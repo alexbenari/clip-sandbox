@@ -17,3 +17,4 @@
 - Code quality
   
   - Match code design to concepts: order mode, display mode, display scheme
+  - Add tests

@@ -1,0 +1,11 @@
+E2E Test Scenarios
+- Load folder: select folder containing multiple video files; grid renders same count, videos autoplay, count text updates, save enabled.
+- Ignore non-video files:  select folder containing both video and non-video files. Only shows videos; count matches videos; status reports loaded videos.
+- Drag to reorder: drag card before/after another; DOM order updates; count unchanged; reflow persists after resize.
+- Delete selected: click a card, press Delete/Backspace; card removed, count updates, selected cleared, status message shown.
+- Toggle titles: Hide Titles toggles filename overlays and button label; Show restores them.
+- Fullscreen enter/exit: click Full Screen (or press “F”), toolbar hidden, grid fills view; exit restores toolbar and previous title-visibility state.
+- Fullscreen slot count: in fullscreen, type digits (e.g., “6”) and confirm grid shows N slots with last kept empty; overflow clips hidden; leaving fullscreen restores all cards.
+- Load valid order file: provide order file matching loaded names; grid order matches file; status “Order applied”.
+- Load invalid order file: order file with missing/extra/duplicate names shows alert and does not reorder.
+- Save order fallback: after reordering, click Save Order without directory handle; triggers download of clip-order.txt containing current order (capture download content).
