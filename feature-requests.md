@@ -13,5 +13,7 @@
     - grid (with optional empty last square) -> current
     
     - sequential: single clip in the center, large. Content is concatenation of all clips
-    
-    - 
+
+- Code quality
+  
+  - Match code design to concepts: order mode, display mode, display scheme
