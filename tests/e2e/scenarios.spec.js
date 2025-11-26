@@ -1,10 +1,17 @@
-const path = require('path');
-const fs = require('fs');
-const { test, expect } = require('@playwright/test');
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { test, expect } from '@playwright/test';
 
-const appUrl = 'file:///' + path.join(__dirname, '..', '..', 'index.html').replace(/^[\\/]/, '').replace(/\\/g, '/');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const appUrl = '/';
 const fixtureDir = (name) => path.join(__dirname, 'fixtures', name);
 const VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'mkv', 'mpg', 'mpeg']);
+
+test.beforeEach(({ page }) => {
+  page.on('pageerror', (err) => console.error('Page error:', err));
+  page.on('console', (msg) => console.log('Console:', msg.type(), msg.text()));
+});
 const clipFiles = (scenario) =>
   fs
     .readdirSync(path.join(fixtureDir(scenario), 'clips'))
