@@ -539,7 +539,8 @@ export function initApp() {
 
 // auto-init in browser
 // Skip auto-init during Vitest to avoid side effects; tests call initApp manually.
-if (typeof window !== 'undefined' && !globalThis.VITEST) {
+const isVitest = typeof globalThis.VITEST !== 'undefined' || typeof globalThis.__vitest_worker__ !== 'undefined';
+if (typeof window !== 'undefined' && !isVitest) {
   const start = () => initApp();
   const ready = document.readyState === 'complete' || document.readyState === 'interactive';
   const hasRootElements = () =>

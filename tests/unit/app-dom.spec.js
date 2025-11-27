@@ -1,5 +1,4 @@
 import { describe, it, beforeEach, expect } from 'vitest';
-import { initApp } from '../../app.js';
 
 // Minimal DOM scaffold to allow init without real layout
 const baseDom = `
@@ -21,11 +20,14 @@ const baseDom = `
 `;
 
 beforeEach(() => {
+  // ensure Vitest flag is present for app.js guard
+  globalThis.VITEST = true;
   document.body.innerHTML = baseDom;
 });
 
 describe('initApp DOM wiring', () => {
-  it('initializes count text and titles button', () => {
+  it('initializes count text and titles button', async () => {
+    const { initApp } = await import('../../app.js');
     initApp();
     expect(document.getElementById('count').textContent).toBe('0 clips');
     expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Hide Titles');
