@@ -536,18 +536,3 @@ export function initApp() {
   computeGrid();
   setTitlesHidden(false);
 }
-
-// auto-init in browser
-// Skip auto-init during Vitest to avoid side effects; tests call initApp manually.
-const isVitest = typeof globalThis.VITEST !== 'undefined' || typeof globalThis.__vitest_worker__ !== 'undefined';
-if (typeof window !== 'undefined' && !isVitest) {
-  const start = () => initApp();
-  const ready = document.readyState === 'complete' || document.readyState === 'interactive';
-  const hasRootElements = () =>
-    document.getElementById('pickBtn') && document.getElementById('folderInput') && document.getElementById('grid');
-  if (ready && hasRootElements()) start();
-  else
-    window.addEventListener('DOMContentLoaded', () => {
-      if (hasRootElements()) start();
-    });
-}
