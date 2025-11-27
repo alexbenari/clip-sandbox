@@ -108,6 +108,10 @@
   </div>
 
   <div class="footerbar" id="status" hidden></div>
-  <script type="module" src="./app.js"></script>
+  <script type="module">
+    import { initApp } from './app.js';
+    // Elements are already parsed by the time this script runs at the end of body.
+    initApp();
+  </script>
 </body>
 </html>
