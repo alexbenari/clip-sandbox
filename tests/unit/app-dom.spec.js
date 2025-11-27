@@ -3,11 +3,6 @@ if (!globalThis.__vitest_worker__) {
   globalThis.__vitest_worker__ = { on() {}, send() {}, rpc: {} };
 }
 
-// Guard in case Vitest worker globals are missing
-if (!globalThis.__vitest_worker__) {
-  globalThis.__vitest_worker__ = { on() {}, send() {}, rpc: {} };
-}
-
 import { describe, it, beforeEach, expect } from 'vitest';
 
 // Minimal DOM scaffold to allow init without real layout
