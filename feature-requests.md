@@ -1,6 +1,6 @@
 - "order" mode
   
-  - Display length of clip in 
+  - Display length of clip
   
   - When loading an order file, if there are missing clips, allow displaying without them
   

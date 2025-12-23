@@ -6,6 +6,7 @@ import {
   computeBestGrid,
   validateOrderStrict,
   computeFsLayout,
+  formatDuration,
 } from './logic.js';
 
 let initialized = false;
@@ -44,7 +45,33 @@ export function initApp() {
   let fsRandPending = false;
   let savedTitleHiddenForFS = null;
 
+  const PLACEHOLDER_DURATION = '--:--:--';
+
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function formatLabel(name, durationSeconds) {
+    const hasDuration = Number.isFinite(durationSeconds);
+    const formatted = hasDuration ? formatDuration(durationSeconds) : PLACEHOLDER_DURATION;
+    return `${name} (${formatted})`;
+  }
+
+  function updateCardLabel(card) {
+    if (!card) return;
+    const label = card.querySelector('.filename');
+    if (!label) return;
+    const name = card.dataset.name || '';
+    const duration = Number.parseFloat(card.dataset.durationSeconds);
+    const text = formatLabel(name, Number.isFinite(duration) ? duration : null);
+    label.textContent = text;
+    label.title = text;
+  }
+
+  function setCardDuration(card, seconds) {
+    if (!card) return;
+    if (Number.isFinite(seconds)) card.dataset.durationSeconds = seconds;
+    else card.dataset.durationSeconds = '';
+    updateCardLabel(card);
+  }
 
   function showStatus(msg, timeout = 2500) {
     statusBar.textContent = msg;
@@ -135,6 +162,7 @@ export function initApp() {
     card.draggable = true;
     card.dataset.name = file.name;
     card.dataset.objectUrl = url;
+    card.dataset.durationSeconds = '';
 
     const vid = document.createElement('video');
     vid.src = url;
@@ -154,11 +182,13 @@ export function initApp() {
     const name = document.createElement('div');
     name.className = 'filename';
     name.title = file.name;
-    name.textContent = file.name;
+    name.textContent = formatLabel(file.name);
 
     card.appendChild(vid);
     card.appendChild(name);
     grid.appendChild(card);
+
+    vid.addEventListener('loadedmetadata', () => setCardDuration(card, vid.duration));
 
     card.addEventListener('click', () => {
       if (selectedThumb && selectedThumb !== card) selectedThumb.classList.remove('selected');
@@ -457,16 +487,16 @@ export function initApp() {
       nb = b.dataset.name;
     const ua = a.dataset.objectUrl,
       ub = b.dataset.objectUrl;
+    const da = a.dataset.durationSeconds,
+      db = b.dataset.durationSeconds;
     a.dataset.name = nb;
     b.dataset.name = na;
     a.dataset.objectUrl = ub;
     b.dataset.objectUrl = ua;
-    const fa = a.querySelector('.filename'),
-      fb = b.querySelector('.filename');
-    fa.textContent = nb;
-    fa.title = nb;
-    fb.textContent = na;
-    fb.title = na;
+    a.dataset.durationSeconds = db || '';
+    b.dataset.durationSeconds = da || '';
+    updateCardLabel(a);
+    updateCardLabel(b);
     va.pause();
     vb.pause();
     va.src = ub;

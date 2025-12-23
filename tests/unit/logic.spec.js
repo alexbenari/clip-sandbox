@@ -3,6 +3,7 @@ import {
   VIDEO_EXTS,
   isVideoFile,
   niceNum,
+  formatDuration,
   filterAndSortFiles,
   computeBestGrid,
   validateOrderStrict,
@@ -30,6 +31,13 @@ describe('video helpers', () => {
 describe('formatting', () => {
   it('formats numbers nicely', () => {
     expect(niceNum(1234)).toBe('1,234');
+  });
+
+  it('formats durations as hh:mm:ss', () => {
+    expect(formatDuration(0)).toBe('00:00:00');
+    expect(formatDuration(61)).toBe('00:01:01');
+    expect(formatDuration(3661.6)).toBe('01:01:02');
+    expect(formatDuration('bad')).toBe('--:--:--');
   });
 });
 

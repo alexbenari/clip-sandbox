@@ -32,7 +32,7 @@ async function loadClips(page, scenario) {
 }
 
 function getOrder(page) {
-  return page.locator('#grid .thumb .filename').allTextContents();
+  return page.locator('#grid .thumb').evaluateAll((els) => els.map((el) => el.dataset.name));
 }
 
 test.describe('Load via folder selection', () => {
@@ -52,6 +52,24 @@ test.describe('Filter non-video files', () => {
     // ensure the non-video filename is not present in any title
     const titles = await getOrder(page);
     expect(titles.some((t) => t.includes('notes.txt'))).toBeFalsy();
+  });
+});
+
+test.describe('Clip title formatting', () => {
+  test('shows filename with formatted duration', async ({ page }) => {
+    await loadClips(page, 'load-basic');
+    const clipHandle = await page.waitForFunction(() => {
+      const thumb = document.querySelector('#grid .thumb');
+      if (!thumb) return null;
+      const label = thumb.querySelector('.filename');
+      const text = label?.textContent?.trim();
+      if (!text || !thumb.dataset.name) return null;
+      return { name: thumb.dataset.name, label: text };
+    });
+    const clip = await clipHandle.jsonValue();
+    const escaped = clip.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`^${escaped} \\((?:\\d{2}:\\d{2}:\\d{2}|--:--:--)\\)$`);
+    expect(clip.label).toMatch(pattern);
   });
 });
 

@@ -13,6 +13,16 @@ export function niceNum(n) {
   return new Intl.NumberFormat().format(n);
 }
 
+export function formatDuration(seconds) {
+  const total = Math.round(Math.max(0, Number(seconds)));
+  if (!Number.isFinite(total)) return '--:--:--';
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (v) => String(v).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
 export function filterAndSortFiles(files) {
   return Array.from(files || [])
     .filter(isVideoFile)
