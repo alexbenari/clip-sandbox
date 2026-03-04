@@ -1,20 +1,19 @@
 - "order" mode
-  
-  - Display length of clip
-  
-  - When loading an order file, if there are missing clips, allow displaying without them
-  
-  - Zoom on highlighted clip (Z key) displays it larger on top of the order window 
+  - When loading an order file:
+    - if there are missing clips, prompt and either:
+      - display without them
+      - put them at the end with a special border (pink)
+  -  Zoom on highlighted clip (Z key or dbl click) displays it larger on top of the order window 
+  -  control number of clips on grid, add arrows for prev/next screens on the sides as needed, add count of how many out of how many (5-10/23 etc)
+  -  refresh from folder: considers also the order file
 
 - "display"" mode
-  
-  - Support for multiple display modes - allow selecting dynamically
-    
-    - grid (with optional empty last square) -> current
-    
-    - sequential: single clip in the center, large. Content is concatenation of all clips
+  upport for multiple display modes - allow selecting dynamically bu mode name.
+    - grid: no names, full grid
+    - remove the current: grid with empty last square (meretz)
+    - cinema: single clip in the center, large. Content is concatenation of all clips in order they are in the order file
 
-- Code quality
+-Share: allow sending a link to a gallery of clips
   
+- Code quality
   - Match code design to concepts: order mode, display mode, display scheme
-  - Add tests
