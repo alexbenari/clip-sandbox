@@ -120,6 +120,32 @@ test.describe('Delete selected clip', () => {
     await expect(page.locator('#grid .thumb')).toHaveCount(1);
     await expect(page.locator('#count')).toHaveText('1 clip');
   });
+
+  test('does not remove selected card while typing in an input', async ({ page }) => {
+    await loadClips(page, 'delete');
+    const first = page.locator('#grid .thumb').first();
+    await first.click();
+
+    await page.evaluate(() => {
+      let input = document.getElementById('scratch-input');
+      if (!input) {
+        input = document.createElement('input');
+        input.id = 'scratch-input';
+        input.type = 'text';
+        input.value = 'abc';
+        input.style.position = 'fixed';
+        input.style.top = '12px';
+        input.style.left = '12px';
+        input.style.zIndex = '9999';
+        document.body.appendChild(input);
+      }
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+
+    await page.keyboard.press('Backspace');
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+  });
 });
 
 test.describe('Toggle titles', () => {
@@ -187,10 +213,13 @@ test.describe('Reject invalid order file', () => {
   test('shows alert and keeps order when file is invalid', async ({ page }) => {
     await loadClips(page, 'order-invalid');
     const original = await getOrder(page);
-    page.once('dialog', (d) => d.accept());
+    const dialogPromise = page.waitForEvent('dialog', { timeout: 1500 });
     const orderFile = path.join(fixtureDir('order-invalid'), 'order', 'invalid.txt');
     await page.setInputFiles('#orderFileInput', orderFile);
-    await page.waitForTimeout(100); // allow dialog handling
+    const dialog = await dialogPromise;
+    expect(dialog.type()).toBe('alert');
+    expect(dialog.message()).toContain('Could not apply order');
+    await dialog.accept();
     const after = await getOrder(page);
     expect(after).toEqual(original);
   });
@@ -214,8 +243,7 @@ test.describe('Status bar visibility', () => {
     await loadClips(page, 'status');
     const status = page.locator('#status');
     await expect(status).toBeVisible();
-    await page.waitForTimeout(3000);
-    await expect(status).toBeHidden();
+    await expect.poll(async () => status.isHidden(), { timeout: 4000 }).toBe(true);
   });
 });
 

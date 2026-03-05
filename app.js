@@ -364,7 +364,14 @@ export function initApp() {
     }
   }
 
+  function isEditableTarget(target) {
+    if (!(target instanceof Element)) return false;
+    const editable = target.closest('input, textarea, select, [contenteditable], [contenteditable="true"]');
+    return !!editable;
+  }
+
   function onKeyDown(e) {
+    if (isEditableTarget(e.target)) return;
     if (!selectedThumb) return;
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const toRemove = selectedThumb;
