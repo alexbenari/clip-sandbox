@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { test, expect } from '@playwright/test';
+import { computeFsLayout } from '../../logic.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appUrl = '/';
@@ -12,10 +13,6 @@ test.beforeEach(({ page }) => {
   page.on('pageerror', (err) => console.error('Page error:', err));
   page.on('console', (msg) => console.log('Console:', msg.type(), msg.text()));
 });
-const clipFiles = (scenario) =>
-  fs
-    .readdirSync(path.join(fixtureDir(scenario), 'clips'))
-    .map((f) => path.join(fixtureDir(scenario), 'clips', f));
 
 async function loadClips(page, scenario) {
   await page.goto(appUrl);
@@ -33,6 +30,36 @@ async function loadClips(page, scenario) {
 
 function getOrder(page) {
   return page.locator('#grid .thumb').evaluateAll((els) => els.map((el) => el.dataset.name));
+}
+
+async function getFullscreenSnapshot(page) {
+  return page.evaluate(() => {
+    const grid = document.getElementById('grid');
+    const gridWrap = document.getElementById('gridWrap');
+    const thumbs = Array.from(document.querySelectorAll('#grid .thumb'));
+    const colsMatch = (grid?.style.gridTemplateColumns || '').match(/repeat\((\d+),\s*1fr\)/);
+    return {
+      gap: parseFloat(getComputedStyle(grid).gap) || 0,
+      availW: gridWrap.clientWidth,
+      availH: window.innerHeight - 28,
+      total: thumbs.length,
+      hidden: thumbs.filter((el) => el.style.display === 'none').length,
+      sampleH: thumbs.length ? parseFloat(thumbs[0].style.height) : 0,
+      cols: colsMatch ? Number(colsMatch[1]) : 1,
+    };
+  });
+}
+
+function expectedFsState(snapshot, slots) {
+  const layout = computeFsLayout({
+    slots,
+    availW: snapshot.availW,
+    availH: snapshot.availH,
+    gap: snapshot.gap,
+  });
+  const visible = Math.max(1, Math.min(snapshot.total, layout.targetVisible));
+  const hidden = Math.max(0, snapshot.total - visible);
+  return { cols: layout.cols, cellH: layout.cellH, hidden };
 }
 
 test.describe('Load via folder selection', () => {
@@ -109,33 +136,38 @@ test.describe('Toggle titles', () => {
 });
 
 test.describe('Fullscreen behaviors', () => {
-  test('enter/exit fullscreen toggles state and slot count updates', async ({ page }) => {
-    await loadClips(page, 'fullscreen');
+  test('enforces fullscreen slot layout and keeps it stable', async ({ page }) => {
+    await loadClips(page, 'fullscreen-many');
     const fsBtn = page.locator('#fsBtn');
     await fsBtn.click();
-    // some environments block fullscreen; if so, trigger handler manually
-    await page.waitForTimeout(50);
-    const active = await page.locator('body').evaluate((el) => el.classList.contains('fs-active'));
-    if (!active) {
-      await page.evaluate(() => document.dispatchEvent(new Event('fullscreenchange')));
-    }
-    // fall back to class toggle even if fullscreen API is restricted in CI
-    await expect(page.locator('body')).toHaveClass(/fs-active/);
+
+    await expect.poll(async () => page.locator('body').evaluate((el) => el.classList.contains('fs-active'))).toBe(true);
+
+    const defaultSnapshot = await getFullscreenSnapshot(page);
+    const expectedDefault = expectedFsState(defaultSnapshot, 12);
+    expect(defaultSnapshot.hidden).toBe(expectedDefault.hidden);
+    expect(defaultSnapshot.cols).toBe(expectedDefault.cols);
+    expect(defaultSnapshot.sampleH).toBeCloseTo(expectedDefault.cellH, 1);
+
     await page.keyboard.type('6');
-    // ensure at least one clip hidden when slots reduce
-    const hidden = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('#grid .thumb')).filter((el) => el.style.display === 'none').length
-    );
-    expect(hidden).toBeGreaterThanOrEqual(0);
+    await expect
+      .poll(async () => {
+        const snapshot = await getFullscreenSnapshot(page);
+        const expected = expectedFsState(snapshot, 6);
+        return (
+          snapshot.hidden === expected.hidden &&
+          snapshot.cols === expected.cols &&
+          Math.abs(snapshot.sampleH - expected.cellH) < 1
+        );
+      })
+      .toBe(true);
+
+    const afterSlots = await getFullscreenSnapshot(page);
+    const expectedAfterSlots = expectedFsState(afterSlots, 6);
+    expect(afterSlots.hidden).toBeGreaterThan(0);
+    expect(afterSlots.sampleH).toBeCloseTo(expectedAfterSlots.cellH, 1);
+
     await page.keyboard.press('F'); // exit via keyboard shortcut
-    await page.waitForTimeout(50);
-    const stillActive = await page.locator('body').evaluate((el) => el.classList.contains('fs-active'));
-    if (stillActive) {
-      await page.evaluate(() => {
-        document.body.classList.remove('fs-active');
-        document.dispatchEvent(new Event('fullscreenchange'));
-      });
-    }
     await expect(page.locator('body')).not.toHaveClass(/fs-active/);
   });
 });

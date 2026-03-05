@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  VIDEO_EXTS,
   isVideoFile,
   niceNum,
   formatDuration,
@@ -72,6 +71,29 @@ describe('order validation', () => {
 describe('fullscreen layout', () => {
   it('reserves one empty slot and computes target visible', () => {
     const res = computeFsLayout({ slots: 6, availW: 1200, availH: 800, gap: 10 });
-    expect(res.rows * res.cols - 1).toBeGreaterThanOrEqual(res.targetVisible);
+    expect(res.targetVisible).toBe(res.rows * res.cols - 1);
+  });
+
+  it('reduces cell height as slots increase for the same viewport', () => {
+    const fewSlots = computeFsLayout({ slots: 4, availW: 1200, availH: 800, gap: 10 });
+    const manySlots = computeFsLayout({ slots: 12, availW: 1200, availH: 800, gap: 10 });
+    expect(manySlots.cellH).toBeLessThan(fewSlots.cellH);
+    expect(manySlots.targetVisible).toBeGreaterThan(fewSlots.targetVisible);
+  });
+
+  it('returns a usable layout in constrained space', () => {
+    const res = computeFsLayout({ slots: 9, availW: 48, availH: 30, gap: 10 });
+    expect(res.cols).toBeGreaterThanOrEqual(1);
+    expect(res.rows).toBeGreaterThanOrEqual(1);
+    expect(res.cellH).toBeGreaterThan(0);
+    expect(res.targetVisible).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('normal vs fullscreen policy', () => {
+  it('produces different sizing when clip count and slots differ', () => {
+    const normal = computeBestGrid({ count: 18, availW: 1200, availH: 800, gap: 10 });
+    const fs = computeFsLayout({ slots: 6, availW: 1200, availH: 800, gap: 10 });
+    expect(normal.cellH).not.toBe(fs.cellH);
   });
 });

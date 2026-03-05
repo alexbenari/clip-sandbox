@@ -1,9 +1,9 @@
 - "order" mode
   - When loading an order file:
-    - if there are missing clips, prompt and either:
+    - if there are missing clips, prompt and based on the user response either:
       - display without them
       - put them at the end with a special border (pink)
-  -  Zoom on highlighted clip (Z key or dbl click) displays it larger on top of the order window 
+  -  Zoom on highlighted clip (Z key or dbl click) displays it larger on top of the order window. Clicking anywhere outside the clip closes the large display.
   -  control number of clips on grid, add arrows for prev/next screens on the sides as needed, add count of how many out of how many (5-10/23 etc)
   -  refresh from folder: considers also the order file
 

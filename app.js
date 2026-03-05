@@ -1,5 +1,4 @@
 import {
-  VIDEO_EXTS,
   isVideoFile,
   niceNum,
   filterAndSortFiles,
@@ -35,8 +34,7 @@ export function initApp() {
   let dragSourceId = null;
   let idCounter = 0;
 
-  // --- Fullscreen layout lock & randomizer state ---
-  let layoutLock = null; // when set, computeGrid keeps exact cols/height
+  // --- Fullscreen slots & randomizer state ---
   let fsSlots = 12; // total slots in fullscreen (last slot empty)
   let fsHidden = []; // elements hidden in fullscreen
   let fsDigitBuffer = '';
@@ -141,13 +139,13 @@ export function initApp() {
     const arr = filterAndSortFiles(fileList);
     if (arr.length === 0) {
       updateCount();
-      computeGrid();
+      recomputeLayout();
       return;
     }
     for (const file of arr) addThumbForFile(file);
     updateCount();
     await sleep(20);
-    computeGrid();
+    recomputeLayout();
     showStatus(`Loaded ${arr.length} video${arr.length === 1 ? '' : 's'}.`);
   }
 
@@ -226,7 +224,7 @@ export function initApp() {
       const before = e.clientY - rect.top < rect.height / 2;
       if (before) grid.insertBefore(srcEl, t);
       else grid.insertBefore(srcEl, t.nextSibling);
-      computeGrid();
+      recomputeLayout();
     });
   }
 
@@ -234,25 +232,33 @@ export function initApp() {
     for (const el of grid.children) el.classList.remove('drag-over');
   }
 
+  function applyGridLayout(cols, cellH) {
+    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    for (const el of grid.children) el.style.height = `${cellH}px`;
+  }
+
+  function readGridMetrics(mode) {
+    const gap = parseFloat(getComputedStyle(grid).gap) || 0;
+    const availW = gridWrap.clientWidth;
+    const chromeH = mode === 'fullscreen' ? 28 : Math.ceil(toolbar.getBoundingClientRect().height) + 28;
+    const availH = window.innerHeight - chromeH;
+    return { gap, availW, availH };
+  }
+
   function computeGrid() {
-    if (layoutLock) {
-      grid.style.gridTemplateColumns = `repeat(${layoutLock.cols}, 1fr)`;
-      for (const el of grid.children) el.style.height = `${layoutLock.cellH}px`;
-      return;
-    }
     const n = grid.children.length;
     if (n === 0) {
       grid.style.gridTemplateColumns = 'repeat(1, 1fr)';
       return;
     }
-    const wrapStyles = getComputedStyle(grid);
-    const gap = parseFloat(wrapStyles.gap) || 0;
-    const toolbarRect = toolbar.getBoundingClientRect();
-    const availW = gridWrap.clientWidth;
-    const availH = window.innerHeight - Math.ceil(toolbarRect.height) - 28;
+    const { gap, availW, availH } = readGridMetrics('normal');
     const { cols, cellH } = computeBestGrid({ count: n, availW, availH, gap });
-    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    for (const el of grid.children) el.style.height = `${cellH}px`;
+    applyGridLayout(cols, cellH);
+  }
+
+  function recomputeLayout() {
+    if (isFullscreen()) fsApplySlots();
+    else computeGrid();
   }
 
   function getOrderArray() {
@@ -270,7 +276,7 @@ export function initApp() {
       if (el) frag.appendChild(el);
     }
     grid.appendChild(frag);
-    computeGrid();
+    recomputeLayout();
     showStatus('Order applied.');
   }
 
@@ -313,7 +319,7 @@ export function initApp() {
       if (el.requestFullscreen) await el.requestFullscreen();
       else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
       fsBtn.textContent = 'Exit Full Screen';
-      computeGrid();
+      recomputeLayout();
     } catch (e) {
       console.warn(e);
     }
@@ -366,7 +372,7 @@ export function initApp() {
       URL.revokeObjectURL(toRemove.dataset.objectUrl);
       toRemove.remove();
       updateCount();
-      computeGrid();
+      recomputeLayout();
       showStatus('Clip removed from view.');
       e.preventDefault();
     }
@@ -409,12 +415,9 @@ export function initApp() {
   });
 
   function fsComputeAndApplyGrid() {
-    const gap = parseFloat(getComputedStyle(grid).gap) || 0;
-    const availW = gridWrap.clientWidth;
-    const availH = window.innerHeight - 28; // account for padding
+    const { gap, availW, availH } = readGridMetrics('fullscreen');
     const best = computeFsLayout({ slots: fsSlots, availW, availH, gap });
-    grid.style.gridTemplateColumns = `repeat(${best.cols}, 1fr)`;
-    for (const el of grid.children) el.style.height = `${best.cellH}px`;
+    applyGridLayout(best.cols, best.cellH);
     return best;
   }
   function fsApplySlots() {
@@ -444,12 +447,11 @@ export function initApp() {
     }
   }
 
-  function fsRestoreAndUnlock() {
+  function fsRestore() {
     if (fsHidden.length) {
       fsHidden.forEach((el) => (el.style.display = ''));
       fsHidden = [];
     }
-    layoutLock = null;
   }
 
   function startFsRandomizer() {
@@ -538,31 +540,30 @@ export function initApp() {
     const active = isFullscreen();
     body.classList.toggle('fs-active', active);
     if (!active) {
-      fsRestoreAndUnlock();
+      fsRestore();
       stopFsRandomizer();
       if (savedTitleHiddenForFS !== null) {
         setTitlesHidden(savedTitleHiddenForFS);
         savedTitleHiddenForFS = null;
       }
       fsBtn.textContent = 'Full Screen';
+      computeGrid();
     } else {
       fsApplySlots();
       startFsRandomizer();
       fsBtn.textContent = 'Exit Full Screen';
     }
-    computeGrid();
   }
   document.addEventListener('fullscreenchange', onFsChange);
   document.addEventListener('webkitfullscreenchange', onFsChange);
 
   window.addEventListener('resize', () => {
-    if (isFullscreen()) fsApplySlots();
-    else computeGrid();
+    recomputeLayout();
   });
   document.addEventListener('keydown', onKeyDown);
   document.addEventListener('keydown', onGlobalKeyDown);
 
   updateCount();
-  computeGrid();
+  recomputeLayout();
   setTitlesHidden(false);
 }
