@@ -1,8 +1,3 @@
-// Guard for environments where Vitest worker globals are missing (Windows oddity)
-if (!globalThis.__vitest_worker__) {
-  globalThis.__vitest_worker__ = { on() {}, send() {}, rpc: {} };
-}
-
 import { describe, it, beforeEach, expect } from 'vitest';
 
 // Minimal DOM scaffold to allow init without real layout
