@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['tests/setup/vitest.setup.js'],
-    include: ['tests/unit/**/*.{test,spec}.{js,ts,jsx,tsx}'],
+    include: ['tests/unit/**/*.{test,spec}.{js,ts,jsx,tsx}', 'tests/integration/**/*.{test,spec}.{js,ts,jsx,tsx}'],
     exclude: ['tests/e2e/**', 'node_modules/**'],
     pool: 'forks', // avoid thread workers on Windows
     threads: false,
