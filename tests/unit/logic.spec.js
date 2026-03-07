@@ -4,10 +4,14 @@ import {
   niceNum,
   formatDuration,
   filterAndSortFiles,
+} from '../../src/domain/clip-rules.js';
+import {
   computeBestGrid,
-  validateOrderStrict,
   computeFsLayout,
-} from '../../logic.js';
+} from '../../src/domain/layout-rules.js';
+import {
+  validateOrderStrict,
+} from '../../src/domain/order-rules.js';
 
 describe('video helpers', () => {
   it('detects video by MIME and extension', () => {

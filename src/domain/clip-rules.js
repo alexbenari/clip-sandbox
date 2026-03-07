@@ -10,6 +10,10 @@ export function isVideoFile(file) {
   return VIDEO_EXTS.has(ext);
 }
 
+export function niceNum(n) {
+  return new Intl.NumberFormat().format(n);
+}
+
 export function formatDuration(seconds) {
   const total = Math.round(Math.max(0, Number(seconds)));
   if (!Number.isFinite(total)) return PLACEHOLDER_DURATION;

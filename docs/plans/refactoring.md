@@ -9,9 +9,9 @@ Users rely on Clip Sandbox for loading, ordering, and fullscreen review of local
 - [x] (2026-03-07 09:30Z) Initial strategy drafted in `docs/plans/refactoring.md`.
 - [x] (2026-03-07 10:05Z) Plan updated to use intuitive terms: `business logic` and `interfaces`.
 - [x] (2026-03-07 19:30Z) Milestone 0 complete: full E2E feature coverage gate expanded and green (`18` Playwright tests).
-- [x] (2026-03-07 20:15Z) Milestone 1 complete: pure domain extraction into `src/domain/*`; `logic.js` converted to compatibility facade.
+- [x] (2026-03-07 20:15Z) Milestone 1 complete: pure domain extraction into `src/domain/*`.
 - [x] (2026-03-07 20:40Z) Milestone 2 complete: centralized runtime state in `src/state/app-state.js` with named operations.
-- [x] (2026-03-07 21:15Z) Milestone 3 complete: interface docs and browser adapters added under `src/interfaces/*` and `src/adapters/browser/*`.
+- [x] (2026-03-07 21:15Z) Milestone 3 complete: browser adapters added under `src/adapters/browser/*`.
 - [x] (2026-03-07 21:40Z) Milestone 4 complete: key business-logic modules added under `src/business-logic/*` and wired from runtime.
 - [x] (2026-03-07 22:44Z) Milestone 5 complete: dedicated `src/ui/*` modules added (`events`, `view-model`, `dom-factory`) with integration tests.
 - [x] (2026-03-07 22:45Z) Milestone 6 stabilization complete: `app.js` reduced to thin wrapper over `src/app/bootstrap.js`; full test suite green.
@@ -21,8 +21,8 @@ Users rely on Clip Sandbox for loading, ordering, and fullscreen review of local
 - Discovery: `app.js` is the main coupling hotspot at 576 lines.
   Evidence: `Get-Content app.js | Measure-Object -Line`
 
-- Discovery: `logic.js` is already pure and a good extraction seed.
-  Evidence: `Get-Content logic.js | Measure-Object -Line`
+- Discovery: the previous pure helper module was a good extraction seed for `src/domain/*`.
+  Evidence: initial helper tests migrated cleanly to direct domain imports.
 
 - Discovery: E2E already covers many user-guide features, but not all required edge paths.
   Evidence: `tests/e2e/scenarios.spec.js` currently lacks explicit tests for direct-write save path, full rotation assertion, and empty-folder behavior.
@@ -69,7 +69,7 @@ Users rely on Clip Sandbox for loading, ordering, and fullscreen review of local
 
 Shipped outcomes in this execution:
 - Full E2E feature baseline expanded from `12` to `18` scenarios, covering the user-facing gaps identified in Milestone 0.
-- Pure logic extracted into `src/domain/*` with `logic.js` maintained as compatibility facade.
+- Pure logic extracted into `src/domain/*` and consumed directly by app/tests.
 - Runtime state centralized in `src/state/app-state.js`.
 - Key browser adapters and business-logic modules introduced and wired into runtime flow.
 - Root `app.js` reduced to a thin compatibility entrypoint that re-exports `initApp` from `src/app/bootstrap.js`.
@@ -87,22 +87,20 @@ Validation evidence:
 Current system (no framework):
 - `index.html`: static shell, controls, bootstrap call.
 - `app.js`: controller + DOM + file IO + fullscreen + state.
-- `logic.js`: pure helpers for file filtering, formatting, layout math, order validation.
+- `src/domain/*`: pure helpers for file filtering, formatting, layout math, order validation.
 - `tests/unit/logic.spec.js`: unit tests for pure logic.
 - `tests/e2e/scenarios.spec.js`: end-to-end behavior tests.
 
 Key terms used in this plan:
 - `domain rules`: pure functions that enforce app invariants.
 - `business logic`: orchestration of user actions using domain rules and interfaces.
-- `interfaces`: narrow contracts consumed by business logic.
-- `adapters`: browser-specific implementations of interfaces.
+- `adapters`: browser-specific modules that isolate platform APIs.
 - `composition root`: one bootstrap location that wires modules together.
 
 Target shape (incremental, no big-bang rewrite):
 
 - `/src/domain/*` for pure rules.
 - `/src/business-logic/*` for orchestration modules.
-- `/src/interfaces/*` for contracts.
 - `/src/adapters/browser/*` for browser API implementations.
 - `/src/ui/*` for event binding and rendering.
 - `/src/state/app-state.js` for mutable app state.
@@ -172,7 +170,6 @@ Move deterministic logic out of `app.js` into domain modules while preserving be
 ### Files
 
 - `app.js` (edit)
-- `logic.js` (edit or keep as compatibility export wrapper)
 - `src/domain/clip-rules.js` (create)
 - `src/domain/order-rules.js` (create)
 - `src/domain/layout-rules.js` (create)
@@ -235,7 +232,7 @@ Create `createAppState()` and move scattered state variables into explicit shape
 - Keep old state reads behind temporary adapter functions until migration is complete.
 - Revert only state-module wiring commit if widespread regressions appear.
 
-## Milestone 3 - Define interfaces and browser adapters
+## Milestone 3 - Define browser adapters and boundaries
 
 ### Scope
 
@@ -243,10 +240,6 @@ Create clear dependency boundaries so business logic does not import browser glo
 
 ### Files
 
-- `src/interfaces/file-system-interface.js` (create)
-- `src/interfaces/renderer-interface.js` (create)
-- `src/interfaces/fullscreen-interface.js` (create)
-- `src/interfaces/clock-interface.js` (create)
 - `src/adapters/browser/file-system-adapter.js` (create)
 - `src/adapters/browser/dom-renderer-adapter.js` (create)
 - `src/adapters/browser/fullscreen-adapter.js` (create)
@@ -264,7 +257,7 @@ Wrap direct browser API usage:
 - timers and async waits,
 - DOM render updates.
 
-Document contract expectations in JSDoc for each interface.
+Document expected adapter behavior in module-level docs/comments.
 
 ### Validation
 
@@ -302,7 +295,7 @@ Move user-intent orchestration from controller handlers to business-logic module
 ### Changes
 
 Each business-logic module should:
-- accept dependencies via interfaces,
+- accept dependencies via injected adapter functions/modules,
 - accept plain input data,
 - return deterministic outputs/state intents where possible.
 

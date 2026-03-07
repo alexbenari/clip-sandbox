@@ -2,12 +2,14 @@ import {
   isVideoFile,
   niceNum,
   filterAndSortFiles,
-  computeBestGrid,
-  validateOrderStrict,
-  computeFsLayout,
   formatLabel,
+} from '../domain/clip-rules.js';
+import {
+  computeBestGrid,
+  computeFsLayout,
   normalizeFsSlots,
-} from '../../logic.js';
+} from '../domain/layout-rules.js';
+import { validateOrderStrict } from '../domain/order-rules.js';
 import { createAppState, nextThumbId, setSelectedThumb, setCurrentDirHandle, setFsSlots } from '../state/app-state.js';
 import {
   canUseDirectoryPicker,
