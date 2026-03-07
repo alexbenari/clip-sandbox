@@ -28,8 +28,53 @@ async function loadClips(page, scenario) {
   await expect(page.locator('#grid .thumb')).toHaveCount(expectedCount);
 }
 
+async function loadClipsViaDirectoryPickerMock(page, files) {
+  await page.goto(appUrl);
+  await page.waitForSelector('#pickBtn');
+  await page.evaluate((mockFiles) => {
+    window.__savedOrderWrites = [];
+    const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
+    window.showDirectoryPicker = async () => ({
+      kind: 'directory',
+      async *values() {
+        for (const f of mockFiles) {
+          yield {
+            kind: 'file',
+            async getFile() {
+              return toFile(f);
+            },
+          };
+        }
+      },
+      async getFileHandle(name, options = {}) {
+        return {
+          async createWritable() {
+            let data = '';
+            return {
+              async write(chunk) {
+                data += typeof chunk === 'string' ? chunk : String(chunk);
+              },
+              async close() {
+                window.__savedOrderWrites.push({ name, data, create: !!options.create });
+              },
+            };
+          },
+        };
+      },
+    });
+  }, files);
+  await page.click('#pickBtn');
+  await expect(page.locator('#grid .thumb')).toHaveCount(files.length);
+}
+
 function getOrder(page) {
   return page.locator('#grid .thumb').evaluateAll((els) => els.map((el) => el.dataset.name));
+}
+
+function getVisibleOrder(page) {
+  return page
+    .locator('#grid .thumb')
+    .evaluateAll((els) => els.filter((el) => el.style.display !== 'none').map((el) => el.dataset.name));
 }
 
 async function getFullscreenSnapshot(page) {
@@ -82,6 +127,24 @@ test.describe('Filter non-video files', () => {
   });
 });
 
+test.describe('No supported videos', () => {
+  test('keeps grid empty when folder has no supported videos', async ({ page }) => {
+    await loadClips(page, 'no-video');
+    await expect(page.locator('#grid .thumb')).toHaveCount(0);
+    await expect(page.locator('#count')).toHaveText('0 clips');
+    await expect(page.locator('#saveBtn')).toBeDisabled();
+  });
+});
+
+test.describe('Natural sorting', () => {
+  test('loads videos in numeric-aware, case-insensitive filename order', async ({ page }) => {
+    await loadClips(page, 'natural-sort');
+    await expect
+      .poll(async () => (await getOrder(page)).join('|'))
+      .toBe(['item1.mp4', 'Item2.mp4', 'ITEM3.mp4', 'item10.mp4'].join('|'));
+  });
+});
+
 test.describe('Clip title formatting', () => {
   test('shows filename with formatted duration', async ({ page }) => {
     await loadClips(page, 'load-basic');
@@ -97,6 +160,45 @@ test.describe('Clip title formatting', () => {
     const escaped = clip.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp(`^${escaped} \\((?:\\d{2}:\\d{2}:\\d{2}|--:--:--)\\)$`);
     expect(clip.label).toMatch(pattern);
+  });
+});
+
+test.describe('Responsive grid layout', () => {
+  test('recomputes grid layout when viewport size changes', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await loadClips(page, 'fullscreen-many');
+    const initial = await page.evaluate(() => {
+      const grid = document.getElementById('grid');
+      const card = document.querySelector('#grid .thumb');
+      const colsMatch = (grid?.style.gridTemplateColumns || '').match(/repeat\((\d+),\s*1fr\)/);
+      return {
+        cols: colsMatch ? Number(colsMatch[1]) : 1,
+        h: card ? parseFloat(card.style.height) : 0,
+      };
+    });
+
+    await page.setViewportSize({ width: 720, height: 900 });
+    await expect
+      .poll(async () => {
+        const next = await page.evaluate(() => {
+          const grid = document.getElementById('grid');
+          const card = document.querySelector('#grid .thumb');
+          const colsMatch = (grid?.style.gridTemplateColumns || '').match(/repeat\((\d+),\s*1fr\)/);
+          return {
+            cols: colsMatch ? Number(colsMatch[1]) : 1,
+            h: card ? parseFloat(card.style.height) : 0,
+          };
+        });
+        return next.cols !== initial.cols || Math.abs(next.h - initial.h) > 1;
+      })
+      .toBe(true);
+
+    await page.setViewportSize({ width: 360, height: 260 });
+    const tiny = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('#grid .thumb'));
+      return cards.every((el) => Number.isFinite(parseFloat(el.style.height)) && parseFloat(el.style.height) > 0);
+    });
+    expect(tiny).toBe(true);
   });
 });
 
@@ -158,6 +260,28 @@ test.describe('Toggle titles', () => {
     await toggle.click();
     await expect(toggle).toHaveText('Hide Titles');
     await expect(page.locator('body')).not.toHaveClass(/titles-hidden/);
+  });
+
+  test('restores previous title visibility after fullscreen exit', async ({ page }) => {
+    await loadClips(page, 'titles');
+    const fsBtn = page.locator('#fsBtn');
+
+    // Default titles visible -> should still be visible after fullscreen exit.
+    await fsBtn.click();
+    await expect(page.locator('body')).toHaveClass(/fs-active/);
+    await page.keyboard.press('F');
+    await expect(page.locator('body')).not.toHaveClass(/fs-active/);
+    await expect(page.locator('body')).not.toHaveClass(/titles-hidden/);
+
+    // Hidden titles before fullscreen -> should remain hidden after exit.
+    const toggle = page.locator('#toggleTitlesBtn');
+    await toggle.click();
+    await expect(page.locator('body')).toHaveClass(/titles-hidden/);
+    await fsBtn.click();
+    await expect(page.locator('body')).toHaveClass(/fs-active/);
+    await page.keyboard.press('F');
+    await expect(page.locator('body')).not.toHaveClass(/fs-active/);
+    await expect(page.locator('body')).toHaveClass(/titles-hidden/);
   });
 });
 
@@ -238,12 +362,57 @@ test.describe('Save order download fallback', () => {
   });
 });
 
+test.describe('Save order direct write path', () => {
+  test('writes clip-order.txt to selected folder handle when available', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'save-a.mp4', type: 'video/mp4', content: 'a' },
+      { name: 'save-b.webm', type: 'video/webm', content: 'b' },
+    ]);
+    await page.click('#saveBtn');
+    await expect(page.locator('#status')).toHaveText('Saved clip-order.txt to the selected folder.');
+
+    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].name).toBe('clip-order.txt');
+    expect(writes[0].data.trim().split('\n')).toEqual(await getOrder(page));
+  });
+});
+
 test.describe('Status bar visibility', () => {
   test('status bar shows for load and hides afterwards', async ({ page }) => {
     await loadClips(page, 'status');
     const status = page.locator('#status');
     await expect(status).toBeVisible();
     await expect.poll(async () => status.isHidden(), { timeout: 4000 }).toBe(true);
+  });
+});
+
+test.describe('Fullscreen clip rotation', () => {
+  test('rotates a hidden clip into visible slots over time', async ({ page }) => {
+    await loadClips(page, 'fullscreen-many');
+    await page.evaluate(() => {
+      const originalSetInterval = window.setInterval.bind(window);
+      window.Math.random = () => 0;
+      window.setInterval = (fn, _ms, ...args) => originalSetInterval(fn, 120, ...args);
+    });
+
+    await page.click('#fsBtn');
+    await expect(page.locator('body')).toHaveClass(/fs-active/);
+    const before = await getVisibleOrder(page);
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate((beforeVisible) => {
+            const visible = Array.from(document.querySelectorAll('#grid .thumb')).filter((el) => el.style.display !== 'none');
+            const firstVideo = visible[0]?.querySelector('video');
+            if (firstVideo) firstVideo.dispatchEvent(new Event('ended'));
+            const current = visible.map((el) => el.dataset.name);
+            return current.join('|') !== beforeVisible.join('|');
+          }, before),
+        { timeout: 8000 }
+      )
+      .toBe(true);
   });
 });
 
