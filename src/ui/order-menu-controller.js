@@ -58,12 +58,7 @@ export function createOrderMenuController({
 
   orderMenuBtn.addEventListener('click', (e) => {
     e.preventDefault();
-    if (isOpen()) {
-      close();
-      return;
-    }
-    open();
-    focusFirstItem();
+    toggle();
   });
   orderMenuBtn.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {

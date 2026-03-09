@@ -33,7 +33,6 @@ This keeps behavior testable while staying framework-free.
 - Toolbar now uses an `Order` menu trigger (`#orderMenuBtn`) with submenu actions:
   - `Load` (`#loadOrderBtn`)
   - `Save` (`#saveBtn`)
-- Hover on desktop reveals the submenu via CSS transitions.
 - Click/tap opens the menu via [`src/ui/order-menu-controller.js`](/C:/dev/clip-sandbox/src/ui/order-menu-controller.js) and supports keyboard navigation:
   - `Enter`/`Space` to open/close from trigger.
   - Arrow navigation between `Load` and `Save`.
@@ -52,7 +51,7 @@ This keeps behavior testable while staying framework-free.
   - Domain and business logic behavior.
   - UI controllers in isolation (for example [`tests/integration/ui/order-menu-controller.spec.js`](/C:/dev/clip-sandbox/tests/integration/ui/order-menu-controller.spec.js)).
 - E2E (Playwright):
-  - Full user workflows in [`tests/e2e/scenarios.spec.js`](/C:/dev/clip-sandbox/tests/e2e/scenarios.spec.js), including order menu hover/click/keyboard behavior and load/save flows.
+  - Full user workflows in [`tests/e2e/scenarios.spec.js`](/C:/dev/clip-sandbox/tests/e2e/scenarios.spec.js), including order menu click/tap and keyboard behavior plus load/save flows.
 
 ## Common Commands
 - `npm run unit`

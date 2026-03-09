@@ -38,14 +38,13 @@ with slot-based display control.
 
 ### 3. Save Current Order
 1. Open **Order**.
-2. On desktop, hover **Order** (or click it).
-3. On touch devices, tap **Order**.
-4. Click **Save**.
-5. If folder write permissions are available, the app writes `clip-order.txt` into the selected folder.
-6. If direct write is unavailable, your browser downloads `clip-order.txt` instead.
+2. Click **Order** (or tap on touch devices).
+3. Click **Save**.
+4. If folder write permissions are available, the app writes `clip-order.txt` into the selected folder.
+5. If direct write is unavailable, your browser downloads `clip-order.txt` instead.
 
 ### 4. Load an Existing Order File
-1. Open **Order** (hover or click on desktop, tap on touch devices).
+1. Open **Order** (click on desktop, tap on touch devices).
 2. Click **Load**.
 3. Pick a `.txt` order file (one filename per line).
 4. If validation passes, the new order is applied.
