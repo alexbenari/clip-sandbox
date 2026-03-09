@@ -47,6 +47,55 @@
     button:active{ transform:translateY(1px); }
     button:disabled{ opacity:.45; cursor:not-allowed; }
     .btn-primary{ background:linear-gradient(180deg, #2a4b9e, #1f2b6b); }
+    .order-menu{
+      position:relative;
+      display:inline-flex;
+      align-items:center;
+    }
+    .order-menu-panel{
+      position:absolute;
+      top:calc(100% + 8px);
+      left:0;
+      min-width:130px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      padding:8px;
+      border-radius:12px;
+      border:1px solid rgba(148,163,184,.25);
+      background:rgba(2,6,23,.95);
+      box-shadow: var(--shadow);
+      max-height:0;
+      opacity:0;
+      overflow:hidden;
+      pointer-events:none;
+      transform: translateY(-8px);
+      transition: max-height .18s ease, opacity .14s ease, transform .18s ease;
+      z-index:30;
+    }
+    .order-menu-panel button{
+      width:100%;
+      text-align:left;
+      padding:8px 10px;
+      border-radius:8px;
+      box-shadow:none;
+    }
+    .order-menu-panel button:disabled{ opacity:.5; }
+    .order-menu[data-open="true"] .order-menu-panel{
+      max-height:120px;
+      opacity:1;
+      pointer-events:auto;
+      transform: translateY(0);
+    }
+    @media (hover: hover) and (pointer: fine){
+      .order-menu:hover .order-menu-panel,
+      .order-menu:focus-within .order-menu-panel{
+        max-height:120px;
+        opacity:1;
+        pointer-events:auto;
+        transform: translateY(0);
+      }
+    }
 
     .visually-hidden{ position:fixed; left:-9999px; width:1px; height:1px; opacity:0; pointer-events:none; }
 
@@ -94,8 +143,13 @@
     <button id="pickBtn" class="btn-primary">Browse Folder…</button>
     <input type="file" id="folderInput" class="visually-hidden" webkitdirectory directory multiple tabindex="-1" aria-hidden="true" />
     <input type="file" id="orderFileInput" class="visually-hidden" accept=".txt,text/plain" tabindex="-1" aria-hidden="true" />
-    <button id="loadOrderBtn" title="Load an order file (clip-order.txt)">Load Order…</button>
-    <button id="saveBtn" title="Save clip-order.txt in the chosen folder (or download if permissions are unavailable)" disabled>Save Order</button>
+    <div class="order-menu" id="orderMenu" data-open="false">
+      <button id="orderMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="orderMenuPanel">Order</button>
+      <div class="order-menu-panel" id="orderMenuPanel" role="menu" aria-label="Order actions">
+        <button id="loadOrderBtn" role="menuitem" title="Load an order file (clip-order.txt)">Load</button>
+        <button id="saveBtn" role="menuitem" title="Save clip-order.txt in the chosen folder (or download if permissions are unavailable)" disabled>Save</button>
+      </div>
+    </div>
     <button id="toggleTitlesBtn" title="Hide or show clip titles">Hide Titles</button>
     <button id="fsBtn" title="Full screen (hides titles)">Full Screen</button>
     <div class="spacer"></div>

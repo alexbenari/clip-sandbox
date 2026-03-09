@@ -43,6 +43,7 @@ import { fullscreenSlotsText, loadedVideosText, orderApplyErrorText } from '../u
 import { createLayoutController } from '../ui/layout-controller.js';
 import { createThumbInteractionHandlers } from '../ui/drag-drop-controller.js';
 import { createOrderFileController } from '../ui/order-file-controller.js';
+import { createOrderMenuController } from '../ui/order-menu-controller.js';
 
 let initialized = false;
 
@@ -53,6 +54,9 @@ export function initApp() {
 
   const pickBtn = document.getElementById('pickBtn');
   const saveBtn = document.getElementById('saveBtn');
+  const orderMenu = document.getElementById('orderMenu');
+  const orderMenuBtn = document.getElementById('orderMenuBtn');
+  const orderMenuPanel = document.getElementById('orderMenuPanel');
   const folderInput = document.getElementById('folderInput');
   const orderFileInput = document.getElementById('orderFileInput');
   const loadOrderBtn = document.getElementById('loadOrderBtn');
@@ -245,6 +249,14 @@ export function initApp() {
   function onOrderFileChange(e) {
     orderFileController.onOrderFileChange(e);
   }
+
+  createOrderMenuController({
+    orderMenu,
+    orderMenuBtn,
+    orderMenuPanel,
+    loadOrderBtn,
+    saveBtn,
+  });
 
   function onToggleTitles() {
     setTitlesHidden(!body.classList.contains('titles-hidden'));

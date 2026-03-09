@@ -74,7 +74,28 @@ function getOrder(page) {
 function getVisibleOrder(page) {
   return page
     .locator('#grid .thumb')
-    .evaluateAll((els) => els.filter((el) => el.style.display !== 'none').map((el) => el.dataset.name));
+      .evaluateAll((els) => els.filter((el) => el.style.display !== 'none').map((el) => el.dataset.name));
+}
+
+async function openOrderMenu(page, method = 'click') {
+  if (method === 'hover') {
+    await page.hover('#orderMenuBtn');
+    await expect
+      .poll(async () =>
+        page.locator('#orderMenuPanel').evaluate((el) => {
+          const style = window.getComputedStyle(el);
+          return style.pointerEvents !== 'none' && parseFloat(style.opacity || '0') > 0 && el.getBoundingClientRect().height > 0;
+        })
+      )
+      .toBe(true);
+    return;
+  } else if (method === 'keyboard') {
+    await page.focus('#orderMenuBtn');
+    await page.keyboard.press('Enter');
+  } else {
+    await page.click('#orderMenuBtn');
+  }
+  await expect.poll(async () => page.locator('#orderMenu').getAttribute('data-open')).toBe('true');
 }
 
 async function getFullscreenSnapshot(page) {
@@ -142,6 +163,32 @@ test.describe('Natural sorting', () => {
     await expect
       .poll(async () => (await getOrder(page)).join('|'))
       .toBe(['item1.mp4', 'Item2.mp4', 'ITEM3.mp4', 'item10.mp4'].join('|'));
+  });
+});
+
+test.describe('Order menu interactions', () => {
+  test('opens on hover and closes on mouse leave', async ({ page }) => {
+    await loadClips(page, 'load-basic');
+    await openOrderMenu(page, 'hover');
+    await page.mouse.move(5, 5);
+    await expect
+      .poll(async () =>
+        page.locator('#orderMenuPanel').evaluate((el) => {
+          const style = window.getComputedStyle(el);
+          return style.pointerEvents !== 'none' && parseFloat(style.opacity || '0') > 0 && el.getBoundingClientRect().height > 0;
+        })
+      )
+      .toBe(false);
+  });
+
+  test('supports click/tap open and keyboard navigation', async ({ page }) => {
+    await loadClips(page, 'load-basic');
+    await openOrderMenu(page, 'click');
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('#saveBtn')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect.poll(async () => page.locator('#orderMenu').getAttribute('data-open')).toBe('false');
+    await expect(page.locator('#orderMenuBtn')).toBeFocused();
   });
 });
 
@@ -352,6 +399,7 @@ test.describe('Reject invalid order file', () => {
 test.describe('Save order download fallback', () => {
   test('saves clip-order.txt via download', async ({ page }) => {
     await loadClips(page, 'save-download');
+    await openOrderMenu(page, 'click');
     const downloadPromise = page.waitForEvent('download');
     await page.click('#saveBtn');
     const download = await downloadPromise;
@@ -368,6 +416,7 @@ test.describe('Save order direct write path', () => {
       { name: 'save-a.mp4', type: 'video/mp4', content: 'a' },
       { name: 'save-b.webm', type: 'video/webm', content: 'b' },
     ]);
+    await openOrderMenu(page, 'click');
     await page.click('#saveBtn');
     await expect(page.locator('#status')).toHaveText('Saved clip-order.txt to the selected folder.');
 
