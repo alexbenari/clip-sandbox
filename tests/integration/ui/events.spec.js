@@ -3,24 +3,26 @@ import { bindControlEvents, bindGlobalEvents, isEditableTarget } from '../../../
 
 describe('ui events module', () => {
   test('detects editable targets', () => {
-    document.body.innerHTML = '<input id=\"a\" /><div id=\"b\"></div>';
+    document.body.innerHTML = '<input id="a" /><div id="b"></div>';
     expect(isEditableTarget(document.getElementById('a'))).toBe(true);
     expect(isEditableTarget(document.getElementById('b'))).toBe(false);
   });
 
   test('binds control events', () => {
     document.body.innerHTML = `
-      <button id=\"pick\"></button>
-      <input id=\"folder\" />
-      <button id=\"save\"></button>
-      <button id=\"load\"></button>
-      <input id=\"order\" />
-      <button id=\"toggle\"></button>
-      <button id=\"fs\"></button>
+      <button id="pick"></button>
+      <input id="folder" />
+      <button id="save"></button>
+      <button id="saveAsNew"></button>
+      <button id="load"></button>
+      <input id="order" />
+      <button id="toggle"></button>
+      <button id="fs"></button>
     `;
     const onPickFolder = vi.fn();
     const onFolderInputChange = vi.fn();
     const onSaveOrder = vi.fn();
+    const onSaveAsNew = vi.fn();
     const onLoadOrderClick = vi.fn();
     const onOrderFileChange = vi.fn();
     const onToggleTitles = vi.fn();
@@ -30,6 +32,7 @@ describe('ui events module', () => {
       pickBtn: document.getElementById('pick'),
       folderInput: document.getElementById('folder'),
       saveBtn: document.getElementById('save'),
+      saveAsNewBtn: document.getElementById('saveAsNew'),
       loadOrderBtn: document.getElementById('load'),
       orderFileInput: document.getElementById('order'),
       toggleTitlesBtn: document.getElementById('toggle'),
@@ -37,6 +40,7 @@ describe('ui events module', () => {
       onPickFolder,
       onFolderInputChange,
       onSaveOrder,
+      onSaveAsNew,
       onLoadOrderClick,
       onOrderFileChange,
       onToggleTitles,
@@ -46,6 +50,7 @@ describe('ui events module', () => {
     document.getElementById('pick').click();
     document.getElementById('folder').dispatchEvent(new Event('change'));
     document.getElementById('save').click();
+    document.getElementById('saveAsNew').click();
     document.getElementById('load').click();
     document.getElementById('order').dispatchEvent(new Event('change'));
     document.getElementById('toggle').click();
@@ -54,6 +59,7 @@ describe('ui events module', () => {
     expect(onPickFolder).toHaveBeenCalledOnce();
     expect(onFolderInputChange).toHaveBeenCalledOnce();
     expect(onSaveOrder).toHaveBeenCalledOnce();
+    expect(onSaveAsNew).toHaveBeenCalledOnce();
     expect(onLoadOrderClick).toHaveBeenCalledOnce();
     expect(onOrderFileChange).toHaveBeenCalledOnce();
     expect(onToggleTitles).toHaveBeenCalledOnce();

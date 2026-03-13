@@ -1,23 +1,23 @@
 # Clip Sandbox User Guide
 
 ## Introduction
-Clip Sandbox is a local video review and ordering tool. It lets you load a folder of clips, preview them in a responsive grid, 
-rearrange the playback order, and save or reload that order from a text file.
-The app is designed for fast curation workflows: load clips, reorder visually, validate order files, and run a fullscreen playback view 
-with slot-based display control.
+Clip Sandbox is a local video review and collection tool. It lets you load a folder of clips, preview them in a responsive grid, rearrange the current collection, and save or reload that collection from a text file.
+The app is designed for fast curation workflows: load clips, refine the visible collection, save subset collections, and run a fullscreen playback view with slot-based display control.
 
 ## Feature List
 - **Load clips from a folder**: Open a folder and load supported video files into the grid.
+- **Implicit full-folder collection**: Loading a folder creates a working collection that initially includes every supported clip in natural filename order.
+- **Collection files**: Load a plain-text collection file to switch the current working collection to a full-folder or subset collection.
 - **Video filtering**: Non-video files are ignored automatically.
 - **Natural sorting on load**: Clips are sorted by filename (numeric-aware, case-insensitive).
 - **Responsive grid layout**: Tile layout adjusts to viewport size and clip count.
 - **Live clip labels**: Each tile shows `filename (hh:mm:ss)`; duration updates when metadata is available.
-- **Drag-and-drop reorder**: Drag clips to change the current order.
-- **Select + remove clip**: Click a tile to select it, then press `Delete` or `Backspace` to remove it from the current view.
+- **Drag-and-drop reorder**: Drag clips to change the current collection order.
+- **Select + remove clip**: Click a tile to select it, then press `Delete` or `Backspace` to remove it from the current collection view.
+- **Missing-entry conflict choices**: If a collection file names clips that are not in the selected folder, the app lists the missing entries and lets you continue with existing clips only or cancel.
 - **Title overlay toggle**: Hide/show filename overlays for cleaner playback.
-- **Order menu**: A single **Order** control opens a small menu with **Load** and **Save** actions.
-- **Save order file**: Save current order as `clip-order.txt` (directly to selected folder when possible, otherwise as a download).
-- **Load order file**: Apply an order from a `.txt` file with strict validation (duplicates/missing/unknown/count mismatch checks).
+- **Collection menu**: A single **Collection** control opens a small menu with **Load Collection** and **Save Collection** actions.
+- **Save collection file**: Save the current collection as `default-collection.txt` (directly to the selected folder when possible, otherwise as a download).
 - **Status notifications**: Temporary status messages confirm load/save/actions and important updates.
 - **Fullscreen mode**: Enter fullscreen playback view via button or `F`.
 - **Fullscreen slot control**: While in fullscreen, type digits to set slot count (minimum `2`); the app keeps one display slot empty by design.
@@ -29,33 +29,36 @@ with slot-based display control.
 1. Click **Browse Folder…**.
 2. Choose a folder containing video clips.
 3. The grid populates with supported formats (`mp4`, `m4v`, `mov`, `webm`, `ogv`, `avi`, `mkv`, `mpg`, `mpeg`).
-4. Check the clip counter on the toolbar to confirm total loaded clips.
+4. The app creates an implicit full-folder collection from those clips.
+5. Check the clip counter on the toolbar to confirm how many clips are in the current collection.
 
-### 2. Reorder Clips
-1. Click and drag a clip tile.
-2. Drop it above or below another tile to reposition it.
-3. Repeat until the visual order matches your desired sequence.
-
-### 3. Save Current Order
-1. Open **Order**.
-2. Click **Order** (or tap on touch devices).
-3. Click **Save**.
-4. If folder write permissions are available, the app writes `clip-order.txt` into the selected folder.
-5. If direct write is unavailable, your browser downloads `clip-order.txt` instead.
-
-### 4. Load an Existing Order File
-1. Open **Order** (click on desktop, tap on touch devices).
-2. Click **Load**.
-3. Pick a `.txt` order file (one filename per line).
-4. If validation passes, the new order is applied.
-5. If validation fails, you will see an alert explaining the issues (for example: duplicate entries, missing clips, unknown clips, or count mismatch).
-
-### 5. Remove a Clip from the Current View
-1. Click a clip to select it (selected tile is highlighted).
-2. Press `Delete` or `Backspace`.
-3. The clip is removed from the current grid view.
+### 2. Reorder or Trim the Current Collection
+1. Click and drag a clip tile to reorder it.
+2. To remove a clip from the current collection, click it and press `Delete` or `Backspace`.
+3. Repeat until the visible collection matches your intended subset and order.
 
 Note: delete shortcuts are ignored while typing in form fields.
+
+### 3. Save the Current Collection
+1. Open **Collection**.
+2. Click **Save Collection**.
+3. If folder write permissions are available, the app writes `default-collection.txt` into the selected folder.
+4. If direct write is unavailable, your browser downloads `default-collection.txt` instead.
+5. The saved file contains exactly the current working collection shown in the UI.
+
+### 4. Load an Existing Collection File
+1. Load the folder first.
+2. Open **Collection**.
+3. Click **Load Collection**.
+4. Pick a `.txt` collection file (one filename per line).
+5. If every entry exists in the selected folder, the app switches to that collection immediately.
+6. If the file lists only some folder clips, the app shows only that subset.
+7. If the file lists clips that are missing from the folder, the app shows an inline panel that lists the missing entries and lets you:
+   - continue with the clips that do exist,
+   - or cancel and keep the current collection unchanged.
+
+### 5. Collection-First Loading
+In this build, load the folder first and then load the collection file. If you try to load a collection before a folder is active, the app will guide you back to the folder-first flow.
 
 ### 6. Hide or Show Titles
 1. Click **Hide Titles** to remove filename overlays.
@@ -73,7 +76,7 @@ Note: delete shortcuts are ignored while typing in form fields.
 3. The app shows how many clips are actively displayed (one slot remains empty intentionally).
 
 ## Tips
-- Keep filenames unique for the most predictable order-file workflows.
-- Use **Order -> Save** after major drag-and-drop changes.
-- If an order file does not apply, review the validation message and align filenames with currently loaded clips.
-- Keyboard access: focus **Order**, press `Enter`/`Space` to open, use arrow keys to move between **Load**/**Save**, and `Escape` to close.
+- Keep filenames unique for the most predictable collection-file workflows.
+- Use **Collection -> Save Collection** after major drag-and-drop or delete changes.
+- If a collection file lists missing clips, use the inline panel to review exactly which entries were skipped.
+- Keyboard access: focus **Collection**, press `Enter`/`Space` to open, use arrow keys to move between **Load Collection** and **Save Collection**, and `Escape` to close.

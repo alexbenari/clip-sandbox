@@ -1,9 +1,9 @@
-function menuItems(loadOrderBtn, saveBtn) {
-  return [loadOrderBtn, saveBtn].filter((el) => el instanceof HTMLElement);
+function menuItems(loadOrderBtn, saveBtn, saveAsNewBtn) {
+  return [loadOrderBtn, saveBtn, saveAsNewBtn].filter((el) => el instanceof HTMLElement);
 }
 
-function focusableItems(loadOrderBtn, saveBtn) {
-  return menuItems(loadOrderBtn, saveBtn).filter((el) => !el.disabled);
+function focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn) {
+  return menuItems(loadOrderBtn, saveBtn, saveAsNewBtn).filter((el) => !el.disabled);
 }
 
 export function createOrderMenuController({
@@ -12,6 +12,7 @@ export function createOrderMenuController({
   orderMenuPanel,
   loadOrderBtn,
   saveBtn,
+  saveAsNewBtn,
 }) {
   if (!orderMenu || !orderMenuBtn || !orderMenuPanel) {
     return {
@@ -44,12 +45,12 @@ export function createOrderMenuController({
   }
 
   function focusFirstItem() {
-    const first = focusableItems(loadOrderBtn, saveBtn)[0];
+    const first = focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn)[0];
     if (first) first.focus();
   }
 
   function moveItemFocus(step) {
-    const items = focusableItems(loadOrderBtn, saveBtn);
+    const items = focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn);
     if (items.length === 0) return;
     const currentIndex = items.findIndex((el) => el === document.activeElement);
     const nextIndex = currentIndex < 0 ? 0 : (currentIndex + step + items.length) % items.length;
@@ -109,12 +110,12 @@ export function createOrderMenuController({
     }
     if (e.key === 'End') {
       e.preventDefault();
-      const items = focusableItems(loadOrderBtn, saveBtn);
+      const items = focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn);
       if (items.length) items[items.length - 1].focus();
     }
   });
 
-  for (const item of menuItems(loadOrderBtn, saveBtn)) {
+  for (const item of menuItems(loadOrderBtn, saveBtn, saveAsNewBtn)) {
     item.addEventListener('click', () => close());
   }
 

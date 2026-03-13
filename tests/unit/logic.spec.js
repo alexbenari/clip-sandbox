@@ -10,7 +10,7 @@ import {
   computeFsLayout,
 } from '../../src/domain/layout-rules.js';
 import {
-  validateOrderStrict,
+  analyzeCollectionEntries,
 } from '../../src/domain/order-rules.js';
 
 describe('video helpers', () => {
@@ -56,19 +56,35 @@ describe('grid computation', () => {
   });
 });
 
-describe('order validation', () => {
-  it('detects duplicates and missing/extra', () => {
-    const current = ['a.mp4', 'b.mp4'];
-    const { issues } = validateOrderStrict(['a.mp4', 'a.mp4', 'c.mp4'], current);
-    expect(issues.join('\n')).toContain('Duplicate');
-    expect(issues.join('\n')).toContain('Missing');
-    expect(issues.join('\n')).toContain('Unknown');
+describe('collection analysis', () => {
+  it('rejects blank collections', () => {
+    const result = analyzeCollectionEntries(['', '  '], ['a.mp4']);
+    expect(result.kind).toBe('invalid-empty');
   });
 
-  it('passes when order matches', () => {
-    const { issues, order } = validateOrderStrict(['b.mp4', 'a.mp4'], ['a.mp4', 'b.mp4']);
-    expect(issues.length).toBe(0);
-    expect(order).toEqual(['b.mp4', 'a.mp4']);
+  it('rejects duplicate entries', () => {
+    const result = analyzeCollectionEntries(['a.mp4', 'a.mp4'], ['a.mp4', 'b.mp4']);
+    expect(result.kind).toBe('invalid-duplicates');
+    expect(result.duplicateNames).toContain('a.mp4 (x2)');
+  });
+
+  it('detects an exact-match collection', () => {
+    const result = analyzeCollectionEntries(['b.mp4', 'a.mp4'], ['a.mp4', 'b.mp4']);
+    expect(result.kind).toBe('exact-match');
+    expect(result.requestedNames).toEqual(['b.mp4', 'a.mp4']);
+  });
+
+  it('detects a subset collection', () => {
+    const result = analyzeCollectionEntries(['c.mp4', 'a.mp4'], ['a.mp4', 'b.mp4', 'c.mp4']);
+    expect(result.kind).toBe('subset-match');
+    expect(result.requestedNames).toEqual(['c.mp4', 'a.mp4']);
+  });
+
+  it('returns missing entries and existing entries in order', () => {
+    const result = analyzeCollectionEntries(['b.mp4', 'missing.mp4', 'a.mp4'], ['a.mp4', 'b.mp4']);
+    expect(result.kind).toBe('has-missing');
+    expect(result.missingNames).toEqual(['missing.mp4']);
+    expect(result.existingNamesInOrder).toEqual(['b.mp4', 'a.mp4']);
   });
 });
 

@@ -1,29 +1,29 @@
 export function createOrderFileController({
   orderFileInput,
-  validateOrderStrict,
-  getOrderArray,
-  applyOrder,
-  orderApplyErrorText,
+  canLoadCollection,
+  onCollectionLines,
+  showStatus,
+  collectionFirstUnavailableText,
+  collectionReadErrorText,
 }) {
   function onLoadOrderClick() {
+    if (!canLoadCollection()) {
+      showStatus(collectionFirstUnavailableText(), 4000);
+      return;
+    }
     if (typeof orderFileInput.showPicker === 'function') orderFileInput.showPicker();
     else orderFileInput.click();
   }
 
   function onOrderFileChange(e) {
-    const f = e.target.files && e.target.files[0];
-    if (f) {
-      f.text()
-        .then((t) => {
-          const lines = t.replace(/\r/g, '').split('\n');
-          const { issues, order } = validateOrderStrict(lines, getOrderArray());
-          if (issues.length) {
-            alert(orderApplyErrorText(issues));
-            return;
-          }
-          applyOrder(order);
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+      file.text()
+        .then((text) => {
+          const lines = text.replace(/\r/g, '').split('\n');
+          onCollectionLines(lines, file);
         })
-        .catch((err) => alert('Failed to read order file: ' + (err?.message || err)));
+        .catch((err) => showStatus(collectionReadErrorText(err), 4000));
     }
     e.target.value = '';
   }

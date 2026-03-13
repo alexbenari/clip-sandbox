@@ -4,18 +4,21 @@ export async function runSaveOrder({
   saveTextToDirectory,
   downloadText,
   showStatus,
+  filename = 'default-collection.txt',
+  buildSavedStatus = (name) => `Saved ${name} to the selected folder.`,
+  buildDownloadedStatus = (name) => `Downloaded ${name}.`,
 }) {
   const text = names.join('\n') + '\n';
   if (currentDirHandle && currentDirHandle.kind === 'directory' && currentDirHandle.getFileHandle) {
     try {
-      await saveTextToDirectory(currentDirHandle, 'clip-order.txt', text);
-      showStatus('Saved clip-order.txt to the selected folder.');
+      await saveTextToDirectory(currentDirHandle, filename, text);
+      showStatus(buildSavedStatus(filename));
       return 'saved';
     } catch (err) {
       console.warn('Direct save failed, falling back to download.', err);
     }
   }
-  downloadText('clip-order.txt', text);
-  showStatus('Downloaded clip-order.txt.');
+  downloadText(filename, text);
+  showStatus(buildDownloadedStatus(filename));
   return 'downloaded';
 }

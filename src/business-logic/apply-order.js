@@ -8,5 +8,5 @@ export function runApplyOrder({ names, grid, recomputeLayout, showStatus }) {
   }
   grid.appendChild(frag);
   recomputeLayout();
-  showStatus('Order applied.');
+  showStatus('Collection loaded.');
 }

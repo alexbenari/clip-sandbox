@@ -35,8 +35,28 @@ describe('business logic modules', () => {
     });
     expect(mode).toBe('saved');
     expect(saveTextToDirectory).toHaveBeenCalledOnce();
+    expect(saveTextToDirectory).toHaveBeenCalledWith(expect.anything(), 'default-collection.txt', 'one.mp4\ntwo.webm\n');
     expect(downloadText).not.toHaveBeenCalled();
-    expect(showStatus).toHaveBeenCalledWith('Saved clip-order.txt to the selected folder.');
+    expect(showStatus).toHaveBeenCalledWith('Saved default-collection.txt to the selected folder.');
+  });
+
+  test('runSaveOrder supports named collection files', async () => {
+    const saveTextToDirectory = vi.fn(async () => {});
+    const downloadText = vi.fn();
+    const showStatus = vi.fn();
+    const mode = await runSaveOrder({
+      names: ['one.mp4'],
+      filename: 'my-cut.txt',
+      currentDirHandle: null,
+      saveTextToDirectory,
+      downloadText,
+      showStatus,
+      buildSavedStatus: (name) => `Saved ${name}`,
+      buildDownloadedStatus: (name) => `Downloaded ${name}`,
+    });
+    expect(mode).toBe('downloaded');
+    expect(downloadText).toHaveBeenCalledWith('my-cut.txt', 'one.mp4\n');
+    expect(showStatus).toHaveBeenCalledWith('Downloaded my-cut.txt');
   });
 
   test('runRemoveSelectedClip removes selected card', () => {

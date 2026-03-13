@@ -4,6 +4,7 @@ export function createThumbInteractionHandlers({
   setSelectedThumb,
   recomputeLayout,
   removeDragOverClasses,
+  onCollectionReordered,
 }) {
   function onSelect(el) {
     if (state.selectedThumb && state.selectedThumb !== el) state.selectedThumb.classList.remove('selected');
@@ -45,6 +46,12 @@ export function createThumbInteractionHandlers({
     const before = e.clientY - rect.top < rect.height / 2;
     if (before) grid.insertBefore(srcEl, el);
     else grid.insertBefore(srcEl, el.nextSibling);
+    if (typeof onCollectionReordered === 'function') {
+      const names = Array.from(grid.children)
+        .map((card) => card.dataset.name)
+        .filter(Boolean);
+      onCollectionReordered(names);
+    }
     recomputeLayout();
   }
 

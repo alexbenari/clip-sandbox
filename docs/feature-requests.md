@@ -1,14 +1,18 @@
 - "order" mode
-  - When loading an order file:
-    - if there are missing clips, prompt and based on the user response either:
-      - display without them
-      - put them at the end with a special border (pink)
-  -  Zoom on highlighted clip (Z key or dbl click) displays it larger on top of the order window. Clicking anywhere outside the clip closes the large display.
-  -  control number of clips on grid, add arrows for prev/next screens on the sides as needed, add count of how many out of how many (5-10/23 etc)
-  -  refresh from folder: considers also the order file
+  - Collections
+    - open collection in a new tab, and tab name = name of the collection
+    - startup window (when no collection): a set of buttons in the center of the screen (sketch it)
+    - allow naming a collection when saving
+    - allow renaming a collection
+    - allow selecting a range of clips
+  - Clip display 
+    - Zoom on highlighted clip (Z key or dbl click) displays it larger on top of the order window. ESC or clicking anywhere outside the clip window closes the large display.
+    -  control number of clips on grid, add arrows for prev/next screens on the sides as needed, add count of how many out of how many (5-10/23 etc)
+    -  refresh from folder: reloads the collection according to the order file
 
 - "FS"" mode
-  Support for multiple display modes - allow selecting dynamically by mode name
+  - rename to "Present" mode
+  - Support for multiple display modes - allow selecting dynamically by mode name
   FS general (for all views): 
     - toggle metadata display (default is off)
     - select num slots (kb shortcut but also explicit in ui)

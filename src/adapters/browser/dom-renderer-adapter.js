@@ -14,7 +14,10 @@ export function applyGridLayout(gridEl, cols, cellHeight) {
   for (const el of gridEl.children) el.style.height = `${cellHeight}px`;
 }
 
-export function updateClipCount(countEl, saveBtn, count, niceNum) {
+export function updateClipCount(countEl, buttons, count, niceNum) {
   countEl.textContent = countText(count, niceNum);
-  saveBtn.disabled = count === 0;
+  const actionButtons = Array.isArray(buttons) ? buttons : [buttons];
+  for (const button of actionButtons.filter(Boolean)) {
+    button.disabled = count === 0;
+  }
 }

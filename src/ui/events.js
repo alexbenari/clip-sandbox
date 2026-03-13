@@ -8,6 +8,7 @@ export function bindControlEvents({
   pickBtn,
   folderInput,
   saveBtn,
+  saveAsNewBtn,
   loadOrderBtn,
   orderFileInput,
   toggleTitlesBtn,
@@ -15,6 +16,7 @@ export function bindControlEvents({
   onPickFolder,
   onFolderInputChange,
   onSaveOrder,
+  onSaveAsNew,
   onLoadOrderClick,
   onOrderFileChange,
   onToggleTitles,
@@ -23,6 +25,7 @@ export function bindControlEvents({
   pickBtn.addEventListener('click', onPickFolder);
   folderInput.addEventListener('change', onFolderInputChange);
   saveBtn.addEventListener('click', onSaveOrder);
+  saveAsNewBtn?.addEventListener('click', onSaveAsNew);
   loadOrderBtn.addEventListener('click', onLoadOrderClick);
   orderFileInput.addEventListener('change', onOrderFileChange);
   toggleTitlesBtn.addEventListener('click', onToggleTitles);

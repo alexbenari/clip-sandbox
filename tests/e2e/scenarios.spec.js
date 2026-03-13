@@ -18,7 +18,6 @@ async function loadClips(page, scenario) {
   await page.goto(appUrl);
   await page.waitForSelector('#folderInput');
   await page.evaluate(() => {
-    // force fallback to file input (folder picker not available in test)
     window.showDirectoryPicker = undefined;
   });
   const dir = path.join(fixtureDir(scenario), 'clips');
@@ -72,9 +71,7 @@ function getOrder(page) {
 }
 
 function getVisibleOrder(page) {
-  return page
-    .locator('#grid .thumb')
-      .evaluateAll((els) => els.filter((el) => el.style.display !== 'none').map((el) => el.dataset.name));
+  return page.locator('#grid .thumb').evaluateAll((els) => els.filter((el) => el.style.display !== 'none').map((el) => el.dataset.name));
 }
 
 async function openOrderMenu(page) {
@@ -117,7 +114,14 @@ test.describe('Load via folder selection', () => {
     await loadClips(page, 'load-basic');
     await expect(page.locator('#count')).toHaveText('2 clips');
     await expect(page.locator('#saveBtn')).toBeEnabled();
+    await expect(page.locator('#saveAsNewBtn')).toBeEnabled();
     await expect(page.locator('#grid video')).toHaveCount(2);
+  });
+
+  test('shows the implicit collection name in the toolbar and page title', async ({ page }) => {
+    await loadClips(page, 'load-basic');
+    await expect(page.locator('#activeCollectionName')).toHaveText('clips');
+    await expect(page).toHaveTitle('clips collection');
   });
 });
 
@@ -126,7 +130,6 @@ test.describe('Filter non-video files', () => {
     await loadClips(page, 'load-mixed');
     await expect(page.locator('#grid .thumb')).toHaveCount(2);
     await expect(page.locator('#count')).toHaveText('2 clips');
-    // ensure the non-video filename is not present in any title
     const titles = await getOrder(page);
     expect(titles.some((t) => t.includes('notes.txt'))).toBeFalsy();
   });
@@ -138,19 +141,18 @@ test.describe('No supported videos', () => {
     await expect(page.locator('#grid .thumb')).toHaveCount(0);
     await expect(page.locator('#count')).toHaveText('0 clips');
     await expect(page.locator('#saveBtn')).toBeDisabled();
+    await expect(page.locator('#saveAsNewBtn')).toBeDisabled();
   });
 });
 
 test.describe('Natural sorting', () => {
   test('loads videos in numeric-aware, case-insensitive filename order', async ({ page }) => {
     await loadClips(page, 'natural-sort');
-    await expect
-      .poll(async () => (await getOrder(page)).join('|'))
-      .toBe(['item1.mp4', 'Item2.mp4', 'ITEM3.mp4', 'item10.mp4'].join('|'));
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['item1.mp4', 'Item2.mp4', 'ITEM3.mp4', 'item10.mp4'].join('|'));
   });
 });
 
-test.describe('Order menu interactions', () => {
+test.describe('Collection menu interactions', () => {
   test('supports click/tap open and keyboard navigation', async ({ page }) => {
     await loadClips(page, 'load-basic');
     await openOrderMenu(page);
@@ -158,6 +160,8 @@ test.describe('Order menu interactions', () => {
     await expect(page.locator('#loadOrderBtn')).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(page.locator('#saveBtn')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('#saveAsNewBtn')).toBeFocused();
     await page.keyboard.press('Escape');
     await expect.poll(async () => page.locator('#orderMenu').getAttribute('data-open')).toBe('false');
     await expect(page.locator('#orderMenuBtn')).toBeFocused();
@@ -197,20 +201,18 @@ test.describe('Responsive grid layout', () => {
     });
 
     await page.setViewportSize({ width: 720, height: 900 });
-    await expect
-      .poll(async () => {
-        const next = await page.evaluate(() => {
-          const grid = document.getElementById('grid');
-          const card = document.querySelector('#grid .thumb');
-          const colsMatch = (grid?.style.gridTemplateColumns || '').match(/repeat\((\d+),\s*1fr\)/);
-          return {
-            cols: colsMatch ? Number(colsMatch[1]) : 1,
-            h: card ? parseFloat(card.style.height) : 0,
-          };
-        });
-        return next.cols !== initial.cols || Math.abs(next.h - initial.h) > 1;
-      })
-      .toBe(true);
+    await expect.poll(async () => {
+      const next = await page.evaluate(() => {
+        const grid = document.getElementById('grid');
+        const card = document.querySelector('#grid .thumb');
+        const colsMatch = (grid?.style.gridTemplateColumns || '').match(/repeat\((\d+),\s*1fr\)/);
+        return {
+          cols: colsMatch ? Number(colsMatch[1]) : 1,
+          h: card ? parseFloat(card.style.height) : 0,
+        };
+      });
+      return next.cols !== initial.cols || Math.abs(next.h - initial.h) > 1;
+    }).toBe(true);
 
     await page.setViewportSize({ width: 360, height: 260 });
     const tiny = await page.evaluate(() => {
@@ -228,7 +230,7 @@ test.describe('Drag reorder', () => {
     const third = page.locator('#grid .thumb').nth(2);
     await first.dragTo(third, { targetPosition: { x: 10, y: 10 } });
     const order = await getOrder(page);
-    expect(order[2]).toContain('red.mp4'); // dragged to last position
+    expect(order[2]).toContain('red.mp4');
   });
 });
 
@@ -285,14 +287,12 @@ test.describe('Toggle titles', () => {
     await loadClips(page, 'titles');
     const fsBtn = page.locator('#fsBtn');
 
-    // Default titles visible -> should still be visible after fullscreen exit.
     await fsBtn.click();
     await expect(page.locator('body')).toHaveClass(/fs-active/);
     await page.keyboard.press('F');
     await expect(page.locator('body')).not.toHaveClass(/fs-active/);
     await expect(page.locator('body')).not.toHaveClass(/titles-hidden/);
 
-    // Hidden titles before fullscreen -> should remain hidden after exit.
     const toggle = page.locator('#toggleTitlesBtn');
     await toggle.click();
     await expect(page.locator('body')).toHaveClass(/titles-hidden/);
@@ -319,82 +319,160 @@ test.describe('Fullscreen behaviors', () => {
     expect(defaultSnapshot.sampleH).toBeCloseTo(expectedDefault.cellH, 1);
 
     await page.keyboard.type('6');
-    await expect
-      .poll(async () => {
-        const snapshot = await getFullscreenSnapshot(page);
-        const expected = expectedFsState(snapshot, 6);
-        return (
-          snapshot.hidden === expected.hidden &&
-          snapshot.cols === expected.cols &&
-          Math.abs(snapshot.sampleH - expected.cellH) < 1
-        );
-      })
-      .toBe(true);
+    await expect.poll(async () => {
+      const snapshot = await getFullscreenSnapshot(page);
+      const expected = expectedFsState(snapshot, 6);
+      return (
+        snapshot.hidden === expected.hidden &&
+        snapshot.cols === expected.cols &&
+        Math.abs(snapshot.sampleH - expected.cellH) < 1
+      );
+    }).toBe(true);
 
     const afterSlots = await getFullscreenSnapshot(page);
     const expectedAfterSlots = expectedFsState(afterSlots, 6);
     expect(afterSlots.hidden).toBeGreaterThan(0);
     expect(afterSlots.sampleH).toBeCloseTo(expectedAfterSlots.cellH, 1);
 
-    await page.keyboard.press('F'); // exit via keyboard shortcut
+    await page.keyboard.press('F');
     await expect(page.locator('body')).not.toHaveClass(/fs-active/);
   });
 });
 
-test.describe('Apply valid order file', () => {
-  test('applies matching order from file', async ({ page }) => {
+test.describe('Collection load', () => {
+  test('applies exact-match collection from file', async ({ page }) => {
     await loadClips(page, 'order-valid');
-    const orderFile = path.join(fixtureDir('order-valid'), 'order', 'valid.txt');
-    await page.setInputFiles('#orderFileInput', orderFile);
-    await expect
-      .poll(async () => (await getOrder(page)).join('|'))
-      .toBe(['three.mp4', 'one.mp4', 'two.webm'].join('|'));
+    const collectionFile = path.join(fixtureDir('order-valid'), 'order', 'valid.txt');
+    await page.setInputFiles('#orderFileInput', collectionFile);
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4', 'two.webm'].join('|'));
   });
-});
 
-test.describe('Reject invalid order file', () => {
-  test('shows alert and keeps order when file is invalid', async ({ page }) => {
+  test('applies subset collection and hides unlisted clips', async ({ page }) => {
+    await loadClips(page, 'order-valid');
+    const collectionFile = path.join(fixtureDir('order-valid'), 'order', 'subset.txt');
+    await page.setInputFiles('#orderFileInput', collectionFile);
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4'].join('|'));
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+    await expect(page.locator('#count')).toHaveText('2 clips');
+    await expect(page.locator('#activeCollectionName')).toHaveText('subset');
+    await expect(page).toHaveTitle('subset collection');
+  });
+
+  test('shows missing-entry panel and applies existing clips when confirmed', async ({ page }) => {
+    await loadClips(page, 'order-invalid');
+    const collectionFile = path.join(fixtureDir('order-invalid'), 'order', 'missing-only.txt');
+    await page.setInputFiles('#orderFileInput', collectionFile);
+
+    await expect(page.locator('#collectionConflict')).toBeVisible();
+    await expect(page.locator('#collectionConflictSummary')).toContainText('1 missing entry');
+    await expect(page.locator('#collectionConflictList')).toContainText('missing.mp4');
+
+    await page.click('#applyCollectionConflictBtn');
+    await expect(page.locator('#collectionConflict')).toBeHidden();
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe('two.webm');
+    await expect(page.locator('#count')).toHaveText('1 clip');
+  });
+
+  test('shows missing-entry panel and keeps the current collection when canceled', async ({ page }) => {
     await loadClips(page, 'order-invalid');
     const original = await getOrder(page);
-    const dialogPromise = page.waitForEvent('dialog', { timeout: 1500 });
-    const orderFile = path.join(fixtureDir('order-invalid'), 'order', 'invalid.txt');
-    await page.setInputFiles('#orderFileInput', orderFile);
-    const dialog = await dialogPromise;
-    expect(dialog.type()).toBe('alert');
-    expect(dialog.message()).toContain('Could not apply order');
-    await dialog.accept();
-    const after = await getOrder(page);
-    expect(after).toEqual(original);
+    const collectionFile = path.join(fixtureDir('order-invalid'), 'order', 'missing-only.txt');
+    await page.setInputFiles('#orderFileInput', collectionFile);
+
+    await expect(page.locator('#collectionConflict')).toBeVisible();
+    await page.click('#cancelCollectionConflictBtn');
+    await expect(page.locator('#collectionConflict')).toBeHidden();
+    expect(await getOrder(page)).toEqual(original);
+  });
+
+  test('shows guidance when loading a collection before a folder', async ({ page }) => {
+    await page.goto(appUrl);
+    await openOrderMenu(page);
+    await page.click('#loadOrderBtn');
+    await expect(page.locator('#status')).toHaveText('Load the folder first, then load the collection file.');
   });
 });
 
-test.describe('Save order download fallback', () => {
-  test('saves clip-order.txt via download', async ({ page }) => {
+test.describe('Save collection download fallback', () => {
+  test('saves default-collection.txt via download', async ({ page }) => {
     await loadClips(page, 'save-download');
     await openOrderMenu(page);
     const downloadPromise = page.waitForEvent('download');
     await page.click('#saveBtn');
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe('clip-order.txt');
+    expect(download.suggestedFilename()).toBe('default-collection.txt');
     const content = await download.createReadStream();
     const text = (await streamToString(content)).trim();
     expect(text.split('\n')).toEqual(await getOrder(page));
   });
+
+  test('saves only the active subset collection', async ({ page }) => {
+    await loadClips(page, 'order-valid');
+    const collectionFile = path.join(fixtureDir('order-valid'), 'order', 'subset.txt');
+    await page.setInputFiles('#orderFileInput', collectionFile);
+    await openOrderMenu(page);
+    const downloadPromise = page.waitForEvent('download');
+    await page.click('#saveBtn');
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('default-collection.txt');
+    const content = await download.createReadStream();
+    const text = (await streamToString(content)).trim();
+    expect(text.split('\n')).toEqual(['three.mp4', 'one.mp4']);
+  });
+
+  test('save as new validates invalid names and downloads a named file', async ({ page }) => {
+    await loadClips(page, 'save-download');
+    await openOrderMenu(page);
+    await page.click('#saveAsNewBtn');
+    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
+
+    await page.fill('#saveAsNewNameInput', 'bad:name');
+    await page.click('#confirmSaveAsNewBtn');
+    await expect(page.locator('#saveAsNewError')).toContainText('cannot contain');
+    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
+
+    await page.fill('#saveAsNewNameInput', 'my-cut');
+    const downloadPromise = page.waitForEvent('download');
+    await page.click('#confirmSaveAsNewBtn');
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('my-cut.txt');
+    const content = await download.createReadStream();
+    const text = (await streamToString(content)).trim();
+    expect(text.split('\n')).toEqual(await getOrder(page));
+    await expect(page.locator('#saveAsNewDialog')).toBeHidden();
+  });
 });
 
-test.describe('Save order direct write path', () => {
-  test('writes clip-order.txt to selected folder handle when available', async ({ page }) => {
+test.describe('Save collection direct write path', () => {
+  test('writes default-collection.txt to selected folder handle when available', async ({ page }) => {
     await loadClipsViaDirectoryPickerMock(page, [
       { name: 'save-a.mp4', type: 'video/mp4', content: 'a' },
       { name: 'save-b.webm', type: 'video/webm', content: 'b' },
     ]);
     await openOrderMenu(page);
     await page.click('#saveBtn');
-    await expect(page.locator('#status')).toHaveText('Saved clip-order.txt to the selected folder.');
+    await expect(page.locator('#status')).toHaveText('Saved default-collection.txt to the selected folder.');
 
     const writes = await page.evaluate(() => window.__savedOrderWrites || []);
     expect(writes).toHaveLength(1);
-    expect(writes[0].name).toBe('clip-order.txt');
+    expect(writes[0].name).toBe('default-collection.txt');
+    expect(writes[0].data.trim().split('\n')).toEqual(await getOrder(page));
+  });
+
+  test('save as new writes a named collection file when directory access is available', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'save-a.mp4', type: 'video/mp4', content: 'a' },
+      { name: 'save-b.webm', type: 'video/webm', content: 'b' },
+    ]);
+    await openOrderMenu(page);
+    await page.click('#saveAsNewBtn');
+    await page.fill('#saveAsNewNameInput', 'director-cut');
+    await page.click('#confirmSaveAsNewBtn');
+    await expect(page.locator('#status')).toHaveText('Saved director-cut.txt to the selected folder.');
+
+    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].name).toBe('director-cut.txt');
     expect(writes[0].data.trim().split('\n')).toEqual(await getOrder(page));
   });
 });
@@ -421,19 +499,16 @@ test.describe('Fullscreen clip rotation', () => {
     await expect(page.locator('body')).toHaveClass(/fs-active/);
     const before = await getVisibleOrder(page);
 
-    await expect
-      .poll(
-        async () =>
-          page.evaluate((beforeVisible) => {
-            const visible = Array.from(document.querySelectorAll('#grid .thumb')).filter((el) => el.style.display !== 'none');
-            const firstVideo = visible[0]?.querySelector('video');
-            if (firstVideo) firstVideo.dispatchEvent(new Event('ended'));
-            const current = visible.map((el) => el.dataset.name);
-            return current.join('|') !== beforeVisible.join('|');
-          }, before),
-        { timeout: 8000 }
-      )
-      .toBe(true);
+    await expect.poll(async () =>
+      page.evaluate((beforeVisible) => {
+        const visible = Array.from(document.querySelectorAll('#grid .thumb')).filter((el) => el.style.display !== 'none');
+        const firstVideo = visible[0]?.querySelector('video');
+        if (firstVideo) firstVideo.dispatchEvent(new Event('ended'));
+        const current = visible.map((el) => el.dataset.name);
+        return current.join('|') !== beforeVisible.join('|');
+      }, before),
+      { timeout: 8000 }
+    ).toBe(true);
   });
 });
 
@@ -446,3 +521,5 @@ async function streamToString(stream) {
     stream.on('error', reject);
   });
 }
+
+
