@@ -9,7 +9,7 @@ import {
 
 describe('ui dom factory', () => {
   beforeEach(() => {
-    document.body.innerHTML = '<div id=\"grid\"></div>';
+    document.body.innerHTML = '<div id="grid"></div>';
   });
 
   test('creates thumb card with safe text label and handlers', () => {
@@ -17,11 +17,13 @@ describe('ui dom factory', () => {
     URL.createObjectURL = vi.fn(() => 'blob:test');
 
     const onSelect = vi.fn();
+    const onDoubleClick = vi.fn();
     const card = createThumbCard({
       file: new File(['x'], '<img src=x>.mp4', { type: 'video/mp4' }),
       id: 'vid_1',
       formatLabel: (name) => `${name} (--:--:--)`,
       onSelect,
+      onDoubleClick,
       onDragStart: vi.fn(),
       onDragEnd: vi.fn(),
       onDragOver: vi.fn(),
@@ -34,7 +36,9 @@ describe('ui dom factory', () => {
     expect(label.textContent).toBe('<img src=x>.mp4 (--:--:--)');
     expect(label.querySelector('img')).toBeNull();
     card.click();
+    card.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     expect(onSelect).toHaveBeenCalledOnce();
+    expect(onDoubleClick).toHaveBeenCalledOnce();
 
     URL.createObjectURL = originalCreate;
   });
@@ -47,6 +51,7 @@ describe('ui dom factory', () => {
       id: 'vid_2',
       formatLabel: (name, seconds) => `${name} (${seconds ?? '--:--:--'})`,
       onSelect: vi.fn(),
+      onDoubleClick: vi.fn(),
       onDragStart: vi.fn(),
       onDragEnd: vi.fn(),
       onDragOver: vi.fn(),

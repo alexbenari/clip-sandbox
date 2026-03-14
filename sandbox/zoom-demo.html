@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zoom Overlay Demo</title>
+  <style>
+    :root{
+      color-scheme: dark;
+      --bg:#09111d;
+      --panel:rgba(7, 17, 31, .82);
+      --text:#e5eefc;
+      --muted:#93a8c7;
+      --accent:#d99a2b;
+      --accent-deep:#9f6410;
+      --border:rgba(147,168,199,.22);
+      --shadow:0 24px 60px rgba(0,0,0,.35);
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      padding:24px;
+      background:
+        radial-gradient(circle at top left, rgba(217,154,43,.26), transparent 30%),
+        radial-gradient(circle at right 20%, rgba(50,104,140,.24), transparent 28%),
+        linear-gradient(160deg, #06101a 0%, #0b1524 54%, #08111d 100%);
+      color:var(--text);
+      font-family:"Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .demo-shell{
+      width:min(560px, 100%);
+      padding:28px;
+      border:1px solid var(--border);
+      border-radius:24px;
+      background:var(--panel);
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(10px);
+    }
+    h1{
+      margin:0 0 10px;
+      font-size:clamp(1.7rem, 3vw, 2.4rem);
+      line-height:1.05;
+      letter-spacing:.02em;
+    }
+    p{
+      margin:0 0 20px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+    button{
+      appearance:none;
+      border:0;
+      cursor:pointer;
+      padding:12px 18px;
+      border-radius:999px;
+      color:#1b1205;
+      font-weight:700;
+      letter-spacing:.02em;
+      background:linear-gradient(180deg, #f0ba54 0%, var(--accent) 64%, var(--accent-deep) 100%);
+      box-shadow:0 12px 28px rgba(159,100,16,.3);
+    }
+    button:hover{ filter:brightness(1.04); }
+    button:active{ transform:translateY(1px); }
+  </style>
+</head>
+<body>
+  <main class="demo-shell">
+    <h1>Zoom Overlay Demo</h1>
+    <p>This page is a minimal host for the reusable zoom overlay component. Click the button to open the sample clip in the same overlay used by the main app.</p>
+    <button id="viewBtn" type="button">Click to View</button>
+  </main>
+  <div id="zoomLayerRoot"></div>
+  <script type="module">
+    import { createZoomOverlayController } from '../src/ui/zoom-overlay-controller.js';
+
+    const zoomOverlay = createZoomOverlayController({
+      mountEl: document.getElementById('zoomLayerRoot'),
+      document,
+    });
+
+    document.getElementById('viewBtn').addEventListener('click', () => {
+      zoomOverlay.open({
+        src: './hand-closes-curtain.mp4',
+        name: 'hand-closes-curtain.mp4',
+      });
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && zoomOverlay.isOpen()) {
+        zoomOverlay.close();
+      }
+    });
+  </script>
+</body>
+</html>

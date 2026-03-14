@@ -245,7 +245,7 @@
     <span class="active-collection-name" id="activeCollectionName">Local Video Grid Reviewer</span>
     <div class="spacer"></div>
     <span class="count" id="count">0 clips</span>
-    <span class="hint">drag to reorder • click to select • press Delete to remove • press F for fullscreen</span>
+    <span class="hint">drag to reorder • click to select • double-click or Z to zoom • press Delete to remove • press F for fullscreen</span>
   </header>
 
   <section class="collection-conflict" id="collectionConflict" hidden aria-live="polite">
@@ -276,9 +276,12 @@
   </div>
 
   <div class="footerbar" id="status" hidden></div>
+  <div id="zoomLayerRoot"></div>
   <script type="module">
     import { initApp } from './app.js';
     initApp();
   </script>
 </body>
 </html>
+
+

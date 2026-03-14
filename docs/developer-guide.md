@@ -15,7 +15,7 @@ This guide explains the current browser-only architecture and where to add or ch
 - [`src/domain`](/C:/dev/clip-sandbox/src/domain): pure rules and calculations (`clip-rules`, `layout-rules`, `order-rules`).
 - [`src/business-logic`](/C:/dev/clip-sandbox/src/business-logic): orchestration flows (`load-clips`, `save-order`, `remove-clip`, `toggle-titles`, `fullscreen-session`).
 - [`src/state`](/C:/dev/clip-sandbox/src/state): app state factory and mutators.
-- [`src/ui`](/C:/dev/clip-sandbox/src/ui): DOM-facing controllers and view helpers (`events`, `layout-controller`, `drag-drop-controller`, `order-file-controller`, `order-menu-controller`, `dom-factory`, `view-model`).
+- [`src/ui`](/C:/dev/clip-sandbox/src/ui): DOM-facing controllers and view helpers (`events`, `layout-controller`, `drag-drop-controller`, `order-file-controller`, `order-menu-controller`, `zoom-overlay-controller`, `dom-factory`, `view-model`).
 - [`src/adapters/browser`](/C:/dev/clip-sandbox/src/adapters/browser): browser API wrappers (file system, fullscreen, clock, DOM rendering).
 - [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js): composition root that wires dependencies and event handlers.
 
@@ -47,11 +47,30 @@ Loading a folder creates an implicit full-folder collection. Loading a collectio
   - `Escape` to close and return focus to the trigger.
 - Missing collection entries are handled by an inline conflict panel in [`index.html`](/C:/dev/clip-sandbox/index.html), not by alert/confirm dialogs.
 
+## Zoom UI Component
+Zoom mode is implemented as a dedicated UI component rather than inline overlay logic in the composition root.
+
+Current shape:
+- [`index.html`](/C:/dev/clip-sandbox/index.html) provides only the shell mount point `#zoomLayerRoot`.
+- [`src/ui/zoom-overlay-controller.js`](/C:/dev/clip-sandbox/src/ui/zoom-overlay-controller.js) owns default style installation, overlay DOM creation, outside-click close behavior, and the zoomed video element lifecycle.
+- [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js) only orchestrates when zoom opens/closes and how it interacts with selection and fullscreen.
+- [`sandbox/zoom-demo.html`](/C:/dev/clip-sandbox/sandbox/zoom-demo.html) is the minimal-host example for reusing the component outside the main app shell.
+
+Integration recipe for another host page:
+1. Render a mount node such as `<div id="zoomLayerRoot"></div>`.
+2. Import `createZoomOverlayController` from [`src/ui/zoom-overlay-controller.js`](/C:/dev/clip-sandbox/src/ui/zoom-overlay-controller.js).
+3. Create the controller with `{ mountEl, document }`.
+4. Call `open({ src, name })` from a user gesture or another host event.
+5. Do not copy zoom CSS from the main app; the controller installs its own default styles automatically.
+
+Important rule: keep transient zoom internals in the controller unless another subsystem genuinely needs to query them. Avoid growing `app-state` with purely local overlay details.
+
 ## State and Rendering Rules
-[`src/state/app-state.js`](/C:/dev/clip-sandbox/src/state/app-state.js) now tracks:
+[src/state/app-state.js](/C:/dev/clip-sandbox/src/state/app-state.js) now tracks:
 - `folderFiles` and `folderFileNames` for the selected folder.
 - `activeCollectionNames` for the current working collection.
 - `pendingCollectionConflict` for a missing-entry decision that is waiting for user input.
+- `selectedThumb` for the currently selected grid tile element.
 
 Important rule: the DOM is a rendering of the current collection state, not the saved model itself. UI interactions such as drag reorder and delete update the active collection state, and save operations serialize that state.
 
@@ -59,18 +78,20 @@ Important rule: the DOM is a rendering of the current collection state, not the 
 [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js) is the integration point:
 - caches DOM elements once,
 - creates app state via `createAppState`,
+- creates the zoom overlay controller from `#zoomLayerRoot`,
 - loads folder files and seeds the implicit collection,
 - analyzes collection files against `state.folderFileNames`,
 - rebuilds the grid from `state.activeCollectionNames`,
 - binds conflict-panel actions and control/global events,
+- coordinates zoom/fullscreen interactions,
 - adapts browser APIs through injected adapter functions.
 
 ## Testing Strategy
 - Unit/integration (Vitest):
   - collection analysis and save behavior,
-  - UI controllers in isolation (for example [`tests/integration/ui/order-file-controller.spec.js`](/C:/dev/clip-sandbox/tests/integration/ui/order-file-controller.spec.js)).
+  - UI controllers in isolation (for example [`tests/integration/ui/order-file-controller.spec.js`](/C:/dev/clip-sandbox/tests/integration/ui/order-file-controller.spec.js) and [`tests/integration/ui/zoom-overlay-controller.spec.js`](/C:/dev/clip-sandbox/tests/integration/ui/zoom-overlay-controller.spec.js)).
 - E2E (Playwright):
-  - full user workflows in [`tests/e2e/scenarios.spec.js`](/C:/dev/clip-sandbox/tests/e2e/scenarios.spec.js), including subset collection load, missing-entry decisions, collection save, and menu behavior.
+  - full user workflows in [`tests/e2e/scenarios.spec.js`](/C:/dev/clip-sandbox/tests/e2e/scenarios.spec.js), including subset collection load, missing-entry decisions, collection save, fullscreen behavior, and zoom mode.
 
 ## Common Commands
 - `npm run unit`
@@ -81,5 +102,9 @@ Important rule: the DOM is a rendering of the current collection state, not the 
 ## Extension Notes
 - Add pure collection comparison rules in `src/domain` first where possible.
 - Keep browser APIs in `src/adapters/browser` instead of calling them directly from business logic.
-- If you add new collection UI states, prefer app-owned surfaces in `index.html` plus controller/view-model logic rather than browser dialogs.
+- If you add new app-owned UI surfaces, prefer a shell mount point in `index.html` plus a dedicated controller in `src/ui` rather than large DOM procedures in `bootstrap.js`.
 - Keep save behavior tied to `activeCollectionNames`, not to scraping the current DOM at save time.
+- Keep zoom/fullscreen coordination at the app orchestration layer unless fullscreen behavior itself is being redesigned.
+
+
+

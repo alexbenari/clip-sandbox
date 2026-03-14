@@ -1,4 +1,7 @@
-- "order" mode
+- design
+  - reusable componenet: clip card
+  - reusable component: clip grid
+- "grid mode" mode
   - Collections
     - open collection in a new tab, and tab name = name of the collection
     - startup window (when no collection): a set of buttons in the center of the screen (sketch it)
@@ -6,7 +9,8 @@
     - allow renaming a collection
     - allow selecting a range of clips
   - Clip display 
-    - Zoom on highlighted clip (Z key or dbl click) displays it larger on top of the order window. ESC or clicking anywhere outside the clip window closes the large display.
+    - hitting m mutes/unmutes a clip: design - should be encapsulated at the clip display level (card? grid? zoom? what is common to all three?) 
+    - Compare mode: compare two clips by opening them in side-by-side zoom and synchronizing their start
     -  control number of clips on grid, add arrows for prev/next screens on the sides as needed, add count of how many out of how many (5-10/23 etc)
     -  refresh from folder: reloads the collection according to the order file
 

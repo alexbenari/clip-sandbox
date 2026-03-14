@@ -73,6 +73,7 @@ import { createLayoutController } from '../ui/layout-controller.js';
 import { createThumbInteractionHandlers } from '../ui/drag-drop-controller.js';
 import { createOrderFileController } from '../ui/order-file-controller.js';
 import { createOrderMenuController } from '../ui/order-menu-controller.js';
+import { createZoomOverlayController } from '../ui/zoom-overlay-controller.js';
 
 let initialized = false;
 const WINDOWS_ILLEGAL_FILENAME_CHARS = /[<>:"/\\|?*]/;
@@ -97,6 +98,7 @@ export function initApp() {
   const activeCollectionNameEl = document.getElementById('activeCollectionName');
   const toolbar = document.getElementById('toolbar');
   const statusBar = document.getElementById('status');
+  const zoomLayerRoot = document.getElementById('zoomLayerRoot');
   const toggleTitlesBtn = document.getElementById('toggleTitlesBtn');
   const fsBtn = document.getElementById('fsBtn');
   const collectionConflict = document.getElementById('collectionConflict');
@@ -112,6 +114,7 @@ export function initApp() {
   const body = document.body;
 
   const state = createAppState();
+  const zoomOverlay = createZoomOverlayController({ mountEl: zoomLayerRoot, document });
 
   function showStatus(msg, timeout = 2500) {
     showStatusAdapter(statusBar, msg, timeout);
@@ -153,6 +156,7 @@ export function initApp() {
   }
 
   function clearGrid() {
+    closeZoom();
     clearGridCards(grid);
     setSelectedThumb(state, null);
     updateCount();
@@ -216,6 +220,18 @@ export function initApp() {
     setActiveCollectionNames(state, currentGridNames(), source);
   }
 
+  function closeZoom() {
+    zoomOverlay.close();
+  }
+
+  function openZoomForCard(card) {
+    if (!card || isFullscreen()) return false;
+    const src = card.dataset.objectUrl;
+    if (!src) return false;
+    thumbInteractions.onSelectOnly(card);
+    return zoomOverlay.open({ src, name: card.dataset.name || '' });
+  }
+
   function addThumbForFile(file) {
     const id = nextThumbId(state);
     const card = createThumbCard({
@@ -224,6 +240,7 @@ export function initApp() {
       formatLabel,
       onLoadedMetadata: (el, vid) => setCardDuration(el, vid.duration, formatLabel),
       onSelect: thumbInteractions.onSelect,
+      onDoubleClick: openZoomForCard,
       onDragStart: thumbInteractions.onDragStart,
       onDragEnd: thumbInteractions.onDragEnd,
       onDragOver: thumbInteractions.onDragOver,
@@ -469,7 +486,31 @@ export function initApp() {
       e.preventDefault();
       return;
     }
+    if (e.key === 'Escape' && zoomOverlay.isOpen()) {
+      closeZoom();
+      e.preventDefault();
+      return;
+    }
     if (isEditableTarget(e.target)) return;
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'f' || e.key === 'F') && zoomOverlay.isOpen()) {
+      closeZoom();
+      return;
+    }
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'z' || e.key === 'Z')) {
+      if (zoomOverlay.isOpen()) {
+        e.preventDefault();
+        return;
+      }
+      if (state.selectedThumb && !isFullscreen()) {
+        openZoomForCard(state.selectedThumb);
+        e.preventDefault();
+      }
+      return;
+    }
+    if (zoomOverlay.isOpen()) {
+      if (e.key === 'Delete' || e.key === 'Backspace') e.preventDefault();
+      return;
+    }
     if (!(e.key === 'Delete' || e.key === 'Backspace')) return;
     const removed = runRemoveSelectedClip({
       selectedThumb: state.selectedThumb,
@@ -504,10 +545,12 @@ export function initApp() {
   }
 
   function onFsToggle() {
+    if (zoomOverlay.isOpen()) closeZoom();
     fullscreenSession.onFsToggle();
   }
 
   function onFsChange() {
+    if (isFullscreen() && zoomOverlay.isOpen()) closeZoom();
     fullscreenSession.onFsChange();
   }
 
@@ -556,6 +599,9 @@ export function initApp() {
   recomputeLayout();
   setTitlesHidden(false);
 }
+
+
+
 
 
 

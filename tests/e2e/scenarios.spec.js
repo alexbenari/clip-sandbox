@@ -79,6 +79,17 @@ async function openOrderMenu(page) {
   await expect.poll(async () => page.locator('#orderMenu').getAttribute('data-open')).toBe('true');
 }
 
+async function waitForZoomVideo(page) {
+  await expect(page.locator('#zoomVideo')).toHaveCount(1);
+}
+
+async function openZoomOnFirstClip(page) {
+  const first = page.locator('#grid .thumb').first();
+  await first.dblclick();
+  await expect(page.locator('#zoomOverlay')).toBeVisible();
+  await waitForZoomVideo(page);
+  return first;
+}
 async function getFullscreenSnapshot(page) {
   return page.evaluate(() => {
     const grid = document.getElementById('grid');
@@ -512,6 +523,88 @@ test.describe('Fullscreen clip rotation', () => {
   });
 });
 
+test.describe('Zoom demo', () => {
+  test('sandbox zoom host opens the sample clip without loading the main app shell', async ({ page }) => {
+    await page.goto('/sandbox/zoom-demo.html');
+    await expect(page.locator('#viewBtn')).toBeVisible();
+    await expect(page.locator('#pickBtn')).toHaveCount(0);
+    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
+
+    await page.click('#viewBtn');
+    await expect(page.locator('#zoomOverlay')).toBeVisible();
+    await expect(page.locator('#zoomFrame')).toBeVisible();
+    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', 'hand-closes-curtain.mp4');
+  });
+});
+test.describe('Zoom mode', () => {
+  test('double-click opens zoom, selects the clip, and keeps the grid rendered', async ({ page }) => {
+    await loadClips(page, 'load-basic');
+    const first = await openZoomOnFirstClip(page);
+    await expect(first).toHaveClass(/selected/);
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+    await expect(page.locator('#zoomFrame')).toBeVisible();
+  });
+
+  test('pressing Z opens zoom for the selected clip and does nothing without selection', async ({ page }) => {
+    await loadClips(page, 'load-basic');
+    await page.keyboard.press('Z');
+    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
+
+    const first = page.locator('#grid .thumb').first();
+    await first.click();
+    await page.keyboard.press('Z');
+    await expect(page.locator('#zoomOverlay')).toBeVisible();
+    await expect(first).toHaveClass(/selected/);
+  });
+
+  test('Escape and outside click both close zoom', async ({ page }) => {
+    await loadClips(page, 'load-basic');
+    await openZoomOnFirstClip(page);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
+
+    await openZoomOnFirstClip(page);
+    await page.mouse.click(10, 10);
+    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
+  });
+
+  test('zoomed video is unmuted and restarts from the beginning when reopened', async ({ page }) => {
+    await loadClips(page, 'load-basic');
+    const first = await openZoomOnFirstClip(page);
+
+    const initialState = await page.evaluate(() => {
+      const video = document.getElementById('zoomVideo');
+      video.pause();
+      const target = Number.isFinite(video.duration) ? Math.min(0.25, Math.max(0.12, video.duration / 2)) : 0.25;
+      video.currentTime = target;
+      return { muted: video.muted, advancedTime: video.currentTime };
+    });
+    expect(initialState.muted).toBe(false);
+    expect(initialState.advancedTime).toBeGreaterThan(0.1);
+
+    await page.keyboard.press('Escape');
+    await first.dblclick();
+    await expect(page.locator('#zoomOverlay')).toBeVisible();
+    await waitForZoomVideo(page);
+
+    const reopenedTime = await page.evaluate(() => {
+      const video = document.getElementById('zoomVideo');
+      video.pause();
+      return video.currentTime;
+    });
+    expect(reopenedTime).toBeLessThan(0.1);
+  });
+
+  test('entering fullscreen closes zoom first', async ({ page }) => {
+    await loadClips(page, 'load-basic');
+    await openZoomOnFirstClip(page);
+    await page.keyboard.press('F');
+    await expect(page.locator('body')).toHaveClass(/fs-active/);
+    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
+    await page.keyboard.press('F');
+    await expect(page.locator('body')).not.toHaveClass(/fs-active/);
+  });
+});
 async function streamToString(stream) {
   if (!stream) return '';
   return new Promise((resolve, reject) => {
@@ -521,5 +614,9 @@ async function streamToString(stream) {
     stream.on('error', reject);
   });
 }
+
+
+
+
 
 

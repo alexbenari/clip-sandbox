@@ -35,6 +35,7 @@ const baseDom = `
     <div id="grid" style="gap:10px"></div>
   </div>
   <div class="footerbar" id="status" hidden></div>
+  <div id="zoomLayerRoot"></div>
 `;
 
 beforeEach(() => {
@@ -50,5 +51,6 @@ describe('initApp DOM wiring', () => {
     expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Hide Titles');
     expect(document.getElementById('activeCollectionName').textContent).toBe('Local Video Grid Reviewer');
     expect(document.title).toBe('Local Video Grid Reviewer');
+    expect(document.getElementById('zoomLayerRoot')).not.toBeNull();
   });
 });

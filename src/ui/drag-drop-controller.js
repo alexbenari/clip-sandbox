@@ -6,11 +6,25 @@ export function createThumbInteractionHandlers({
   removeDragOverClasses,
   onCollectionReordered,
 }) {
-  function onSelect(el) {
-    if (state.selectedThumb && state.selectedThumb !== el) state.selectedThumb.classList.remove('selected');
+  function clearCurrentSelection(nextSelected = null) {
+    if (state.selectedThumb && state.selectedThumb !== nextSelected) {
+      state.selectedThumb.classList.remove('selected');
+    }
+  }
+
+  function selectOnly(el) {
+    clearCurrentSelection(el);
     setSelectedThumb(state, el);
-    el.classList.toggle('selected');
-    if (!el.classList.contains('selected')) setSelectedThumb(state, null);
+    el.classList.add('selected');
+  }
+
+  function onSelect(el) {
+    if (state.selectedThumb === el && el.classList.contains('selected')) {
+      el.classList.remove('selected');
+      setSelectedThumb(state, null);
+      return;
+    }
+    selectOnly(el);
   }
 
   function onDragStart(el, e) {
@@ -55,5 +69,5 @@ export function createThumbInteractionHandlers({
     recomputeLayout();
   }
 
-  return { onSelect, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop };
+  return { onSelect, onSelectOnly: selectOnly, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop };
 }

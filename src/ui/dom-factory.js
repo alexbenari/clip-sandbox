@@ -33,6 +33,7 @@ export function createThumbCard({
   id,
   formatLabel,
   onSelect,
+  onDoubleClick,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -75,6 +76,7 @@ export function createThumbCard({
 
   vid.addEventListener('loadedmetadata', () => onLoadedMetadata(card, vid));
   card.addEventListener('click', () => onSelect(card));
+  card.addEventListener('dblclick', () => onDoubleClick?.(card));
   card.addEventListener('dragstart', (e) => onDragStart(card, e));
   card.addEventListener('dragend', () => onDragEnd(card));
   card.addEventListener('dragover', (e) => onDragOver(card, e));
