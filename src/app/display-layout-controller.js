@@ -2,7 +2,7 @@ export function createLayoutController({
   grid,
   gridWrap,
   toolbar,
-  state,
+  fullscreenState,
   computeBestGrid,
   computeFsLayout,
   applyGridLayout,
@@ -29,15 +29,15 @@ export function createLayoutController({
 
   function fsComputeAndApplyGrid() {
     const { gap, availW, availH } = readGridMetrics('fullscreen');
-    const best = computeFsLayout({ slots: state.fsSlots, availW, availH, gap });
+    const best = computeFsLayout({ slots: fullscreenState.slots, availW, availH, gap });
     applyGridLayout(best.cols, best.cellH);
     return best;
   }
 
   function fsApplySlots() {
-    if (state.fsHidden.length) {
-      state.fsHidden.forEach((el) => (el.style.display = ''));
-      state.fsHidden = [];
+    if (fullscreenState.hiddenCards.length) {
+      fullscreenState.hiddenCards.forEach((el) => (el.style.display = ''));
+      fullscreenState.hiddenCards = [];
     }
     const best = fsComputeAndApplyGrid();
     const children = Array.from(grid.children);
@@ -53,7 +53,7 @@ export function createLayoutController({
       }
       if (toHide > 0) {
         el.style.display = 'none';
-        state.fsHidden.push(el);
+        fullscreenState.hiddenCards.push(el);
         toHide--;
       } else {
         el.style.display = '';
@@ -62,9 +62,9 @@ export function createLayoutController({
   }
 
   function fsRestore() {
-    if (state.fsHidden.length) {
-      state.fsHidden.forEach((el) => (el.style.display = ''));
-      state.fsHidden = [];
+    if (fullscreenState.hiddenCards.length) {
+      fullscreenState.hiddenCards.forEach((el) => (el.style.display = ''));
+      fullscreenState.hiddenCards = [];
     }
   }
 

@@ -1,4 +1,4 @@
-// Pure layout rules for normal and fullscreen display.
+// Layout rules for normal and fullscreen display.
 export function computeBestGrid({ count, availW, availH, gap }) {
   if (count <= 0 || availW <= 0 || availH <= 0) {
     return { cols: 1, rows: Math.max(1, count), cellH: Math.max(80, availH || 0) };

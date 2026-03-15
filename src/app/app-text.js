@@ -1,6 +1,10 @@
 export const DEFAULT_APP_TITLE = 'Local Video Grid Reviewer';
 export const DEFAULT_ACTIVE_COLLECTION_NAME = 'All Clips';
 
+export function niceNum(n) {
+  return new Intl.NumberFormat().format(n);
+}
+
 export function countText(count, niceNum) {
   return count === 1 ? '1 clip' : `${niceNum(count)} clips`;
 }

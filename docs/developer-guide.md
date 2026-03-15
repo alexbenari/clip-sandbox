@@ -12,86 +12,99 @@ This guide explains the current browser-only architecture and where to add or ch
 - E2E tests: Playwright (Chromium) with a local static server.
 
 ## Project Structure
-- [`src/domain`](/C:/dev/clip-sandbox/src/domain): pure rules and calculations (`clip-rules`, `layout-rules`, `order-rules`).
-- [`src/business-logic`](/C:/dev/clip-sandbox/src/business-logic): orchestration flows (`load-clips`, `save-order`, `remove-clip`, `toggle-titles`, `fullscreen-session`).
-- [`src/state`](/C:/dev/clip-sandbox/src/state): app state factory and mutators.
-- [`src/ui`](/C:/dev/clip-sandbox/src/ui): DOM-facing controllers and view helpers (`events`, `layout-controller`, `drag-drop-controller`, `order-file-controller`, `order-menu-controller`, `zoom-overlay-controller`, `dom-factory`, `view-model`).
+- [`src/domain`](/C:/dev/clip-sandbox/src/domain): pure rules and model helpers (`clip-model`, `clip-collection`, `clip-rules`, `layout-rules`, `order-rules`).
+- [`src/business-logic`](/C:/dev/clip-sandbox/src/business-logic): workflow helpers and feature-specific orchestration (`save-order`, `toggle-titles`, `fullscreen-session`).
+- [`src/state`](/C:/dev/clip-sandbox/src/state): app session state (`currentCollection`, `folderClips`, fullscreen state, pending conflict state).
+- [`src/ui`](/C:/dev/clip-sandbox/src/ui): DOM-facing controllers and helpers (`clip-collection-grid-controller`, `layout-controller`, `zoom-overlay-controller`, `order-file-controller`, `order-menu-controller`, `dom-factory`, `events`, `view-model`).
 - [`src/adapters/browser`](/C:/dev/clip-sandbox/src/adapters/browser): browser API wrappers (file system, fullscreen, clock, DOM rendering).
-- [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js): composition root that wires dependencies and event handlers.
+- [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js): composition root that wires models, controllers, and browser adapters.
 
 ## Architecture Overview
-The app follows a functional layered structure:
-1. Domain: deterministic logic, no DOM and no browser API usage.
-2. Business logic: orchestration of user actions using domain rules and injected adapters.
-3. UI/controllers: DOM event handling and user interaction coordination.
+The app now follows a clearer model/controller split:
+1. Domain: clip and collection models plus pure rules.
+2. Business logic: save/fullscreen/title-toggle flows using model data.
+3. UI/controllers: the collection grid, zoom overlay, order-file controller, and menu controller.
 4. Adapters: thin wrappers around browser APIs and side effects.
-5. Bootstrap: constructs state and composes all modules.
+5. Bootstrap: constructs the app state and composes the whole system.
 
-This keeps behavior testable while staying framework-free.
+This keeps clip identity and collection identity out of the DOM while staying framework-free.
 
-## Ordered Collection Model
-The app now distinguishes between three concepts:
-1. `folder contents`: all supported video files in the selected folder.
-2. `current working collection`: the ordered subset currently shown in the grid and saved to disk.
-3. `collection file`: a plain-text file that defines an explicit ordered collection.
+## Clip and Collection Model
+The app now distinguishes between three related concepts:
+1. `folder contents`: all supported clips currently loaded from the chosen folder.
+2. `current collection`: the mutable ordered collection currently shown in the grid.
+3. `collection file`: a plain-text file describing an explicit ordered collection by filename.
 
-Loading a folder creates an implicit full-folder collection. Loading a collection file can replace that with a subset collection. Reorder and delete actions then mutate the current working collection from the UI.
+Key model files:
+- [`src/domain/clip-model.js`](/C:/dev/clip-sandbox/src/domain/clip-model.js): creates one app-level clip object with runtime id, filename, `File`, and optional duration.
+- [`src/domain/clip-collection.js`](/C:/dev/clip-sandbox/src/domain/clip-collection.js): owns ordered clip ids, lookup by id, full-order replacement, removal, and serialization of ordered clip names.
 
-## Collection UI (Current)
-- Toolbar uses a `Collection` menu trigger (`#orderMenuBtn`) with submenu actions:
-  - `Load Collection` (`#loadOrderBtn`)
-  - `Save Collection` (`#saveBtn`)
-- Click/tap opens the menu via [`src/ui/order-menu-controller.js`](/C:/dev/clip-sandbox/src/ui/order-menu-controller.js) and supports keyboard navigation:
-  - `Enter`/`Space` to open/close from trigger.
-  - Arrow navigation between `Load Collection` and `Save Collection`.
-  - `Escape` to close and return focus to the trigger.
-- Missing collection entries are handled by an inline conflict panel in [`index.html`](/C:/dev/clip-sandbox/index.html), not by alert/confirm dialogs.
+Important rule: the collection model is now the source of truth for current order. The DOM is a rendering of that order, not the model itself.
+
+## Clip Collection Grid
+The main grid is implemented as a dedicated UI controller rather than as loose DOM helpers wired directly in bootstrap.
+
+Current shape:
+- [`src/ui/clip-collection-grid-controller.js`](/C:/dev/clip-sandbox/src/ui/clip-collection-grid-controller.js) owns:
+  - rendering cards from a `ClipCollection`,
+  - selection UI by clip id,
+  - drag/drop reorder UI,
+  - mapping between clip ids and rendered card state,
+  - object URL lifecycle for rendered video cards.
+- [`src/ui/dom-factory.js`](/C:/dev/clip-sandbox/src/ui/dom-factory.js) remains a small card-creation and label-update helper used by the grid controller.
+- [`src/ui/layout-controller.js`](/C:/dev/clip-sandbox/src/ui/layout-controller.js) still owns layout math for normal and fullscreen grid presentation.
+
+Important rule: selection belongs to the grid UI, but app-level coordination uses `selectedClipId`, not a selected DOM node.
 
 ## Zoom UI Component
-Zoom mode is implemented as a dedicated UI component rather than inline overlay logic in the composition root.
+Zoom mode remains a dedicated reusable UI component rather than inline overlay logic in the composition root.
 
 Current shape:
 - [`index.html`](/C:/dev/clip-sandbox/index.html) provides only the shell mount point `#zoomLayerRoot`.
 - [`src/ui/zoom-overlay-controller.js`](/C:/dev/clip-sandbox/src/ui/zoom-overlay-controller.js) owns default style installation, overlay DOM creation, outside-click close behavior, and the zoomed video element lifecycle.
-- [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js) only orchestrates when zoom opens/closes and how it interacts with selection and fullscreen.
-- [`sandbox/zoom-demo.html`](/C:/dev/clip-sandbox/sandbox/zoom-demo.html) is the minimal-host example for reusing the component outside the main app shell.
+- [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js) handles app-level zoom requests by resolving the selected/requested clip and passing a playable media source into the overlay.
+- [`sandbox/zoom-demo.html`](/C:/dev/clip-sandbox/sandbox/zoom-demo.html) remains the minimal-host example for reusing the overlay outside the main app shell.
 
-Integration recipe for another host page:
-1. Render a mount node such as `<div id="zoomLayerRoot"></div>`.
-2. Import `createZoomOverlayController` from [`src/ui/zoom-overlay-controller.js`](/C:/dev/clip-sandbox/src/ui/zoom-overlay-controller.js).
-3. Create the controller with `{ mountEl, document }`.
-4. Call `open({ src, name })` from a user gesture or another host event.
-5. Do not copy zoom CSS from the main app; the controller installs its own default styles automatically.
-
-Important rule: keep transient zoom internals in the controller unless another subsystem genuinely needs to query them. Avoid growing `app-state` with purely local overlay details.
+Integration rule: the app is clip-centric, but the reusable overlay stays media-source-oriented.
 
 ## State and Rendering Rules
-[src/state/app-state.js](/C:/dev/clip-sandbox/src/state/app-state.js) now tracks:
-- `folderFiles` and `folderFileNames` for the selected folder.
-- `activeCollectionNames` for the current working collection.
-- `pendingCollectionConflict` for a missing-entry decision that is waiting for user input.
-- `selectedThumb` for the currently selected grid tile element.
+[`src/state/app-state.js`](/C:/dev/clip-sandbox/src/state/app-state.js) now tracks:
+- `folderClips` and `folderClipNames` for the selected folder,
+- `currentCollection` for the currently displayed ordered collection,
+- `selectedClipId` for app-level coordination with the currently selected clip,
+- `pendingCollectionConflict` for missing-entry decisions during collection load,
+- fullscreen-only state such as slot count and randomization timers.
 
-Important rule: the DOM is a rendering of the current collection state, not the saved model itself. UI interactions such as drag reorder and delete update the active collection state, and save operations serialize that state.
+Important rules:
+- `selectedClipId` is app state; the selected DOM card is not.
+- Save behavior should serialize [`clipNamesInOrder(...)`](/C:/dev/clip-sandbox/src/domain/clip-collection.js) from the collection model, not scrape the grid DOM.
+- Object URLs are runtime view resources created for rendered cards and revoked when cards are cleared or rerendered.
 
 ## Composition Root
 [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js) is the integration point:
 - caches DOM elements once,
 - creates app state via `createAppState`,
+- loads browser `File` objects and creates `Clip` models,
+- creates the mutable current collection,
+- creates the `ClipCollectionGrid` from `#grid`,
 - creates the zoom overlay controller from `#zoomLayerRoot`,
-- loads folder files and seeds the implicit collection,
-- analyzes collection files against `state.folderFileNames`,
-- rebuilds the grid from `state.activeCollectionNames`,
-- binds conflict-panel actions and control/global events,
+- analyzes collection files against `state.folderClipNames`,
+- updates the collection model when the grid emits reorder or selection events,
 - coordinates zoom/fullscreen interactions,
 - adapts browser APIs through injected adapter functions.
 
+Important rule: bootstrap should orchestrate models and controllers. It should not own per-card DOM logic or derive collection order from `grid.children`.
+
 ## Testing Strategy
 - Unit/integration (Vitest):
-  - collection analysis and save behavior,
-  - UI controllers in isolation (for example [`tests/integration/ui/order-file-controller.spec.js`](/C:/dev/clip-sandbox/tests/integration/ui/order-file-controller.spec.js) and [`tests/integration/ui/zoom-overlay-controller.spec.js`](/C:/dev/clip-sandbox/tests/integration/ui/zoom-overlay-controller.spec.js)).
+  - clip and collection model behavior,
+  - grid controller behavior,
+  - zoom overlay controller behavior,
+  - order-file and menu controller behavior.
 - E2E (Playwright):
-  - full user workflows in [`tests/e2e/scenarios.spec.js`](/C:/dev/clip-sandbox/tests/e2e/scenarios.spec.js), including subset collection load, missing-entry decisions, collection save, fullscreen behavior, and zoom mode.
+  - full user workflows in [`tests/e2e/scenarios.spec.js`](/C:/dev/clip-sandbox/tests/e2e/scenarios.spec.js), including load, collection replacement, reorder, delete, save, zoom, and fullscreen.
+
+During architecture-heavy work, prefer E2E coverage as the higher-confidence safety net because it validates observable behavior rather than old internal seams.
 
 ## Common Commands
 - `npm run unit`
@@ -100,11 +113,8 @@ Important rule: the DOM is a rendering of the current collection state, not the 
 - `npm run e2e:headed`
 
 ## Extension Notes
-- Add pure collection comparison rules in `src/domain` first where possible.
-- Keep browser APIs in `src/adapters/browser` instead of calling them directly from business logic.
-- If you add new app-owned UI surfaces, prefer a shell mount point in `index.html` plus a dedicated controller in `src/ui` rather than large DOM procedures in `bootstrap.js`.
-- Keep save behavior tied to `activeCollectionNames`, not to scraping the current DOM at save time.
+- Add new model logic in `src/domain` first when possible.
+- Keep persistence side effects outside the collection model.
+- Keep clip identity stable and model-owned; avoid reintroducing DOM nodes as primary identity.
+- Keep object URL lifecycle in the grid/view layer, not in the pure clip model.
 - Keep zoom/fullscreen coordination at the app orchestration layer unless fullscreen behavior itself is being redesigned.
-
-
-

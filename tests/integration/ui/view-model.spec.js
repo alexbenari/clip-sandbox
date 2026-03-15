@@ -14,9 +14,9 @@ import {
   downloadedCollectionFileText,
   activeCollectionText,
   activeCollectionTabText,
-} from '../../../src/ui/view-model.js';
+} from '../../../src/app/app-text.js';
 
-describe('ui view-model helpers', () => {
+describe('app text helpers', () => {
   test('formats count text', () => {
     const niceNum = (n) => String(n);
     expect(countText(1, niceNum)).toBe('1 clip');

@@ -1,17 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import {
-  isVideoFile,
-  niceNum,
-  formatDuration,
-  filterAndSortFiles,
-} from '../../src/domain/clip-rules.js';
+import { isVideoFile, filterAndSortFiles } from '../../src/business-logic/load-clips.js';
+import { niceNum } from '../../src/app/app-text.js';
+import { formatDuration } from '../../src/ui/clip-collection-grid-controller.js';
 import {
   computeBestGrid,
   computeFsLayout,
-} from '../../src/domain/layout-rules.js';
-import {
-  analyzeCollectionEntries,
-} from '../../src/domain/order-rules.js';
+} from '../../src/app/display-layout-rules.js';
 
 describe('video helpers', () => {
   it('detects video by MIME and extension', () => {
@@ -53,38 +47,6 @@ describe('grid computation', () => {
   it('chooses more columns for wider space', () => {
     const res = computeBestGrid({ count: 4, availW: 800, availH: 400, gap: 10 });
     expect(res.cols).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe('collection analysis', () => {
-  it('rejects blank collections', () => {
-    const result = analyzeCollectionEntries(['', '  '], ['a.mp4']);
-    expect(result.kind).toBe('invalid-empty');
-  });
-
-  it('rejects duplicate entries', () => {
-    const result = analyzeCollectionEntries(['a.mp4', 'a.mp4'], ['a.mp4', 'b.mp4']);
-    expect(result.kind).toBe('invalid-duplicates');
-    expect(result.duplicateNames).toContain('a.mp4 (x2)');
-  });
-
-  it('detects an exact-match collection', () => {
-    const result = analyzeCollectionEntries(['b.mp4', 'a.mp4'], ['a.mp4', 'b.mp4']);
-    expect(result.kind).toBe('exact-match');
-    expect(result.requestedNames).toEqual(['b.mp4', 'a.mp4']);
-  });
-
-  it('detects a subset collection', () => {
-    const result = analyzeCollectionEntries(['c.mp4', 'a.mp4'], ['a.mp4', 'b.mp4', 'c.mp4']);
-    expect(result.kind).toBe('subset-match');
-    expect(result.requestedNames).toEqual(['c.mp4', 'a.mp4']);
-  });
-
-  it('returns missing entries and existing entries in order', () => {
-    const result = analyzeCollectionEntries(['b.mp4', 'missing.mp4', 'a.mp4'], ['a.mp4', 'b.mp4']);
-    expect(result.kind).toBe('has-missing');
-    expect(result.missingNames).toEqual(['missing.mp4']);
-    expect(result.existingNamesInOrder).toEqual(['b.mp4', 'a.mp4']);
   });
 });
 

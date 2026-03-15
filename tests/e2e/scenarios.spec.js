@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { test, expect } from '@playwright/test';
-import { computeFsLayout } from '../../src/domain/layout-rules.js';
+import { computeFsLayout } from '../../src/app/display-layout-rules.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appUrl = '/';
@@ -288,10 +288,10 @@ test.describe('Toggle titles', () => {
     const toggle = page.locator('#toggleTitlesBtn');
     await toggle.click();
     await expect(toggle).toHaveText('Show Titles');
-    await expect(page.locator('body')).toHaveClass(/titles-hidden/);
+    await expect(page.locator('#gridWrap')).toHaveClass(/titles-hidden/);
     await toggle.click();
     await expect(toggle).toHaveText('Hide Titles');
-    await expect(page.locator('body')).not.toHaveClass(/titles-hidden/);
+    await expect(page.locator('#gridWrap')).not.toHaveClass(/titles-hidden/);
   });
 
   test('restores previous title visibility after fullscreen exit', async ({ page }) => {
@@ -302,16 +302,16 @@ test.describe('Toggle titles', () => {
     await expect(page.locator('body')).toHaveClass(/fs-active/);
     await page.keyboard.press('F');
     await expect(page.locator('body')).not.toHaveClass(/fs-active/);
-    await expect(page.locator('body')).not.toHaveClass(/titles-hidden/);
+    await expect(page.locator('#gridWrap')).not.toHaveClass(/titles-hidden/);
 
     const toggle = page.locator('#toggleTitlesBtn');
     await toggle.click();
-    await expect(page.locator('body')).toHaveClass(/titles-hidden/);
+    await expect(page.locator('#gridWrap')).toHaveClass(/titles-hidden/);
     await fsBtn.click();
     await expect(page.locator('body')).toHaveClass(/fs-active/);
     await page.keyboard.press('F');
     await expect(page.locator('body')).not.toHaveClass(/fs-active/);
-    await expect(page.locator('body')).toHaveClass(/titles-hidden/);
+    await expect(page.locator('#gridWrap')).toHaveClass(/titles-hidden/);
   });
 });
 

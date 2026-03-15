@@ -1,25 +1,128 @@
 import { describe, expect, test, vi } from 'vitest';
 import { runLoadClips } from '../../src/business-logic/load-clips.js';
+import { runLoadCollection, runLoadCollectionFromFile } from '../../src/business-logic/load-collection.js';
 import { runSaveOrder } from '../../src/business-logic/save-order.js';
-import { runRemoveSelectedClip } from '../../src/business-logic/remove-clip.js';
 
 describe('business logic modules', () => {
-  test('runLoadClips loads and reports count', async () => {
-    const added = [];
-    const showStatus = vi.fn();
-    const count = await runLoadClips({
-      fileList: [{ name: 'b.mp4' }, { name: 'a.mp4' }],
-      filterAndSortFiles: (files) => files.slice().sort((a, b) => a.name.localeCompare(b.name)),
-      addThumbForFile: (file) => added.push(file.name),
-      updateCount: vi.fn(),
-      recomputeLayout: vi.fn(),
-      showStatus,
-      delay: async () => {},
-      buildLoadedMessage: (n) => `Loaded ${n} videos.`,
+  test('runLoadClips filters, sorts, creates clips, and builds a collection', () => {
+    const result = runLoadClips({
+      fileList: [
+        { name: 'b.mp4', type: 'video/mp4' },
+        { name: 'note.txt', type: 'text/plain' },
+        { name: 'a.mp4', type: 'video/mp4' },
+      ],
+      collectionName: 'Folder A',
+      defaultCollectionName: 'All Clips',
+      nextClipId: vi.fn().mockReturnValueOnce('clip_1').mockReturnValueOnce('clip_2'),
     });
-    expect(count).toBe(2);
-    expect(added).toEqual(['a.mp4', 'b.mp4']);
-    expect(showStatus).toHaveBeenCalledWith('Loaded 2 videos.');
+    expect(result.files.map((file) => file.name)).toEqual(['a.mp4', 'b.mp4']);
+    expect(result.clips.map((clip) => clip.id)).toEqual(['clip_1', 'clip_2']);
+    expect(result.collection.name).toBe('Folder A');
+    expect(result.collection.orderedClipIds).toEqual(['clip_1', 'clip_2']);
+    expect(result.count).toBe(2);
+  });
+
+  test('runLoadClips leaves collection name empty when no videos are present', () => {
+    const result = runLoadClips({
+      fileList: [{ name: 'note.txt', type: 'text/plain' }],
+      collectionName: 'Folder A',
+      defaultCollectionName: 'All Clips',
+      nextClipId: vi.fn(),
+    });
+    expect(result.count).toBe(0);
+    expect(result.collection.name).toBe('');
+    expect(result.collection.orderedClipIds).toEqual([]);
+  });
+
+  test('runLoadCollection rejects blank collections', () => {
+    const result = runLoadCollection({
+      lines: ['', '  '],
+      file: { name: 'subset.txt' },
+      folderClipNames: ['a.mp4'],
+      folderClips: [],
+      currentCollectionName: 'All Clips',
+    });
+    expect(result.kind).toBe('invalid-empty');
+    expect(result.collectionName).toBe('subset');
+  });
+
+  test('runLoadCollection rejects duplicate entries', () => {
+    const result = runLoadCollection({
+      lines: ['a.mp4', 'a.mp4'],
+      file: { name: 'subset.txt' },
+      folderClipNames: ['a.mp4', 'b.mp4'],
+      folderClips: [],
+      currentCollectionName: 'All Clips',
+    });
+    expect(result.kind).toBe('invalid-duplicates');
+    expect(result.duplicateNames).toContain('a.mp4 (x2)');
+  });
+
+  test('runLoadCollection builds exact-match and subset collections', () => {
+    const clips = [
+      { id: 'clip_1', name: 'a.mp4' },
+      { id: 'clip_2', name: 'b.mp4' },
+      { id: 'clip_3', name: 'c.mp4' },
+    ];
+    const exact = runLoadCollection({
+      lines: ['b.mp4', 'a.mp4', 'c.mp4'],
+      file: { name: 'ordered.txt' },
+      folderClipNames: ['a.mp4', 'b.mp4', 'c.mp4'],
+      folderClips: clips,
+      currentCollectionName: 'All Clips',
+    });
+    expect(exact.kind).toBe('loaded');
+    expect(exact.matchKind).toBe('exact-match');
+    expect(exact.collection.name).toBe('ordered');
+    expect(exact.collection.orderedClipIds).toEqual(['clip_2', 'clip_1', 'clip_3']);
+
+    const subset = runLoadCollection({
+      lines: ['c.mp4', 'a.mp4'],
+      file: { name: 'subset.txt' },
+      folderClipNames: ['a.mp4', 'b.mp4', 'c.mp4'],
+      folderClips: clips,
+      currentCollectionName: 'All Clips',
+    });
+    expect(subset.kind).toBe('loaded');
+    expect(subset.matchKind).toBe('subset-match');
+    expect(subset.collection.orderedClipIds).toEqual(['clip_3', 'clip_1']);
+  });
+
+  test('runLoadCollection returns conflict details and partial collection for missing entries', () => {
+    const clips = [
+      { id: 'clip_1', name: 'a.mp4' },
+      { id: 'clip_2', name: 'b.mp4' },
+    ];
+    const result = runLoadCollection({
+      lines: ['b.mp4', 'missing.mp4', 'a.mp4'],
+      file: { name: 'subset.txt' },
+      folderClipNames: ['a.mp4', 'b.mp4'],
+      folderClips: clips,
+      currentCollectionName: 'All Clips',
+    });
+    expect(result.kind).toBe('has-missing');
+    expect(result.missingNames).toEqual(['missing.mp4']);
+    expect(result.existingNamesInOrder).toEqual(['b.mp4', 'a.mp4']);
+    expect(result.partialCollection.orderedClipIds).toEqual(['clip_2', 'clip_1']);
+  });
+
+  test('runLoadCollectionFromFile reads file text and delegates to collection loading', async () => {
+    const result = await runLoadCollectionFromFile({
+      file: {
+        name: 'subset.txt',
+        text: () => Promise.resolve('b.mp4\r\na.mp4\n'),
+      },
+      folderClipNames: ['a.mp4', 'b.mp4'],
+      folderClips: [
+        { id: 'clip_1', name: 'a.mp4' },
+        { id: 'clip_2', name: 'b.mp4' },
+      ],
+      currentCollectionName: 'All Clips',
+    });
+
+    expect(result.kind).toBe('loaded');
+    expect(result.collection.name).toBe('subset');
+    expect(result.collection.orderedClipIds).toEqual(['clip_2', 'clip_1']);
   });
 
   test('runSaveOrder uses direct write when handle is available', async () => {
@@ -57,22 +160,5 @@ describe('business logic modules', () => {
     expect(mode).toBe('downloaded');
     expect(downloadText).toHaveBeenCalledWith('my-cut.txt', 'one.mp4\n');
     expect(showStatus).toHaveBeenCalledWith('Downloaded my-cut.txt');
-  });
-
-  test('runRemoveSelectedClip removes selected card', () => {
-    const removed = { dataset: { objectUrl: 'blob:x' }, remove: vi.fn() };
-    const originalRevoke = URL.revokeObjectURL;
-    URL.revokeObjectURL = vi.fn();
-    const result = runRemoveSelectedClip({
-      selectedThumb: removed,
-      clearSelection: vi.fn(),
-      updateCount: vi.fn(),
-      recomputeLayout: vi.fn(),
-      showStatus: vi.fn(),
-    });
-    expect(result).toBe(true);
-    expect(removed.remove).toHaveBeenCalledOnce();
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x');
-    URL.revokeObjectURL = originalRevoke;
   });
 });

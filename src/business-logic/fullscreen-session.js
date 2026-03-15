@@ -1,8 +1,9 @@
 export function createFullscreenSession({
-  state,
+  fullscreenState,
   grid,
   body,
   fsBtn,
+  isTitlesHidden,
   setTitlesHidden,
   enterFullScreenAdapter,
   exitFullScreenAdapter,
@@ -11,7 +12,6 @@ export function createFullscreenSession({
   fsRestore,
   computeGrid,
   showStatus,
-  setFsSlots,
   normalizeFsSlots,
   fullscreenSlotsText,
   every,
@@ -21,7 +21,7 @@ export function createFullscreenSession({
 }) {
   async function enterFullScreen() {
     try {
-      state.savedTitleHiddenForFS = body.classList.contains('titles-hidden');
+      fullscreenState.savedTitlesHidden = isTitlesHidden();
       setTitlesHidden(true);
       await enterFullScreenAdapter(document);
       fsBtn.textContent = 'Exit Full Screen';
@@ -54,15 +54,15 @@ export function createFullscreenSession({
     }
     if (!isFullscreen()) return;
     if (key >= '0' && key <= '9') {
-      state.fsDigitBuffer += key;
-      clearTimeout(state.fsDigitTimer);
-      state.fsDigitTimer = setTimeout(() => {
-        const v = parseInt(state.fsDigitBuffer, 10);
-        state.fsDigitBuffer = '';
+      fullscreenState.digitBuffer += key;
+      clearTimeout(fullscreenState.digitTimer);
+      fullscreenState.digitTimer = setTimeout(() => {
+        const v = parseInt(fullscreenState.digitBuffer, 10);
+        fullscreenState.digitBuffer = '';
         if (!Number.isNaN(v)) {
-          setFsSlots(state, normalizeFsSlots(v));
+          fullscreenState.slots = normalizeFsSlots(v);
           fsApplySlots();
-          showStatus(fullscreenSlotsText(state.fsSlots), 1500);
+          showStatus(fullscreenSlotsText(fullscreenState.slots), 1500);
         }
       }, 600);
       e.preventDefault();
@@ -70,18 +70,18 @@ export function createFullscreenSession({
   }
 
   function startFsRandomizer() {
-    if (state.fsRandInterval) return;
-    state.fsRandInterval = every(3000, () => {
+    if (fullscreenState.randInterval) return;
+    fullscreenState.randInterval = every(3000, () => {
       if (isFullscreen()) randomizeOnce();
     });
   }
 
   function stopFsRandomizer() {
-    if (state.fsRandInterval) {
-      clearClock(state.fsRandInterval);
-      state.fsRandInterval = null;
+    if (fullscreenState.randInterval) {
+      clearClock(fullscreenState.randInterval);
+      fullscreenState.randInterval = null;
     }
-    state.fsRandPending = false;
+    fullscreenState.randPending = false;
   }
 
   function currentVisibleCards() {
@@ -131,14 +131,14 @@ export function createFullscreenSession({
   }
 
   function randomizeOnce() {
-    if (!isFullscreen() || state.fsRandPending) return;
+    if (!isFullscreen() || fullscreenState.randPending) return;
     const vis = currentVisibleCards();
     const hid = currentHiddenCards();
     if (vis.length <= 1 || hid.length === 0) return;
     const targetCard = vis[Math.floor(Math.random() * vis.length)];
     const replCard = hid[Math.floor(Math.random() * hid.length)];
     const v = targetCard.querySelector('video');
-    state.fsRandPending = true;
+    fullscreenState.randPending = true;
     v.loop = false;
     waitForEnd(v)
       .then(() => {
@@ -151,7 +151,7 @@ export function createFullscreenSession({
       })
       .catch(() => {})
       .finally(() => {
-        state.fsRandPending = false;
+        fullscreenState.randPending = false;
       });
   }
 
@@ -161,9 +161,9 @@ export function createFullscreenSession({
     if (!active) {
       fsRestore();
       stopFsRandomizer();
-      if (state.savedTitleHiddenForFS !== null) {
-        setTitlesHidden(state.savedTitleHiddenForFS);
-        state.savedTitleHiddenForFS = null;
+      if (fullscreenState.savedTitlesHidden !== null) {
+        setTitlesHidden(fullscreenState.savedTitlesHidden);
+        fullscreenState.savedTitlesHidden = null;
       }
       fsBtn.textContent = 'Full Screen';
       computeGrid();
@@ -182,3 +182,4 @@ export function createFullscreenSession({
     exitFullScreen,
   };
 }
+

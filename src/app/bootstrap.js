@@ -1,27 +1,25 @@
-import {
-  isVideoFile,
-  niceNum,
-  filterAndSortFiles,
-  formatLabel,
-} from '../domain/clip-rules.js';
+import { isVideoFile, runLoadClips } from '../business-logic/load-clips.js';
 import {
   computeBestGrid,
   computeFsLayout,
   normalizeFsSlots,
-} from '../domain/layout-rules.js';
-import { analyzeCollectionEntries } from '../domain/order-rules.js';
+} from './display-layout-rules.js';
+import { runLoadCollection, runLoadCollectionFromFile } from '../business-logic/load-collection.js';
+import {
+  clipNamesInOrder,
+  getClip,
+  removeClipFromCollection,
+  renameClipCollection,
+  replaceClipOrder,
+} from '../domain/clip-collection.js';
 import {
   createAppState,
-  nextThumbId,
-  setSelectedThumb,
+  nextClipId,
+  setCurrentCollection,
   setCurrentDirHandle,
-  setFolderFiles,
-  setActiveCollectionName,
-  setActiveCollectionNames,
-  setPendingCollectionConflict,
+  setFolderClips,
   resetCollectionState,
-  setFsSlots,
-} from '../state/app-state.js';
+} from './app-state.js';
 import {
   canUseDirectoryPicker,
   pickDirectory,
@@ -36,19 +34,10 @@ import {
 } from '../adapters/browser/fullscreen-adapter.js';
 import { delay, every, clear as clearClock } from '../adapters/browser/clock-adapter.js';
 import { showStatus as showStatusAdapter, applyGridLayout as applyGridLayoutAdapter, updateClipCount } from '../adapters/browser/dom-renderer-adapter.js';
-import { runLoadClips } from '../business-logic/load-clips.js';
 import { runSaveOrder } from '../business-logic/save-order.js';
-import { runRemoveSelectedClip } from '../business-logic/remove-clip.js';
-import { runToggleTitles } from '../business-logic/toggle-titles.js';
 import { createFullscreenSession } from '../business-logic/fullscreen-session.js';
-import {
-  createThumbCard,
-  clearGridCards,
-  removeDragOverClasses,
-  setCardDuration,
-  updateCardLabel,
-} from '../ui/dom-factory.js';
-import { bindControlEvents, bindGlobalEvents, isEditableTarget } from '../ui/events.js';
+import { bindControlEvents, bindGlobalEvents, isEditableTarget } from './event-binding.js';
+import { createLayoutController } from './display-layout-controller.js';
 import {
   fullscreenSlotsText,
   loadedVideosText,
@@ -68,12 +57,12 @@ import {
   DEFAULT_ACTIVE_COLLECTION_NAME,
   activeCollectionText,
   activeCollectionTabText,
-} from '../ui/view-model.js';
-import { createLayoutController } from '../ui/layout-controller.js';
-import { createThumbInteractionHandlers } from '../ui/drag-drop-controller.js';
-import { createOrderFileController } from '../ui/order-file-controller.js';
+  niceNum,
+} from './app-text.js';
 import { createOrderMenuController } from '../ui/order-menu-controller.js';
 import { createZoomOverlayController } from '../ui/zoom-overlay-controller.js';
+import { createClipCollectionGridController, formatLabel } from '../ui/clip-collection-grid-controller.js';
+import { updateCardLabel } from '../ui/clip-collection-grid-controller.js';
 
 let initialized = false;
 const WINDOWS_ILLEGAL_FILENAME_CHARS = /[<>:"/\\|?*]/;
@@ -114,7 +103,17 @@ export function initApp() {
   const body = document.body;
 
   const state = createAppState();
+  const fullscreenState = {
+    slots: 12,
+    hiddenCards: [],
+    digitBuffer: '',
+    digitTimer: null,
+    randInterval: null,
+    randPending: false,
+    savedTitlesHidden: null,
+  };
   const zoomOverlay = createZoomOverlayController({ mountEl: zoomLayerRoot, document });
+  let pendingCollectionConflict = null;
 
   function showStatus(msg, timeout = 2500) {
     showStatusAdapter(statusBar, msg, timeout);
@@ -141,9 +140,17 @@ export function initApp() {
     return normalizedCollectionName(name, DEFAULT_ACTIVE_COLLECTION_NAME);
   }
 
+  function currentCollectionName() {
+    return state.currentCollection?.name || '';
+  }
+
+  function folderClipNames() {
+    return state.folderClips.map((clip) => clip.name);
+  }
+
   function renderActiveCollectionName() {
-    const text = activeCollectionText(state.activeCollectionName);
-    document.title = activeCollectionTabText(state.activeCollectionName);
+    const text = activeCollectionText(currentCollectionName());
+    document.title = activeCollectionTabText(currentCollectionName());
     if (activeCollectionNameEl) {
       activeCollectionNameEl.textContent = text;
       activeCollectionNameEl.title = text;
@@ -151,14 +158,16 @@ export function initApp() {
   }
 
   function updateCount() {
-    const n = grid.children.length;
-    updateClipCount(countSpan, [saveBtn, saveAsNewBtn], n, niceNum);
+    updateClipCount(countSpan, [saveBtn, saveAsNewBtn], grid.children.length, niceNum);
+  }
+
+  function closeZoom() {
+    zoomOverlay.close();
   }
 
   function clearGrid() {
     closeZoom();
-    clearGridCards(grid);
-    setSelectedThumb(state, null);
+    gridController.destroy();
     updateCount();
   }
 
@@ -169,7 +178,7 @@ export function initApp() {
   }
 
   function showCollectionConflictPanel(conflict) {
-    setPendingCollectionConflict(state, conflict);
+    pendingCollectionConflict = conflict;
     if (collectionConflictSummary) {
       collectionConflictSummary.textContent = collectionConflictSummaryText(
         conflict.existingNamesInOrder.length,
@@ -202,73 +211,84 @@ export function initApp() {
     if (saveAsNewError) saveAsNewError.textContent = text;
   }
 
+  function isFullscreen() {
+    return isFullScreenActive(document);
+  }
+
+  function applyGridLayout(cols, cellH) {
+    applyGridLayoutAdapter(grid, cols, cellH);
+  }
+
+  const { recomputeLayout, computeGrid, fsApplySlots, fsRestore } = createLayoutController({
+    grid,
+    gridWrap,
+    toolbar,
+    fullscreenState,
+    computeBestGrid,
+    computeFsLayout,
+    applyGridLayout,
+    isFullscreen,
+  });
+
+  function openZoomForClipId(clipId) {
+    if (!clipId || isFullscreen()) return false;
+    const src = gridController.getClipMediaSource(clipId);
+    if (!src) return false;
+    gridController.setSelectedClipId(clipId);
+    const clip = getClip(state.currentCollection, clipId);
+    return zoomOverlay.open({ src, name: clip?.name || '' });
+  }
+
+  const gridController = createClipCollectionGridController({
+    grid,
+    gridRoot: gridWrap,
+    formatLabel,
+    updateCount,
+    recomputeLayout,
+    onOrderChange: (orderedClipIds) => {
+      if (!state.currentCollection) return;
+      replaceClipOrder(state.currentCollection, orderedClipIds);
+    },
+    onOpenClip: openZoomForClipId,
+  });
+
   function resetLoadedCollectionView() {
     hideCollectionConflict();
+    pendingCollectionConflict = null;
     closeSaveAsNewDialog();
     clearGrid();
     resetCollectionState(state);
     renderActiveCollectionName();
   }
 
-  function currentGridNames() {
-    return Array.from(grid.children)
-      .map((el) => el.dataset.name)
-      .filter(Boolean);
-  }
-
-  function syncActiveCollectionFromGrid(source = 'ui-edited') {
-    setActiveCollectionNames(state, currentGridNames(), source);
-  }
-
-  function closeZoom() {
-    zoomOverlay.close();
-  }
-
-  function openZoomForCard(card) {
-    if (!card || isFullscreen()) return false;
-    const src = card.dataset.objectUrl;
-    if (!src) return false;
-    thumbInteractions.onSelectOnly(card);
-    return zoomOverlay.open({ src, name: card.dataset.name || '' });
-  }
-
-  function addThumbForFile(file) {
-    const id = nextThumbId(state);
-    const card = createThumbCard({
-      file,
-      id,
-      formatLabel,
-      onLoadedMetadata: (el, vid) => setCardDuration(el, vid.duration, formatLabel),
-      onSelect: thumbInteractions.onSelect,
-      onDoubleClick: openZoomForCard,
-      onDragStart: thumbInteractions.onDragStart,
-      onDragEnd: thumbInteractions.onDragEnd,
-      onDragOver: thumbInteractions.onDragOver,
-      onDragLeave: thumbInteractions.onDragLeave,
-      onDrop: thumbInteractions.onDrop,
-    });
-    grid.appendChild(card);
-  }
-
-  function renderActiveCollection() {
-    const filesByName = new Map(state.folderFiles.map((file) => [file.name, file]));
-    clearGrid();
-    for (const name of state.activeCollectionNames) {
-      const file = filesByName.get(name);
-      if (file) addThumbForFile(file);
-    }
-    updateCount();
-    recomputeLayout();
-  }
-
-  function applyCollection(names, source, statusText, timeout = 2500, collectionName = state.activeCollectionName) {
+  function applyCollection(collection, statusText, timeout = 2500) {
     hideCollectionConflict();
-    setPendingCollectionConflict(state, null);
-    setActiveCollectionNames(state, names, source);
-    setActiveCollectionName(state, normalizedCollectionName(collectionName, state.activeCollectionName));
-    renderActiveCollection();
+    pendingCollectionConflict = null;
+    setCurrentCollection(state, collection);
+    gridController.renderCollection(collection);
     renderActiveCollectionName();
     showStatus(statusText, timeout);
+  }
+
+  async function loadFiles(fileList, collectionName = DEFAULT_ACTIVE_COLLECTION_NAME) {
+    const result = runLoadClips({
+      fileList,
+      collectionName: implicitCollectionName(collectionName),
+      defaultCollectionName: DEFAULT_ACTIVE_COLLECTION_NAME,
+      nextClipId: () => nextClipId(state),
+    });
+    setFolderClips(state, result.clips);
+    setCurrentCollection(state, result.collection);
+    pendingCollectionConflict = null;
+    hideCollectionConflict();
+    gridController.renderCollection(result.collection);
+    renderActiveCollectionName();
+    if (result.count > 0) {
+      showStatus(loadedVideosText(result.count));
+      await delay(20);
+      recomputeLayout();
+    }
+    return result.count;
   }
 
   async function pickFolder() {
@@ -277,9 +297,8 @@ export function initApp() {
       try {
         setCurrentDirHandle(state, await pickDirectory());
         const files = (await readFilesFromDirectory(state.currentDirHandle)).filter(isVideoFile);
-        const sorted = filterAndSortFiles(files);
-        if (sorted.length === 0) showStatus('No video files found in the selected folder.');
-        await loadFiles(sorted, implicitCollectionName(state.currentDirHandle?.name));
+        if (files.length === 0) showStatus('No video files found in the selected folder.');
+        await loadFiles(files, implicitCollectionName(state.currentDirHandle?.name));
         return;
       } catch (err) {
         console.warn('Directory picker unavailable, falling back.', err);
@@ -293,61 +312,9 @@ export function initApp() {
     }
   }
 
-  async function loadFiles(fileList, collectionName = DEFAULT_ACTIVE_COLLECTION_NAME) {
-    const loadedFiles = [];
-    const count = await runLoadClips({
-      fileList,
-      filterAndSortFiles,
-      addThumbForFile: (file) => {
-        loadedFiles.push(file);
-        addThumbForFile(file);
-      },
-      updateCount,
-      recomputeLayout,
-      showStatus,
-      delay,
-      buildLoadedMessage: loadedVideosText,
-    });
-    setFolderFiles(state, loadedFiles);
-    setActiveCollectionNames(state, loadedFiles.map((file) => file.name), 'implicit-folder');
-    setActiveCollectionName(state, loadedFiles.length > 0 ? implicitCollectionName(collectionName) : '');
-    setPendingCollectionConflict(state, null);
-    hideCollectionConflict();
-    renderActiveCollectionName();
-    return count;
-  }
-
-  function applyGridLayout(cols, cellH) {
-    applyGridLayoutAdapter(grid, cols, cellH);
-  }
-
-  function isFullscreen() {
-    return isFullScreenActive(document);
-  }
-
-  const { recomputeLayout, computeGrid, fsApplySlots, fsRestore } = createLayoutController({
-    grid,
-    gridWrap,
-    toolbar,
-    state,
-    computeBestGrid,
-    computeFsLayout,
-    applyGridLayout,
-    isFullscreen,
-  });
-
-  const thumbInteractions = createThumbInteractionHandlers({
-    state,
-    grid,
-    setSelectedThumb,
-    recomputeLayout,
-    removeDragOverClasses,
-    onCollectionReordered: (names) => setActiveCollectionNames(state, names, 'ui-edited'),
-  });
-
   async function saveCollection(filename = 'default-collection.txt') {
     await runSaveOrder({
-      names: state.activeCollectionNames,
+      names: clipNamesInOrder(state.currentCollection),
       currentDirHandle: state.currentDirHandle,
       saveTextToDirectory,
       downloadText,
@@ -381,20 +348,26 @@ export function initApp() {
     }
     const filename = normalizeCollectionFilename(rawName);
     await saveCollection(filename);
-    setActiveCollectionName(state, collectionNameFromFilename(filename));
+    renameClipCollection(state.currentCollection, collectionNameFromFilename(filename));
     renderActiveCollectionName();
     closeSaveAsNewDialog();
   }
 
+  function renderTitlesToggleButton() {
+    toggleTitlesBtn.textContent = gridController.areTitlesHidden() ? 'Show Titles' : 'Hide Titles';
+  }
+
   function setTitlesHidden(hidden) {
-    runToggleTitles({ body, toggleBtn: toggleTitlesBtn, hidden });
+    gridController.setTitlesHidden(hidden);
+    renderTitlesToggleButton();
   }
 
   const fullscreenSession = createFullscreenSession({
-    state,
+    fullscreenState,
     grid,
     body,
     fsBtn,
+    isTitlesHidden: () => gridController.areTitlesHidden(),
     setTitlesHidden,
     enterFullScreenAdapter,
     exitFullScreenAdapter,
@@ -403,7 +376,6 @@ export function initApp() {
     fsRestore,
     computeGrid,
     showStatus,
-    setFsSlots,
     normalizeFsSlots,
     fullscreenSlotsText,
     every,
@@ -412,68 +384,75 @@ export function initApp() {
     formatLabel,
   });
 
-  function handleCollectionLines(lines, file) {
-    const analysis = analyzeCollectionEntries(lines, state.folderFileNames);
-    const collectionName = collectionNameFromFilename(file?.name);
-    if (analysis.kind === 'invalid-empty') {
+  function handleCollectionResult(result) {
+    if (result.kind === 'invalid-empty') {
       showStatus(collectionEmptyErrorText(), 4000);
       return;
     }
-    if (analysis.kind === 'invalid-duplicates') {
-      showStatus(collectionDuplicateErrorText(analysis.duplicateNames), 4500);
+    if (result.kind === 'invalid-duplicates') {
+      showStatus(collectionDuplicateErrorText(result.duplicateNames), 4500);
       return;
     }
-    if (analysis.kind === 'has-missing') {
-      showCollectionConflictPanel({ ...analysis, collectionName });
+    if (result.kind === 'has-missing') {
+      showCollectionConflictPanel(result);
       return;
     }
     applyCollection(
-      analysis.requestedNames,
-      'collection-file',
-      collectionLoadedText(analysis.requestedNames.length),
-      2500,
-      collectionName
+      result.collection,
+      collectionLoadedText(result.requestedNames.length),
+      2500
     );
   }
 
-  const orderFileController = createOrderFileController({
-    orderFileInput,
-    canLoadCollection: () => state.folderFileNames.length > 0,
-    onCollectionLines: handleCollectionLines,
-    showStatus,
-    collectionFirstUnavailableText,
-    collectionReadErrorText,
-  });
-
   function onLoadOrderClick() {
-    orderFileController.onLoadOrderClick();
+    if (folderClipNames().length === 0) {
+      showStatus(collectionFirstUnavailableText(), 4000);
+      return;
+    }
+    if (typeof orderFileInput.showPicker === 'function') orderFileInput.showPicker();
+    else orderFileInput.click();
   }
 
-  function onOrderFileChange(e) {
-    orderFileController.onOrderFileChange(e);
+  async function onOrderFileChange(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) {
+      e.target.value = '';
+      return;
+    }
+    try {
+      const result = await runLoadCollectionFromFile({
+        file,
+        folderClips: state.folderClips,
+        folderClipNames: folderClipNames(),
+        currentCollectionName: currentCollectionName(),
+      });
+      handleCollectionResult(result);
+    } catch (err) {
+      showStatus(collectionReadErrorText(err), 4000);
+    } finally {
+      e.target.value = '';
+    }
   }
 
   function onApplyCollectionConflict() {
-    const conflict = state.pendingCollectionConflict;
+    const conflict = pendingCollectionConflict;
     hideCollectionConflict();
-    setPendingCollectionConflict(state, null);
+    pendingCollectionConflict = null;
     if (!conflict) return;
     if (conflict.existingNamesInOrder.length === 0) {
       showStatus(noCollectionMatchesText(conflict.missingCount), 4500);
       return;
     }
     applyCollection(
-      conflict.existingNamesInOrder,
-      'partial-collection-after-missing-filter',
+      conflict.partialCollection,
       collectionPartiallyLoadedText(conflict.existingNamesInOrder.length, conflict.missingCount),
-      4000,
-      conflict.collectionName
+      4000
     );
   }
 
   function onCancelCollectionConflict() {
     hideCollectionConflict();
-    setPendingCollectionConflict(state, null);
+    pendingCollectionConflict = null;
   }
 
   function onGlobalKeyDown(e) {
@@ -501,8 +480,9 @@ export function initApp() {
         e.preventDefault();
         return;
       }
-      if (state.selectedThumb && !isFullscreen()) {
-        openZoomForCard(state.selectedThumb);
+      const selectedClipId = gridController.getSelectedClipId();
+      if (selectedClipId && !isFullscreen()) {
+        openZoomForClipId(selectedClipId);
         e.preventDefault();
       }
       return;
@@ -512,17 +492,13 @@ export function initApp() {
       return;
     }
     if (!(e.key === 'Delete' || e.key === 'Backspace')) return;
-    const removed = runRemoveSelectedClip({
-      selectedThumb: state.selectedThumb,
-      clearSelection: () => setSelectedThumb(state, null),
-      updateCount,
-      recomputeLayout,
-      showStatus,
-    });
-    if (removed) {
-      syncActiveCollectionFromGrid('ui-edited');
-      e.preventDefault();
-    }
+    const selectedClipId = gridController.getSelectedClipId();
+    if (!selectedClipId || !state.currentCollection) return;
+    const removed = removeClipFromCollection(state.currentCollection, selectedClipId);
+    if (!removed) return;
+    gridController.renderCollection(state.currentCollection);
+    showStatus('Clip removed from view.');
+    e.preventDefault();
   }
 
   function onFolderInputChange(e) {
@@ -541,7 +517,7 @@ export function initApp() {
   });
 
   function onToggleTitles() {
-    setTitlesHidden(!body.classList.contains('titles-hidden'));
+    setTitlesHidden(!gridController.areTitlesHidden());
   }
 
   function onFsToggle() {
@@ -552,7 +528,12 @@ export function initApp() {
   function onFsChange() {
     if (isFullscreen() && zoomOverlay.isOpen()) closeZoom();
     fullscreenSession.onFsChange();
+    if (!isFullscreen() && state.currentCollection) {
+      gridController.renderCollection(state.currentCollection);
+    }
   }
+
+  renderTitlesToggleButton();
 
   bindControlEvents({
     pickBtn,
@@ -599,12 +580,6 @@ export function initApp() {
   recomputeLayout();
   setTitlesHidden(false);
 }
-
-
-
-
-
-
 
 
 

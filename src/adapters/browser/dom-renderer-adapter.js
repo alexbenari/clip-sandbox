@@ -1,4 +1,4 @@
-import { countText } from '../../ui/view-model.js';
+import { countText } from '../../app/app-text.js';
 
 export function showStatus(statusEl, message, timeout = 2500) {
   statusEl.textContent = message;

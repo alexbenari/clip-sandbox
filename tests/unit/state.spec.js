@@ -1,38 +1,31 @@
 import { describe, expect, test } from 'vitest';
 import {
   createAppState,
-  nextThumbId,
-  setActiveCollectionName,
+  nextClipId,
+  setCurrentCollection,
   setCurrentDirHandle,
-  setFsSlots,
-  setSelectedThumb,
-} from '../../src/state/app-state.js';
+} from '../../src/app/app-state.js';
 
 describe('app state', () => {
   test('creates default state shape', () => {
     const state = createAppState();
     expect(state.currentDirHandle).toBeNull();
-    expect(state.selectedThumb).toBeNull();
-    expect(state.activeCollectionName).toBe('');
-    expect(state.fsSlots).toBe(12);
+    expect(state.folderClips).toEqual([]);
+    expect(state.currentCollection).toBeNull();
     expect(state.idCounter).toBe(0);
   });
 
   test('supports named state operations', () => {
     const state = createAppState();
-    setSelectedThumb(state, { id: 'x' });
     setCurrentDirHandle(state, { kind: 'directory' });
-    setActiveCollectionName(state, 'subset');
-    setFsSlots(state, 6);
-    expect(state.selectedThumb).toEqual({ id: 'x' });
+    setCurrentCollection(state, { name: 'subset' });
     expect(state.currentDirHandle).toEqual({ kind: 'directory' });
-    expect(state.activeCollectionName).toBe('subset');
-    expect(state.fsSlots).toBe(6);
+    expect(state.currentCollection).toEqual({ name: 'subset' });
   });
 
-  test('increments generated thumb ids', () => {
+  test('increments generated clip ids', () => {
     const state = createAppState();
-    expect(nextThumbId(state)).toBe('vid_1');
-    expect(nextThumbId(state)).toBe('vid_2');
+    expect(nextClipId(state)).toBe('clip_1');
+    expect(nextClipId(state)).toBe('clip_2');
   });
 });
