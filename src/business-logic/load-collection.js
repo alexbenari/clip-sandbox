@@ -1,4 +1,4 @@
-import { createCollectionFromClipNames } from '../domain/clip-collection.js';
+import { ClipCollection } from '../domain/clip-collection.js';
 
 function normalizedCollectionName(name, fallback = '') {
   const trimmed = (name || '').trim();
@@ -70,7 +70,7 @@ export function runLoadCollection({
     return {
       ...analysis,
       collectionName,
-      partialCollection: createCollectionFromClipNames({
+      partialCollection: ClipCollection.fromClipNames({
         name: collectionName,
         orderedNames: analysis.existingNamesInOrder,
         clips: folderClips,
@@ -83,7 +83,7 @@ export function runLoadCollection({
     matchKind: analysis.kind,
     collectionName,
     requestedNames: analysis.requestedNames,
-    collection: createCollectionFromClipNames({
+    collection: ClipCollection.fromClipNames({
       name: collectionName,
       orderedNames: analysis.requestedNames,
       clips: folderClips,

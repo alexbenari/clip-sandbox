@@ -1,5 +1,5 @@
-import { createClipCollection } from '../domain/clip-collection.js';
-import { createClip } from '../domain/clip-model.js';
+import { ClipCollection } from '../domain/clip-collection.js';
+import { Clip } from '../domain/clip.js';
 
 export const VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'mkv', 'mpg', 'mpeg']);
 
@@ -28,8 +28,8 @@ export function runLoadClips({
   nextClipId,
 } = {}) {
   const files = filterAndSortFiles(fileList);
-  const clips = files.map((file) => createClip({ id: nextClipId(), file }));
-  const collection = createClipCollection({
+  const clips = files.map((file) => new Clip({ id: nextClipId(), file }));
+  const collection = new ClipCollection({
     name: clips.length > 0 ? normalizedCollectionName(collectionName, defaultCollectionName) : '',
     clips,
   });
@@ -40,3 +40,4 @@ export function runLoadClips({
     count: clips.length,
   };
 }
+

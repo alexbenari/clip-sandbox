@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
-import { createClip } from '../../../src/domain/clip-model.js';
-import { createClipCollection } from '../../../src/domain/clip-collection.js';
+import { Clip } from '../../../src/domain/clip.js';
+import { ClipCollection } from '../../../src/domain/clip-collection.js';
 import { createClipCollectionGridController, updateCardLabel } from '../../../src/ui/clip-collection-grid-controller.js';
 
 describe('clip collection grid controller', () => {
@@ -25,11 +25,11 @@ describe('clip collection grid controller', () => {
   });
 
   function makeCollection() {
-    return createClipCollection({
+    return new ClipCollection({
       name: 'demo',
       clips: [
-        createClip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
-        createClip({ id: 'clip_2', file: new File(['b'], 'bravo.webm', { type: 'video/webm' }) }),
+        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
+        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm', { type: 'video/webm' }) }),
       ],
     });
   }
@@ -102,9 +102,9 @@ describe('clip collection grid controller', () => {
     });
 
     controller.renderCollection(
-      createClipCollection({
+      new ClipCollection({
         name: 'demo',
-        clips: [createClip({ id: 'clip_1', file: new File(['a'], '<img src=x>.mp4', { type: 'video/mp4' }) })],
+        clips: [new Clip({ id: 'clip_1', file: new File(['a'], '<img src=x>.mp4', { type: 'video/mp4' }) })],
       })
     );
 
@@ -196,3 +196,4 @@ describe('clip collection grid controller', () => {
     expect(document.querySelectorAll('#clipCollectionGridStyles')).toHaveLength(1);
   });
 });
+

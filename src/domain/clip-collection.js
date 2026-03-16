@@ -1,63 +1,75 @@
-function orderedIdsFromClips(clips) {
-  return Array.from(clips || []).map((clip) => clip.id);
-}
+export class ClipCollection {
+  #name;
+  #orderedClipIds;
+  #clipMap;
 
-function clipMapFromClips(clips) {
-  return new Map(Array.from(clips || []).map((clip) => [clip.id, clip]));
-}
+  constructor({ name = '', clips = [] } = {}) {
+    this.#name = (name || '').trim();
+    this.#orderedClipIds = [];
+    this.#clipMap = new Map();
+    for (const clip of Array.from(clips || [])) {
+      this.#addClip(clip);
+    }
+  }
 
-export function createClipCollection({ name = '', clips = [] } = {}) {
-  return {
-    name: (name || '').trim(),
-    orderedClipIds: orderedIdsFromClips(clips),
-    clipMap: clipMapFromClips(clips),
-  };
-}
+  static fromClipNames({ name = '', orderedNames = [], clips = [] } = {}) {
+    const clipsByName = new Map(Array.from(clips || []).map((clip) => [clip.name, clip]));
+    const ordered = Array.from(orderedNames || [])
+      .map((clipName) => clipsByName.get(clipName))
+      .filter(Boolean);
+    return new ClipCollection({ name, clips: ordered });
+  }
 
-export function renameClipCollection(collection, name) {
-  if (!collection) return;
-  collection.name = (name || '').trim();
-}
+  get name() {
+    return this.#name;
+  }
 
-export function getClip(collection, clipId) {
-  return collection?.clipMap?.get(clipId) || null;
-}
+  rename(name) {
+    this.#name = (name || '').trim();
+  }
 
-export function orderedClips(collection) {
-  if (!collection?.clipMap) return [];
-  return Array.from(collection.orderedClipIds || [])
-    .map((clipId) => collection.clipMap.get(clipId))
-    .filter(Boolean);
-}
+  hasClip(clipId) {
+    return this.#clipMap.has(clipId);
+  }
 
-export function replaceClipOrder(collection, orderedClipIds) {
-  if (!collection?.clipMap) return [];
-  const seen = new Set();
-  const nextOrder = Array.from(orderedClipIds || []).filter((clipId) => {
-    if (!collection.clipMap.has(clipId) || seen.has(clipId)) return false;
-    seen.add(clipId);
+  getClip(clipId) {
+    return this.#clipMap.get(clipId) || null;
+  }
+
+  orderedClips() {
+    return this.#orderedClipIds
+      .map((clipId) => this.#clipMap.get(clipId))
+      .filter(Boolean);
+  }
+
+  replaceOrder(orderedClipIds) {
+    const seen = new Set();
+    const nextOrder = Array.from(orderedClipIds || []).filter((clipId) => {
+      if (!this.#clipMap.has(clipId) || seen.has(clipId)) return false;
+      seen.add(clipId);
+      return true;
+    });
+    const missing = Array.from(this.#clipMap.keys()).filter((clipId) => !seen.has(clipId));
+    this.#orderedClipIds = nextOrder.concat(missing);
+    return this.#orderedClipIds.slice();
+  }
+
+  remove(clipId) {
+    if (!this.#clipMap.has(clipId)) return false;
+    this.#clipMap.delete(clipId);
+    this.#orderedClipIds = this.#orderedClipIds.filter((id) => id !== clipId);
     return true;
-  });
-  const missing = Array.from(collection.clipMap.keys()).filter((clipId) => !seen.has(clipId));
-  collection.orderedClipIds = nextOrder.concat(missing);
-  return collection.orderedClipIds.slice();
-}
+  }
 
-export function removeClipFromCollection(collection, clipId) {
-  if (!collection?.clipMap?.has(clipId)) return false;
-  collection.clipMap.delete(clipId);
-  collection.orderedClipIds = Array.from(collection.orderedClipIds || []).filter((id) => id !== clipId);
-  return true;
-}
+  clipNamesInOrder() {
+    return this.orderedClips().map((clip) => clip.name);
+  }
 
-export function clipNamesInOrder(collection) {
-  return orderedClips(collection).map((clip) => clip.name);
-}
-
-export function createCollectionFromClipNames({ name = '', orderedNames = [], clips = [] } = {}) {
-  const clipsByName = new Map(Array.from(clips || []).map((clip) => [clip.name, clip]));
-  const ordered = Array.from(orderedNames || [])
-    .map((clipName) => clipsByName.get(clipName))
-    .filter(Boolean);
-  return createClipCollection({ name, clips: ordered });
+  #addClip(clip) {
+    if (!clip?.id) throw new Error('Clip id is required.');
+    if (this.#clipMap.has(clip.id)) return false;
+    this.#clipMap.set(clip.id, clip);
+    this.#orderedClipIds.push(clip.id);
+    return true;
+  }
 }

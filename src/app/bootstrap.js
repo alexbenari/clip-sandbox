@@ -6,13 +6,6 @@ import {
 } from './display-layout-rules.js';
 import { runLoadCollection, runLoadCollectionFromFile } from '../business-logic/load-collection.js';
 import {
-  clipNamesInOrder,
-  getClip,
-  removeClipFromCollection,
-  renameClipCollection,
-  replaceClipOrder,
-} from '../domain/clip-collection.js';
-import {
   createAppState,
   nextClipId,
   setCurrentCollection,
@@ -235,7 +228,7 @@ export function initApp() {
     const src = gridController.getClipMediaSource(clipId);
     if (!src) return false;
     gridController.setSelectedClipId(clipId);
-    const clip = getClip(state.currentCollection, clipId);
+    const clip = state.currentCollection?.getClip(clipId);
     return zoomOverlay.open({ src, name: clip?.name || '' });
   }
 
@@ -247,7 +240,7 @@ export function initApp() {
     recomputeLayout,
     onOrderChange: (orderedClipIds) => {
       if (!state.currentCollection) return;
-      replaceClipOrder(state.currentCollection, orderedClipIds);
+      state.currentCollection.replaceOrder(orderedClipIds);
     },
     onOpenClip: openZoomForClipId,
   });
@@ -314,7 +307,7 @@ export function initApp() {
 
   async function saveCollection(filename = 'default-collection.txt') {
     await runSaveOrder({
-      names: clipNamesInOrder(state.currentCollection),
+      names: state.currentCollection?.clipNamesInOrder() || [],
       currentDirHandle: state.currentDirHandle,
       saveTextToDirectory,
       downloadText,
@@ -348,7 +341,7 @@ export function initApp() {
     }
     const filename = normalizeCollectionFilename(rawName);
     await saveCollection(filename);
-    renameClipCollection(state.currentCollection, collectionNameFromFilename(filename));
+    state.currentCollection?.rename(collectionNameFromFilename(filename));
     renderActiveCollectionName();
     closeSaveAsNewDialog();
   }
@@ -494,7 +487,7 @@ export function initApp() {
     if (!(e.key === 'Delete' || e.key === 'Backspace')) return;
     const selectedClipId = gridController.getSelectedClipId();
     if (!selectedClipId || !state.currentCollection) return;
-    const removed = removeClipFromCollection(state.currentCollection, selectedClipId);
+    const removed = state.currentCollection.remove(selectedClipId);
     if (!removed) return;
     gridController.renderCollection(state.currentCollection);
     showStatus('Clip removed from view.');
@@ -580,6 +573,8 @@ export function initApp() {
   recomputeLayout();
   setTitlesHidden(false);
 }
+
+
 
 
 

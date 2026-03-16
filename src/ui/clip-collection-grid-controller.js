@@ -1,6 +1,3 @@
-import { orderedClips } from '../domain/clip-collection.js';
-import { setClipDuration } from '../domain/clip-model.js';
-
 const CLIP_COLLECTION_GRID_STYLE_ID = 'clipCollectionGridStyles';
 const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
 .clip-collection-grid-root{
@@ -278,7 +275,7 @@ export function createClipCollectionGridController({
   }
 
   function onLoadedMetadata(card, video, clip) {
-    setClipDuration(clip, video.duration);
+    clip.setDuration(video.duration);
     setCardDuration(card, clip.durationSec, formatClipLabel);
   }
 
@@ -300,7 +297,7 @@ export function createClipCollectionGridController({
       notifySelectionChange();
       return;
     }
-    for (const clip of orderedClips(currentCollection)) {
+    for (const clip of currentCollection.orderedClips()) {
       const objectUrl = URL.createObjectURL(clip.file);
       const card = createThumbCard({
         clip,
@@ -318,7 +315,7 @@ export function createClipCollectionGridController({
       });
       grid.appendChild(card);
     }
-    selectedClipId = currentCollection.clipMap.has(previousSelection) ? previousSelection : null;
+    selectedClipId = currentCollection.hasClip(previousSelection) ? previousSelection : null;
     applySelectionClasses();
     updateCount?.();
     recomputeLayout?.();

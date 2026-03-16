@@ -18,7 +18,7 @@ describe('business logic modules', () => {
     expect(result.files.map((file) => file.name)).toEqual(['a.mp4', 'b.mp4']);
     expect(result.clips.map((clip) => clip.id)).toEqual(['clip_1', 'clip_2']);
     expect(result.collection.name).toBe('Folder A');
-    expect(result.collection.orderedClipIds).toEqual(['clip_1', 'clip_2']);
+    expect(result.collection.orderedClips().map((clip) => clip.id)).toEqual(['clip_1', 'clip_2']);
     expect(result.count).toBe(2);
   });
 
@@ -31,7 +31,7 @@ describe('business logic modules', () => {
     });
     expect(result.count).toBe(0);
     expect(result.collection.name).toBe('');
-    expect(result.collection.orderedClipIds).toEqual([]);
+    expect(result.collection.orderedClips()).toEqual([]);
   });
 
   test('runLoadCollection rejects blank collections', () => {
@@ -74,7 +74,7 @@ describe('business logic modules', () => {
     expect(exact.kind).toBe('loaded');
     expect(exact.matchKind).toBe('exact-match');
     expect(exact.collection.name).toBe('ordered');
-    expect(exact.collection.orderedClipIds).toEqual(['clip_2', 'clip_1', 'clip_3']);
+    expect(exact.collection.orderedClips().map((clip) => clip.id)).toEqual(['clip_2', 'clip_1', 'clip_3']);
 
     const subset = runLoadCollection({
       lines: ['c.mp4', 'a.mp4'],
@@ -85,7 +85,7 @@ describe('business logic modules', () => {
     });
     expect(subset.kind).toBe('loaded');
     expect(subset.matchKind).toBe('subset-match');
-    expect(subset.collection.orderedClipIds).toEqual(['clip_3', 'clip_1']);
+    expect(subset.collection.orderedClips().map((clip) => clip.id)).toEqual(['clip_3', 'clip_1']);
   });
 
   test('runLoadCollection returns conflict details and partial collection for missing entries', () => {
@@ -103,7 +103,7 @@ describe('business logic modules', () => {
     expect(result.kind).toBe('has-missing');
     expect(result.missingNames).toEqual(['missing.mp4']);
     expect(result.existingNamesInOrder).toEqual(['b.mp4', 'a.mp4']);
-    expect(result.partialCollection.orderedClipIds).toEqual(['clip_2', 'clip_1']);
+    expect(result.partialCollection.orderedClips().map((clip) => clip.id)).toEqual(['clip_2', 'clip_1']);
   });
 
   test('runLoadCollectionFromFile reads file text and delegates to collection loading', async () => {
@@ -122,7 +122,7 @@ describe('business logic modules', () => {
 
     expect(result.kind).toBe('loaded');
     expect(result.collection.name).toBe('subset');
-    expect(result.collection.orderedClipIds).toEqual(['clip_2', 'clip_1']);
+    expect(result.collection.orderedClips().map((clip) => clip.id)).toEqual(['clip_2', 'clip_1']);
   });
 
   test('runSaveOrder uses direct write when handle is available', async () => {
