@@ -180,6 +180,20 @@ export function createClipCollectionGridController({
     return Array.from(grid.children).find((card) => card.dataset.clipId === clipId) || null;
   }
 
+  function getClipById(clipId) {
+    return currentCollection?.getClip(clipId) || null;
+  }
+
+  function getAdjacentClip(clipId, offset) {
+    const currentCard = getCardByClipId(clipId);
+    if (!currentCard) return null;
+    const orderedCards = Array.from(grid.children);
+    const currentIndex = orderedCards.indexOf(currentCard);
+    if (currentIndex === -1) return null;
+    const adjacentCard = orderedCards[currentIndex + offset];
+    return getClipById(adjacentCard?.dataset.clipId || '');
+  }
+
   function areTitlesHidden() {
     return !!gridRoot?.classList.contains('titles-hidden');
   }
@@ -333,7 +347,10 @@ export function createClipCollectionGridController({
     getSelectedClipId,
     setSelectedClipId,
     getCardByClipId,
+    getClipById,
     getClipMediaSource,
+    getNextClip: (clipId) => getAdjacentClip(clipId, 1),
+    getPrevClip: (clipId) => getAdjacentClip(clipId, -1),
     getOrderedClipIds: orderedClipIdsFromDom,
     areTitlesHidden,
     setTitlesHidden,

@@ -3,6 +3,7 @@ const DEFAULT_ZOOM_OVERLAY_CSS = `
 #zoomLayerRoot{ position:relative; z-index:40; }
 .zoom-overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:clamp(16px, 3vw, 32px); background:transparent; }
 .zoom-frame{ width:min(66vw, 1200px); height:min(66vh, 820px); max-width:100%; max-height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#000; border-radius:18px; border:1px solid rgba(148,163,184,.24); box-shadow:0 20px 60px rgba(0,0,0,.45); }
+.zoom-frame:focus{ outline:none; }
 .zoom-video{ width:100%; height:100%; object-fit:contain; display:block; background:#000; }
 `;
 
@@ -18,6 +19,7 @@ export function createZoomOverlayController({ mountEl, document: doc = document 
   let overlayEl = null;
   let frameEl = null;
   let videoEl = null;
+  let currentItem = null;
 
   function ensureMount() {
     if (!mountEl) {
@@ -42,6 +44,7 @@ export function createZoomOverlayController({ mountEl, document: doc = document 
     frameEl = doc.createElement('div');
     frameEl.id = 'zoomFrame';
     frameEl.className = 'zoom-frame';
+    frameEl.tabIndex = -1;
     frameEl.setAttribute('role', 'dialog');
     frameEl.setAttribute('aria-label', 'Zoomed clip');
     frameEl.setAttribute('aria-modal', 'false');
@@ -60,7 +63,7 @@ export function createZoomOverlayController({ mountEl, document: doc = document 
     nextVideo.autoplay = true;
     nextVideo.controls = false;
     nextVideo.loop = true;
-    nextVideo.muted = false;
+    nextVideo.muted = true;
     nextVideo.playsInline = true;
     nextVideo.preload = 'auto';
     nextVideo.addEventListener(
@@ -93,12 +96,14 @@ export function createZoomOverlayController({ mountEl, document: doc = document 
     videoEl = null;
   }
 
-  function open({ src, name = '' } = {}) {
+  function open({ clipId = null, src, name = '' } = {}) {
     if (!src) return false;
     buildOverlay();
     clearVideo();
     videoEl = createVideo({ src, name });
+    currentItem = { clipId, src, name };
     frameEl.replaceChildren(videoEl);
+    frameEl.focus({ preventScroll: true });
     videoEl.play().catch(() => {});
     return true;
   }
@@ -110,6 +115,7 @@ export function createZoomOverlayController({ mountEl, document: doc = document 
     mountEl.replaceChildren();
     overlayEl = null;
     frameEl = null;
+    currentItem = null;
     return true;
   }
 
@@ -125,11 +131,24 @@ export function createZoomOverlayController({ mountEl, document: doc = document 
     return videoEl;
   }
 
+  function toggleMuted() {
+    if (!videoEl) return null;
+    videoEl.muted = !videoEl.muted;
+    return videoEl.muted;
+  }
+
+  function getCurrentClipId() {
+    return currentItem?.clipId || null;
+  }
+
   return {
     open,
     close,
     destroy,
     isOpen,
     getVideoElement,
+    toggleMuted,
+    getCurrentClipId,
   };
 }
+

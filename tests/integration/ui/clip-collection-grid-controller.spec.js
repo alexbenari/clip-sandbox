@@ -90,6 +90,11 @@ describe('clip collection grid controller', () => {
     document.querySelectorAll('#grid .thumb')[0].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     expect(openRequests).toEqual(['clip_2']);
     expect(controller.getClipMediaSource('clip_2')).toBe('blob:bravo.webm');
+    expect(controller.getClipById('clip_2')?.name).toBe('bravo.webm');
+    expect(controller.getPrevClip('clip_2')).toBeNull();
+    expect(controller.getNextClip('clip_2')?.id).toBe('clip_1');
+    expect(controller.getPrevClip('clip_1')?.id).toBe('clip_2');
+    expect(controller.getNextClip('clip_1')).toBeNull();
   });
 
   test('renders safe filename labels and updates duration text', () => {

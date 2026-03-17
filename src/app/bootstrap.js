@@ -27,6 +27,7 @@ import {
 } from '../adapters/browser/fullscreen-adapter.js';
 import { delay, every, clear as clearClock } from '../adapters/browser/clock-adapter.js';
 import { showStatus as showStatusAdapter, applyGridLayout as applyGridLayoutAdapter, updateClipCount } from '../adapters/browser/dom-renderer-adapter.js';
+import { playBoundaryClank } from '../adapters/browser/audio-feedback-adapter.js';
 import { runSaveOrder } from '../business-logic/save-order.js';
 import { createFullscreenSession } from '../business-logic/fullscreen-session.js';
 import { bindControlEvents, bindGlobalEvents, isEditableTarget } from './event-binding.js';
@@ -223,13 +224,29 @@ export function initApp() {
     isFullscreen,
   });
 
-  function openZoomForClipId(clipId) {
-    if (!clipId || isFullscreen()) return false;
-    const src = gridController.getClipMediaSource(clipId);
+  function openZoomForClip(clip) {
+    if (!clip || isFullscreen()) return false;
+    const src = gridController.getClipMediaSource(clip.id);
     if (!src) return false;
-    gridController.setSelectedClipId(clipId);
-    const clip = state.currentCollection?.getClip(clipId);
-    return zoomOverlay.open({ src, name: clip?.name || '' });
+    gridController.setSelectedClipId(clip.id);
+    return zoomOverlay.open({ clipId: clip.id, src, name: clip.name || '' });
+  }
+
+  function openZoomForClipId(clipId) {
+    return openZoomForClip(gridController.getClipById(clipId));
+  }
+
+  function browseZoomByOffset(offset) {
+    if (!zoomOverlay.isOpen()) return false;
+    const currentClipId = zoomOverlay.getCurrentClipId();
+    const nextClip = offset > 0
+      ? gridController.getNextClip(currentClipId)
+      : gridController.getPrevClip(currentClipId);
+    if (!nextClip) {
+      playBoundaryClank(window);
+      return false;
+    }
+    return openZoomForClip(nextClip);
   }
 
   const gridController = createClipCollectionGridController({
@@ -468,6 +485,16 @@ export function initApp() {
       closeZoom();
       return;
     }
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'a' || e.key === 'A') && zoomOverlay.isOpen()) {
+      zoomOverlay.toggleMuted();
+      e.preventDefault();
+      return;
+    }
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && zoomOverlay.isOpen() && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      browseZoomByOffset(e.key === 'ArrowRight' ? 1 : -1);
+      e.preventDefault();
+      return;
+    }
     if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'z' || e.key === 'Z')) {
       if (zoomOverlay.isOpen()) {
         e.preventDefault();
@@ -573,6 +600,7 @@ export function initApp() {
   recomputeLayout();
   setTitlesHidden(false);
 }
+
 
 
 

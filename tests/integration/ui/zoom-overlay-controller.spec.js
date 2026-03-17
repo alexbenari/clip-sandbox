@@ -58,13 +58,13 @@ describe('zoom overlay controller', () => {
     expect(document.querySelectorAll('#zoomOverlayStyles')).toHaveLength(1);
   });
 
-  test('opens a zoom overlay with an unmuted video', () => {
+  test('opens a zoom overlay with audio muted by default', () => {
     const controller = createZoomOverlayController({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });
 
-    expect(controller.open({ src: 'blob:test-a', name: 'alpha.mp4' })).toBe(true);
+    expect(controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' })).toBe(true);
 
     const overlay = document.getElementById('zoomOverlay');
     const frame = document.getElementById('zoomFrame');
@@ -72,10 +72,32 @@ describe('zoom overlay controller', () => {
     expect(overlay).not.toBeNull();
     expect(frame).not.toBeNull();
     expect(video).not.toBeNull();
-    expect(video.muted).toBe(false);
+    expect(video.muted).toBe(true);
     expect(video.dataset.name).toBe('alpha.mp4');
+    expect(document.activeElement).toBe(frame);
+    expect(controller.getCurrentClipId()).toBe('clip_1');
     expect(controller.isOpen()).toBe(true);
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+  });
+
+  test('toggles zoom audio for the current session only', () => {
+    const controller = createZoomOverlayController({
+      mountEl: document.getElementById('zoomLayerRoot'),
+      document,
+    });
+
+    controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
+    const firstVideo = document.getElementById('zoomVideo');
+    expect(firstVideo.muted).toBe(true);
+
+    expect(controller.toggleMuted()).toBe(false);
+    expect(firstVideo.muted).toBe(false);
+    expect(controller.toggleMuted()).toBe(true);
+    expect(firstVideo.muted).toBe(true);
+
+    controller.close();
+    controller.open({ src: 'blob:test-a', name: 'alpha.mp4' });
+    expect(document.getElementById('zoomVideo').muted).toBe(true);
   });
 
   test('replaces the current zoomed clip when reopened', () => {
@@ -84,13 +106,14 @@ describe('zoom overlay controller', () => {
       document,
     });
 
-    controller.open({ src: 'blob:test-a', name: 'alpha.mp4' });
+    controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
     const firstVideo = document.getElementById('zoomVideo');
-    controller.open({ src: 'blob:test-b', name: 'bravo.webm' });
+    controller.open({ clipId: 'clip_2', src: 'blob:test-b', name: 'bravo.webm' });
     const secondVideo = document.getElementById('zoomVideo');
 
     expect(secondVideo).not.toBe(firstVideo);
     expect(secondVideo.dataset.name).toBe('bravo.webm');
+    expect(controller.getCurrentClipId()).toBe('clip_2');
     expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
     expect(HTMLMediaElement.prototype.load).toHaveBeenCalled();
   });
@@ -101,12 +124,14 @@ describe('zoom overlay controller', () => {
       document,
     });
 
-    controller.open({ src: 'blob:test-a', name: 'alpha.mp4' });
+    controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
     document.getElementById('zoomFrame').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(controller.isOpen()).toBe(true);
 
     document.getElementById('zoomOverlay').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(controller.isOpen()).toBe(false);
+    expect(controller.getCurrentClipId()).toBeNull();
     expect(document.getElementById('zoomLayerRoot').children.length).toBe(0);
   });
 });
+

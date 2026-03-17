@@ -568,7 +568,7 @@ test.describe('Zoom mode', () => {
     await expect(page.locator('#zoomOverlay')).toHaveCount(0);
   });
 
-  test('zoomed video is unmuted and restarts from the beginning when reopened', async ({ page }) => {
+  test('A toggles zoom audio and reopening zoom resets it to muted from the beginning', async ({ page }) => {
     await loadClips(page, 'load-basic');
     const first = await openZoomOnFirstClip(page);
 
@@ -579,20 +579,110 @@ test.describe('Zoom mode', () => {
       video.currentTime = target;
       return { muted: video.muted, advancedTime: video.currentTime };
     });
-    expect(initialState.muted).toBe(false);
+    expect(initialState.muted).toBe(true);
     expect(initialState.advancedTime).toBeGreaterThan(0.1);
+
+    await page.keyboard.press('A');
+    await expect.poll(async () => page.evaluate(() => document.getElementById('zoomVideo')?.muted)).toBe(false);
+    await page.keyboard.press('A');
+    await expect.poll(async () => page.evaluate(() => document.getElementById('zoomVideo')?.muted)).toBe(true);
 
     await page.keyboard.press('Escape');
     await first.dblclick();
     await expect(page.locator('#zoomOverlay')).toBeVisible();
     await waitForZoomVideo(page);
 
-    const reopenedTime = await page.evaluate(() => {
+    const reopenedState = await page.evaluate(() => {
       const video = document.getElementById('zoomVideo');
       video.pause();
-      return video.currentTime;
+      return { muted: video.muted, currentTime: video.currentTime };
     });
-    expect(reopenedTime).toBeLessThan(0.1);
+    expect(reopenedState.muted).toBe(true);
+    expect(reopenedState.currentTime).toBeLessThan(0.1);
+  });
+
+  test('ArrowLeft and ArrowRight browse zoomed clips and clank at collection boundaries', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__clankStarts = 0;
+      class FakeOscillator {
+        constructor() {
+          this.frequency = {
+            setValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          };
+          this.type = 'sine';
+        }
+        connect() {}
+        start() {
+          window.__clankStarts += 1;
+        }
+        stop() {}
+      }
+      class FakeGain {
+        constructor() {
+          this.gain = {
+            setValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          };
+        }
+        connect() {}
+      }
+      class FakeAudioContext {
+        constructor() {
+          this.currentTime = 0;
+          this.state = 'running';
+          this.destination = {};
+        }
+        createOscillator() {
+          return new FakeOscillator();
+        }
+        createGain() {
+          return new FakeGain();
+        }
+        resume() {
+          return Promise.resolve();
+        }
+      }
+      window.AudioContext = FakeAudioContext;
+    });
+
+    await loadClips(page, 'load-basic');
+    const order = await getOrder(page);
+    const first = page.locator('#grid .thumb').first();
+    await first.dblclick();
+    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[0]);
+    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
+
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[0]);
+    const leftBoundaryCount = await page.evaluate(() => window.__clankStarts || 0);
+    expect(leftBoundaryCount).toBeGreaterThan(0);
+
+    await page.keyboard.press('A');
+    await expect.poll(async () => page.evaluate(() => document.getElementById('zoomVideo')?.muted)).toBe(false);
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[1]);
+    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
+    const afterRight = await page.evaluate(() => ({
+      clankCount: window.__clankStarts || 0,
+      muted: document.getElementById('zoomVideo')?.muted,
+      selectedNames: Array.from(document.querySelectorAll('#grid .thumb.selected')).map((el) => el.dataset.name),
+    }));
+    expect(afterRight.clankCount).toBe(leftBoundaryCount);
+    expect(afterRight.muted).toBe(true);
+    expect(afterRight.selectedNames).toEqual([order[1]]);
+
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[1]);
+    await expect.poll(async () => page.evaluate(() => window.__clankStarts || 0)).toBeGreaterThan(leftBoundaryCount);
+
+    await page.keyboard.press('A');
+    await expect.poll(async () => page.evaluate(() => document.getElementById('zoomVideo')?.muted)).toBe(false);
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[0]);
+    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
+    const afterLeft = await page.evaluate(() => document.getElementById('zoomVideo')?.muted);
+    expect(afterLeft).toBe(true);
   });
 
   test('entering fullscreen closes zoom first', async ({ page }) => {
@@ -614,6 +704,7 @@ async function streamToString(stream) {
     stream.on('error', reject);
   });
 }
+
 
 
 
