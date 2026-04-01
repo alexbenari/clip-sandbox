@@ -1,35 +1,76 @@
-- design
-  - reusable componenet: clip card
-  - reusable component: clip grid
-- "grid mode" mode
-  - Collections
-    - open collection in a new tab, and tab name = name of the collection
-    - startup window (when no collection): a set of buttons in the center of the screen (sketch it)
-    - allow naming a collection when saving
-    - allow renaming a collection
-    - allow selecting a range of clips
-  - Clip display 
-    - hitting m mutes/unmutes a clip: design - should be encapsulated at the clip display level (card? grid? zoom? what is common to all three?) 
-    - Compare mode: compare two clips by opening them in side-by-side zoom and synchronizing their start
-    -  control number of clips on grid, add arrows for prev/next screens on the sides as needed, add count of how many out of how many (5-10/23 etc)
-    -  refresh from folder: reloads the collection according to the order file
+# Feature Requests
 
-- "FS"" mode
-  - rename to "Present" mode
-  - Support for multiple display modes - allow selecting dynamically by mode name
-  FS general (for all views): 
-    - toggle metadata display (default is off)
-    - select num slots (kb shortcut but also explicit in ui)
-    - Modes
-      - Collection view
-        - select num slots: shows and allows navigating back and forth through the collection screems which hace X vidfeo each (according to num slots) 
-      - Randomizer
-        - select num slots: number is fixed -> they change randomly within these slots
-        - optional: leave last slot emppty (off by default)
-      - Cinema: 
-        - single clip in the center, large. Content is concatenation of all clips in the order they are in the order file
+## Design
+- `ClipCollectionLoader`: file-level logic where the input is a folder and the output is a `ClipCollection`.
 
--Share: allow sending a link to a gallery of clips
-  
-- Code quality
-  - Match code design to concepts: order mode, display mode, display scheme
+## Grid Mode
+
+### Collections
+
+- On folder selection, all collection files (txt files with filename per line) are enumertaed
+  - each appears as an item under the current collecion name
+  - when clicked it opens that collection
+- move to collection
+  - Right click on selected -> move to collection
+  - Right click on selected -> move to new collection
+- Allow naming a collection when saving.
+- Support saving as a new collection.
+- Allow selecting a range of clips and deleting them.
+- Allow selecting a range of clips and starting a new collection.
+- Allow selecting a range of clips and moving them to an existing collection.
+- Allow renaming a collection.
+- If the user loads a new collection and the existing one has changes, prompt whether to save first.
+- Support displaying multiple collections and moving between them, perhaps with internal tabs.
+- Refresh from folder: reload the collection according to the collection file.
+- Add a startup window for the no-collection state: a centered set of buttons. Sketch it.
+
+### Clip Display
+
+- Hitting `m` mutes or unmutes a clip. Design question: should this be encapsulated at the clip display level (`card`, `grid`, `zoom`), and what should be shared across them?
+- Compare mode:
+  - Compare two clips by opening them in side-by-side zoom and synchronizing their start.
+  - The `s` key or a resync button starts them again together from zero.
+- Control the number of clips on the grid via collection paging.
+  - Add navigation to previous and next screens on the sides as needed.
+  - Add a count showing total items and current screen position (`x/y`).
+
+### App
+
+- Add a keyboard map icon in the top bar. When clicked, open a small panel showing all key mappings and their descriptions.
+- Add a `?` icon that opens a panel with a brief textual explanation of the main app features, one per row.
+
+## FS Mode
+
+- Rename to `Present` mode.
+- Support multiple display modes and allow selecting them dynamically by mode name.
+
+### General
+
+- Toggle metadata display. Default should be off.
+- Select number of slots, both through a keyboard shortcut and explicit UI.
+
+### Modes
+
+#### Collection View
+
+- Select number of slots.
+- Show and allow navigating back and forth through collection screens, each showing `X` videos according to the selected slot count.
+
+#### Randomizer
+
+- Select number of slots.
+- The number of slots is fixed and clips change randomly within those slots.
+- Optional: leave the last slot empty. Default should be off.
+
+#### Cinema
+
+- Show a single large clip in the center.
+- Content is the concatenation of all clips in the order defined by the collection file.
+
+## Share
+
+- Allow sending a link to a gallery of clips.
+
+## Other
+
+- Support GIF files and other formats.
