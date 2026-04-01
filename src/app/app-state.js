@@ -3,8 +3,8 @@ export function createAppState() {
   return {
     currentDirHandle: null,
     idCounter: 0,
-    folderClips: [],
     currentCollection: null,
+    collectionInventory: null,
   };
 }
 
@@ -17,15 +17,15 @@ export function setCurrentDirHandle(state, handle) {
   state.currentDirHandle = handle || null;
 }
 
-export function setFolderClips(state, clips) {
-  state.folderClips = Array.from(clips || []);
-}
-
 export function setCurrentCollection(state, collection) {
   state.currentCollection = collection || null;
 }
 
+export function setCollectionInventory(state, inventory) {
+  state.collectionInventory = inventory || null;
+}
+
 export function resetCollectionState(state) {
-  state.folderClips = [];
   state.currentCollection = null;
+  state.collectionInventory = null;
 }

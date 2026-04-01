@@ -14,7 +14,7 @@ test.beforeEach(({ page }) => {
   page.on('console', (msg) => console.log('Console:', msg.type(), msg.text()));
 });
 
-async function loadClips(page, scenario) {
+async function loadClips(page, scenario, { expectedVisibleCount } = {}) {
   await page.goto(appUrl);
   await page.waitForSelector('#folderInput');
   await page.evaluate(() => {
@@ -23,11 +23,13 @@ async function loadClips(page, scenario) {
   const dir = path.join(fixtureDir(scenario), 'clips');
   await page.setInputFiles('#folderInput', dir);
   const files = fs.readdirSync(dir);
-  const expectedCount = files.filter((f) => VIDEO_EXTS.has(f.split('.').pop().toLowerCase())).length;
+  const expectedCount = Number.isInteger(expectedVisibleCount)
+    ? expectedVisibleCount
+    : files.filter((f) => VIDEO_EXTS.has(f.split('.').pop().toLowerCase())).length;
   await expect(page.locator('#grid .thumb')).toHaveCount(expectedCount);
 }
 
-async function loadClipsViaDirectoryPickerMock(page, files) {
+async function loadClipsViaDirectoryPickerMock(page, files, { expectedVisibleCount } = {}) {
   await page.goto(appUrl);
   await page.waitForSelector('#pickBtn');
   await page.evaluate((mockFiles) => {
@@ -35,6 +37,7 @@ async function loadClipsViaDirectoryPickerMock(page, files) {
     const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
     window.showDirectoryPicker = async () => ({
       kind: 'directory',
+      name: 'clips',
       async *values() {
         for (const f of mockFiles) {
           yield {
@@ -63,7 +66,14 @@ async function loadClipsViaDirectoryPickerMock(page, files) {
     });
   }, files);
   await page.click('#pickBtn');
-  await expect(page.locator('#grid .thumb')).toHaveCount(files.length);
+  const expectedCount = Number.isInteger(expectedVisibleCount)
+    ? expectedVisibleCount
+    : files.filter((file) => VIDEO_EXTS.has(file.name.split('.').pop().toLowerCase())).length;
+  await expect(page.locator('#grid .thumb')).toHaveCount(expectedCount);
+}
+
+async function selectCollection(page, filename) {
+  await page.selectOption('#activeCollectionName', filename);
 }
 
 function getOrder(page) {
@@ -129,10 +139,11 @@ test.describe('Load via folder selection', () => {
     await expect(page.locator('#grid video')).toHaveCount(2);
   });
 
-  test('shows the implicit collection name in the toolbar and page title', async ({ page }) => {
+  test('shows the synthetic default collection name in the toolbar and page title', async ({ page }) => {
     await loadClips(page, 'load-basic');
-    await expect(page.locator('#activeCollectionName')).toHaveText('clips');
-    await expect(page).toHaveTitle('clips collection');
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+    await expect(page.locator('#activeCollectionName')).toContainText('clips-default');
+    await expect(page).toHaveTitle('clips-default collection');
   });
 });
 
@@ -167,8 +178,6 @@ test.describe('Collection menu interactions', () => {
   test('supports click/tap open and keyboard navigation', async ({ page }) => {
     await loadClips(page, 'load-basic');
     await openOrderMenu(page);
-    await page.keyboard.press('ArrowDown');
-    await expect(page.locator('#loadOrderBtn')).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(page.locator('#saveBtn')).toBeFocused();
     await page.keyboard.press('ArrowDown');
@@ -351,28 +360,54 @@ test.describe('Fullscreen behaviors', () => {
 });
 
 test.describe('Collection load', () => {
-  test('applies exact-match collection from file', async ({ page }) => {
-    await loadClips(page, 'order-valid');
-    const collectionFile = path.join(fixtureDir('order-valid'), 'order', 'valid.txt');
-    await page.setInputFiles('#orderFileInput', collectionFile);
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4', 'two.webm'].join('|'));
+  test('loads the synthetic default collection even when a same-named txt collection exists', async ({ page }) => {
+    await loadClips(page, 'default-source');
+    await expect(page.locator('#activeCollectionName option')).toHaveCount(2);
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+    await expect(page.locator('#count')).toHaveText('3 clips');
   });
 
-  test('applies subset collection and hides unlisted clips', async ({ page }) => {
+  test('treats default-collection.txt as a regular explicit collection', async ({ page }) => {
+    await loadClips(page, 'legacy-default');
+    await expect(page.locator('#activeCollectionName option')).toHaveText([
+      'clips-default',
+      'default-collection',
+      'minus-1',
+      'minus-2',
+    ]);
+
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+    await selectCollection(page, 'default-collection.txt');
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4'].join('|'));
+  });
+
+  test('ignores nested videos and nested collection files', async ({ page }) => {
+    await loadClips(page, 'non-recursive');
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['alpha.mp4', 'bravo.webm'].join('|'));
+    await expect(page.locator('#activeCollectionName option')).toHaveText(['clips-default', 'subset']);
+  });
+
+  test('lists collections in the dropdown and applies exact-match and subset collections', async ({ page }) => {
     await loadClips(page, 'order-valid');
-    const collectionFile = path.join(fixtureDir('order-valid'), 'order', 'subset.txt');
-    await page.setInputFiles('#orderFileInput', collectionFile);
+    await expect(page.locator('#activeCollectionName option')).toHaveText(['clips-default', 'subset', 'valid']);
+
+    await selectCollection(page, 'valid.txt');
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4', 'two.webm'].join('|'));
+
+    await selectCollection(page, 'subset.txt');
     await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4'].join('|'));
     await expect(page.locator('#grid .thumb')).toHaveCount(2);
     await expect(page.locator('#count')).toHaveText('2 clips');
-    await expect(page.locator('#activeCollectionName')).toHaveText('subset');
+    await expect(page.locator('#activeCollectionName')).toHaveValue('subset.txt');
     await expect(page).toHaveTitle('subset collection');
   });
 
   test('shows missing-entry panel and applies existing clips when confirmed', async ({ page }) => {
     await loadClips(page, 'order-invalid');
-    const collectionFile = path.join(fixtureDir('order-invalid'), 'order', 'missing-only.txt');
-    await page.setInputFiles('#orderFileInput', collectionFile);
+    await expect(page.locator('#activeCollectionName option')).toHaveText(['clips-default', 'missing-only']);
+
+    await selectCollection(page, 'missing-only.txt');
 
     await expect(page.locator('#collectionConflict')).toBeVisible();
     await expect(page.locator('#collectionConflictSummary')).toContainText('1 missing entry');
@@ -387,8 +422,7 @@ test.describe('Collection load', () => {
   test('shows missing-entry panel and keeps the current collection when canceled', async ({ page }) => {
     await loadClips(page, 'order-invalid');
     const original = await getOrder(page);
-    const collectionFile = path.join(fixtureDir('order-invalid'), 'order', 'missing-only.txt');
-    await page.setInputFiles('#orderFileInput', collectionFile);
+    await selectCollection(page, 'missing-only.txt');
 
     await expect(page.locator('#collectionConflict')).toBeVisible();
     await page.click('#cancelCollectionConflictBtn');
@@ -396,22 +430,70 @@ test.describe('Collection load', () => {
     expect(await getOrder(page)).toEqual(original);
   });
 
-  test('shows guidance when loading a collection before a folder', async ({ page }) => {
+  test('keeps the collection selector disabled before a folder is loaded', async ({ page }) => {
     await page.goto(appUrl);
-    await openOrderMenu(page);
-    await page.click('#loadOrderBtn');
-    await expect(page.locator('#status')).toHaveText('Load the folder first, then load the collection file.');
+    await expect(page.locator('#activeCollectionName')).toBeDisabled();
+  });
+
+  test('prompts before switching collections when the current collection is dirty', async ({ page }) => {
+    await loadClips(page, 'order-valid');
+    await page.locator('#grid .thumb').first().click();
+    await page.keyboard.press('Delete');
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+
+    await selectCollection(page, 'subset.txt');
+    await expect(page.locator('#unsavedChangesDialog')).toHaveAttribute('open', '');
+    await page.click('#cancelUnsavedChangesBtn');
+
+    await expect(page.locator('#unsavedChangesDialog')).not.toHaveAttribute('open', '');
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+  });
+
+  test('saves then switches when the dirty-switch dialog confirms save', async ({ page }) => {
+    await loadClips(page, 'order-valid');
+    await page.locator('#grid .thumb').first().click();
+    await page.keyboard.press('Delete');
+
+    await selectCollection(page, 'subset.txt');
+    await expect(page.locator('#unsavedChangesDialog')).toHaveAttribute('open', '');
+    await page.click('#confirmUnsavedChangesBtn');
+    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
+    const downloadPromise = page.waitForEvent('download');
+    await page.fill('#saveAsNewNameInput', 'from-default');
+    await page.click('#confirmSaveAsNewBtn');
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toBe('from-default.txt');
+    await expect(page.locator('#activeCollectionName')).toHaveValue('subset.txt');
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4'].join('|'));
+  });
+
+  test('prompts before browsing to another folder when the current collection is dirty', async ({ page }) => {
+    await loadClips(page, 'order-valid');
+    await page.locator('#grid .thumb').first().click();
+    await page.keyboard.press('Delete');
+
+    await page.click('#pickBtn');
+    await expect(page.locator('#unsavedChangesDialog')).toHaveAttribute('open', '');
+    await page.click('#cancelUnsavedChangesBtn');
+
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
   });
 });
 
 test.describe('Save collection download fallback', () => {
-  test('saves default-collection.txt via download', async ({ page }) => {
+  test('save on the synthetic default opens naming flow and downloads a named file', async ({ page }) => {
     await loadClips(page, 'save-download');
     await openOrderMenu(page);
-    const downloadPromise = page.waitForEvent('download');
     await page.click('#saveBtn');
+    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
+    const downloadPromise = page.waitForEvent('download');
+    await page.fill('#saveAsNewNameInput', 'all-clips');
+    await page.click('#confirmSaveAsNewBtn');
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe('default-collection.txt');
+    expect(download.suggestedFilename()).toBe('all-clips.txt');
     const content = await download.createReadStream();
     const text = (await streamToString(content)).trim();
     expect(text.split('\n')).toEqual(await getOrder(page));
@@ -419,13 +501,12 @@ test.describe('Save collection download fallback', () => {
 
   test('saves only the active subset collection', async ({ page }) => {
     await loadClips(page, 'order-valid');
-    const collectionFile = path.join(fixtureDir('order-valid'), 'order', 'subset.txt');
-    await page.setInputFiles('#orderFileInput', collectionFile);
+    await selectCollection(page, 'subset.txt');
     await openOrderMenu(page);
     const downloadPromise = page.waitForEvent('download');
     await page.click('#saveBtn');
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe('default-collection.txt');
+    expect(download.suggestedFilename()).toBe('subset.txt');
     const content = await download.createReadStream();
     const text = (await streamToString(content)).trim();
     expect(text.split('\n')).toEqual(['three.mp4', 'one.mp4']);
@@ -455,18 +536,219 @@ test.describe('Save collection download fallback', () => {
 });
 
 test.describe('Save collection direct write path', () => {
-  test('writes default-collection.txt to selected folder handle when available', async ({ page }) => {
+  test('directory picker flow preserves collection options when browsing the same folder again', async ({ page }) => {
+    await page.goto(appUrl);
+    await page.waitForSelector('#pickBtn');
+    await page.evaluate(() => {
+      window.__savedOrderWrites = [];
+      const mockFiles = [
+        { name: 'one.mp4', type: 'video/mp4', content: '1' },
+        { name: 'two.webm', type: 'video/webm', content: '2' },
+        { name: 'three.mp4', type: 'video/mp4', content: '3' },
+        { name: 'default-collection.txt', type: 'text/plain', content: 'three.mp4\none.mp4\n' },
+        { name: 'minus-1.txt', type: 'text/plain', content: 'two.webm\none.mp4\n' },
+        { name: 'minus-2.txt', type: 'text/plain', content: 'one.mp4\n' },
+      ];
+      const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
+      window.showDirectoryPicker = async () => ({
+        kind: 'directory',
+        name: 'clips',
+        async *values() {
+          for (const f of mockFiles) {
+            yield {
+              kind: 'file',
+              async getFile() {
+                return toFile(f);
+              },
+            };
+          }
+        },
+        async getFileHandle(name, options = {}) {
+          return {
+            async createWritable() {
+              let data = '';
+              return {
+                async write(chunk) {
+                  data += typeof chunk === 'string' ? chunk : String(chunk);
+                },
+                async close() {
+                  window.__savedOrderWrites.push({ name, data, create: !!options.create });
+                },
+              };
+            },
+          };
+        },
+      });
+    });
+
+    await page.click('#pickBtn');
+    await expect(page.locator('#activeCollectionName option')).toHaveText([
+      'clips-default',
+      'default-collection',
+      'minus-1',
+      'minus-2',
+    ]);
+
+    await page.click('#pickBtn');
+    await expect(page.locator('#activeCollectionName option')).toHaveText([
+      'clips-default',
+      'default-collection',
+      'minus-1',
+      'minus-2',
+    ]);
+  });
+
+  test('directory picker flow with a real folder name keeps explicit collections alongside the synthetic default', async ({ page }) => {
+    await page.goto(appUrl);
+    await page.waitForSelector('#pickBtn');
+    await page.evaluate(() => {
+      const mockFiles = [
+        { name: 'one.mp4', type: 'video/mp4', content: '1' },
+        { name: 'two.webm', type: 'video/webm', content: '2' },
+        { name: 'three.mp4', type: 'video/mp4', content: '3' },
+        { name: 'default-collection.txt', type: 'text/plain', content: 'three.mp4\none.mp4\n' },
+        { name: 'minus-1.txt', type: 'text/plain', content: 'two.webm\none.mp4\n' },
+        { name: 'minus-2.txt', type: 'text/plain', content: 'one.mp4\n' },
+      ];
+      const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
+      window.showDirectoryPicker = async () => ({
+        kind: 'directory',
+        name: 'downhill-racer',
+        async *values() {
+          for (const f of mockFiles) {
+            yield {
+              kind: 'file',
+              async getFile() {
+                return toFile(f);
+              },
+            };
+          }
+        },
+        async getFileHandle() {
+          return {
+            async createWritable() {
+              return {
+                async write() {},
+                async close() {},
+              };
+            },
+          };
+        },
+      });
+    });
+
+    await page.click('#pickBtn');
+    await expect(page.locator('#activeCollectionName option')).toHaveText([
+      'downhill-racer-default',
+      'default-collection',
+      'minus-1',
+      'minus-2',
+    ]);
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+  });
+
+  test('directory picker flow lists a synthetic default plus explicit collections', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'one.mp4', type: 'video/mp4', content: '1' },
+      { name: 'two.webm', type: 'video/webm', content: '2' },
+      { name: 'three.mp4', type: 'video/mp4', content: '3' },
+      { name: 'default-collection.txt', type: 'text/plain', content: 'three.mp4\none.mp4\n' },
+      { name: 'minus-1.txt', type: 'text/plain', content: 'two.webm\none.mp4\n' },
+      { name: 'minus-2.txt', type: 'text/plain', content: 'one.mp4\n' },
+    ]);
+
+    await expect(page.locator('#activeCollectionName option')).toHaveText([
+      'clips-default',
+      'default-collection',
+      'minus-1',
+      'minus-2',
+    ]);
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+  });
+
+  test('directory picker flow retries transient collection file reads and still lists all collections', async ({ page }) => {
+    await page.goto(appUrl);
+    await page.waitForSelector('#pickBtn');
+    await page.evaluate(() => {
+      const mockFiles = [
+        { name: 'one.mp4', type: 'video/mp4', content: '1' },
+        { name: 'two.webm', type: 'video/webm', content: '2' },
+        { name: 'three.mp4', type: 'video/mp4', content: '3' },
+        { name: 'default-collection.txt', type: 'text/plain', content: 'three.mp4\none.mp4\n' },
+        { name: 'minus-1.txt', type: 'text/plain', content: 'two.webm\none.mp4\n' },
+        { name: 'minus-2.txt', type: 'text/plain', content: 'one.mp4\n' },
+      ];
+      const attempts = new Map();
+      const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
+      window.showDirectoryPicker = async () => ({
+        kind: 'directory',
+        name: 'downhill-racer',
+        async *values() {
+          for (const f of mockFiles) {
+            yield {
+              kind: 'file',
+              name: f.name,
+              async getFile() {
+                const nextAttempt = (attempts.get(f.name) || 0) + 1;
+                attempts.set(f.name, nextAttempt);
+                if (f.name.endsWith('.txt') && nextAttempt === 1) {
+                  throw new Error(`Transient provider error for ${f.name}`);
+                }
+                return toFile(f);
+              },
+            };
+          }
+        },
+        async getFileHandle() {
+          return {
+            async createWritable() {
+              return {
+                async write() {},
+                async close() {},
+              };
+            },
+          };
+        },
+      });
+    });
+
+    await page.click('#pickBtn');
+    await expect(page.locator('#activeCollectionName option')).toHaveText([
+      'downhill-racer-default',
+      'default-collection',
+      'minus-1',
+      'minus-2',
+    ]);
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+  });
+
+  test('writes err.log entries for invalid collection files when directory access is available', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'save-a.mp4', type: 'video/mp4', content: 'a' },
+      { name: 'broken.txt', type: 'text/plain', content: 'save-a.mp4\nsave-a.mp4\n' },
+    ]);
+
+    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
+    expect(writes.some((write) => write.name === 'err.log')).toBe(true);
+    const errLogWrite = writes.find((write) => write.name === 'err.log');
+    expect(errLogWrite.data).toContain('Problem: invalid-duplicates');
+  });
+
+  test('save on the synthetic default writes a named collection file when directory access is available', async ({ page }) => {
     await loadClipsViaDirectoryPickerMock(page, [
       { name: 'save-a.mp4', type: 'video/mp4', content: 'a' },
       { name: 'save-b.webm', type: 'video/webm', content: 'b' },
     ]);
     await openOrderMenu(page);
     await page.click('#saveBtn');
-    await expect(page.locator('#status')).toHaveText('Saved default-collection.txt to the selected folder.');
+    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
+    await page.fill('#saveAsNewNameInput', 'all-clips');
+    await page.click('#confirmSaveAsNewBtn');
+    await expect(page.locator('#status')).toHaveText('Saved all-clips.txt to the selected folder.');
 
     const writes = await page.evaluate(() => window.__savedOrderWrites || []);
     expect(writes).toHaveLength(1);
-    expect(writes[0].name).toBe('default-collection.txt');
+    expect(writes[0].name).toBe('all-clips.txt');
     expect(writes[0].data.trim().split('\n')).toEqual(await getOrder(page));
   });
 

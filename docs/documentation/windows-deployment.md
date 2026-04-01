@@ -20,16 +20,35 @@ Run the repo-side deployment script from the repository root:
 powershell -ExecutionPolicy Bypass -File .\deployment\deploy.ps1
 ```
 
+If you want the shortest repo-side command that deploys and then immediately starts the installed copy:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deployment\deploy-and-start.ps1
+```
+
 What it does:
 
-1. Fully removes the existing `C:\installs\clip-sandbox\` folder if it exists.
-2. Recreates the install directory.
-3. Copies the runtime payload into that folder.
+1. Stops the installed `miniserve` for that target install if it is currently running.
+2. Clears the existing contents of `C:\installs\clip-sandbox\` if they exist.
+3. Reuses the install directory itself.
+4. Copies the runtime payload into that folder.
 
-To deploy and launch the installed copy immediately:
+To deploy and launch the installed copy immediately from `deploy.ps1` itself:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\deployment\deploy.ps1 -Launch
+```
+
+To deploy and launch without opening a browser window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deployment\deploy-and-start.ps1 -NoBrowser
+```
+
+To deploy, launch, and prefer a different starting port:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deployment\deploy-and-start.ps1 -PreferredPort 8899
 ```
 
 To deploy to a different location:
@@ -50,7 +69,8 @@ Default launch behavior:
 
 1. Finds a free localhost port starting at `8787`.
 2. Starts bundled `miniserve`.
-3. Opens the default browser to the local app URL.
+3. Serves the app with no-cache response headers so redeploys do not leave stale JS modules in the browser cache.
+4. Opens the browser with a fresh launch URL each time so an already-open tab is forced onto a new navigation target.
 
 Optional troubleshooting launch that skips opening the browser:
 

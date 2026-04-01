@@ -1,3 +1,5 @@
+import { ClipCollectionContent } from './clip-collection-content.js';
+
 export class ClipCollection {
   #name;
   #orderedClipIds;
@@ -63,6 +65,14 @@ export class ClipCollection {
 
   clipNamesInOrder() {
     return this.orderedClips().map((clip) => clip.name);
+  }
+
+  toCollectionContent({ filename = null, collectionName = '' } = {}) {
+    return new ClipCollectionContent({
+      collectionName,
+      filename,
+      orderedClipNames: this.clipNamesInOrder(),
+    });
   }
 
   #addClip(clip) {

@@ -14,13 +14,37 @@ export async function pickDirectory(win = window) {
   return win.showDirectoryPicker({ mode: 'readwrite' });
 }
 
-export async function readFilesFromDirectory(directoryHandle) {
+async function readFileEntryWithRetry(entry, { maxAttempts = 3 } = {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return {
+        file: await entry.getFile(),
+        attempts: attempt,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw Object.assign(lastError || new Error('Failed to read file entry.'), {
+    attempts: maxAttempts,
+  });
+}
+
+export async function readFilesFromDirectory(directoryHandle, { onFileReadError } = {}) {
   const files = [];
   for await (const entry of directoryHandle.values()) {
     if (entry.kind !== 'file') continue;
     try {
-      files.push(await entry.getFile());
-    } catch {}
+      const { file } = await readFileEntryWithRetry(entry);
+      files.push(file);
+    } catch (error) {
+      await onFileReadError?.({
+        filename: entry?.name || '',
+        attempts: error?.attempts || 3,
+        error,
+      });
+    }
   }
   return files;
 }
@@ -29,6 +53,18 @@ export async function saveTextToDirectory(directoryHandle, filename, text) {
   const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
   const writable = await fileHandle.createWritable();
   await writable.write(text);
+  await writable.close();
+}
+
+export async function appendTextToDirectoryFile(directoryHandle, filename, text) {
+  const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+  let previous = '';
+  try {
+    const existing = await fileHandle.getFile();
+    previous = await existing.text();
+  } catch {}
+  const writable = await fileHandle.createWritable();
+  await writable.write(`${previous}${text}`);
   await writable.close();
 }
 

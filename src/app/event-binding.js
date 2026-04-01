@@ -26,8 +26,8 @@ export function bindControlEvents({
   folderInput.addEventListener('change', onFolderInputChange);
   saveBtn.addEventListener('click', onSaveOrder);
   saveAsNewBtn?.addEventListener('click', onSaveAsNew);
-  loadOrderBtn.addEventListener('click', onLoadOrderClick);
-  orderFileInput.addEventListener('change', onOrderFileChange);
+  loadOrderBtn?.addEventListener('click', onLoadOrderClick);
+  orderFileInput?.addEventListener('change', onOrderFileChange);
   toggleTitlesBtn.addEventListener('click', onToggleTitles);
   fsBtn.addEventListener('click', onFsToggle);
 }

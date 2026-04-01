@@ -1,19 +1,18 @@
-import { isVideoFile, runLoadClips } from '../business-logic/load-clips.js';
 import {
-  computeBestGrid,
-  computeFsLayout,
-  normalizeFsSlots,
-} from './display-layout-rules.js';
-import { runLoadCollection, runLoadCollectionFromFile } from '../business-logic/load-collection.js';
+  getVideosAndCollectionFiles,
+} from '../business-logic/load-clips.js';
+import { materializeCollectionContent } from '../business-logic/load-collection.js';
+import { buildCollectionInventory } from '../business-logic/load-collection-inventory.js';
 import {
   createAppState,
   nextClipId,
+  setCollectionInventory,
   setCurrentCollection,
   setCurrentDirHandle,
-  setFolderClips,
   resetCollectionState,
 } from './app-state.js';
 import {
+  appendTextToDirectoryFile,
   canUseDirectoryPicker,
   pickDirectory,
   readFilesFromDirectory,
@@ -33,14 +32,16 @@ import { createFullscreenSession } from '../business-logic/fullscreen-session.js
 import { bindControlEvents, bindGlobalEvents, isEditableTarget } from './event-binding.js';
 import { createLayoutController } from './display-layout-controller.js';
 import {
+  computeBestGrid,
+  computeFsLayout,
+  normalizeFsSlots,
+} from './display-layout-rules.js';
+import {
   fullscreenSlotsText,
   loadedVideosText,
   collectionLoadedText,
   collectionPartiallyLoadedText,
-  collectionEmptyErrorText,
-  collectionDuplicateErrorText,
   collectionReadErrorText,
-  collectionFirstUnavailableText,
   collectionConflictSummaryText,
   collectionConflictListText,
   noCollectionMatchesText,
@@ -48,18 +49,20 @@ import {
   saveAsNewInvalidNameText,
   savedCollectionFileText,
   downloadedCollectionFileText,
-  DEFAULT_ACTIVE_COLLECTION_NAME,
   activeCollectionText,
   activeCollectionTabText,
   niceNum,
+  DEFAULT_APP_TITLE,
 } from './app-text.js';
 import { createOrderMenuController } from '../ui/order-menu-controller.js';
 import { createZoomOverlayController } from '../ui/zoom-overlay-controller.js';
-import { createClipCollectionGridController, formatLabel } from '../ui/clip-collection-grid-controller.js';
-import { updateCardLabel } from '../ui/clip-collection-grid-controller.js';
+import { createClipCollectionGridController, formatLabel, updateCardLabel } from '../ui/clip-collection-grid-controller.js';
+import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
+import { ClipCollectionContent } from '../domain/clip-collection-content.js';
 
 let initialized = false;
 const WINDOWS_ILLEGAL_FILENAME_CHARS = /[<>:"/\\|?*]/;
+const ERROR_LOG_FILENAME = 'err.log';
 
 export function initApp() {
   if (initialized) return;
@@ -73,8 +76,6 @@ export function initApp() {
   const orderMenuBtn = document.getElementById('orderMenuBtn');
   const orderMenuPanel = document.getElementById('orderMenuPanel');
   const folderInput = document.getElementById('folderInput');
-  const orderFileInput = document.getElementById('orderFileInput');
-  const loadOrderBtn = document.getElementById('loadOrderBtn');
   const grid = document.getElementById('grid');
   const gridWrap = document.getElementById('gridWrap');
   const countSpan = document.getElementById('count');
@@ -94,6 +95,11 @@ export function initApp() {
   const saveAsNewError = document.getElementById('saveAsNewError');
   const confirmSaveAsNewBtn = document.getElementById('confirmSaveAsNewBtn');
   const cancelSaveAsNewBtn = document.getElementById('cancelSaveAsNewBtn');
+  const unsavedChangesDialog = document.getElementById('unsavedChangesDialog');
+  const unsavedChangesText = document.getElementById('unsavedChangesText');
+  const confirmUnsavedChangesBtn = document.getElementById('confirmUnsavedChangesBtn');
+  const discardUnsavedChangesBtn = document.getElementById('discardUnsavedChangesBtn');
+  const cancelUnsavedChangesBtn = document.getElementById('cancelUnsavedChangesBtn');
   const body = document.body;
 
   const state = createAppState();
@@ -106,6 +112,7 @@ export function initApp() {
     randPending: false,
     savedTitlesHidden: null,
   };
+  const validator = new CollectionDescriptionValidator();
   const zoomOverlay = createZoomOverlayController({ mountEl: zoomLayerRoot, document });
   let pendingCollectionConflict = null;
 
@@ -113,13 +120,20 @@ export function initApp() {
     showStatusAdapter(statusBar, msg, timeout);
   }
 
-  function normalizedCollectionName(name, fallback = '') {
-    const trimmed = (name || '').trim();
-    return trimmed || fallback;
+  function currentInventory() {
+    return state.collectionInventory;
   }
 
-  function collectionNameFromFilename(filename) {
-    return normalizedCollectionName((filename || '').replace(/\.txt$/i, ''));
+  function currentContent() {
+    return currentInventory()?.activeCollection() || null;
+  }
+
+  function currentCollectionName() {
+    return state.currentCollection?.name || currentContent()?.collectionName || '';
+  }
+
+  function activeCollectionFilename() {
+    return currentContent()?.filename || '';
   }
 
   function folderNameFromFiles(fileList) {
@@ -128,81 +142,6 @@ export function initApp() {
     if (!relPath) return '';
     const parts = relPath.split(/[\\/]/).filter(Boolean);
     return parts.length > 1 ? parts[0] : '';
-  }
-
-  function implicitCollectionName(name) {
-    return normalizedCollectionName(name, DEFAULT_ACTIVE_COLLECTION_NAME);
-  }
-
-  function currentCollectionName() {
-    return state.currentCollection?.name || '';
-  }
-
-  function folderClipNames() {
-    return state.folderClips.map((clip) => clip.name);
-  }
-
-  function renderActiveCollectionName() {
-    const text = activeCollectionText(currentCollectionName());
-    document.title = activeCollectionTabText(currentCollectionName());
-    if (activeCollectionNameEl) {
-      activeCollectionNameEl.textContent = text;
-      activeCollectionNameEl.title = text;
-    }
-  }
-
-  function updateCount() {
-    updateClipCount(countSpan, [saveBtn, saveAsNewBtn], grid.children.length, niceNum);
-  }
-
-  function closeZoom() {
-    zoomOverlay.close();
-  }
-
-  function clearGrid() {
-    closeZoom();
-    gridController.destroy();
-    updateCount();
-  }
-
-  function hideCollectionConflict() {
-    if (collectionConflict) collectionConflict.hidden = true;
-    if (collectionConflictSummary) collectionConflictSummary.textContent = '';
-    if (collectionConflictList) collectionConflictList.textContent = '';
-  }
-
-  function showCollectionConflictPanel(conflict) {
-    pendingCollectionConflict = conflict;
-    if (collectionConflictSummary) {
-      collectionConflictSummary.textContent = collectionConflictSummaryText(
-        conflict.existingNamesInOrder.length,
-        conflict.missingCount
-      );
-    }
-    if (collectionConflictList) collectionConflictList.textContent = collectionConflictListText(conflict.missingNames);
-    if (collectionConflict) collectionConflict.hidden = false;
-  }
-
-  function clearSaveAsNewError() {
-    if (saveAsNewError) saveAsNewError.textContent = '';
-  }
-
-  function closeSaveAsNewDialog() {
-    if (saveAsNewDialog) saveAsNewDialog.hidden = true;
-    if (saveAsNewNameInput) saveAsNewNameInput.value = '';
-    clearSaveAsNewError();
-  }
-
-  function openSaveAsNewDialog() {
-    if (!saveAsNewDialog || !saveAsNewNameInput) return;
-    clearSaveAsNewError();
-    saveAsNewDialog.hidden = false;
-    saveAsNewNameInput.value = '';
-    saveAsNewNameInput.focus();
-  }
-
-  function showSaveAsNewError(text) {
-    if (saveAsNewError) saveAsNewError.textContent = text;
   }
 
   function isFullscreen() {
@@ -223,6 +162,402 @@ export function initApp() {
     applyGridLayout,
     isFullscreen,
   });
+
+  function renderCollectionSelector() {
+    const inventory = currentInventory();
+    const label = activeCollectionText(currentCollectionName());
+    document.title = activeCollectionTabText(currentCollectionName());
+    if (!(activeCollectionNameEl instanceof HTMLSelectElement)) return;
+
+    activeCollectionNameEl.innerHTML = '';
+    if (!inventory) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = label || DEFAULT_APP_TITLE;
+      activeCollectionNameEl.appendChild(option);
+      activeCollectionNameEl.disabled = true;
+      activeCollectionNameEl.value = '';
+      activeCollectionNameEl.title = option.textContent;
+      return;
+    }
+
+    for (const collectionContent of inventory.selectableCollections()) {
+      const option = document.createElement('option');
+      option.value = inventory.selectionValueFor(collectionContent);
+      option.textContent = collectionContent.collectionName;
+      activeCollectionNameEl.appendChild(option);
+    }
+
+    activeCollectionNameEl.disabled = false;
+    activeCollectionNameEl.value = inventory.activeSelectionValue();
+    activeCollectionNameEl.title = label || DEFAULT_APP_TITLE;
+  }
+
+  function updateCount() {
+    updateClipCount(countSpan, [saveBtn, saveAsNewBtn], grid.children.length, niceNum);
+  }
+
+  function closeZoom() {
+    zoomOverlay.close();
+  }
+
+  function hideCollectionConflict() {
+    if (collectionConflict) collectionConflict.hidden = true;
+    if (collectionConflictSummary) collectionConflictSummary.textContent = '';
+    if (collectionConflictList) collectionConflictList.textContent = '';
+  }
+
+  function showCollectionConflictPanel(conflict, handlers) {
+    pendingCollectionConflict = { conflict, handlers };
+    if (collectionConflictSummary) {
+      collectionConflictSummary.textContent = collectionConflictSummaryText(
+        conflict.existingNamesInOrder.length,
+        conflict.missingCount
+      );
+    }
+    if (collectionConflictList) collectionConflictList.textContent = collectionConflictListText(conflict.missingNames);
+    if (collectionConflict) collectionConflict.hidden = false;
+  }
+
+  function clearSaveAsNewError() {
+    if (saveAsNewError) saveAsNewError.textContent = '';
+  }
+
+  function closeSaveAsNewDialog() {
+    if (saveAsNewDialog) saveAsNewDialog.hidden = true;
+    if (saveAsNewNameInput) saveAsNewNameInput.value = '';
+    clearSaveAsNewError();
+  }
+
+  function cancelSaveAsNewFlow() {
+    closeSaveAsNewDialog();
+    currentInventory()?.clearPendingAction();
+    renderCollectionSelector();
+  }
+
+  function openSaveAsNewDialog() {
+    if (!saveAsNewDialog || !saveAsNewNameInput) return;
+    clearSaveAsNewError();
+    saveAsNewDialog.hidden = false;
+    saveAsNewNameInput.value = '';
+    saveAsNewNameInput.focus();
+  }
+
+  function showSaveAsNewError(text) {
+    if (saveAsNewError) saveAsNewError.textContent = text;
+  }
+
+  function openUnsavedDialog() {
+    if (!unsavedChangesDialog) return;
+    if (unsavedChangesText) {
+      const action = currentInventory()?.pendingAction();
+      unsavedChangesText.textContent = action?.type === 'browse-folder'
+        ? 'The current collection has unsaved changes. Save before browsing to another folder?'
+        : 'The current collection has unsaved changes. Save before switching collections?';
+    }
+    if (typeof unsavedChangesDialog.showModal === 'function') {
+      unsavedChangesDialog.showModal();
+      return;
+    }
+    unsavedChangesDialog.setAttribute('open', '');
+  }
+
+  function closeUnsavedDialog() {
+    if (!unsavedChangesDialog) return;
+    if (typeof unsavedChangesDialog.close === 'function' && unsavedChangesDialog.open) {
+      unsavedChangesDialog.close();
+      return;
+    }
+    unsavedChangesDialog.removeAttribute('open');
+  }
+
+  async function appendErrorLog(text, dirHandle = state.currentDirHandle) {
+    if (!text) return false;
+    if (dirHandle?.kind === 'directory' && dirHandle.getFileHandle) {
+      try {
+        await appendTextToDirectoryFile(dirHandle, ERROR_LOG_FILENAME, text);
+        return true;
+      } catch (err) {
+        console.warn('Failed to append err.log in selected folder.', err);
+      }
+    }
+    console.warn(text.trim());
+    return false;
+  }
+
+  async function logInvalidDescription(result, dirHandle) {
+    await appendErrorLog(validator.formatLogEntry(result, 'Collection enumeration'), dirHandle);
+  }
+
+  async function logRuntimeError(problem, err, dirHandle = state.currentDirHandle) {
+    const detail = `Runtime error\nProblem: ${problem}\nDetails: ${err?.message || err}\n\n`;
+    await appendErrorLog(detail, dirHandle);
+  }
+
+  async function logDirectoryReadError({ filename = '', attempts = 0, error } = {}, dirHandle) {
+    const problem = filename
+      ? `Failed to read folder entry: ${filename}`
+      : 'Failed to read folder entry';
+    const detail = `Directory enumeration error\nProblem: ${problem}\nAttempts: ${attempts}\nDetails: ${error?.message || error}\n\n`;
+    await appendErrorLog(detail, dirHandle);
+  }
+
+  function applyCollection(collection, { inventory = currentInventory(), dirHandle = state.currentDirHandle, statusText = '', timeout = 2500 } = {}) {
+    hideCollectionConflict();
+    pendingCollectionConflict = null;
+    setCurrentDirHandle(state, dirHandle || null);
+    setCollectionInventory(state, inventory || null);
+    setCurrentCollection(state, collection || null);
+    inventory?.refreshDirtyState(collection);
+    gridController.renderCollection(collection);
+    renderCollectionSelector();
+    if (statusText) showStatus(statusText, timeout);
+  }
+
+  function clearLoadedState() {
+    hideCollectionConflict();
+    pendingCollectionConflict = null;
+    closeSaveAsNewDialog();
+    closeUnsavedDialog();
+    closeZoom();
+    gridController.destroy();
+    resetCollectionState(state);
+    setCurrentDirHandle(state, null);
+    renderCollectionSelector();
+    updateCount();
+  }
+
+  function initialLoadStatusText(inventory, result) {
+    const activeCollection = inventory.activeCollection();
+    if (inventory.videoNames().length === 0 && activeCollection?.isDefault) {
+      return 'No video files found in the selected folder.';
+    }
+    if (activeCollection?.isDefault) {
+      return loadedVideosText(result.collection.orderedClips().length);
+    }
+    return collectionLoadedText(result.collection.orderedClips().length);
+  }
+
+  function materializeContent(inventory, collectionContent) {
+    return materializeCollectionContent({
+      content: collectionContent,
+      availableVideoFiles: inventory.videoFiles(),
+      nextClipId: () => nextClipId(state),
+    });
+  }
+
+  function queueMissingConflict(conflict, handlers) {
+    showCollectionConflictPanel(conflict, handlers);
+  }
+
+  async function applyCollectionSelection(collectionContent, { inventory = currentInventory(), dirHandle = state.currentDirHandle } = {}) {
+    if (!inventory || !collectionContent) return;
+    const result = materializeContent(inventory, collectionContent);
+    if (result.kind === 'has-missing') {
+      queueMissingConflict(result, {
+        onApply: () => {
+          if (result.existingNamesInOrder.length === 0) {
+            renderCollectionSelector();
+            showStatus(noCollectionMatchesText(result.missingCount), 4500);
+            return;
+          }
+          inventory.setActiveCollection(collectionContent);
+          applyCollection(result.partialCollection, {
+            inventory,
+            dirHandle,
+            statusText: collectionPartiallyLoadedText(result.existingNamesInOrder.length, result.missingCount),
+            timeout: 4000,
+          });
+        },
+        onCancel: () => {
+          renderCollectionSelector();
+        },
+      });
+      return;
+    }
+
+    inventory.setActiveCollection(collectionContent);
+    applyCollection(result.collection, {
+      inventory,
+      dirHandle,
+      statusText: collectionLoadedText(result.collection.orderedClips().length),
+    });
+  }
+
+  async function loadFolderSelection({ dirHandle = null, files = [], folderName = '' } = {}) {
+    try {
+      const { inventory } = await buildCollectionInventory({
+        folderName,
+        files,
+        validator,
+        logInvalidDescription: (result) => logInvalidDescription(result, dirHandle),
+      });
+      inventory.setActiveCollection(inventory.defaultCollection());
+      const initialCollection = inventory.activeCollection();
+      const result = materializeContent(inventory, initialCollection);
+
+      if (result.kind === 'has-missing') {
+        queueMissingConflict(result, {
+          onApply: () => {
+            if (result.existingNamesInOrder.length === 0) {
+              showStatus(noCollectionMatchesText(result.missingCount), 4500);
+              return;
+            }
+            inventory.setActiveCollection(initialCollection);
+            applyCollection(result.partialCollection, {
+              inventory,
+              dirHandle,
+              statusText: collectionPartiallyLoadedText(result.existingNamesInOrder.length, result.missingCount),
+              timeout: 4000,
+            });
+          },
+          onCancel: () => {},
+        });
+        return;
+      }
+
+      applyCollection(result.collection, {
+        inventory,
+        dirHandle,
+        statusText: initialLoadStatusText(inventory, result),
+      });
+      if (result.collection.orderedClips().length > 0) {
+        await delay(20);
+        recomputeLayout();
+      }
+    } catch (err) {
+      await logRuntimeError('Failed to load the selected folder.', err, dirHandle);
+      showStatus(collectionReadErrorText(err), 4000);
+    }
+  }
+
+  async function triggerFolderPicker() {
+    hideCollectionConflict();
+    if (canUseDirectoryPicker()) {
+      try {
+        const dirHandle = await pickDirectory();
+        const files = await readFilesFromDirectory(dirHandle, {
+          onFileReadError: (info) => logDirectoryReadError(info, dirHandle),
+        });
+        await loadFolderSelection({
+          dirHandle,
+          files,
+          folderName: dirHandle?.name || '',
+        });
+        return;
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+        console.warn('Directory picker unavailable, falling back.', err);
+      }
+    }
+    try {
+      if (typeof folderInput.showPicker === 'function') folderInput.showPicker();
+      else folderInput.click();
+    } catch {
+      folderInput.click();
+    }
+  }
+
+  async function onPickFolder() {
+    if (currentInventory()?.hasDirtyChanges()) {
+      currentInventory().setPendingAction({ type: 'browse-folder' });
+      renderCollectionSelector();
+      openUnsavedDialog();
+      return;
+    }
+    await triggerFolderPicker();
+  }
+
+  async function continuePendingAction({ saveFirst }) {
+    const inventory = currentInventory();
+    const pendingAction = inventory?.pendingAction();
+    closeUnsavedDialog();
+    if (!pendingAction) {
+      renderCollectionSelector();
+      return;
+    }
+    if (saveFirst) {
+      const saveResult = await saveCollection();
+      if (saveResult?.deferred) return;
+    }
+    inventory?.clearPendingAction();
+    if (pendingAction.type === 'browse-folder') {
+      await triggerFolderPicker();
+      return;
+    }
+    if (pendingAction.type === 'switch-collection') {
+      await applyCollectionSelection(currentInventory()?.getCollectionBySelectionValue(pendingAction.selectionValue));
+      return;
+    }
+    renderCollectionSelector();
+  }
+
+  async function saveCollection(filename = activeCollectionFilename(), { makeActive = true } = {}) {
+    if (!state.currentCollection || !currentInventory()) return null;
+    const targetFilename = ClipCollectionContent.filenameFromCollectionName(filename || '');
+    if (!targetFilename) {
+      openSaveAsNewDialog();
+      return { deferred: true };
+    }
+    const nextContent = state.currentCollection.toCollectionContent({
+      filename: targetFilename,
+    });
+
+    const mode = await runSaveOrder({
+      names: nextContent.orderedClipNames,
+      currentDirHandle: state.currentDirHandle,
+      saveTextToDirectory,
+      downloadText,
+      showStatus,
+      filename: nextContent.filename,
+      buildSavedStatus: savedCollectionFileText,
+      buildDownloadedStatus: downloadedCollectionFileText,
+    });
+
+    currentInventory().upsertCollectionContent(nextContent, { makeActive });
+    if (makeActive) {
+      currentInventory().setActiveCollection(nextContent);
+      state.currentCollection.rename(nextContent.collectionName);
+    }
+    currentInventory().refreshDirtyState(state.currentCollection);
+    renderCollectionSelector();
+    return { mode, content: nextContent };
+  }
+
+  function normalizeCollectionFilename(name) {
+    return ClipCollectionContent.filenameFromCollectionName((name || '').trim());
+  }
+
+  function validateSaveAsNewName(name) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return saveAsNewNameRequiredText();
+    if (WINDOWS_ILLEGAL_FILENAME_CHARS.test(trimmed)) return saveAsNewInvalidNameText();
+    return '';
+  }
+
+  async function confirmSaveAsNew() {
+    const rawName = saveAsNewNameInput?.value || '';
+    const validationError = validateSaveAsNewName(rawName);
+    if (validationError) {
+      showSaveAsNewError(validationError);
+      saveAsNewNameInput?.focus();
+      return;
+    }
+    await saveCollection(normalizeCollectionFilename(rawName), { makeActive: true });
+    closeSaveAsNewDialog();
+    if (currentInventory()?.pendingAction()) {
+      await continuePendingAction({ saveFirst: false });
+    }
+  }
+
+  function renderTitlesToggleButton() {
+    toggleTitlesBtn.textContent = gridController.areTitlesHidden() ? 'Show Titles' : 'Hide Titles';
+  }
+
+  function setTitlesHidden(hidden) {
+    gridController.setTitlesHidden(hidden);
+    renderTitlesToggleButton();
+  }
 
   function openZoomForClip(clip) {
     if (!clip || isFullscreen()) return false;
@@ -258,119 +593,11 @@ export function initApp() {
     onOrderChange: (orderedClipIds) => {
       if (!state.currentCollection) return;
       state.currentCollection.replaceOrder(orderedClipIds);
+      currentInventory()?.refreshDirtyState(state.currentCollection);
+      renderCollectionSelector();
     },
     onOpenClip: openZoomForClipId,
   });
-
-  function resetLoadedCollectionView() {
-    hideCollectionConflict();
-    pendingCollectionConflict = null;
-    closeSaveAsNewDialog();
-    clearGrid();
-    resetCollectionState(state);
-    renderActiveCollectionName();
-  }
-
-  function applyCollection(collection, statusText, timeout = 2500) {
-    hideCollectionConflict();
-    pendingCollectionConflict = null;
-    setCurrentCollection(state, collection);
-    gridController.renderCollection(collection);
-    renderActiveCollectionName();
-    showStatus(statusText, timeout);
-  }
-
-  async function loadFiles(fileList, collectionName = DEFAULT_ACTIVE_COLLECTION_NAME) {
-    const result = runLoadClips({
-      fileList,
-      collectionName: implicitCollectionName(collectionName),
-      defaultCollectionName: DEFAULT_ACTIVE_COLLECTION_NAME,
-      nextClipId: () => nextClipId(state),
-    });
-    setFolderClips(state, result.clips);
-    setCurrentCollection(state, result.collection);
-    pendingCollectionConflict = null;
-    hideCollectionConflict();
-    gridController.renderCollection(result.collection);
-    renderActiveCollectionName();
-    if (result.count > 0) {
-      showStatus(loadedVideosText(result.count));
-      await delay(20);
-      recomputeLayout();
-    }
-    return result.count;
-  }
-
-  async function pickFolder() {
-    resetLoadedCollectionView();
-    if (canUseDirectoryPicker()) {
-      try {
-        setCurrentDirHandle(state, await pickDirectory());
-        const files = (await readFilesFromDirectory(state.currentDirHandle)).filter(isVideoFile);
-        if (files.length === 0) showStatus('No video files found in the selected folder.');
-        await loadFiles(files, implicitCollectionName(state.currentDirHandle?.name));
-        return;
-      } catch (err) {
-        console.warn('Directory picker unavailable, falling back.', err);
-      }
-    }
-    try {
-      if (typeof folderInput.showPicker === 'function') folderInput.showPicker();
-      else folderInput.click();
-    } catch {
-      folderInput.click();
-    }
-  }
-
-  async function saveCollection(filename = 'default-collection.txt') {
-    await runSaveOrder({
-      names: state.currentCollection?.clipNamesInOrder() || [],
-      currentDirHandle: state.currentDirHandle,
-      saveTextToDirectory,
-      downloadText,
-      showStatus,
-      filename,
-      buildSavedStatus: savedCollectionFileText,
-      buildDownloadedStatus: downloadedCollectionFileText,
-    });
-  }
-
-  function normalizeCollectionFilename(name) {
-    const trimmed = (name || '').trim();
-    if (!trimmed.toLowerCase().endsWith('.txt')) return `${trimmed}.txt`;
-    return trimmed;
-  }
-
-  function validateSaveAsNewName(name) {
-    const trimmed = (name || '').trim();
-    if (!trimmed) return saveAsNewNameRequiredText();
-    if (WINDOWS_ILLEGAL_FILENAME_CHARS.test(trimmed)) return saveAsNewInvalidNameText();
-    return '';
-  }
-
-  async function confirmSaveAsNew() {
-    const rawName = saveAsNewNameInput?.value || '';
-    const validationError = validateSaveAsNewName(rawName);
-    if (validationError) {
-      showSaveAsNewError(validationError);
-      saveAsNewNameInput?.focus();
-      return;
-    }
-    const filename = normalizeCollectionFilename(rawName);
-    await saveCollection(filename);
-    state.currentCollection?.rename(collectionNameFromFilename(filename));
-    renderActiveCollectionName();
-    closeSaveAsNewDialog();
-  }
-
-  function renderTitlesToggleButton() {
-    toggleTitlesBtn.textContent = gridController.areTitlesHidden() ? 'Show Titles' : 'Hide Titles';
-  }
-
-  function setTitlesHidden(hidden) {
-    gridController.setTitlesHidden(hidden);
-    renderTitlesToggleButton();
-  }
 
   const fullscreenSession = createFullscreenSession({
     fullscreenState,
@@ -394,75 +621,18 @@ export function initApp() {
     formatLabel,
   });
 
-  function handleCollectionResult(result) {
-    if (result.kind === 'invalid-empty') {
-      showStatus(collectionEmptyErrorText(), 4000);
-      return;
-    }
-    if (result.kind === 'invalid-duplicates') {
-      showStatus(collectionDuplicateErrorText(result.duplicateNames), 4500);
-      return;
-    }
-    if (result.kind === 'has-missing') {
-      showCollectionConflictPanel(result);
-      return;
-    }
-    applyCollection(
-      result.collection,
-      collectionLoadedText(result.requestedNames.length),
-      2500
-    );
-  }
-
-  function onLoadOrderClick() {
-    if (folderClipNames().length === 0) {
-      showStatus(collectionFirstUnavailableText(), 4000);
-      return;
-    }
-    if (typeof orderFileInput.showPicker === 'function') orderFileInput.showPicker();
-    else orderFileInput.click();
-  }
-
-  async function onOrderFileChange(e) {
-    const file = e.target.files && e.target.files[0];
-    if (!file) {
-      e.target.value = '';
-      return;
-    }
-    try {
-      const result = await runLoadCollectionFromFile({
-        file,
-        folderClips: state.folderClips,
-        folderClipNames: folderClipNames(),
-        currentCollectionName: currentCollectionName(),
-      });
-      handleCollectionResult(result);
-    } catch (err) {
-      showStatus(collectionReadErrorText(err), 4000);
-    } finally {
-      e.target.value = '';
-    }
-  }
-
   function onApplyCollectionConflict() {
-    const conflict = pendingCollectionConflict;
+    const pending = pendingCollectionConflict;
     hideCollectionConflict();
     pendingCollectionConflict = null;
-    if (!conflict) return;
-    if (conflict.existingNamesInOrder.length === 0) {
-      showStatus(noCollectionMatchesText(conflict.missingCount), 4500);
-      return;
-    }
-    applyCollection(
-      conflict.partialCollection,
-      collectionPartiallyLoadedText(conflict.existingNamesInOrder.length, conflict.missingCount),
-      4000
-    );
+    pending?.handlers?.onApply?.();
   }
 
   function onCancelCollectionConflict() {
+    const pending = pendingCollectionConflict;
     hideCollectionConflict();
     pendingCollectionConflict = null;
+    pending?.handlers?.onCancel?.();
   }
 
   function onGlobalKeyDown(e) {
@@ -470,9 +640,16 @@ export function initApp() {
   }
 
   function onKeyDown(e) {
-    if (!saveAsNewDialog?.hidden && e.key === 'Escape') {
-      closeSaveAsNewDialog();
+    if (saveAsNewDialog && !saveAsNewDialog.hidden && e.key === 'Escape') {
+      cancelSaveAsNewFlow();
       e.preventDefault();
+      return;
+    }
+    if (unsavedChangesDialog?.open && e.key === 'Escape') {
+      e.preventDefault();
+      currentInventory()?.clearPendingAction();
+      closeUnsavedDialog();
+      renderCollectionSelector();
       return;
     }
     if (e.key === 'Escape' && zoomOverlay.isOpen()) {
@@ -516,25 +693,28 @@ export function initApp() {
     if (!selectedClipId || !state.currentCollection) return;
     const removed = state.currentCollection.remove(selectedClipId);
     if (!removed) return;
+    currentInventory()?.refreshDirtyState(state.currentCollection);
     gridController.renderCollection(state.currentCollection);
+    renderCollectionSelector();
     showStatus('Clip removed from view.');
     e.preventDefault();
   }
 
   function onFolderInputChange(e) {
-    setCurrentDirHandle(state, null);
-    resetLoadedCollectionView();
-    void loadFiles(e.target.files, implicitCollectionName(folderNameFromFiles(e.target.files)));
+    const fileList = Array.from(e.target.files || []);
+    const { videos, collectionFiles } = getVideosAndCollectionFiles(fileList);
+    if (videos.length === 0 && collectionFiles.length === 0) {
+      e.target.value = '';
+      return;
+    }
+    const folderName = folderNameFromFiles(fileList);
+    e.target.value = '';
+    void loadFolderSelection({
+      dirHandle: null,
+      files: fileList,
+      folderName,
+    });
   }
-
-  createOrderMenuController({
-    orderMenu,
-    orderMenuBtn,
-    orderMenuPanel,
-    loadOrderBtn,
-    saveBtn,
-    saveAsNewBtn,
-  });
 
   function onToggleTitles() {
     setTitlesHidden(!gridController.areTitlesHidden());
@@ -555,21 +735,30 @@ export function initApp() {
 
   renderTitlesToggleButton();
 
+  createOrderMenuController({
+    orderMenu,
+    orderMenuBtn,
+    orderMenuPanel,
+    loadOrderBtn: null,
+    saveBtn,
+    saveAsNewBtn,
+  });
+
   bindControlEvents({
     pickBtn,
     folderInput,
     saveBtn,
     saveAsNewBtn,
-    loadOrderBtn,
-    orderFileInput,
+    loadOrderBtn: null,
+    orderFileInput: null,
     toggleTitlesBtn,
     fsBtn,
-    onPickFolder: () => void pickFolder(),
+    onPickFolder: () => void onPickFolder(),
     onFolderInputChange,
     onSaveOrder: () => void saveCollection(),
     onSaveAsNew: openSaveAsNewDialog,
-    onLoadOrderClick,
-    onOrderFileChange,
+    onLoadOrderClick: () => {},
+    onOrderFileChange: () => {},
     onToggleTitles,
     onFsToggle,
   });
@@ -577,13 +766,45 @@ export function initApp() {
   applyCollectionConflictBtn?.addEventListener('click', onApplyCollectionConflict);
   cancelCollectionConflictBtn?.addEventListener('click', onCancelCollectionConflict);
   confirmSaveAsNewBtn?.addEventListener('click', () => void confirmSaveAsNew());
-  cancelSaveAsNewBtn?.addEventListener('click', closeSaveAsNewDialog);
+  cancelSaveAsNewBtn?.addEventListener('click', cancelSaveAsNewFlow);
   saveAsNewNameInput?.addEventListener('input', clearSaveAsNewError);
   saveAsNewNameInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       void confirmSaveAsNew();
     }
+  });
+  activeCollectionNameEl?.addEventListener('change', (e) => {
+    if (!(e.target instanceof HTMLSelectElement)) return;
+    const selectedValue = e.target.value;
+    if (!currentInventory()) {
+      renderCollectionSelector();
+      return;
+    }
+    if (selectedValue === currentInventory().activeSelectionValue()) {
+      renderCollectionSelector();
+      return;
+    }
+    if (currentInventory().hasDirtyChanges()) {
+      currentInventory().setPendingAction({ type: 'switch-collection', selectionValue: selectedValue });
+      renderCollectionSelector();
+      openUnsavedDialog();
+      return;
+    }
+    void applyCollectionSelection(currentInventory().getCollectionBySelectionValue(selectedValue));
+  });
+  confirmUnsavedChangesBtn?.addEventListener('click', () => void continuePendingAction({ saveFirst: true }));
+  discardUnsavedChangesBtn?.addEventListener('click', () => void continuePendingAction({ saveFirst: false }));
+  cancelUnsavedChangesBtn?.addEventListener('click', () => {
+    currentInventory()?.clearPendingAction();
+    closeUnsavedDialog();
+    renderCollectionSelector();
+  });
+  unsavedChangesDialog?.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    currentInventory()?.clearPendingAction();
+    closeUnsavedDialog();
+    renderCollectionSelector();
   });
 
   bindGlobalEvents({
@@ -595,15 +816,7 @@ export function initApp() {
     onGlobalKeyDown,
   });
 
-  renderActiveCollectionName();
-  updateCount();
+  clearLoadedState();
   recomputeLayout();
   setTitlesHidden(false);
 }
-
-
-
-
-
-
-

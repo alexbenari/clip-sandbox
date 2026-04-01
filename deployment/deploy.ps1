@@ -42,11 +42,46 @@ function Copy-RepoItem {
   }
 }
 
+function Stop-InstalledMiniserve {
+  param([string]$ExecutablePath)
+
+  if (-not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) {
+    return
+  }
+
+  $normalizedExecutablePath = [System.IO.Path]::GetFullPath($ExecutablePath)
+  $matchingProcesses = @(
+    Get-CimInstance Win32_Process -Filter "Name = 'miniserve-win.exe'" -ErrorAction SilentlyContinue |
+      Where-Object {
+        $_.ExecutablePath -and
+        ([System.IO.Path]::GetFullPath($_.ExecutablePath) -ieq $normalizedExecutablePath)
+      }
+  )
+
+  if ($matchingProcesses.Count -eq 0) {
+    return
+  }
+
+  Write-Host 'Stopping installed miniserve...'
+  foreach ($process in $matchingProcesses) {
+    Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+  }
+
+  foreach ($process in $matchingProcesses) {
+    try {
+      Wait-Process -Id $process.ProcessId -Timeout 5 -ErrorAction Stop
+    } catch {}
+  }
+}
+
 Write-Host "Deploying Clip Sandbox to $resolvedInstallRoot"
 
 if (Test-Path -LiteralPath $resolvedInstallRoot) {
-  Write-Host "Removing existing install..."
-  Remove-Item -LiteralPath $resolvedInstallRoot -Recurse -Force
+  Stop-InstalledMiniserve -ExecutablePath (Join-Path $resolvedInstallRoot 'deployment\miniserve-win.exe')
+  Write-Host "Removing existing install contents..."
+  Get-ChildItem -LiteralPath $resolvedInstallRoot -Force | ForEach-Object {
+    Remove-Item -LiteralPath $_.FullName -Recurse -Force
+  }
 }
 
 New-Item -ItemType Directory -Force -Path $resolvedInstallRoot | Out-Null

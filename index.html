@@ -36,6 +36,14 @@
     .spacer{ flex:1; }
     .count{ color:var(--muted); font-size:14px; }
     .active-collection-name{
+      appearance:none;
+      border:1px solid rgba(122,162,247,.35);
+      border-radius:12px;
+      background:rgba(15,23,42,.92);
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%237aa2f7' d='M1.41.59 6 5.17 10.59.59 12 2l-6 6-6-6z'/%3E%3C/svg%3E");
+      background-position:right 12px center;
+      background-repeat:no-repeat;
+      background-size:12px 8px;
       color:#7aa2f7;
       font-size:15px;
       font-weight:700;
@@ -45,6 +53,22 @@
       overflow:hidden;
       text-overflow:ellipsis;
       text-shadow:0 0 18px rgba(122,162,247,.22);
+      padding:8px 34px 8px 12px;
+      min-width:220px;
+      max-width:min(42vw, 420px);
+      box-shadow: var(--shadow);
+    }
+    .active-collection-name:focus{
+      outline:2px solid rgba(122,162,247,.8);
+      outline-offset:2px;
+    }
+    .active-collection-name:disabled{
+      opacity:.8;
+      cursor:not-allowed;
+    }
+    .active-collection-name option{
+      color:#e5e7eb;
+      background:#0f172a;
     }
     .hint{ color:var(--muted); font-size:12px; }
     button{
@@ -137,6 +161,33 @@
       background:rgba(15,23,42,.92);
       max-width:520px;
     }
+    .unsaved-changes-dialog{
+      width:min(92vw, 420px);
+      border:1px solid rgba(122,162,247,.35);
+      border-radius:16px;
+      padding:18px 18px 16px;
+      background:rgba(15,23,42,.98);
+      color:var(--fg);
+      box-shadow: var(--shadow);
+    }
+    .unsaved-changes-dialog::backdrop{
+      background:rgba(2,6,23,.62);
+      backdrop-filter: blur(3px);
+    }
+    .unsaved-changes-dialog h2{
+      margin:0 0 8px;
+      font-size:18px;
+    }
+    .unsaved-changes-dialog p{
+      margin:0 0 14px;
+      color:var(--muted);
+    }
+    .unsaved-changes-actions{
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+    }
     .save-as-new-dialog h2{
       margin:0 0 8px;
       font-size:18px;
@@ -171,7 +222,8 @@
     .fs-active .toolbar{ display:none; }
     .fs-active #gridWrap{ height:100vh; padding:14px; display:block; }
     .fs-active .collection-conflict,
-    .fs-active .save-as-new-dialog{ display:none !important; }
+    .fs-active .save-as-new-dialog,
+    .fs-active .unsaved-changes-dialog{ display:none !important; }
 
     .fs-active .thumb{ background:#000 !important; border:none !important; box-shadow:none !important; }
     .fs-active .thumb.selected{ box-shadow:none !important; }
@@ -185,8 +237,6 @@
         position:absolute;
         left:50%;
         transform:translateX(-50%);
-        max-width:min(42vw, 420px);
-        pointer-events:none;
       }
     }
 
@@ -195,6 +245,7 @@
         order:20;
         flex-basis:100%;
         width:100%;
+        max-width:none;
       }
     }
   </style>
@@ -203,18 +254,18 @@
   <header class="toolbar" id="toolbar">
     <button id="pickBtn" class="btn-primary">Browse Folder…</button>
     <input type="file" id="folderInput" class="visually-hidden" webkitdirectory directory multiple tabindex="-1" aria-hidden="true" />
-    <input type="file" id="orderFileInput" class="visually-hidden" accept=".txt,text/plain" tabindex="-1" aria-hidden="true" />
     <div class="order-menu" id="orderMenu" data-open="false">
       <button id="orderMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="orderMenuPanel">Collection</button>
       <div class="order-menu-panel" id="orderMenuPanel" role="menu" aria-label="Collection actions">
-        <button id="loadOrderBtn" role="menuitem" title="Load a collection file (folder must already be loaded)">Load</button>
-        <button id="saveBtn" role="menuitem" title="Save default-collection.txt in the chosen folder (or download if permissions are unavailable)" disabled>Save</button>
+        <button id="saveBtn" role="menuitem" title="Save the selected collection file in the chosen folder (or download if permissions are unavailable)" disabled>Save</button>
         <button id="saveAsNewBtn" role="menuitem" title="Save the current collection to a new file" disabled>Save as New</button>
       </div>
     </div>
     <button id="toggleTitlesBtn" title="Hide or show clip titles">Hide Titles</button>
     <button id="fsBtn" title="Full screen (hides titles)">Full Screen</button>
-    <span class="active-collection-name" id="activeCollectionName">Local Video Grid Reviewer</span>
+    <select class="active-collection-name" id="activeCollectionName" aria-label="Active collection" disabled>
+      <option value="">Local Video Grid Reviewer</option>
+    </select>
     <div class="spacer"></div>
     <span class="count" id="count">0 clips</span>
     <span class="hint">drag to reorder • click to select • double-click or Z to zoom • press Delete to remove • press F for fullscreen</span>
@@ -242,6 +293,16 @@
       <button id="cancelSaveAsNewBtn" type="button">Cancel</button>
     </div>
   </section>
+
+  <dialog class="unsaved-changes-dialog" id="unsavedChangesDialog">
+    <h2>Save changes before switching?</h2>
+    <p id="unsavedChangesText">The current collection has unsaved changes.</p>
+    <div class="unsaved-changes-actions">
+      <button id="cancelUnsavedChangesBtn" type="button">Cancel</button>
+      <button id="discardUnsavedChangesBtn" type="button">Don't Save</button>
+      <button id="confirmUnsavedChangesBtn" type="button" class="btn-primary">Save</button>
+    </div>
+  </dialog>
 
   <div id="gridWrap">
     <div id="grid" aria-live="polite"></div>

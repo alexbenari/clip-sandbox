@@ -86,11 +86,15 @@ function Wait-ForServer {
 
 $port = Find-FreePort -StartPort $PreferredPort
 $url = "http://127.0.0.1:$port/"
+$browserUrl = "$($url)?launch=$([Guid]::NewGuid().ToString('N'))"
 $arguments = @(
   '-i', '127.0.0.1',
   '-i', '::1',
   '-p', "$port",
   '--index', 'index.html',
+  '--header', '"Cache-Control:no-store, no-cache, must-revalidate"',
+  '--header', '"Pragma:no-cache"',
+  '--header', '"Expires:0"',
   "`"$siteDir`""
 ) -join ' '
 
@@ -111,8 +115,9 @@ try {
 }
 
 if (-not $NoBrowser) {
-  Start-Process $url | Out-Null
+  Start-Process $browserUrl | Out-Null
 }
 
 Write-Output "Clip Sandbox is running at $url"
+Write-Output "Browser URL: $browserUrl"
 Write-Output "miniserve PID: $($process.Id)"

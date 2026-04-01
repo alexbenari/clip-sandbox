@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { isVideoFile, filterAndSortFiles } from '../../src/business-logic/load-clips.js';
+import {
+  isVideoFile,
+  filterAndSortFiles,
+  isCollectionFile,
+  isTopLevelFolderEntry,
+  getVideosAndCollectionFiles,
+} from '../../src/business-logic/load-clips.js';
 import { niceNum } from '../../src/app/app-text.js';
 import { formatDuration } from '../../src/ui/clip-collection-grid-controller.js';
 import {
@@ -22,6 +28,25 @@ describe('video helpers', () => {
     ];
     const sorted = filterAndSortFiles(files);
     expect(sorted.map((f) => f.name)).toEqual(['clip2.mp4', 'clip10.mp4']);
+  });
+
+  it('detects collection text files and top-level folder entries', () => {
+    expect(isCollectionFile({ name: 'set-a.txt' })).toBe(true);
+    expect(isCollectionFile({ name: 'set-a.md' })).toBe(false);
+    expect(isTopLevelFolderEntry({ webkitRelativePath: 'clips/one.mp4' })).toBe(true);
+    expect(isTopLevelFolderEntry({ webkitRelativePath: 'clips/sub/one.mp4' })).toBe(false);
+  });
+
+  it('splits top-level videos and collection files while ignoring nested entries', () => {
+    const { videos, collectionFiles } = getVideosAndCollectionFiles([
+      { name: 'clip10.mp4', type: 'video/mp4', webkitRelativePath: 'clips/clip10.mp4' },
+      { name: 'clip2.mp4', type: 'video/mp4', webkitRelativePath: 'clips/clip2.mp4' },
+      { name: 'subset.txt', type: 'text/plain', webkitRelativePath: 'clips/subset.txt' },
+      { name: 'deep.mp4', type: 'video/mp4', webkitRelativePath: 'clips/nested/deep.mp4' },
+      { name: 'deep.txt', type: 'text/plain', webkitRelativePath: 'clips/nested/deep.txt' },
+    ]);
+    expect(videos.map((file) => file.name)).toEqual(['clip2.mp4', 'clip10.mp4']);
+    expect(collectionFiles.map((file) => file.name)).toEqual(['subset.txt']);
   });
 });
 
