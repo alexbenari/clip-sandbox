@@ -49,6 +49,7 @@ import {
   saveAsNewInvalidNameText,
   savedCollectionFileText,
   downloadedCollectionFileText,
+  removedClipsText,
   activeCollectionText,
   activeCollectionTabText,
   niceNum,
@@ -597,6 +598,15 @@ export function initApp() {
       renderCollectionSelector();
     },
     onOpenClip: openZoomForClipId,
+    onRemoveSelected: (orderedSelectedClipIds) => {
+      if (zoomOverlay.isOpen() || !state.currentCollection) return;
+      const removedClipIds = state.currentCollection.removeMany(orderedSelectedClipIds);
+      if (removedClipIds.length === 0) return;
+      currentInventory()?.refreshDirtyState(state.currentCollection);
+      gridController.renderCollection(state.currentCollection);
+      renderCollectionSelector();
+      showStatus(removedClipsText(removedClipIds.length));
+    },
   });
 
   const fullscreenSession = createFullscreenSession({
@@ -657,6 +667,14 @@ export function initApp() {
       e.preventDefault();
       return;
     }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (zoomOverlay.isOpen()) {
+        e.preventDefault();
+        return;
+      }
+      if (gridController.handleKeyDown(e)) return;
+      return;
+    }
     if (isEditableTarget(e.target)) return;
     if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'f' || e.key === 'F') && zoomOverlay.isOpen()) {
       closeZoom();
@@ -685,19 +703,8 @@ export function initApp() {
       return;
     }
     if (zoomOverlay.isOpen()) {
-      if (e.key === 'Delete' || e.key === 'Backspace') e.preventDefault();
       return;
     }
-    if (!(e.key === 'Delete' || e.key === 'Backspace')) return;
-    const selectedClipId = gridController.getSelectedClipId();
-    if (!selectedClipId || !state.currentCollection) return;
-    const removed = state.currentCollection.remove(selectedClipId);
-    if (!removed) return;
-    currentInventory()?.refreshDirtyState(state.currentCollection);
-    gridController.renderCollection(state.currentCollection);
-    renderCollectionSelector();
-    showStatus('Clip removed from view.');
-    e.preventDefault();
   }
 
   function onFolderInputChange(e) {

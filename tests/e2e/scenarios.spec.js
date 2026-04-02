@@ -255,13 +255,30 @@ test.describe('Drag reorder', () => {
 });
 
 test.describe('Delete selected clip', () => {
-  test('Delete/Backspace removes selected card', async ({ page }) => {
+  test('Delete/Backspace removes all selected cards', async ({ page }) => {
     await loadClips(page, 'delete');
     const first = page.locator('#grid .thumb').first();
+    const second = page.locator('#grid .thumb').nth(1);
     await first.click();
+    await second.click({ modifiers: ['Control'] });
+    await expect(page.locator('#grid .thumb.selected')).toHaveCount(2);
     await page.keyboard.press('Delete');
-    await expect(page.locator('#grid .thumb')).toHaveCount(1);
-    await expect(page.locator('#count')).toHaveText('1 clip');
+    await expect(page.locator('#grid .thumb')).toHaveCount(0);
+    await expect(page.locator('#count')).toHaveText('0 clips');
+  });
+
+  test('Cmd-click toggles clips inside the selected set', async ({ page }) => {
+    await loadClips(page, 'delete');
+    const first = page.locator('#grid .thumb').first();
+    const second = page.locator('#grid .thumb').nth(1);
+
+    await first.click();
+    await second.dispatchEvent('click', { metaKey: true });
+    await expect(page.locator('#grid .thumb.selected')).toHaveCount(2);
+
+    await first.dispatchEvent('click', { metaKey: true });
+    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
+    await expect(page.locator('#grid .thumb.selected').first()).toHaveAttribute('data-name', 'solo.mp4');
   });
 
   test('does not remove selected card while typing in an input', async ({ page }) => {
@@ -827,12 +844,18 @@ test.describe('Zoom mode', () => {
     await expect(page.locator('#zoomFrame')).toBeVisible();
   });
 
-  test('pressing Z opens zoom for the selected clip and does nothing without selection', async ({ page }) => {
+  test('pressing Z opens zoom only for exactly one selected clip', async ({ page }) => {
     await loadClips(page, 'load-basic');
     await page.keyboard.press('Z');
     await expect(page.locator('#zoomOverlay')).toHaveCount(0);
 
     const first = page.locator('#grid .thumb').first();
+    const second = page.locator('#grid .thumb').nth(1);
+    await first.click();
+    await second.click({ modifiers: ['Control'] });
+    await page.keyboard.press('Z');
+    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
+
     await first.click();
     await page.keyboard.press('Z');
     await expect(page.locator('#zoomOverlay')).toBeVisible();

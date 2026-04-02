@@ -34,7 +34,7 @@ describe('clip collection grid controller', () => {
     });
   }
 
-  test('renders collection cards and tracks selection by clip id', () => {
+  test('tracks single and modifier-based multi-selection by clip id', () => {
     const selectionChanges = [];
     const controller = createClipCollectionGridController({
       grid: document.getElementById('grid'),
@@ -42,16 +42,30 @@ describe('clip collection grid controller', () => {
       formatLabel: (name) => name,
       updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
-      onSelectionChange: (clipId) => selectionChanges.push(clipId),
+      onSelectionChange: (clipId, clipIds) => selectionChanges.push({ clipId, clipIds }),
     });
 
     controller.renderCollection(makeCollection());
     const cards = document.querySelectorAll('#grid .thumb');
     expect(cards).toHaveLength(2);
-    cards[0].click();
+    cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(controller.getSelectedClipId()).toBe('clip_1');
-    expect(selectionChanges.at(-1)).toBe('clip_1');
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
+    expect(selectionChanges.at(-1)).toEqual({ clipId: 'clip_1', clipIds: ['clip_1'] });
     expect(cards[0].classList.contains('selected')).toBe(true);
+
+    cards[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    expect(controller.getSelectedClipId()).toBeNull();
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+    expect(cards[1].classList.contains('selected')).toBe(true);
+
+    cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    expect(controller.getSelectedClipId()).toBe('clip_2');
+    expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
+
+    cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(controller.getSelectedClipId()).toBe('clip_1');
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
   });
 
   test('emits full order after drag-drop reorder and provides clip media source', () => {
@@ -95,6 +109,7 @@ describe('clip collection grid controller', () => {
     expect(controller.getNextClip('clip_2')?.id).toBe('clip_1');
     expect(controller.getPrevClip('clip_1')?.id).toBe('clip_2');
     expect(controller.getNextClip('clip_1')).toBeNull();
+    expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
   });
 
   test('renders safe filename labels and updates duration text', () => {
@@ -174,6 +189,53 @@ describe('clip collection grid controller', () => {
     controller.destroy();
     expect(document.getElementById('grid').children).toHaveLength(0);
     expect(document.getElementById('gridWrap').classList.contains('titles-hidden')).toBe(false);
+  });
+
+  test('drops invalid selections on rerender and emits ordered selected ids for removal', () => {
+    const removalRequests = [];
+    const controller = createClipCollectionGridController({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      updateCount: vi.fn(),
+      recomputeLayout: vi.fn(),
+      onRemoveSelected: (clipIds) => removalRequests.push(clipIds),
+    });
+
+    controller.renderCollection(
+      new ClipCollection({
+        name: 'demo',
+        clips: [
+          new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
+          new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm', { type: 'video/webm' }) }),
+          new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4', { type: 'video/mp4' }) }),
+        ],
+      })
+    );
+
+    const cards = document.querySelectorAll('#grid .thumb');
+    cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    cards[2].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_3']);
+
+    const handled = controller.handleKeyDown(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(handled).toBe(true);
+    expect(removalRequests).toEqual([['clip_1', 'clip_3']]);
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    const inputDelete = new KeyboardEvent('keydown', { key: 'Delete', bubbles: true });
+    Object.defineProperty(inputDelete, 'target', { value: input });
+    expect(controller.handleKeyDown(inputDelete)).toBe(false);
+
+    controller.renderCollection(
+      new ClipCollection({
+        name: 'subset',
+        clips: [new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4', { type: 'video/mp4' }) })],
+      })
+    );
+    expect(controller.getSelectedClipIds()).toEqual(['clip_3']);
+    expect(controller.getSelectedClipId()).toBe('clip_3');
   });
 
   test('injects default styles only once per document', () => {

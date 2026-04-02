@@ -163,7 +163,8 @@ Important limitation:
 
 Responsibilities:
 - render cards from a `ClipCollection`
-- manage selection UI by clip id
+- manage selected-set UI by clip id
+- resolve delete/remove requests from the current selected set
 - manage drag/drop reorder
 - maintain object URL lifecycle
 

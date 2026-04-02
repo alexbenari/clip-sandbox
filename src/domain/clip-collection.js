@@ -63,6 +63,15 @@ export class ClipCollection {
     return true;
   }
 
+  removeMany(orderedClipIds) {
+    const removedClipIds = [];
+    for (const clipId of Array.from(orderedClipIds || [])) {
+      if (!this.remove(clipId)) continue;
+      removedClipIds.push(clipId);
+    }
+    return removedClipIds;
+  }
+
   clipNamesInOrder() {
     return this.orderedClips().map((clip) => clip.name);
   }

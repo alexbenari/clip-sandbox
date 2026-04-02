@@ -72,6 +72,12 @@ function removeDragOverClasses(grid) {
   for (const el of grid.children) el.classList.remove('drag-over');
 }
 
+function isEditableTarget(target) {
+  if (!(target instanceof Element)) return false;
+  const editable = target.closest('input, textarea, select, [contenteditable], [contenteditable="true"]');
+  return !!editable;
+}
+
 function createThumbCard({
   clip,
   cardId,
@@ -121,7 +127,7 @@ function createThumbCard({
   card.appendChild(name);
 
   vid.addEventListener('loadedmetadata', () => onLoadedMetadata(card, vid, clip));
-  card.addEventListener('click', () => onSelect(card));
+  card.addEventListener('click', (event) => onSelect(card, event));
   card.addEventListener('dblclick', () => onDoubleClick?.(card));
   card.addEventListener('dragstart', (e) => onDragStart(card, e));
   card.addEventListener('dragend', () => onDragEnd(card));
@@ -157,10 +163,11 @@ export function createClipCollectionGridController({
   onSelectionChange,
   onOrderChange,
   onOpenClip,
+  onRemoveSelected,
 } = {}) {
   const doc = grid?.ownerDocument || document;
   let currentCollection = null;
-  let selectedClipId = null;
+  let selectedClipIds = new Set();
   let dragSourceCardId = null;
 
   ensureClipCollectionGridStyles(doc);
@@ -168,11 +175,16 @@ export function createClipCollectionGridController({
   grid?.classList.add('clip-collection-grid');
 
   function notifySelectionChange() {
-    onSelectionChange?.(selectedClipId);
+    onSelectionChange?.(getSelectedClipId(), getSelectedClipIds());
   }
 
   function getSelectedClipId() {
-    return selectedClipId;
+    const selectedIds = getSelectedClipIds();
+    return selectedIds.length === 1 ? selectedIds[0] : null;
+  }
+
+  function getSelectedClipIds() {
+    return orderedClipIdsFromDom().filter((clipId) => selectedClipIds.has(clipId));
   }
 
   function getCardByClipId(clipId) {
@@ -204,18 +216,18 @@ export function createClipCollectionGridController({
 
   function applySelectionClasses() {
     for (const card of Array.from(grid.children)) {
-      card.classList.toggle('selected', !!selectedClipId && card.dataset.clipId === selectedClipId);
+      card.classList.toggle('selected', selectedClipIds.has(card.dataset.clipId));
     }
   }
 
   function clearSelection() {
-    selectedClipId = null;
+    selectedClipIds = new Set();
     applySelectionClasses();
     notifySelectionChange();
   }
 
   function setSelectedClipId(clipId) {
-    selectedClipId = clipId || null;
+    selectedClipIds = clipId ? new Set([clipId]) : new Set();
     applySelectionClasses();
     notifySelectionChange();
   }
@@ -225,15 +237,28 @@ export function createClipCollectionGridController({
       clearSelection();
       return;
     }
-    selectedClipId = card.dataset.clipId || null;
+    selectedClipIds = new Set([card.dataset.clipId]);
     applySelectionClasses();
     notifySelectionChange();
   }
 
-  function onSelect(card) {
+  function toggleCardSelection(card) {
+    const clipId = card?.dataset.clipId || '';
+    if (!clipId) return;
+    if (selectedClipIds.has(clipId)) selectedClipIds.delete(clipId);
+    else selectedClipIds.add(clipId);
+    applySelectionClasses();
+    notifySelectionChange();
+  }
+
+  function onSelect(card, event) {
     const clipId = card?.dataset.clipId || null;
-    if (selectedClipId && selectedClipId === clipId) {
+    if (!clipId) {
       clearSelection();
+      return;
+    }
+    if (event?.ctrlKey || event?.metaKey) {
+      toggleCardSelection(card);
       return;
     }
     selectOnlyCard(card);
@@ -243,6 +268,17 @@ export function createClipCollectionGridController({
     selectOnlyCard(card);
     const clipId = card?.dataset.clipId || null;
     if (clipId) onOpenClip?.(clipId);
+  }
+
+  function handleKeyDown(event) {
+    if (!onRemoveSelected) return false;
+    if (!(event?.key === 'Delete' || event?.key === 'Backspace')) return false;
+    if (isEditableTarget(event.target)) return false;
+    const orderedSelectedClipIds = getSelectedClipIds();
+    if (orderedSelectedClipIds.length === 0) return false;
+    onRemoveSelected(orderedSelectedClipIds);
+    event.preventDefault();
+    return true;
   }
 
   function onDragStart(card, event) {
@@ -295,17 +331,17 @@ export function createClipCollectionGridController({
 
   function destroy() {
     clearGridCards(grid);
-    selectedClipId = null;
+    selectedClipIds = new Set();
     dragSourceCardId = null;
     setTitlesHidden(false);
   }
 
   function renderCollection(collection) {
     currentCollection = collection || null;
-    const previousSelection = selectedClipId;
+    const previousSelection = new Set(selectedClipIds);
     clearGridCards(grid);
     if (!currentCollection) {
-      selectedClipId = null;
+      selectedClipIds = new Set();
       updateCount?.();
       recomputeLayout?.();
       notifySelectionChange();
@@ -329,7 +365,9 @@ export function createClipCollectionGridController({
       });
       grid.appendChild(card);
     }
-    selectedClipId = currentCollection.hasClip(previousSelection) ? previousSelection : null;
+    selectedClipIds = new Set(
+      Array.from(previousSelection).filter((clipId) => currentCollection.hasClip(clipId))
+    );
     applySelectionClasses();
     updateCount?.();
     recomputeLayout?.();
@@ -345,6 +383,7 @@ export function createClipCollectionGridController({
     destroy,
     clearSelection,
     getSelectedClipId,
+    getSelectedClipIds,
     setSelectedClipId,
     getCardByClipId,
     getClipById,
@@ -354,5 +393,6 @@ export function createClipCollectionGridController({
     getOrderedClipIds: orderedClipIdsFromDom,
     areTitlesHidden,
     setTitlesHidden,
+    handleKeyDown,
   };
 }

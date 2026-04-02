@@ -12,6 +12,7 @@ import {
   saveAsNewInvalidNameText,
   savedCollectionFileText,
   downloadedCollectionFileText,
+  removedClipsText,
   activeCollectionText,
   activeCollectionTabText,
 } from '../../../src/app/app-text.js';
@@ -31,6 +32,8 @@ describe('app text helpers', () => {
     expect(collectionPartiallyLoadedText(1, 2)).toContain('Skipped 2 missing entries.');
     expect(savedCollectionFileText('my-cut.txt')).toBe('Saved my-cut.txt to the selected folder.');
     expect(downloadedCollectionFileText('my-cut.txt')).toBe('Downloaded my-cut.txt.');
+    expect(removedClipsText(1)).toBe('Clip removed from view.');
+    expect(removedClipsText(3)).toBe('Removed 3 clips from view.');
   });
 
   test('formats collection errors and conflict summary', () => {

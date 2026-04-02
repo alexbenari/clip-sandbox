@@ -36,7 +36,7 @@ describe('clip and collection models', () => {
     expect(collection.getClip('clip_2')?.name).toBe('bravo.webm');
   });
 
-  test('supports removal and collection construction from ordered names', () => {
+  test('supports removal, batch removal, and collection construction from ordered names', () => {
     const clips = [
       new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
       new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
@@ -50,6 +50,10 @@ describe('clip and collection models', () => {
     expect(collection.clipNamesInOrder()).toEqual(['charlie.mp4', 'alpha.mp4']);
     expect(collection.remove('clip_3')).toBe(true);
     expect(collection.clipNamesInOrder()).toEqual(['alpha.mp4']);
+
+    const batchCollection = new ClipCollection({ name: 'full', clips });
+    expect(batchCollection.removeMany(['clip_3', 'missing', 'clip_1'])).toEqual(['clip_3', 'clip_1']);
+    expect(batchCollection.clipNamesInOrder()).toEqual(['bravo.webm']);
   });
 
   test('builds collection content from runtime collections', () => {

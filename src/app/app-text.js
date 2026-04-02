@@ -77,6 +77,10 @@ export function downloadedCollectionFileText(filename) {
   return `Downloaded ${filename}.`;
 }
 
+export function removedClipsText(count) {
+  return count === 1 ? 'Clip removed from view.' : `Removed ${count} clips from view.`;
+}
+
 export function activeCollectionText(name) {
   return (name || '').trim() || DEFAULT_APP_TITLE;
 }

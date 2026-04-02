@@ -62,8 +62,10 @@ Supported video formats:
 ### 3. Reorder or Trim the Current Collection
 
 1. Drag a clip tile to change its order.
-2. Click a clip and press `Delete` or `Backspace` to remove it from the current collection.
-3. These edits affect only the active collection.
+2. Click a clip to select only that clip.
+3. `Ctrl+click` on Windows/Linux or `Cmd+click` on macOS adds or removes a clip from the current selection.
+4. Press `Delete` or `Backspace` to remove all selected clips from the current collection.
+5. These edits affect only the active collection.
 
 Note: delete shortcuts are ignored while typing in inputs or selects.
 
