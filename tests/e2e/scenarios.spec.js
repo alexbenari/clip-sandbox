@@ -89,6 +89,22 @@ async function openOrderMenu(page) {
   await expect.poll(async () => page.locator('#orderMenu').getAttribute('data-open')).toBe('true');
 }
 
+async function openGridContextMenu(page, locator = page.locator('#gridWrap'), options = {}) {
+  const position = options.position || { x: 40, y: 40 };
+  await locator.dispatchEvent('contextmenu', {
+    bubbles: true,
+    button: 2,
+    clientX: position.x,
+    clientY: position.y,
+  });
+  const expectedCount = options.expectedCount;
+  if (Number.isInteger(expectedCount)) {
+    await expect(page.locator('#clipContextMenu [role="menuitem"]')).toHaveCount(expectedCount);
+    return;
+  }
+  await expect.poll(async () => page.locator('#clipContextMenu [role="menuitem"]').count()).toBeGreaterThan(0);
+}
+
 async function waitForZoomVideo(page) {
   await expect(page.locator('#zoomVideo')).toHaveCount(1);
 }
@@ -185,6 +201,24 @@ test.describe('Collection menu interactions', () => {
     await page.keyboard.press('Escape');
     await expect.poll(async () => page.locator('#orderMenu').getAttribute('data-open')).toBe('false');
     await expect(page.locator('#orderMenuBtn')).toBeFocused();
+  });
+});
+
+test.describe('Context menu sandbox', () => {
+  test('smoke-tests the reusable context menu outside the app shell', async ({ page }) => {
+    await page.goto('/sandbox/context-menu-demo.html');
+    await page.waitForSelector('#demoSurface');
+
+    await page.locator('#demoSurface').click({ button: 'right', position: { x: 100, y: 80 } });
+    await expect(page.locator('#sandboxContextMenu [role="menuitem"]')).toHaveCount(3);
+    await expect(page.locator('#sandboxContextMenu [data-item-id="disabled"]')).toBeDisabled();
+
+    await page.click('body', { position: { x: 10, y: 10 } });
+    await expect(page.locator('#sandboxContextMenu')).toBeHidden();
+
+    await page.click('#openBtn');
+    await page.click('#sandboxContextMenu [data-item-id="primary"]');
+    await expect(page.locator('#resultLog')).toContainText('Primary action invoked from button.');
   });
 });
 
@@ -378,10 +412,10 @@ test.describe('Fullscreen behaviors', () => {
 
 test.describe('Collection load', () => {
   test('loads the synthetic default collection even when a same-named txt collection exists', async ({ page }) => {
-    await loadClips(page, 'default-source');
-    await expect(page.locator('#activeCollectionName option')).toHaveCount(2);
+    await loadClips(page, 'default-source', { expectedVisibleCount: 2 });
+    await expect(page.locator('#activeCollectionName option')).toHaveCount(1);
     await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-    await expect(page.locator('#count')).toHaveText('3 clips');
+    await expect(page.locator('#count')).toHaveText('2 clips');
   });
 
   test('treats default-collection.txt as a regular explicit collection', async ({ page }) => {
@@ -497,6 +531,102 @@ test.describe('Collection load', () => {
 
     await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
     await expect(page.locator('#grid .thumb')).toHaveCount(2);
+  });
+});
+
+test.describe('Add selected clips to a collection', () => {
+  test('right-click adds the current selected set to an existing collection without changing the source selection', async ({ page }) => {
+    await loadClips(page, 'order-valid');
+    const first = page.locator('#grid .thumb').nth(0);
+    const third = page.locator('#grid .thumb').nth(2);
+
+    await first.click();
+    await third.click({ modifiers: ['Control'] });
+    await expect(page.locator('#grid .thumb.selected')).toHaveCount(2);
+
+    const downloadPromise = page.waitForEvent('download');
+    await openGridContextMenu(page, page.locator('#gridWrap'), { position: { x: 40, y: 40 }, expectedCount: 3 });
+    await expect(page.locator('#clipContextMenu [role="menuitem"]')).toHaveText([
+      'Add to subset',
+      'Add to valid',
+      'New collection...',
+    ]);
+    await page.click('#clipContextMenu [data-item-id="add-to-subset.txt"]');
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toBe('subset.txt');
+    const content = await download.createReadStream();
+    const text = (await streamToString(content)).trim();
+    expect(text.split('\n')).toEqual(['three.mp4', 'one.mp4', 'two.webm']);
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+    await expect(page.locator('#grid .thumb.selected')).toHaveCount(2);
+    await expect(page.locator('#status')).toHaveText('Added 1 clip to subset. Skipped 1 already present.');
+  });
+
+  test('toolbar fallback opens the same add flow and validates new names', async ({ page }) => {
+    await loadClips(page, 'save-download');
+    await page.locator('#grid .thumb').first().click();
+    await openOrderMenu(page);
+    await page.click('#addToCollectionBtn');
+    await expect(page.locator('#addToCollectionDialog')).toHaveAttribute('open', '');
+
+    await page.selectOption('#addToCollectionSelect', '__new_collection__');
+    await page.fill('#addToCollectionNameInput', 'bad:name');
+    await expect(page.locator('#addToCollectionError')).toContainText('cannot contain');
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.fill('#addToCollectionNameInput', 'my-cut');
+    await page.click('#confirmAddToCollectionBtn');
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toBe('my-cut.txt');
+    const content = await download.createReadStream();
+    const text = (await streamToString(content)).trim();
+    expect(text.split('\n')).toEqual(['save-a.mp4']);
+    await expect(page.locator('#activeCollectionName option')).toContainText(['clips-default', 'my-cut']);
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
+    await expect(page.locator('#status')).toHaveText('Added 1 clip to my-cut.');
+  });
+
+  test('right-click new collection opens the dialog already focused on the new-collection path', async ({ page }) => {
+    await loadClips(page, 'save-download');
+    await page.locator('#grid .thumb').first().click();
+
+    await openGridContextMenu(page, page.locator('#gridWrap'), { position: { x: 40, y: 40 }, expectedCount: 1 });
+    await page.click('#clipContextMenu [data-item-id="new-collection"]');
+
+    await expect(page.locator('#addToCollectionDialog')).toHaveAttribute('open', '');
+    await expect(page.locator('#addToCollectionSelect')).toHaveValue('__new_collection__');
+    await expect(page.locator('#addToCollectionNameLabel')).not.toHaveAttribute('hidden', '');
+    await expect(page.locator('#addToCollectionNameInput')).toBeFocused();
+  });
+
+  test('direct-write flow adds selected clips to the default destination and updates inventory without switching collections', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'one.mp4', type: 'video/mp4', content: '1' },
+      { name: 'two.webm', type: 'video/webm', content: '2' },
+      { name: 'three.mp4', type: 'video/mp4', content: '3' },
+      { name: 'clips-default.txt', type: 'text/plain', content: 'one.mp4\n' },
+      { name: 'subset.txt', type: 'text/plain', content: 'three.mp4\n' },
+    ], { expectedVisibleCount: 1 });
+
+    await selectCollection(page, 'subset.txt');
+    await page.locator('#grid .thumb').first().click();
+    await openOrderMenu(page);
+    await page.click('#addToCollectionBtn');
+    await expect(page.locator('#addToCollectionDialog')).toHaveAttribute('open', '');
+    await page.selectOption('#addToCollectionSelect', '__default__');
+    await page.click('#confirmAddToCollectionBtn');
+
+    await expect(page.locator('#status')).toHaveText('Added 1 clip to clips-default.');
+    await expect(page.locator('#activeCollectionName')).toHaveValue('subset.txt');
+    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
+    const defaultWrite = writes.find((write) => write.name === 'clips-default.txt');
+    expect(defaultWrite).toBeTruthy();
+    expect(defaultWrite.data.trim().split('\n')).toEqual(['one.mp4', 'three.mp4']);
+
+    await selectCollection(page, '__default__');
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['one.mp4', 'three.mp4'].join('|'));
   });
 });
 

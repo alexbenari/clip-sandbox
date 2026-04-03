@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Context Menu Demo</title>
+  <style>
+    :root{
+      color-scheme: dark;
+      --bg:#0a111c;
+      --panel:rgba(8, 19, 34, .86);
+      --text:#e5eefc;
+      --muted:#93a8c7;
+      --accent:#f0ba54;
+      --border:rgba(147,168,199,.22);
+      --shadow:0 24px 60px rgba(0,0,0,.35);
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      min-height:100vh;
+      padding:28px;
+      background:
+        radial-gradient(circle at top left, rgba(240,186,84,.22), transparent 28%),
+        radial-gradient(circle at right 18%, rgba(64,122,175,.2), transparent 24%),
+        linear-gradient(160deg, #06101a 0%, #0b1524 54%, #08111d 100%);
+      color:var(--text);
+      font-family:"Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .demo-shell{
+      width:min(760px, 100%);
+      margin:0 auto;
+      padding:28px;
+      border:1px solid var(--border);
+      border-radius:24px;
+      background:var(--panel);
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(10px);
+    }
+    h1{
+      margin:0 0 10px;
+      font-size:clamp(1.8rem, 3vw, 2.5rem);
+      line-height:1.05;
+      letter-spacing:.02em;
+    }
+    p{
+      margin:0 0 18px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+    .actions{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-bottom:18px;
+    }
+    button{
+      appearance:none;
+      border:0;
+      cursor:pointer;
+      padding:12px 18px;
+      border-radius:999px;
+      color:#1b1205;
+      font-weight:700;
+      letter-spacing:.02em;
+      background:linear-gradient(180deg, #f0ba54 0%, #d99a2b 64%, #9f6410 100%);
+      box-shadow:0 12px 28px rgba(159,100,16,.3);
+    }
+    .demo-surface{
+      min-height:220px;
+      padding:22px;
+      border:1px dashed rgba(147,168,199,.35);
+      border-radius:18px;
+      background:rgba(5, 12, 22, .55);
+    }
+    .log{
+      margin-top:18px;
+      padding:14px 16px;
+      border-radius:14px;
+      background:rgba(5, 12, 22, .72);
+      color:var(--muted);
+      min-height:56px;
+    }
+    code{
+      color:#f4d18a;
+      font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+  </style>
+</head>
+<body>
+  <main class="demo-shell">
+    <h1>Context Menu Demo</h1>
+    <p>This page is a minimal host for the reusable context menu component. Use the button or right-click the demo surface to exercise fake actions without any clip-grid or collection state.</p>
+    <div class="actions">
+      <button id="openBtn" type="button">Open Menu</button>
+    </div>
+    <section class="demo-surface" id="demoSurface">
+      <p>Right-click anywhere in this box. One action is intentionally disabled so the sandbox proves rendering and dismissal behavior independent of the main app.</p>
+      <p><code>Escape</code> also closes the menu.</p>
+    </section>
+    <div class="log" id="resultLog">No sandbox action invoked yet.</div>
+  </main>
+  <div id="sandboxContextMenu" hidden>
+    <div id="sandboxContextMenuPanel"></div>
+  </div>
+  <script type="module">
+    import { createContextMenuController } from '../src/ui/context-menu-controller.js';
+
+    const root = document.getElementById('sandboxContextMenu');
+    const panel = document.getElementById('sandboxContextMenuPanel');
+    const openBtn = document.getElementById('openBtn');
+    const demoSurface = document.getElementById('demoSurface');
+    const resultLog = document.getElementById('resultLog');
+    const controller = createContextMenuController({ root, panel, document });
+
+    function writeLog(text) {
+      resultLog.textContent = text;
+    }
+
+    function buildItems(sourceLabel) {
+      return [
+        {
+          id: 'primary',
+          label: `Primary action from ${sourceLabel}`,
+          onSelect: () => writeLog(`Primary action invoked from ${sourceLabel}.`),
+        },
+        {
+          id: 'disabled',
+          label: 'Disabled action',
+          disabled: true,
+        },
+        {
+          id: 'secondary',
+          label: 'Secondary action',
+          onSelect: () => writeLog(`Secondary action invoked from ${sourceLabel}.`),
+        },
+      ];
+    }
+
+    openBtn.addEventListener('click', () => {
+      const rect = openBtn.getBoundingClientRect();
+      controller.open({
+        point: {
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 8,
+        },
+        items: buildItems('button'),
+        focusFirst: true,
+        restoreFocusTo: openBtn,
+      });
+    });
+
+    demoSurface.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      controller.open({
+        point: { x: event.clientX, y: event.clientY },
+        items: buildItems('surface'),
+      });
+    });
+  </script>
+</body>
+</html>

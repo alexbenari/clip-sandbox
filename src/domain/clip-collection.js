@@ -44,6 +44,16 @@ export class ClipCollection {
       .filter(Boolean);
   }
 
+  clipsForIdsInOrder(orderedClipIds) {
+    return Array.from(orderedClipIds || [])
+      .map((clipId) => this.#clipMap.get(clipId))
+      .filter(Boolean);
+  }
+
+  clipNamesForIdsInOrder(orderedClipIds) {
+    return this.clipsForIdsInOrder(orderedClipIds).map((clip) => clip.name);
+  }
+
   replaceOrder(orderedClipIds) {
     const seen = new Set();
     const nextOrder = Array.from(orderedClipIds || []).filter((clipId) => {

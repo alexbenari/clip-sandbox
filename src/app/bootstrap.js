@@ -28,6 +28,7 @@ import { delay, every, clear as clearClock } from '../adapters/browser/clock-ada
 import { showStatus as showStatusAdapter, applyGridLayout as applyGridLayoutAdapter, updateClipCount } from '../adapters/browser/dom-renderer-adapter.js';
 import { playBoundaryClank } from '../adapters/browser/audio-feedback-adapter.js';
 import { runSaveOrder } from '../business-logic/save-order.js';
+import { normalizeCollectionFilename, validateCollectionName } from '../business-logic/collection-name.js';
 import { createFullscreenSession } from '../business-logic/fullscreen-session.js';
 import { bindControlEvents, bindGlobalEvents, isEditableTarget } from './event-binding.js';
 import { createLayoutController } from './display-layout-controller.js';
@@ -47,23 +48,29 @@ import {
   noCollectionMatchesText,
   saveAsNewNameRequiredText,
   saveAsNewInvalidNameText,
+  collectionAlreadyExistsText,
   savedCollectionFileText,
   downloadedCollectionFileText,
   removedClipsText,
+  addedSelectedClipsText,
+  addSelectedClipsFailedText,
   activeCollectionText,
   activeCollectionTabText,
   niceNum,
   DEFAULT_APP_TITLE,
 } from './app-text.js';
 import { createOrderMenuController } from '../ui/order-menu-controller.js';
+import { createAddToCollectionDialogController } from '../ui/add-to-collection-dialog-controller.js';
+import { createContextMenuController } from '../ui/context-menu-controller.js';
 import { createZoomOverlayController } from '../ui/zoom-overlay-controller.js';
 import { createClipCollectionGridController, formatLabel, updateCardLabel } from '../ui/clip-collection-grid-controller.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { ClipCollectionContent } from '../domain/clip-collection-content.js';
+import { CollectionManager } from './collection-manager.js';
 
 let initialized = false;
-const WINDOWS_ILLEGAL_FILENAME_CHARS = /[<>:"/\\|?*]/;
 const ERROR_LOG_FILENAME = 'err.log';
+const NEW_COLLECTION_SELECTION_VALUE = '__new_collection__';
 
 export function initApp() {
   if (initialized) return;
@@ -73,6 +80,7 @@ export function initApp() {
   const pickBtn = document.getElementById('pickBtn');
   const saveBtn = document.getElementById('saveBtn');
   const saveAsNewBtn = document.getElementById('saveAsNewBtn');
+  const addToCollectionBtn = document.getElementById('addToCollectionBtn');
   const orderMenu = document.getElementById('orderMenu');
   const orderMenuBtn = document.getElementById('orderMenuBtn');
   const orderMenuPanel = document.getElementById('orderMenuPanel');
@@ -96,11 +104,20 @@ export function initApp() {
   const saveAsNewError = document.getElementById('saveAsNewError');
   const confirmSaveAsNewBtn = document.getElementById('confirmSaveAsNewBtn');
   const cancelSaveAsNewBtn = document.getElementById('cancelSaveAsNewBtn');
+  const addToCollectionDialog = document.getElementById('addToCollectionDialog');
+  const addToCollectionSelect = document.getElementById('addToCollectionSelect');
+  const addToCollectionNameLabel = document.getElementById('addToCollectionNameLabel');
+  const addToCollectionNameInput = document.getElementById('addToCollectionNameInput');
+  const addToCollectionError = document.getElementById('addToCollectionError');
+  const confirmAddToCollectionBtn = document.getElementById('confirmAddToCollectionBtn');
+  const cancelAddToCollectionBtn = document.getElementById('cancelAddToCollectionBtn');
   const unsavedChangesDialog = document.getElementById('unsavedChangesDialog');
   const unsavedChangesText = document.getElementById('unsavedChangesText');
   const confirmUnsavedChangesBtn = document.getElementById('confirmUnsavedChangesBtn');
   const discardUnsavedChangesBtn = document.getElementById('discardUnsavedChangesBtn');
   const cancelUnsavedChangesBtn = document.getElementById('cancelUnsavedChangesBtn');
+  const clipContextMenu = document.getElementById('clipContextMenu');
+  const clipContextMenuPanel = document.getElementById('clipContextMenuPanel');
   const body = document.body;
 
   const state = createAppState();
@@ -115,6 +132,26 @@ export function initApp() {
   };
   const validator = new CollectionDescriptionValidator();
   const zoomOverlay = createZoomOverlayController({ mountEl: zoomLayerRoot, document });
+  const collectionManager = new CollectionManager({ saveTextToDirectory, downloadText });
+  const clipContextMenuController = createContextMenuController({
+    root: clipContextMenu,
+    panel: clipContextMenuPanel,
+    document,
+  });
+  const addToCollectionDialogController = createAddToCollectionDialogController({
+    dialog: addToCollectionDialog,
+    destinationSelect: addToCollectionSelect,
+    newCollectionNameLabel: addToCollectionNameLabel,
+    newCollectionNameInput: addToCollectionNameInput,
+    errorMessageEl: addToCollectionError,
+    confirmBtn: confirmAddToCollectionBtn,
+    cancelBtn: cancelAddToCollectionBtn,
+    newSelectionValue: NEW_COLLECTION_SELECTION_VALUE,
+    validateNewName: (name) => validateAddToCollectionName(name),
+    onConfirm: (destination) => {
+      void confirmAddToCollection(destination);
+    },
+  });
   let pendingCollectionConflict = null;
 
   function showStatus(msg, timeout = 2500) {
@@ -248,6 +285,75 @@ export function initApp() {
     if (saveAsNewError) saveAsNewError.textContent = text;
   }
 
+  function addToCollectionValidationErrorText(code) {
+    if (code === 'required') return saveAsNewNameRequiredText();
+    if (code === 'illegal-chars') return saveAsNewInvalidNameText();
+    if (code === 'already-exists') return collectionAlreadyExistsText();
+    return '';
+  }
+
+  function validateAddToCollectionName(name) {
+    let validationCode = validateCollectionName(name).code;
+    if (!validationCode) {
+      const candidateFilename = normalizeCollectionFilename(name || '');
+      if (currentInventory()?.getCollectionByFilename(candidateFilename)) validationCode = 'already-exists';
+    }
+    return addToCollectionValidationErrorText(validationCode);
+  }
+
+  function renderAddToCollectionButton() {
+    if (!addToCollectionBtn) return;
+    const hasSelection = gridController?.getSelectedClipIds?.().length > 0;
+    addToCollectionBtn.disabled = !currentInventory() || !hasSelection;
+  }
+
+  function addToCollectionChoices() {
+    const inventory = currentInventory();
+    if (!inventory) return [];
+    return collectionManager.addDestinationChoices(inventory, inventory.activeSelectionValue());
+  }
+
+  function openAddToCollectionDialog({ startWithNewCollection = false } = {}) {
+    if (!currentInventory()) return;
+    addToCollectionDialogController.open({
+      choices: addToCollectionChoices(),
+      hasSelection: gridController?.getSelectedClipIds?.().length > 0,
+      startWithNewCollection,
+    });
+  }
+
+  async function runAddToCollection(destination, { showDialogValidation = false } = {}) {
+    if (!state.currentCollection || !currentInventory()) return { ok: false, code: 'missing-context' };
+
+    const result = await collectionManager.addSelectedClipsToCollection({
+      selectedClipIds: gridController.getSelectedClipIds(),
+      sourceSelectionValue: currentInventory().activeSelectionValue(),
+      destination,
+      currentCollection: state.currentCollection,
+      inventory: currentInventory(),
+      currentDirHandle: state.currentDirHandle,
+    });
+
+    if (!result.ok) {
+      const validationError = addToCollectionValidationErrorText(result.code);
+      if (showDialogValidation && validationError) {
+        addToCollectionDialogController.showValidationError(validationError, {
+          focusNameInput: destination.kind === 'new',
+        });
+        return result;
+      }
+      if (showDialogValidation) addToCollectionDialogController.close();
+      showStatus(addSelectedClipsFailedText(result.destinationName, result.error || result.code), 4000);
+      return result;
+    }
+
+    addToCollectionDialogController.close();
+    renderCollectionSelector();
+    renderAddToCollectionButton();
+    showStatus(addedSelectedClipsText(result.destinationName, result.addedCount, result.skippedCount), 4000);
+    return result;
+  }
+
   function openUnsavedDialog() {
     if (!unsavedChangesDialog) return;
     if (unsavedChangesText) {
@@ -306,12 +412,15 @@ export function initApp() {
   function applyCollection(collection, { inventory = currentInventory(), dirHandle = state.currentDirHandle, statusText = '', timeout = 2500 } = {}) {
     hideCollectionConflict();
     pendingCollectionConflict = null;
+    clipContextMenuController.close({ restoreFocus: false });
+    addToCollectionDialogController.close();
     setCurrentDirHandle(state, dirHandle || null);
     setCollectionInventory(state, inventory || null);
     setCurrentCollection(state, collection || null);
     inventory?.refreshDirtyState(collection);
     gridController.renderCollection(collection);
     renderCollectionSelector();
+    renderAddToCollectionButton();
     if (statusText) showStatus(statusText, timeout);
   }
 
@@ -319,6 +428,8 @@ export function initApp() {
     hideCollectionConflict();
     pendingCollectionConflict = null;
     closeSaveAsNewDialog();
+    addToCollectionDialogController.close();
+    clipContextMenuController.close({ restoreFocus: false });
     closeUnsavedDialog();
     closeZoom();
     gridController.destroy();
@@ -326,6 +437,7 @@ export function initApp() {
     setCurrentDirHandle(state, null);
     renderCollectionSelector();
     updateCount();
+    renderAddToCollectionButton();
   }
 
   function initialLoadStatusText(inventory, result) {
@@ -525,14 +637,10 @@ export function initApp() {
     return { mode, content: nextContent };
   }
 
-  function normalizeCollectionFilename(name) {
-    return ClipCollectionContent.filenameFromCollectionName((name || '').trim());
-  }
-
   function validateSaveAsNewName(name) {
-    const trimmed = (name || '').trim();
-    if (!trimmed) return saveAsNewNameRequiredText();
-    if (WINDOWS_ILLEGAL_FILENAME_CHARS.test(trimmed)) return saveAsNewInvalidNameText();
+    const validation = validateCollectionName(name);
+    if (validation.code === 'required') return saveAsNewNameRequiredText();
+    if (validation.code === 'illegal-chars') return saveAsNewInvalidNameText();
     return '';
   }
 
@@ -549,6 +657,11 @@ export function initApp() {
     if (currentInventory()?.pendingAction()) {
       await continuePendingAction({ saveFirst: false });
     }
+  }
+
+  async function confirmAddToCollection(destination) {
+    if (!state.currentCollection || !currentInventory()) return;
+    await runAddToCollection(destination, { showDialogValidation: true });
   }
 
   function renderTitlesToggleButton() {
@@ -585,12 +698,49 @@ export function initApp() {
     return openZoomForClip(nextClip);
   }
 
+  function openGridContextMenu(point) {
+    const inventory = currentInventory();
+    const hasSelection = gridController.getSelectedClipIds().length > 0;
+    const items = hasSelection
+      ? collectionManager.addDestinationChoices(inventory, inventory?.activeSelectionValue()).map((choice) => ({
+        id: `add-to-${choice.selectionValue}`,
+        label: `Add to ${choice.label}`,
+        onSelect: () => {
+          void runAddToCollection({
+            kind: 'existing',
+            selectionValue: choice.selectionValue,
+          });
+        },
+      }))
+      : [{
+        id: 'add-to-collection-disabled',
+        label: 'Select clips to add to a collection',
+        disabled: true,
+      }];
+    items.push({
+      id: 'new-collection',
+      label: 'New collection...',
+      disabled: !inventory || !hasSelection,
+      onSelect: () => {
+        openAddToCollectionDialog({ startWithNewCollection: true });
+      },
+    });
+
+    clipContextMenuController.open({
+      point,
+      items,
+    });
+  }
+
   const gridController = createClipCollectionGridController({
     grid,
     gridRoot: gridWrap,
     formatLabel,
     updateCount,
     recomputeLayout,
+    onSelectionChange: () => {
+      renderAddToCollectionButton();
+    },
     onOrderChange: (orderedClipIds) => {
       if (!state.currentCollection) return;
       state.currentCollection.replaceOrder(orderedClipIds);
@@ -606,6 +756,10 @@ export function initApp() {
       gridController.renderCollection(state.currentCollection);
       renderCollectionSelector();
       showStatus(removedClipsText(removedClipIds.length));
+    },
+    onContextMenu: ({ point }) => {
+      if (zoomOverlay.isOpen() || isFullscreen()) return;
+      openGridContextMenu(point);
     },
   });
 
@@ -655,6 +809,11 @@ export function initApp() {
       e.preventDefault();
       return;
     }
+    if (addToCollectionDialogController.isOpen() && e.key === 'Escape') {
+      e.preventDefault();
+      addToCollectionDialogController.close();
+      return;
+    }
     if (unsavedChangesDialog?.open && e.key === 'Escape') {
       e.preventDefault();
       currentInventory()?.clearPendingAction();
@@ -675,6 +834,7 @@ export function initApp() {
       if (gridController.handleKeyDown(e)) return;
       return;
     }
+    if (addToCollectionDialogController.isOpen()) return;
     if (isEditableTarget(e.target)) return;
     if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'f' || e.key === 'F') && zoomOverlay.isOpen()) {
       closeZoom();
@@ -749,6 +909,7 @@ export function initApp() {
     loadOrderBtn: null,
     saveBtn,
     saveAsNewBtn,
+    addToCollectionBtn,
   });
 
   bindControlEvents({
@@ -756,6 +917,7 @@ export function initApp() {
     folderInput,
     saveBtn,
     saveAsNewBtn,
+    addToCollectionBtn,
     loadOrderBtn: null,
     orderFileInput: null,
     toggleTitlesBtn,
@@ -764,6 +926,7 @@ export function initApp() {
     onFolderInputChange,
     onSaveOrder: () => void saveCollection(),
     onSaveAsNew: openSaveAsNewDialog,
+    onAddToCollection: openAddToCollectionDialog,
     onLoadOrderClick: () => {},
     onOrderFileChange: () => {},
     onToggleTitles,

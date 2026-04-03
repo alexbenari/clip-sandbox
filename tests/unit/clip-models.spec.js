@@ -56,6 +56,23 @@ describe('clip and collection models', () => {
     expect(batchCollection.clipNamesInOrder()).toEqual(['bravo.webm']);
   });
 
+  test('returns ordered clips and clip names for a supplied id list', () => {
+    const clips = [
+      new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
+      new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
+      new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4') }),
+    ];
+    const collection = new ClipCollection({ name: 'full', clips });
+    expect(collection.clipsForIdsInOrder(['clip_3', 'missing', 'clip_1']).map((clip) => clip.id)).toEqual([
+      'clip_3',
+      'clip_1',
+    ]);
+    expect(collection.clipNamesForIdsInOrder(['clip_3', 'missing', 'clip_1'])).toEqual([
+      'charlie.mp4',
+      'alpha.mp4',
+    ]);
+  });
+
   test('builds collection content from runtime collections', () => {
     const clips = [
       new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
@@ -68,6 +85,18 @@ describe('clip and collection models', () => {
     expect(content.filename).toBe('director-cut.txt');
     expect(content.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm']);
     expect(content.toText()).toBe('alpha.mp4\nbravo.webm\n');
+  });
+
+  test('appends only missing clip names while preserving destination order', () => {
+    const content = ClipCollectionContent.fromFilename({
+      filename: 'subset.txt',
+      orderedClipNames: ['alpha.mp4', 'bravo.webm'],
+    });
+    const merged = content.appendMissingClipNames(['bravo.webm', 'charlie.mp4', 'delta.mp4', 'charlie.mp4']);
+    expect(merged.addedClipNames).toEqual(['charlie.mp4', 'delta.mp4']);
+    expect(merged.skippedClipNames).toEqual(['bravo.webm', 'charlie.mp4']);
+    expect(merged.content.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm', 'charlie.mp4', 'delta.mp4']);
+    expect(merged.isNoOp).toBe(false);
   });
 
   test('creates a synthetic default collection and sorts explicit collections alphabetically', () => {
@@ -101,6 +130,35 @@ describe('clip and collection models', () => {
       'beta',
       'zeta',
     ]);
+  });
+
+  test('absorbs the default collection backing file into the default collection entry', () => {
+    const inventory = new ClipCollectionInventory({
+      folderName: 'clips',
+      videoFiles: [
+        new File(['a'], 'alpha.mp4'),
+        new File(['b'], 'bravo.webm'),
+        new File(['c'], 'charlie.mp4'),
+      ],
+      collectionContents: [
+        ClipCollectionContent.fromFilename({
+          filename: 'clips-default.txt',
+          orderedClipNames: ['charlie.mp4', 'alpha.mp4'],
+        }),
+        ClipCollectionContent.fromFilename({
+          filename: 'subset.txt',
+          orderedClipNames: ['alpha.mp4'],
+        }),
+      ],
+    });
+
+    expect(inventory.defaultCollection().orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
+    expect(inventory.selectableCollections().map((collectionContent) => collectionContent.collectionName)).toEqual([
+      'clips-default',
+      'subset',
+    ]);
+    expect(inventory.defaultCollectionFilename()).toBe('clips-default.txt');
+    expect(inventory.getCollectionByFilename('clips-default.txt')?.orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
   });
 
   test('treats default-collection.txt as a regular explicit collection', () => {

@@ -48,13 +48,23 @@ export class ClipCollectionInventory {
 
   setCollectionContents(collectionContents) {
     const nextCollectionsByFilename = new Map();
+    let nextDefaultCollection = this.#defaultCollection;
     for (const collectionContent of Array.from(collectionContents || [])) {
       if (!(collectionContent instanceof ClipCollectionContent)) continue;
+      if (this.isDefaultCollectionFilename(collectionContent.filename)) {
+        nextDefaultCollection = ClipCollectionContent.createDefault({
+          folderName: this.#folderName,
+          orderedClipNames: collectionContent.orderedClipNames,
+        });
+        continue;
+      }
       if (!collectionContent.hasBackingFile) continue;
       nextCollectionsByFilename.set(collectionContent.filename, collectionContent);
     }
+    this.#defaultCollection = nextDefaultCollection;
     this.#collectionsByFilename = nextCollectionsByFilename;
     if (!this.#activeCollection?.hasBackingFile
+      || this.#activeCollection.collectionName === this.#defaultCollection.collectionName
       || !this.#collectionsByFilename.has(this.#activeCollection.filename)) {
       this.#activeCollection = this.#defaultCollection;
     } else {
@@ -64,6 +74,14 @@ export class ClipCollectionInventory {
 
   upsertCollectionContent(collectionContent, { makeActive = false } = {}) {
     if (!(collectionContent instanceof ClipCollectionContent)) return;
+    if (this.isDefaultCollectionFilename(collectionContent.filename)) {
+      this.#defaultCollection = ClipCollectionContent.createDefault({
+        folderName: this.#folderName,
+        orderedClipNames: collectionContent.orderedClipNames,
+      });
+      if (makeActive) this.#activeCollection = this.#defaultCollection;
+      return;
+    }
     if (!collectionContent.hasBackingFile) return;
     this.#collectionsByFilename.set(collectionContent.filename, collectionContent);
     if (makeActive) this.#activeCollection = collectionContent;
@@ -91,6 +109,7 @@ export class ClipCollectionInventory {
 
   getCollectionByFilename(filename) {
     const normalizedFilename = String(filename || '').trim();
+    if (this.isDefaultCollectionFilename(normalizedFilename)) return this.#defaultCollection;
     return this.#collectionsByFilename.get(normalizedFilename) || null;
   }
 
@@ -108,6 +127,19 @@ export class ClipCollectionInventory {
     return value === DEFAULT_COLLECTION_SELECTION_VALUE
       ? this.#defaultCollection
       : this.getCollectionByFilename(value);
+  }
+
+  defaultCollectionFilename() {
+    return ClipCollectionContent.filenameFromCollectionName(this.#defaultCollection.collectionName);
+  }
+
+  isDefaultCollectionFilename(filename) {
+    return String(filename || '').trim() === this.defaultCollectionFilename();
+  }
+
+  eligibleDestinationCollections(sourceSelectionValue = this.activeSelectionValue()) {
+    return this.selectableCollections()
+      .filter((collectionContent) => this.selectionValueFor(collectionContent) !== sourceSelectionValue);
   }
 
   activeSelectionValue() {
@@ -143,9 +175,12 @@ export class ClipCollectionInventory {
   }
 
   #refreshDefaultCollection() {
+    const existingOrderedClipNames = this.#defaultCollection?.orderedClipNames?.length
+      ? this.#defaultCollection.orderedClipNames
+      : this.videoNames();
     this.#defaultCollection = ClipCollectionContent.createDefault({
       folderName: this.#folderName,
-      orderedClipNames: this.videoNames(),
+      orderedClipNames: existingOrderedClipNames,
     });
     if (!this.#activeCollection?.hasBackingFile) {
       this.#activeCollection = this.#defaultCollection;

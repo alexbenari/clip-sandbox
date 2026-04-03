@@ -18,7 +18,7 @@ This guide explains the current browser-only architecture and the collection-man
 - [`src/domain`](/C:/dev/clip-sandbox/src/domain): runtime models and pure validation/state helpers
 - [`src/business-logic`](/C:/dev/clip-sandbox/src/business-logic): folder/collection workflows, materialization, save behavior
 - [`src/app`](/C:/dev/clip-sandbox/src/app): composition root, app state, text, layout rules, event binding
-- [`src/ui`](/C:/dev/clip-sandbox/src/ui): DOM-facing controllers such as the grid, order menu, and zoom overlay
+- [`src/ui`](/C:/dev/clip-sandbox/src/ui): DOM-facing controllers such as the grid, order menu, reusable context menu, and zoom overlay
 - [`src/adapters/browser`](/C:/dev/clip-sandbox/src/adapters/browser): thin wrappers around browser APIs
 - [`tests/unit`](/C:/dev/clip-sandbox/tests/unit): unit coverage
 - [`tests/integration/ui`](/C:/dev/clip-sandbox/tests/integration/ui): UI-controller integration coverage
@@ -39,9 +39,9 @@ Responsibilities:
 - removal
 - conversion to `ClipCollectionDescription`
 
-### `ClipCollectionDescription`
+### `ClipCollectionContent`
 
-[`src/domain/clip-collection-description.js`](/C:/dev/clip-sandbox/src/domain/clip-collection-description.js)
+[`src/domain/clip-collection-content.js`](/C:/dev/clip-sandbox/src/domain/clip-collection-content.js)
 
 A serialized collection definition.
 
@@ -66,7 +66,7 @@ Responsibilities:
 - parse collection text
 - reject empty files
 - reject duplicate entries
-- build `ClipCollectionDescription` instances
+- build `ClipCollectionContent` instances
 - produce human-readable diagnostics suitable for `err.log`
 
 Important rule:
@@ -106,7 +106,7 @@ The main collection-management flow is orchestrated in [`src/app/bootstrap.js`](
 4. The default collection is resolved:
    - existing `[folder-name]-default.txt` wins,
    - otherwise an implicit default description is synthesized from the top-level videos.
-5. [`materializeCollectionDescription(...)`](/C:/dev/clip-sandbox/src/business-logic/materialize-collection.js) creates the active `ClipCollection`.
+5. [`materializeCollectionContent(...)`](/C:/dev/clip-sandbox/src/business-logic/materialize-collection.js) creates the active `ClipCollection`.
 6. The grid renders only the active collection's clips.
 
 ### Collection Switching
@@ -128,6 +128,30 @@ Standard save overwrites the active collection file:
 
 Implementation entry point:
 - [`src/business-logic/save-order.js`](/C:/dev/clip-sandbox/src/business-logic/save-order.js)
+
+### Add Selected to Collection
+
+The add-to-collection workflow is split across three levels:
+
+1. [`src/ui/context-menu-controller.js`](/C:/dev/clip-sandbox/src/ui/context-menu-controller.js)
+   - reusable right-click menu primitive
+   - no collection or inventory knowledge
+   - the app can populate it with direct destination actions such as `Add to subset` plus `New collection...`
+2. [`src/ui/add-to-collection-dialog-controller.js`](/C:/dev/clip-sandbox/src/ui/add-to-collection-dialog-controller.js)
+   - owns the add-to-collection dialog DOM, focus behavior, field visibility, and inline validation display
+   - stays UI-only and receives shared validation results plus submit callbacks from the app layer
+3. [`src/app/collection-manager.js`](/C:/dev/clip-sandbox/src/app/collection-manager.js)
+   - application service for collection operations such as adding selected clips to another collection
+   - coordinates inventory lookups, domain merge behavior, and immediate destination save
+4. existing domain objects
+   - [`src/domain/clip-collection.js`](/C:/dev/clip-sandbox/src/domain/clip-collection.js) resolves ordered source clip names from selected clip ids
+   - [`src/domain/clip-collection-content.js`](/C:/dev/clip-sandbox/src/domain/clip-collection-content.js) merges incoming clip names into destination content without duplicates
+
+Important rule:
+- keep collection operation orchestration in `CollectionManager`
+- keep merge rules on the domain objects
+- do not push DOM concerns into `CollectionManager`
+- do not push whole collection operations into `ClipCollectionInventory`
 
 ## Non-Recursive Rule
 
@@ -178,9 +202,23 @@ Important rule:
 
 Responsibilities:
 - open/close the toolbar action menu
-- keyboard navigation for save actions
+- keyboard navigation for save and add-to-collection fallback actions
 
 Collection selection itself is no longer handled here. That moved to the centered dropdown in the main shell.
+
+### Reusable Context Menu
+
+[`src/ui/context-menu-controller.js`](/C:/dev/clip-sandbox/src/ui/context-menu-controller.js)
+
+Responsibilities:
+- render a supplied generic action list
+- position itself from pointer coordinates
+- dismiss on outside click or `Escape`
+- support disabled actions
+
+Important rule:
+- this component must stay independent of collection, inventory, grid, and persistence modules
+- the sandbox demo at [`sandbox/context-menu-demo.html`](/C:/dev/clip-sandbox/sandbox/context-menu-demo.html) exists to prove that independence over time
 
 ### Zoom Overlay
 
@@ -214,6 +252,7 @@ Owns orchestration of:
 - collection inventory construction
 - collection materialization
 - collection save and save-as-new
+- add-to-collection dialog flow and `CollectionManager` integration
 - dirty prompts
 - missing-entry conflict handling
 - zoom/fullscreen integration
@@ -232,15 +271,18 @@ Important rule:
 - Integration:
   - grid controller
   - order menu controller
+  - reusable context menu controller
   - event binding
   - zoom overlay controller
 - End-to-end:
+  - context menu sandbox smoke coverage
   - default-file source-of-truth
   - dropdown-based collection switching
   - dirty switch and dirty folder-change prompts
   - non-recursive filtering
   - `err.log` behavior in writable-folder mode
   - save/download/direct-write flows
+  - add-selected-to-collection flows
 
 ## Common Commands
 
@@ -248,6 +290,14 @@ Important rule:
 - `npm run e2e`
 - `npm run test:all`
 - `npm run e2e:headed`
+
+## Sandbox Surfaces
+
+- [`sandbox/zoom-demo.html`](/C:/dev/clip-sandbox/sandbox/zoom-demo.html): isolated host for the reusable zoom overlay.
+- [`sandbox/context-menu-demo.html`](/C:/dev/clip-sandbox/sandbox/context-menu-demo.html): isolated host for the reusable context menu.
+
+Important rule:
+- sandbox pages are not just demos; they are also intended to stay Playwright-smoke-tested so reusable UI primitives keep working outside the main app shell.
 
 ## Extension Notes
 

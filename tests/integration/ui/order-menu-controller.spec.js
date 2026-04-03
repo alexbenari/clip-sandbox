@@ -9,6 +9,7 @@ function setupDom() {
         <button id="loadOrderBtn" role="menuitem">Load</button>
         <button id="saveBtn" role="menuitem">Save</button>
         <button id="saveAsNewBtn" role="menuitem">Save as New</button>
+        <button id="addToCollectionBtn" role="menuitem">Add Selected to Collection...</button>
       </div>
     </div>
   `;
@@ -18,8 +19,9 @@ function setupDom() {
   const loadOrderBtn = document.getElementById('loadOrderBtn');
   const saveBtn = document.getElementById('saveBtn');
   const saveAsNewBtn = document.getElementById('saveAsNewBtn');
-  createOrderMenuController({ orderMenu, orderMenuBtn, orderMenuPanel, loadOrderBtn, saveBtn, saveAsNewBtn });
-  return { orderMenu, orderMenuBtn, loadOrderBtn, saveBtn, saveAsNewBtn };
+  const addToCollectionBtn = document.getElementById('addToCollectionBtn');
+  createOrderMenuController({ orderMenu, orderMenuBtn, orderMenuPanel, loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn });
+  return { orderMenu, orderMenuBtn, loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn };
 }
 
 describe('order menu controller', () => {
@@ -46,7 +48,7 @@ describe('order menu controller', () => {
   });
 
   test('arrow keys navigate through all items and escape closes', () => {
-    const { orderMenu, orderMenuBtn, loadOrderBtn, saveBtn, saveAsNewBtn } = setupDom();
+    const { orderMenu, orderMenuBtn, loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn } = setupDom();
     orderMenuBtn.focus();
     orderMenuBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(loadOrderBtn).toBe(document.activeElement);
@@ -57,7 +59,10 @@ describe('order menu controller', () => {
     saveBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     expect(saveAsNewBtn).toBe(document.activeElement);
 
-    saveAsNewBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    saveAsNewBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(addToCollectionBtn).toBe(document.activeElement);
+
+    addToCollectionBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(orderMenu.dataset.open).toBe('false');
     expect(orderMenuBtn).toBe(document.activeElement);
   });

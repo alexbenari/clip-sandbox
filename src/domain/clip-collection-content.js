@@ -68,6 +68,40 @@ export class ClipCollectionContent {
     });
   }
 
+  withFilename(filename) {
+    return new ClipCollectionContent({
+      collectionName: this.#collectionName,
+      filename,
+      orderedClipNames: this.#orderedClipNames,
+    });
+  }
+
+  appendMissingClipNames(orderedClipNames) {
+    const existingNames = this.orderedClipNames;
+    const seenNames = new Set(existingNames);
+    const addedClipNames = [];
+    const skippedClipNames = [];
+
+    for (const clipName of ClipCollectionContent.#normalizedOrderedClipNames(orderedClipNames)) {
+      if (seenNames.has(clipName)) {
+        skippedClipNames.push(clipName);
+        continue;
+      }
+      seenNames.add(clipName);
+      addedClipNames.push(clipName);
+    }
+
+    const nextOrderedClipNames = existingNames.concat(addedClipNames);
+    return {
+      content: this.withOrderedClipNames(nextOrderedClipNames),
+      addedClipNames,
+      skippedClipNames,
+      addedCount: addedClipNames.length,
+      skippedCount: skippedClipNames.length,
+      isNoOp: addedClipNames.length === 0,
+    };
+  }
+
   toText() {
     if (this.#orderedClipNames.length === 0) return '';
     return this.#orderedClipNames.join('\n') + '\n';

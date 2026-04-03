@@ -164,6 +164,7 @@ export function createClipCollectionGridController({
   onOrderChange,
   onOpenClip,
   onRemoveSelected,
+  onContextMenu,
 } = {}) {
   const doc = grid?.ownerDocument || document;
   let currentCollection = null;
@@ -268,6 +269,19 @@ export function createClipCollectionGridController({
     selectOnlyCard(card);
     const clipId = card?.dataset.clipId || null;
     if (clipId) onOpenClip?.(clipId);
+  }
+
+  function onGridContextMenu(event) {
+    if (!onContextMenu) return;
+    event.preventDefault();
+    const card = event.target instanceof Element ? event.target.closest('.thumb') : null;
+    onContextMenu({
+      card,
+      point: { x: event.clientX, y: event.clientY },
+      selectedClipId: getSelectedClipId(),
+      selectedClipIds: getSelectedClipIds(),
+      clipId: card?.dataset.clipId || null,
+    });
   }
 
   function handleKeyDown(event) {
@@ -377,6 +391,8 @@ export function createClipCollectionGridController({
   function getClipMediaSource(clipId) {
     return getCardByClipId(clipId)?.dataset.objectUrl || '';
   }
+
+  gridRoot?.addEventListener('contextmenu', onGridContextMenu);
 
   return {
     renderCollection,

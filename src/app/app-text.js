@@ -61,6 +61,10 @@ export function saveAsNewInvalidNameText() {
   return 'Collection names cannot contain any of these characters: < > : " / \\ | ? *';
 }
 
+export function collectionAlreadyExistsText() {
+  return 'A collection with that name already exists.';
+}
+
 export function saveAsNewHeadingText() {
   return 'Save current collection as a new file';
 }
@@ -79,6 +83,21 @@ export function downloadedCollectionFileText(filename) {
 
 export function removedClipsText(count) {
   return count === 1 ? 'Clip removed from view.' : `Removed ${count} clips from view.`;
+}
+
+export function addedSelectedClipsText(destinationName, addedCount, skippedCount = 0) {
+  if (addedCount === 0) {
+    return `No clips were added to ${destinationName}. All ${skippedCount} selected clip${skippedCount === 1 ? ' is' : 's are'} already present.`;
+  }
+  if (skippedCount > 0) {
+    return `Added ${addedCount} clip${addedCount === 1 ? '' : 's'} to ${destinationName}. Skipped ${skippedCount} already present.`;
+  }
+  return `Added ${addedCount} clip${addedCount === 1 ? '' : 's'} to ${destinationName}.`;
+}
+
+export function addSelectedClipsFailedText(destinationName, err) {
+  const detail = err?.message || err || 'Unknown error.';
+  return `Failed to add selected clips to ${destinationName || 'the destination collection'}: ${detail}`;
 }
 
 export function activeCollectionText(name) {

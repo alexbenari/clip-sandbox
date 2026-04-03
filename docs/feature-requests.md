@@ -1,32 +1,23 @@
 # Feature Requests
 
 ## Design
-- `ClipCollectionLoader`: file-level logic where the input is a folder and the output is a `ClipCollection`.
+- bootstrap 
+  - different name (app-controller?) and state as part of this new class
+  - remove non-orchstration code
+- business logic -> move functionality into domain when needed (e.g. collection-anme.js?)
+- layout controller and rules -> fold into grid controller when applicable, leave FS for future
+-  `ClipCollectionLoader`: file-level logic where the input is a folder and the output is a `ClipCollection`.
+-  Reusable UI components imported from a separate library: zoom view and rclick menu
 
 ## Grid Mode
 
 ### Collections
-
-- On folder selection, all collection files (txt files with filename per line) are enumertaed
-  - each appears as an item under the current collecion name
-  - when clicked it opens that collection
-- move to collection
-  - Right click on selected -> move to collection
-  - Right click on selected -> move to new collection
-- Allow naming a collection when saving.
-- Support saving as a new collection.
-- Allow selecting a range of clips and deleting them.
-- Allow selecting a range of clips and starting a new collection.
-- Allow selecting a range of clips and moving them to an existing collection.
 - Allow renaming a collection.
-- If the user loads a new collection and the existing one has changes, prompt whether to save first.
-- Support displaying multiple collections and moving between them, perhaps with internal tabs.
-- Refresh from folder: reload the collection according to the collection file.
 - Add a startup window for the no-collection state: a centered set of buttons. Sketch it.
+- support gif format
 
 ### Clip Display
 
-- Hitting `m` mutes or unmutes a clip. Design question: should this be encapsulated at the clip display level (`card`, `grid`, `zoom`), and what should be shared across them?
 - Compare mode:
   - Compare two clips by opening them in side-by-side zoom and synchronizing their start.
   - The `s` key or a resync button starts them again together from zero.
@@ -35,14 +26,23 @@
   - Add a count showing total items and current screen position (`x/y`).
 
 ### App
-
 - Add a keyboard map icon in the top bar. When clicked, open a small panel showing all key mappings and their descriptions.
-- Add a `?` icon that opens a panel with a brief textual explanation of the main app features, one per row.
+- Add a `?` icon that opens a panel with a brief textual explanation of the main app features, one per row.## Share
 
-## FS Mode
+- Allow sending a link to a gallery of clips.
 
+## Other
+
+- Support GIF files and other formats.
+- Add general settings panel: 
+  - default audio = on/off
+
+## Presentation mode (aka FS Mode)
 - Rename to `Present` mode.
-- Support multiple display modes and allow selecting them dynamically by mode name.
+- Acces from drop down menu with play like arrow
+  - Click on arrow -> default presentation mode
+  - Drop down -> other presentation modes
+  - Within present mode, there is a access to a config pane for presentation settings of that mode
 
 ### General
 
@@ -67,10 +67,4 @@
 - Show a single large clip in the center.
 - Content is the concatenation of all clips in the order defined by the collection file.
 
-## Share
 
-- Allow sending a link to a gallery of clips.
-
-## Other
-
-- Support GIF files and other formats.

@@ -21,6 +21,7 @@ Collection management is folder-scoped:
 - **Missing-entry conflict choices**: if a selected collection references clips missing from the folder, the app lets you continue with existing clips only or cancel.
 - **Save current collection**: save overwrites the currently selected collection file.
 - **Save as New**: save the current collection to a new `.txt` file and make it the active collection for the session.
+- **Add selected clips to another collection**: right-click the grid for direct destination choices, or use **Collection** -> **Add Selected to Collection...** as the dialog fallback.
 - **Error log**: invalid collection-file diagnostics are written to `err.log` in the selected folder when direct folder write access is available.
 - **Zoom mode**: double-click a clip or press `Z`.
 - **Fullscreen mode**: click **Full Screen** or press `F`.
@@ -59,13 +60,17 @@ Supported video formats:
    - `Don't Save`: switch without saving,
    - `Cancel`: stay on the current collection.
 
-### 3. Reorder or Trim the Current Collection
+### 3. Reorder, Trim, or Copy Selected Clips
 
 1. Drag a clip tile to change its order.
 2. Click a clip to select only that clip.
 3. `Ctrl+click` on Windows/Linux or `Cmd+click` on macOS adds or removes a clip from the current selection.
 4. Press `Delete` or `Backspace` to remove all selected clips from the current collection.
-5. These edits affect only the active collection.
+5. Right-click anywhere in the grid to choose an existing destination directly, or open **Collection** and choose **Add Selected to Collection...** for the dialog flow.
+6. The right-click menu lists same-folder destination collections directly and also includes `New collection...`.
+7. In the dialog flow, choose another same-folder collection or `New collection...`.
+8. Existing destination entries are kept, selected clips already present are skipped, and new clips append at the end in the current selected order.
+9. The app stays on the current source collection after the add completes.
 
 Note: delete shortcuts are ignored while typing in inputs or selects.
 
@@ -133,6 +138,7 @@ Choices:
 - Keep filenames unique within a folder for predictable collection matching.
 - Use **Save** after drag-and-drop or delete changes you want to keep.
 - Use **Save as New** when you want to preserve the current collection under a different name.
+- Use right-click to add the current selection straight into an existing collection without the extra dialog step.
 - If a collection appears to be missing from the dropdown, check whether the file is top-level, has a `.txt` extension, and contains one non-blank filename per line without duplicates.
 - Keyboard access: focus **Collection**, press `Enter` or `Space` to open the action menu, use arrow keys to move between actions, and press `Escape` to close it.
 - Zoom shortcuts: `Z` opens zoom for the selected clip, `Escape` closes zoom, and `F` from zoom closes zoom first and then enters fullscreen.

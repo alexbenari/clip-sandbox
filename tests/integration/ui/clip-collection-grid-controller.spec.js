@@ -238,6 +238,44 @@ describe('clip collection grid controller', () => {
     expect(controller.getSelectedClipId()).toBe('clip_3');
   });
 
+  test('emits context-menu requests without changing the current selection', () => {
+    const contextMenuRequests = [];
+    const controller = createClipCollectionGridController({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      updateCount: vi.fn(),
+      recomputeLayout: vi.fn(),
+      onContextMenu: (payload) => contextMenuRequests.push(payload),
+    });
+
+    controller.renderCollection(
+      new ClipCollection({
+        name: 'demo',
+        clips: [
+          new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
+          new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm', { type: 'video/webm' }) }),
+        ],
+      })
+    );
+
+    const cards = document.querySelectorAll('#grid .thumb');
+    cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    cards[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+
+    document.getElementById('gridWrap').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      clientX: 180,
+      clientY: 220,
+    }));
+
+    expect(contextMenuRequests).toHaveLength(1);
+    expect(contextMenuRequests[0].selectedClipIds).toEqual(['clip_1', 'clip_2']);
+    expect(contextMenuRequests[0].clipId).toBeNull();
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+  });
+
   test('injects default styles only once per document', () => {
     createClipCollectionGridController({
       grid: document.getElementById('grid'),

@@ -218,12 +218,67 @@
       color:#fca5a5;
       font-size:13px;
     }
+    .add-to-collection-dialog{
+      width:min(92vw, 440px);
+      border:1px solid rgba(122,162,247,.35);
+      border-radius:16px;
+      padding:18px 18px 16px;
+      background:rgba(15,23,42,.98);
+      color:var(--fg);
+      box-shadow: var(--shadow);
+    }
+    .add-to-collection-dialog::backdrop{
+      background:rgba(2,6,23,.62);
+      backdrop-filter: blur(3px);
+    }
+    .add-to-collection-dialog h2{
+      margin:0 0 8px;
+      font-size:18px;
+    }
+    .add-to-collection-dialog p{
+      margin:0 0 12px;
+      color:var(--muted);
+    }
+    .add-to-collection-dialog label{
+      display:block;
+      margin-bottom:10px;
+      color:#dbeafe;
+      font-size:14px;
+    }
+    .add-to-collection-dialog select,
+    .add-to-collection-dialog input{
+      width:100%;
+      margin-top:6px;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid rgba(148,163,184,.25);
+      background:rgba(2,6,23,.85);
+      color:var(--fg);
+      font:inherit;
+    }
+    .add-to-collection-dialog input[hidden],
+    .add-to-collection-dialog label[hidden]{
+      display:none;
+    }
+    .add-to-collection-error{
+      min-height:20px;
+      margin:0 0 12px;
+      color:#fca5a5;
+      font-size:13px;
+    }
+    .add-to-collection-actions{
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+    }
 
     .fs-active .toolbar{ display:none; }
     .fs-active #gridWrap{ height:100vh; padding:14px; display:block; }
     .fs-active .collection-conflict,
     .fs-active .save-as-new-dialog,
-    .fs-active .unsaved-changes-dialog{ display:none !important; }
+    .fs-active .unsaved-changes-dialog,
+    .fs-active .add-to-collection-dialog{ display:none !important; }
 
     .fs-active .thumb{ background:#000 !important; border:none !important; box-shadow:none !important; }
     .fs-active .thumb.selected{ box-shadow:none !important; }
@@ -259,6 +314,7 @@
       <div class="order-menu-panel" id="orderMenuPanel" role="menu" aria-label="Collection actions">
         <button id="saveBtn" role="menuitem" title="Save the selected collection file in the chosen folder (or download if permissions are unavailable)" disabled>Save</button>
         <button id="saveAsNewBtn" role="menuitem" title="Save the current collection to a new file" disabled>Save as New</button>
+        <button id="addToCollectionBtn" role="menuitem" title="Add the current selected clips to another collection" disabled>Add Selected to Collection...</button>
       </div>
     </div>
     <button id="toggleTitlesBtn" title="Hide or show clip titles">Hide Titles</button>
@@ -268,7 +324,7 @@
     </select>
     <div class="spacer"></div>
     <span class="count" id="count">0 clips</span>
-    <span class="hint">drag to reorder • click to select • Ctrl/Cmd-click to multi-select • double-click or Z to zoom • press Delete to remove selected clips • press F for fullscreen</span>
+    <span class="hint">drag to reorder • click to select • Ctrl/Cmd-click to multi-select • right-click for direct add-to-collection or use Collection • double-click or Z to zoom • press Delete to remove selected clips • press F for fullscreen</span>
   </header>
 
   <section class="collection-conflict" id="collectionConflict" hidden aria-live="polite">
@@ -304,11 +360,32 @@
     </div>
   </dialog>
 
+  <dialog class="add-to-collection-dialog" id="addToCollectionDialog">
+    <h2>Add Selected to Collection</h2>
+    <p>Choose another collection in this folder, or create a new one from the current selected clips.</p>
+    <label for="addToCollectionSelect">
+      Destination
+      <select id="addToCollectionSelect"></select>
+    </label>
+    <label for="addToCollectionNameInput" id="addToCollectionNameLabel" hidden>
+      New collection name
+      <input id="addToCollectionNameInput" type="text" autocomplete="off" spellcheck="false" />
+    </label>
+    <div class="add-to-collection-error" id="addToCollectionError"></div>
+    <div class="add-to-collection-actions">
+      <button id="cancelAddToCollectionBtn" type="button">Cancel</button>
+      <button id="confirmAddToCollectionBtn" type="button" class="btn-primary">Add</button>
+    </div>
+  </dialog>
+
   <div id="gridWrap">
     <div id="grid" aria-live="polite"></div>
   </div>
 
   <div class="footerbar" id="status" hidden></div>
+  <div id="clipContextMenu" hidden>
+    <div id="clipContextMenuPanel"></div>
+  </div>
   <div id="zoomLayerRoot"></div>
   <script type="module">
     import { initApp } from './app.js';
