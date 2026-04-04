@@ -1,8 +1,7 @@
-import { runSaveOrder } from '../business-logic/save-order.js';
+import { persistCollectionContent } from './save-order.js';
 import { ClipCollectionContent } from '../domain/clip-collection-content.js';
-import { validateCollectionName } from '../business-logic/collection-name.js';
-
-function defaultNoop() {}
+import { collectionRefsEqual, normalizeCollectionRef } from '../domain/collection-ref.js';
+import { validateCollectionName } from './collection-name.js';
 
 export class CollectionManager {
   #saveTextToDirectory;
@@ -16,19 +15,9 @@ export class CollectionManager {
     this.#downloadText = downloadText;
   }
 
-  addDestinationChoices(inventory, sourceSelectionValue = inventory?.activeSelectionValue?.()) {
-    if (!inventory) return [];
-    return inventory.eligibleDestinationCollections(sourceSelectionValue).map((collectionContent) => ({
-      label: collectionContent.collectionName,
-      selectionValue: inventory.selectionValueFor(collectionContent),
-      isDefault: collectionContent.isDefault,
-      isNew: false,
-    }));
-  }
-
   async addSelectedClipsToCollection({
     selectedClipIds = [],
-    sourceSelectionValue = '',
+    sourceCollectionRef = null,
     destination = {},
     currentCollection,
     inventory,
@@ -46,7 +35,7 @@ export class CollectionManager {
     const destinationResolution = this.#resolveDestination({
       destination,
       inventory,
-      sourceSelectionValue,
+      sourceCollectionRef,
     });
     if (!destinationResolution.ok) return destinationResolution;
 
@@ -64,15 +53,11 @@ export class CollectionManager {
 
     const persistableContent = merged.content.withFilename(destinationResolution.filename);
     try {
-      const saveMode = await runSaveOrder({
-        names: persistableContent.orderedClipNames,
+      const { mode: saveMode } = await persistCollectionContent({
+        content: persistableContent,
         currentDirHandle,
         saveTextToDirectory: this.#saveTextToDirectory,
         downloadText: this.#downloadText,
-        showStatus: defaultNoop,
-        filename: persistableContent.filename,
-        buildSavedStatus: defaultNoop,
-        buildDownloadedStatus: defaultNoop,
       });
       inventory.upsertCollectionContent(persistableContent, { makeActive: false });
       return {
@@ -94,13 +79,13 @@ export class CollectionManager {
     }
   }
 
-  #resolveDestination({ destination, inventory, sourceSelectionValue }) {
+  #resolveDestination({ destination, inventory, sourceCollectionRef }) {
     if (destination?.kind === 'existing') {
-      const selectionValue = String(destination.selectionValue || '').trim();
-      if (!selectionValue || selectionValue === sourceSelectionValue) {
+      const destinationCollectionRef = normalizeCollectionRef(destination.collectionRef);
+      if (!destinationCollectionRef || collectionRefsEqual(destinationCollectionRef, sourceCollectionRef)) {
         return { ok: false, code: 'invalid-destination' };
       }
-      const collectionContent = inventory.getCollectionBySelectionValue(selectionValue);
+      const collectionContent = inventory.getCollectionByRef(destinationCollectionRef);
       if (!collectionContent) return { ok: false, code: 'invalid-destination' };
       return {
         ok: true,
@@ -114,7 +99,7 @@ export class CollectionManager {
     if (destination?.kind === 'new') {
       const validation = validateCollectionName(destination.name);
       if (!validation.ok) return { ok: false, code: validation.code };
-      if (validation.filename === sourceSelectionValue) {
+      if (sourceCollectionRef?.kind === 'saved' && validation.filename === sourceCollectionRef.filename) {
         return { ok: false, code: 'invalid-destination' };
       }
       if (inventory.getCollectionByFilename(validation.filename)) {

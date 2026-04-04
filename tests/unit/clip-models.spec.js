@@ -2,10 +2,8 @@ import { describe, expect, test } from 'vitest';
 import { Clip } from '../../src/domain/clip.js';
 import { ClipCollection } from '../../src/domain/clip-collection.js';
 import { ClipCollectionContent } from '../../src/domain/clip-collection-content.js';
-import {
-  ClipCollectionInventory,
-  DEFAULT_COLLECTION_SELECTION_VALUE,
-} from '../../src/domain/clip-collection-inventory.js';
+import { ClipCollectionInventory } from '../../src/domain/clip-collection-inventory.js';
+import { createDefaultCollectionRef, createSavedCollectionRef } from '../../src/domain/collection-ref.js';
 import { CollectionDescriptionValidator } from '../../src/domain/collection-description-validator.js';
 
 describe('clip and collection models', () => {
@@ -124,7 +122,7 @@ describe('clip and collection models', () => {
     expect(inventory.defaultCollection().filename).toBeNull();
     expect(inventory.defaultCollection().orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm']);
     expect(inventory.activeCollection().isDefault).toBe(true);
-    expect(inventory.activeSelectionValue()).toBe(DEFAULT_COLLECTION_SELECTION_VALUE);
+    expect(inventory.activeCollectionRef()).toEqual(createDefaultCollectionRef());
     expect(inventory.selectableCollections().map((collectionContent) => collectionContent.collectionName)).toEqual([
       'clips-default',
       'beta',
@@ -159,6 +157,8 @@ describe('clip and collection models', () => {
     ]);
     expect(inventory.defaultCollectionFilename()).toBe('clips-default.txt');
     expect(inventory.getCollectionByFilename('clips-default.txt')?.orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
+    expect(inventory.getCollectionByRef(createDefaultCollectionRef())?.orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
+    expect(inventory.getCollectionByRef(createSavedCollectionRef('subset.txt'))?.orderedClipNames).toEqual(['alpha.mp4']);
   });
 
   test('treats default-collection.txt as a regular explicit collection', () => {

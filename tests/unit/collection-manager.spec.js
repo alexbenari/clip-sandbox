@@ -1,9 +1,10 @@
 import { describe, expect, test, vi } from 'vitest';
-import { CollectionManager } from '../../src/app/collection-manager.js';
+import { CollectionManager } from '../../src/business-logic/collection-manager.js';
 import { Clip } from '../../src/domain/clip.js';
 import { ClipCollection } from '../../src/domain/clip-collection.js';
 import { ClipCollectionContent } from '../../src/domain/clip-collection-content.js';
-import { ClipCollectionInventory, DEFAULT_COLLECTION_SELECTION_VALUE } from '../../src/domain/clip-collection-inventory.js';
+import { ClipCollectionInventory } from '../../src/domain/clip-collection-inventory.js';
+import { createDefaultCollectionRef, createSavedCollectionRef } from '../../src/domain/collection-ref.js';
 
 function makeInventory() {
   return new ClipCollectionInventory({
@@ -47,8 +48,8 @@ describe('CollectionManager', () => {
 
     const result = await manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_3', 'clip_1'],
-      sourceSelectionValue: DEFAULT_COLLECTION_SELECTION_VALUE,
-      destination: { kind: 'existing', selectionValue: 'subset.txt' },
+      sourceCollectionRef: createDefaultCollectionRef(),
+      destination: { kind: 'existing', collectionRef: createSavedCollectionRef('subset.txt') },
       currentCollection,
       inventory,
       currentDirHandle: {
@@ -79,7 +80,7 @@ describe('CollectionManager', () => {
 
     const result = await manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_2', 'clip_3'],
-      sourceSelectionValue: DEFAULT_COLLECTION_SELECTION_VALUE,
+      sourceCollectionRef: createDefaultCollectionRef(),
       destination: { kind: 'new', name: 'highlights' },
       currentCollection,
       inventory,
@@ -112,8 +113,8 @@ describe('CollectionManager', () => {
 
     const result = await manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_2', 'clip_3'],
-      sourceSelectionValue: 'subset.txt',
-      destination: { kind: 'existing', selectionValue: DEFAULT_COLLECTION_SELECTION_VALUE },
+      sourceCollectionRef: createSavedCollectionRef('subset.txt'),
+      destination: { kind: 'existing', collectionRef: createDefaultCollectionRef() },
       currentCollection: makeCurrentCollection(),
       inventory,
       currentDirHandle: {
@@ -142,8 +143,8 @@ describe('CollectionManager', () => {
 
     const result = await manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_1'],
-      sourceSelectionValue: DEFAULT_COLLECTION_SELECTION_VALUE,
-      destination: { kind: 'existing', selectionValue: 'subset.txt' },
+      sourceCollectionRef: createDefaultCollectionRef(),
+      destination: { kind: 'existing', collectionRef: createSavedCollectionRef('subset.txt') },
       currentCollection: makeCurrentCollection(),
       inventory: makeInventory(),
       currentDirHandle: {
@@ -172,7 +173,7 @@ describe('CollectionManager', () => {
 
     await expect(manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_1'],
-      sourceSelectionValue: DEFAULT_COLLECTION_SELECTION_VALUE,
+      sourceCollectionRef: createDefaultCollectionRef(),
       destination: { kind: 'new', name: 'bad:name' },
       currentCollection: makeCurrentCollection(),
       inventory,
@@ -181,7 +182,7 @@ describe('CollectionManager', () => {
 
     await expect(manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_1'],
-      sourceSelectionValue: DEFAULT_COLLECTION_SELECTION_VALUE,
+      sourceCollectionRef: createDefaultCollectionRef(),
       destination: { kind: 'new', name: 'subset' },
       currentCollection: makeCurrentCollection(),
       inventory,

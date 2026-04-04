@@ -29,7 +29,7 @@ This plan refactors the architecture so the app has explicit clip and collection
   Evidence: `src/ui/dom-factory.js` creates object URLs, stores clip identity in `card.dataset`, and returns DOM cards as the main clip representation used by interaction flows.
 
 - Discovery: current collection order still leaks through the DOM.
-  Evidence: `src/app/bootstrap.js` has `currentGridNames()` and `syncActiveCollectionFromGrid()` that rebuild collection state from `grid.children` and `dataset.name`.
+  Evidence: `src/app/app-controller.js` has `currentGridNames()` and `syncActiveCollectionFromGrid()` that rebuild collection state from `grid.children` and `dataset.name`.
 
 - Discovery: selection is currently DOM-backed rather than model-backed.
   Evidence: `src/state/app-state.js` stores `selectedThumb`, and `src/ui/drag-drop-controller.js` toggles the `.selected` class on DOM elements directly.
@@ -78,7 +78,7 @@ Implementation outcomes:
 - `src/domain/clip-collection.js` now owns ordered clip ids, clip lookup, replacement of full order, removal, and ordered-name serialization.
 - `src/state/app-state.js` now tracks `selectedClipId`, `folderClips`, and `currentCollection` instead of DOM-backed selection and DOM-mirrored ordering fields.
 - `src/ui/clip-collection-grid-controller.js` now owns card rendering, selected clip state, drag/drop reorder emission, and object URL cleanup for rendered cards.
-- `src/app/bootstrap.js` now orchestrates models and controllers instead of scraping grid DOM order or using selected DOM nodes as the primary source of truth.
+- `src/app/app-controller.js` now orchestrates models and controllers instead of scraping grid DOM order or using selected DOM nodes as the primary source of truth.
 - `src/business-logic/fullscreen-session.js` and the zoom-open path were adapted so app-level requests are clip-centric while the reusable zoom overlay remains media-source-oriented.
 - `docs/developer-guide.md` now documents the new clip / collection / grid architecture as the supported design.
 
@@ -107,7 +107,7 @@ Key current files:
 - `src/business-logic/load-clips.js`: orchestrates adding clips to the grid one file at a time.
 - `src/business-logic/save-order.js`: saves ordered clip names to disk or download.
 - `src/domain/order-rules.js`: collection-file analysis rules.
-- `src/app/bootstrap.js`: composition root that currently glues clip loading, collection state, card rendering, zoom, fullscreen, save/load, and DOM synchronization together.
+- `src/app/app-controller.js`: composition root that currently glues clip loading, collection state, card rendering, zoom, fullscreen, save/load, and DOM synchronization together.
 - `src/ui/zoom-overlay-controller.js`: already a dedicated component for zoom overlay behavior and should remain a separate component after the refactor.
 - `tests/e2e/scenarios.spec.js`: the highest-confidence regression layer for the refactor because it validates observable behavior instead of internal module boundaries.
 
@@ -115,8 +115,8 @@ Important current data flow for a newcomer:
 
 1. Folder load reads browser `File` objects and stores them in `state.folderFiles`.
 2. The app stores collection order separately as `state.activeCollectionNames`.
-3. `bootstrap.js` rebuilds the grid by matching names back to `File` objects and calling `createThumbCard(...)` from `src/ui/dom-factory.js`.
-4. Card selection and drag/drop reorder currently act on DOM elements; collection state is synchronized back from the DOM using `currentGridNames()` and related helpers in `bootstrap.js`.
+3. `app-controller.js` rebuilds the grid by matching names back to `File` objects and calling `createThumbCard(...)` from `src/ui/dom-factory.js`.
+4. Card selection and drag/drop reorder currently act on DOM elements; collection state is synchronized back from the DOM using `currentGridNames()` and related helpers in `app-controller.js`.
 5. Zoom opens from a selected or double-clicked card by reading `dataset.objectUrl` from that DOM node.
 
 Definitions used in this plan:
@@ -220,7 +220,7 @@ Create a dedicated grid controller that owns card rendering, selection UI, drag/
 - File: `src/ui/layout-controller.js`
   Edit: keep layout math separate if that remains the simplest first-pass design, but adapt its API so the new grid controller can consume it cleanly.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: stop creating clip cards directly and stop wiring per-card interactions directly. Instead, create `ClipCollectionGrid`, pass the current collection in, and respond to emitted events.
 
 - File: `tests/integration/ui/*.spec.js`
@@ -246,10 +246,10 @@ Rewire higher-level app behaviors so they consume clip and collection identity i
 
 ### Changes
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: change zoom-open flow to resolve the requested clip from collection/grid identity rather than reading `dataset.objectUrl` from a selected thumb element.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: change delete-selected flow to operate on selected clip id and collection removal rather than on a selected DOM element as the primary source of truth.
 
 - File: `src/business-logic/save-order.js`
@@ -287,7 +287,7 @@ Finalize the refactor by removing obsolete DOM-as-model paths and updating devel
 - File: `src/state/app-state.js`
   Edit: remove obsolete fields such as `selectedThumb` and any state that only existed to mirror DOM identity or DOM-derived collection order.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: remove helpers such as `currentGridNames()` and `syncActiveCollectionFromGrid()` once the collection model is authoritative.
 
 - File: `docs/developer-guide.md`
@@ -310,3 +310,4 @@ Finalize the refactor by removing obsolete DOM-as-model paths and updating devel
 ### Rollback/Containment
 
 If cleanup work reveals hidden dependencies on removed helpers or state fields, restore only the smallest compatibility shim behind the new boundaries. Do not leave the old DOM-as-model pathways as first-class architecture.
+

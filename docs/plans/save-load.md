@@ -28,7 +28,7 @@ Users need Save/Load to do more than restore a full-folder ordering. The app sho
   Evidence: `index.html` currently uses `<input type="file" id="orderFileInput" ...>` for load; the approved product direction requires capability-gated File System Access support for collection-first behavior.
 
 - Discovery: keeping `activeCollectionNames` as explicit state while syncing it from drag/drop and delete actions preserved the user's UI-driven collection without scraping the DOM at save time.
-  Evidence: drag reorder updates state in `src/ui/drag-drop-controller.js`, delete sync happens in `src/app/bootstrap.js`, and save reads `state.activeCollectionNames`.
+  Evidence: drag reorder updates state in `src/ui/drag-drop-controller.js`, delete sync happens in `src/app/app-controller.js`, and save reads `state.activeCollectionNames`.
 
 ## Decision Log
 
@@ -80,7 +80,7 @@ Current implementation shape:
 - `src/domain/order-rules.js`: collection-file analysis logic for exact match, subset match, missing entries, and invalid files.
 - `src/state/app-state.js`: explicit state for `folderFiles`, `folderFileNames`, `activeCollectionNames`, and `pendingCollectionConflict`.
 - `src/ui/order-file-controller.js`: reads a collection file, blocks collection-first loading with fallback guidance, and passes parsed lines into collection analysis.
-- `src/app/bootstrap.js`: wires folder load, collection load, inline conflict-panel actions, save behavior, and state-synced reorder/delete interactions.
+- `src/app/app-controller.js`: wires folder load, collection load, inline conflict-panel actions, save behavior, and state-synced reorder/delete interactions.
 - `src/business-logic/save-order.js`: serializes the active collection to `default-collection.txt`.
 - `tests/unit/logic.spec.js`: unit coverage for collection analysis rules.
 - `tests/e2e/scenarios.spec.js`: end-to-end coverage for exact/subset collection load, missing-entry decisions, and collection save behavior.
@@ -267,7 +267,7 @@ Replace strict full-grid order validation with collection-aware analysis based o
 
 - `src/domain/order-rules.js` or a renamed collection-focused domain module
 - `src/state/app-state.js`
-- `src/app/bootstrap.js`
+- `src/app/app-controller.js`
 - `tests/unit/logic.spec.js`
 - `tests/unit/state/*.spec.js` if new state helpers are added
 
@@ -308,7 +308,7 @@ Replace alert-only validation with collection-aware UI, including the inline mis
 - `src/ui/order-file-controller.js` or renamed collection controller
 - `src/ui/view-model.js`
 - `src/ui/events.js`
-- `src/app/bootstrap.js`
+- `src/app/app-controller.js`
 - `tests/integration/ui/*.spec.js`
 - `tests/e2e/scenarios.spec.js`
 
@@ -346,7 +346,7 @@ Make Save serialize the current working collection exactly and switch the defaul
 ### Files
 
 - `src/business-logic/save-order.js` or renamed save-collection module
-- `src/app/bootstrap.js`
+- `src/app/app-controller.js`
 - `tests/unit/business-logic.spec.js`
 - `tests/e2e/scenarios.spec.js`
 - `index.html`
@@ -422,6 +422,7 @@ During execution, keep this file current:
 - record new facts in `Surprises & Discoveries` with evidence,
 - log material product or implementation choices in `Decision Log`,
 - complete `Outcomes & Retrospective` with actual commands and outcomes.
+
 
 
 

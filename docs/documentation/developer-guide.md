@@ -8,7 +8,7 @@ This guide explains the current browser-only architecture and the collection-man
 
 - Runtime: browser-native JavaScript (ES modules), no framework
 - UI shell: static [`index.html`](/C:/dev/clip-sandbox/index.html) with inline CSS
-- Entry point: [`app.js`](/C:/dev/clip-sandbox/app.js) -> [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js)
+- Entry point: [`app.js`](/C:/dev/clip-sandbox/app.js) -> [`src/app/app-controller.js`](/C:/dev/clip-sandbox/src/app/app-controller.js)
 - Unit/integration tests: Vitest + jsdom
 - End-to-end tests: Playwright (Chromium)
 - Windows deployment: static files served locally by bundled `miniserve`
@@ -94,7 +94,7 @@ Important rule:
 
 ## Folder and Collection Flow
 
-The main collection-management flow is orchestrated in [`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js).
+The main collection-management flow is orchestrated in [`src/app/app-controller.js`](/C:/dev/clip-sandbox/src/app/app-controller.js).
 
 ### Folder Selection
 
@@ -244,7 +244,7 @@ Important rule:
 
 ## Composition Root
 
-[`src/app/bootstrap.js`](/C:/dev/clip-sandbox/src/app/bootstrap.js)
+[`src/app/app-controller.js`](/C:/dev/clip-sandbox/src/app/app-controller.js)
 
 Owns orchestration of:
 - DOM element lookup
@@ -306,3 +306,4 @@ Important rule:
 - Keep folder-scoped selection state inside `ClipCollectionInventory`.
 - Treat fallback browser filesystem limitations as first-class constraints; do not assume direct write access exists.
 - When adding new collection-editing actions, update dirty-state handling by refreshing inventory state after mutating the active `ClipCollection`.
+

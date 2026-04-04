@@ -26,13 +26,13 @@ This plan implements the approved spec in [selected-clips-to-collection-spec.md]
   Evidence: [clip-collection-grid-controller.js](C:/dev/clip-sandbox/src/ui/clip-collection-grid-controller.js) exposes selected-set behavior added for multi-selection and bulk remove, and [multi-selection-exec-plan.md](C:/dev/clip-sandbox/docs/plans/multi-selection-exec-plan.md) documents that boundary.
 
 - Discovery: non-active collections currently exist as serialized folder inventory entries, not as fully materialized runtime `ClipCollection` objects.
-  Evidence: [clip-collection-inventory.js](C:/dev/clip-sandbox/src/domain/clip-collection-inventory.js) stores `ClipCollectionContent` instances and active-selection state, while [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js) materializes only the active collection for rendering.
+  Evidence: [clip-collection-inventory.js](C:/dev/clip-sandbox/src/domain/clip-collection-inventory.js) stores `ClipCollectionContent` instances and active-selection state, while [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js) materializes only the active collection for rendering.
 
 - Discovery: immediate-save semantics can reuse the existing save path rather than introducing a second file-writing flow.
   Evidence: [save-order.js](C:/dev/clip-sandbox/src/business-logic/save-order.js) already handles both direct folder write and download fallback for collection text persistence.
 
 - Discovery: `Save as New` already defines the filename validation rules that the new destination-picker flow should reuse.
-  Evidence: [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js) implements `validateSaveAsNewName(...)` and normalizes names through `ClipCollectionContent.filenameFromCollectionName(...)`.
+  Evidence: [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js) implements `validateSaveAsNewName(...)` and normalizes names through `ClipCollectionContent.filenameFromCollectionName(...)`.
 
 - Discovery: the current collection action menu is already keyboard navigable, so the new feature can preserve keyboard reachability by adding a fallback entry there even though right-click is the primary surface.
   Evidence: [order-menu-controller.spec.js](C:/dev/clip-sandbox/tests/integration/ui/order-menu-controller.spec.js) proves open, focus movement, and escape-close behavior for the existing toolbar menu.
@@ -50,7 +50,7 @@ This plan implements the approved spec in [selected-clips-to-collection-spec.md]
   Date/Author: 2026-04-02 / Codex + user
 
 - Decision: introduce a dedicated `CollectionManager` application-service class for collection operations such as add-to-collection.
-  Rationale: collection operations should not be spread across `bootstrap.js`, and they should not be pushed down into inventory itself. `CollectionManager` is the right place to coordinate inventory lookups, domain merge behavior, persistence, and structured outcomes.
+  Rationale: collection operations should not be spread across `app-controller.js`, and they should not be pushed down into inventory itself. `CollectionManager` is the right place to coordinate inventory lookups, domain merge behavior, persistence, and structured outcomes.
   Date/Author: 2026-04-02 / Codex + user
 
 - Decision: put source-side ordered clip-name resolution on `ClipCollection` and destination-side append-without-duplicates behavior on `ClipCollectionContent`.
@@ -111,7 +111,7 @@ Follow-up candidates:
 
 ## Context and orientation
 
-This repository is a browser-only clip review and collection management app with no frontend framework. The shell is [index.html](C:/dev/clip-sandbox/index.html), runtime wiring happens in [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js), and collection files are plain-text `.txt` files containing one clip filename per line.
+This repository is a browser-only clip review and collection management app with no frontend framework. The shell is [index.html](C:/dev/clip-sandbox/index.html), runtime wiring happens in [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js), and collection files are plain-text `.txt` files containing one clip filename per line.
 
 Current collection model:
 
@@ -128,7 +128,7 @@ Current UI and orchestration shape:
   Renders grid cards, owns selection state, exposes ordered selected ids, and drives drag/drop plus open/remove callbacks.
 - [order-menu-controller.js](C:/dev/clip-sandbox/src/ui/order-menu-controller.js)
   Owns the existing top toolbar `Collection` menu interaction, but it is specialized for a button-triggered action list.
-- [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
   Wires the shell together, owns save and collection-switch flows, and currently contains the `Save as New` name validation used by the existing menu.
 
 Persistence shape:
@@ -255,7 +255,7 @@ Introduce the reusable menu component and the UI surfaces needed to launch the a
   - the add-to-collection destination picker,
   - optional `New collection...` name input and inline validation display.
 
-- File: [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- File: [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
   Edit: wire both entry points:
   - right-click `Add Selected to Collection`,
   - top `Collection` menu fallback `Add Selected to Collection...`,
@@ -336,7 +336,7 @@ Add the lower-level and orchestration behavior for add-to-collection operations 
   - upserts the saved destination into inventory,
   - returns a structured result for UI/status reporting.
 
-- File: [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- File: [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
   Edit: move shared collection-name validation out of inline `Save as New` flow if needed so both `Save as New` and `CollectionManager` can use one source of truth.
 
 - File: [clip-collection-inventory.js](C:/dev/clip-sandbox/src/domain/clip-collection-inventory.js)
@@ -381,14 +381,14 @@ Connect the UI entry points to `CollectionManager`, persist destination updates 
 
 ### Changes
 
-- File: [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- File: [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
   Edit: instantiate `CollectionManager` with:
   - inventory access,
   - current runtime collection access,
   - save dependencies,
   - status/error reporting dependencies.
 
-- File: [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- File: [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
   Edit: on confirm from the destination-picker flow:
   - read ordered selected clip ids from the grid controller,
   - call `CollectionManager`,
@@ -396,7 +396,7 @@ Connect the UI entry points to `CollectionManager`, persist destination updates 
   - leave the source selection unchanged,
   - update status/error text from the returned result.
 
-- File: [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- File: [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
   Edit: ensure destination saves update inventory without:
   - switching active collection,
   - clearing current source dirty state,
@@ -484,3 +484,4 @@ Make the feature discoverable and confirm it does not regress adjacent collectio
 ### Rollback/Containment
 
 If documentation lags late in the milestone, runtime behavior and regression coverage take priority, but the user guide and in-app discoverability copy must ship with the feature because the right-click entry point is not self-evident on its own.
+

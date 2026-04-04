@@ -186,7 +186,7 @@ Best for:
 ```text
 /src
   /app
-    bootstrap.js            # composition root: wire dependencies and start app
+    app-controller.js            # composition root: wire dependencies and start app
     router.js               # optional local view/state routing
   /domain
     models.js               # core entities/value objects
@@ -388,3 +388,4 @@ That combination gives the best long-term maintainability under SOLID/DRY/KISS/A
 28. Vitest, Features/isolation: https://vitest.dev/guide/features
 29. Vitest, Improving performance and isolation: https://vitest.dev/guide/improving-performance.html
 30. Google Testing Blog, Don't Overuse Mocks: https://testing.googleblog.com/2013/05/testing-on-toilet-dont-overuse-mocks.html
+

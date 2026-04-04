@@ -143,7 +143,7 @@ Expected implementation direction:
    - replace single selected clip state with selected-set state,
    - update card click handling and selection helpers,
    - expose selected-set accessors needed by the app layer.
-2. `src/app/bootstrap.js`
+2. `src/app/app-controller.js`
    - update keyboard remove logic to consume the selected set,
    - keep single-item zoom behavior by checking whether the selection resolves to exactly one clip,
    - keep double-click behavior collapsed to one item before zoom.
@@ -208,3 +208,4 @@ These assumptions are intentionally locked unless changed during sign-off:
 3. there is no notion of a primary item inside a multi-selection,
 4. selection is a transient view concern and is not saved with the collection,
 5. future collection actions should operate on the full selected set in current grid order.
+

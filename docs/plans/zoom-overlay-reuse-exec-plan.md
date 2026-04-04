@@ -26,7 +26,7 @@ This plan implements the approved spec in [docs/specs/zoom-overlay-reuse-spec.md
   Evidence: the zoom layout rules for `#zoomLayerRoot`, `.zoom-overlay`, `.zoom-frame`, and `.zoom-video` were declared in `index.html`, while DOM creation and video lifecycle were already in `src/ui/zoom-overlay-controller.js`.
 
 - Discovery: the app composition root already treats zoom as a controller-level concern rather than an app-state concern.
-  Evidence: `src/app/bootstrap.js` creates the zoom controller from `#zoomLayerRoot`, calls `open({ src, name })`, and uses only `close()` and `isOpen()` for coordination.
+  Evidence: `src/app/app-controller.js` creates the zoom controller from `#zoomLayerRoot`, calls `open({ src, name })`, and uses only `close()` and `isOpen()` for coordination.
 
 - Discovery: the existing test harness can serve the sandbox demo page without new infrastructure.
   Evidence: `playwright.config.mjs` already starts `npx http-server . -p 4173 -c-1`, so `/sandbox/zoom-demo.html` can be exercised under the same static server.
@@ -81,7 +81,7 @@ Relevant files for this work:
 
 - `index.html`: the main app shell. It now includes only the zoom mount root plus the rest of the app shell markup and non-zoom CSS.
 - `src/ui/zoom-overlay-controller.js`: the zoom component controller. It creates the overlay DOM, manages the zoomed video element, and handles outside-click close.
-- `src/app/bootstrap.js`: the app composition root. It creates the zoom controller, opens zoom for a selected card, closes zoom on `Escape`, and coordinates zoom with fullscreen.
+- `src/app/app-controller.js`: the app composition root. It creates the zoom controller, opens zoom for a selected card, closes zoom on `Escape`, and coordinates zoom with fullscreen.
 - `tests/integration/ui/zoom-overlay-controller.spec.js`: isolated DOM-level tests for the controller.
 - `tests/e2e/scenarios.spec.js`: browser tests for shipped behavior. It already covers the main app’s zoom workflows.
 - `docs/developer-guide.md`: current architecture guide. It now documents the built-in-style contract and the sandbox host integration recipe.
@@ -91,15 +91,15 @@ Relevant files for this work:
 Current zoom flow for a newcomer:
 
 1. `index.html` renders `<div id="zoomLayerRoot"></div>` near the end of `<body>` and leaves zoom styling to the component.
-2. `src/app/bootstrap.js` locates `#zoomLayerRoot` and creates `createZoomOverlayController({ mountEl: zoomLayerRoot, document })`.
-3. When the user double-clicks a tile or presses `Z`, `bootstrap.js` passes the selected clip’s object URL into `zoomOverlay.open({ src, name })`.
+2. `src/app/app-controller.js` locates `#zoomLayerRoot` and creates `createZoomOverlayController({ mountEl: zoomLayerRoot, document })`.
+3. When the user double-clicks a tile or presses `Z`, `app-controller.js` passes the selected clip’s object URL into `zoomOverlay.open({ src, name })`.
 4. The controller installs its default stylesheet once per document, creates `#zoomOverlay`, `#zoomFrame`, and `#zoomVideo`, starts playback with audio, and removes the DOM on close.
 
 Important constraints for the implementation:
 
 - The refactor must not move zoom state into `src/state/app-state.js`; the controller should keep transient overlay internals local.
 - The main app must preserve current zoom behavior, including fullscreen coordination and playback-from-zero behavior.
-- The demo host must not import `app.js` or `src/app/bootstrap.js`; if it does, it is not a valid reuse proof.
+- The demo host must not import `app.js` or `src/app/app-controller.js`; if it does, it is not a valid reuse proof.
 - The demo host should stay minimal so the integration contract is obvious at a glance.
 
 ## Milestone 1 - Prototype component-owned style installation
@@ -174,7 +174,7 @@ Cleanly reconnect the main app to the component-owned styles and ensure the shel
 
 ### Changes
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: keep the current orchestration helpers (`openZoomForCard`, `closeZoom`, fullscreen coordination) aligned with the existing controller API after the style refactor. Avoid moving any style or DOM-structure ownership back into bootstrap.
 
 - File: `index.html`
@@ -226,6 +226,7 @@ Make the reusable boundary explicit in the repo documentation and close the loop
 ### Rollback/Containment
 
 If time pressure appears late in the work, documentation can be tightened in a follow-up only if the runtime behavior and the demo host are already correct and the developer guide still does not misstate the integration contract. The guide must not ship with stale ownership claims.
+
 
 
 

@@ -218,7 +218,7 @@ Recommended shape:
   - extend event binding if needed for zoom-specific interactions.
 - `src/ui/drag-drop-controller.js`
   - preserve existing click-to-select behavior and support selecting the double-clicked tile before zooming.
-- `src/app/bootstrap.js`
+- `src/app/app-controller.js`
   - wire high-level app events into the zoom component and coordinate fullscreen interaction.
   - bootstrap should orchestrate the feature, not own the zoom overlay DOM directly.
 
@@ -277,3 +277,4 @@ The feature is complete when all of the following are true:
 11. Zoom does not open in fullscreen/present mode in this first pass.
 12. If fullscreen is entered while zoom is open, zoom closes first.
 13. Automated tests cover both the main interactions and the start-from-beginning regression.
+

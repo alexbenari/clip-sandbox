@@ -1,6 +1,10 @@
 import { ClipCollectionContent } from './clip-collection-content.js';
-
-export const DEFAULT_COLLECTION_SELECTION_VALUE = '__default__';
+import {
+  collectionRefsEqual,
+  createDefaultCollectionRef,
+  createSavedCollectionRef,
+  normalizeCollectionRef,
+} from './collection-ref.js';
 
 export class ClipCollectionInventory {
   #folderName;
@@ -119,14 +123,18 @@ export class ClipCollectionInventory {
     return [this.#defaultCollection, ...explicitCollections];
   }
 
-  selectionValueFor(collectionContent) {
-    return collectionContent?.hasBackingFile ? collectionContent.filename : DEFAULT_COLLECTION_SELECTION_VALUE;
+  collectionRefFor(collectionContent) {
+    return collectionContent?.hasBackingFile
+      ? createSavedCollectionRef(collectionContent.filename)
+      : createDefaultCollectionRef();
   }
 
-  getCollectionBySelectionValue(value) {
-    return value === DEFAULT_COLLECTION_SELECTION_VALUE
+  getCollectionByRef(collectionRef) {
+    const normalizedRef = normalizeCollectionRef(collectionRef);
+    if (!normalizedRef) return null;
+    return normalizedRef.kind === 'default'
       ? this.#defaultCollection
-      : this.getCollectionByFilename(value);
+      : this.getCollectionByFilename(normalizedRef.filename);
   }
 
   defaultCollectionFilename() {
@@ -137,13 +145,17 @@ export class ClipCollectionInventory {
     return String(filename || '').trim() === this.defaultCollectionFilename();
   }
 
-  eligibleDestinationCollections(sourceSelectionValue = this.activeSelectionValue()) {
+  eligibleDestinationCollections(sourceCollectionRef = this.activeCollectionRef()) {
+    const normalizedSourceRef = normalizeCollectionRef(sourceCollectionRef);
     return this.selectableCollections()
-      .filter((collectionContent) => this.selectionValueFor(collectionContent) !== sourceSelectionValue);
+      .filter((collectionContent) => !collectionRefsEqual(
+        this.collectionRefFor(collectionContent),
+        normalizedSourceRef,
+      ));
   }
 
-  activeSelectionValue() {
-    return this.selectionValueFor(this.activeCollection());
+  activeCollectionRef() {
+    return this.collectionRefFor(this.activeCollection());
   }
 
   hasDirtyChanges() {

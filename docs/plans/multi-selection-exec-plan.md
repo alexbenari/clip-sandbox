@@ -25,8 +25,8 @@ This plan implements the approved spec in [docs/specs/multi-selection-spec.md](C
 - Discovery: double-click already has the right collapse-before-open shape for the new feature because it calls `selectOnlyCard(card)` before `onOpenClip`.
   Evidence: `onDoubleClick(card)` in `src/ui/clip-collection-grid-controller.js`.
 
-- Discovery: delete behavior is still orchestrated in `src/app/bootstrap.js`, and it currently removes exactly one clip by calling `state.currentCollection.remove(selectedClipId)`.
-  Evidence: `onKeyDown(e)` in `src/app/bootstrap.js`.
+- Discovery: delete behavior is still orchestrated in `src/app/app-controller.js`, and it currently removes exactly one clip by calling `state.currentCollection.remove(selectedClipId)`.
+  Evidence: `onKeyDown(e)` in `src/app/app-controller.js`.
 
 - Discovery: the visible usage hint and docs are still single-selection oriented.
   Evidence: `index.html` contains `drag to reorder • click to select • double-click or Z to zoom • press Delete to remove • press F for fullscreen`, and `docs/documentation/user-guide.md` describes delete in singular form.
@@ -41,7 +41,7 @@ This plan implements the approved spec in [docs/specs/multi-selection-spec.md](C
   Date/Author: 2026-04-02 / Codex
 
 - Decision: expose both `getSelectedClipIds()` and a convenience accessor that resolves to one clip id only when exactly one clip is selected.
-  Rationale: bulk actions need the full set, while zoom and similar single-item features should keep a simple exact-one query instead of duplicating selection logic in `bootstrap.js`.
+  Rationale: bulk actions need the full set, while zoom and similar single-item features should keep a simple exact-one query instead of duplicating selection logic in `app-controller.js`.
   Date/Author: 2026-04-02 / Codex
 
 - Decision: bulk delete must operate on selected clips in current grid order, then clear selection.
@@ -75,7 +75,7 @@ Implementation notes:
 
 - `src/ui/clip-collection-grid-controller.js` now owns an ordered selected-set API and delete-key interpretation.
 - `src/domain/clip-collection.js` now owns batch removal through `removeMany(...)`.
-- `src/app/bootstrap.js` now responds to grid removal requests by mutating the active runtime collection, refreshing dirty state, rerendering, and showing singular/plural status text.
+- `src/app/app-controller.js` now responds to grid removal requests by mutating the active runtime collection, refreshing dirty state, rerendering, and showing singular/plural status text.
 
 Validation evidence:
 
@@ -85,13 +85,13 @@ Validation evidence:
 
 ## Context and orientation
 
-This repository is a browser-only clip-review app with no frontend framework. The app shell is `index.html`, and runtime wiring happens in `src/app/bootstrap.js`.
+This repository is a browser-only clip-review app with no frontend framework. The app shell is `index.html`, and runtime wiring happens in `src/app/app-controller.js`.
 
 Key files for this feature:
 
 - `src/ui/clip-collection-grid-controller.js`
   Owns card rendering, click/double-click/drag wiring, selection visuals, and object URL lifecycle for the main grid.
-- `src/app/bootstrap.js`
+- `src/app/app-controller.js`
   Owns keyboard behavior, collection mutation, zoom opening, fullscreen coordination, and user-facing status messages.
 - `src/domain/clip-collection.js`
   Owns ordered clip membership and collection mutations such as `remove(...)` and `replaceOrder(...)`.
@@ -106,11 +106,11 @@ Key files for this feature:
 
 Current behavior flow:
 
-1. `bootstrap.js` creates `gridController` through `createClipCollectionGridController(...)`.
+1. `app-controller.js` creates `gridController` through `createClipCollectionGridController(...)`.
 2. The grid controller renders one card per clip and tracks one selected clip id.
 3. Plain click toggles the one selected clip on or off.
 4. Double-click selects one clip and opens zoom.
-5. `Delete` and `Backspace` in `bootstrap.js` remove the one selected clip from `state.currentCollection`, rerender the grid, and show a status message.
+5. `Delete` and `Backspace` in `app-controller.js` remove the one selected clip from `state.currentCollection`, rerender the grid, and show a status message.
 
 Terms used in this plan:
 
@@ -181,7 +181,7 @@ Move delete-key handling into the grid controller so the grid owns selection-dri
 
 ### Changes
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: replace calls to `gridController.getSelectedClipId()` in zoom paths with the new selected-set API and remove direct delete-key ownership from `onKeyDown(e)`.
 
 - File: `src/domain/clip-collection.js`
@@ -197,7 +197,7 @@ Move delete-key handling into the grid controller so the grid owns selection-dri
   - resolve selected clip ids in current grid order,
   - emit a new app-level callback such as `onRemoveSelected(orderedSelectedClipIds)`.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: handle the new grid callback by:
   - calling the new `ClipCollection.removeMany(...)` method on `state.currentCollection`,
   - refreshing dirty state once after the batch mutation,
@@ -205,16 +205,16 @@ Move delete-key handling into the grid controller so the grid owns selection-dri
   - updating the collection selector,
   - showing singular or plural status text based on the removed count.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: keep `Z` as an exact-one action only. When zero or multiple clips are selected, it must return without opening zoom.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: keep double-click semantics unchanged at the app level by relying on the controller’s collapse-before-open behavior.
 
 - File: `src/ui/clip-collection-grid-controller.js`
   Edit: ensure delete-key handling remains a no-op when no clips are selected.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: ensure zoom-open state still suppresses removal behavior by keeping grid-driven delete requests from mutating the collection while zoom is open.
 
 - File: `tests/e2e/scenarios.spec.js`
@@ -268,3 +268,4 @@ Make the shipped feature discoverable and verify it does not regress adjacent wo
 ### Rollback/Containment
 
 If schedule pressure appears here, runtime behavior and regression coverage take priority over developer-guide wording, but the in-app hint and user guide must ship with the feature because the interaction is not obvious from existing copy.
+

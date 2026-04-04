@@ -210,7 +210,7 @@ Recommended ownership after the refactor:
   - owns overlay DOM creation, video lifecycle, outside-click behavior, and default style installation.
 - `index.html`
   - provides only a mount point for the zoom overlay in the main app shell.
-- `src/app/bootstrap.js`
+- `src/app/app-controller.js`
   - continues to orchestrate when zoom opens or closes, but does not own zoom styling.
 - `sandbox/zoom-demo.html`
   - acts as an independent host example for the component.
@@ -263,3 +263,4 @@ This feature is complete when:
 4. the demo page imports only the zoom component layer and not the full app bootstrap,
 5. developer-facing documentation explains how to integrate the component into another app,
 6. tests covering the new component-style ownership pass.
+

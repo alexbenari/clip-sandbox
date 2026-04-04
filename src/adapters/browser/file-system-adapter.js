@@ -14,6 +14,14 @@ export async function pickDirectory(win = window) {
   return win.showDirectoryPicker({ mode: 'readwrite' });
 }
 
+export function folderNameFromFiles(fileList) {
+  const firstFile = Array.from(fileList || [])[0];
+  const relPath = firstFile?.webkitRelativePath || '';
+  if (!relPath) return '';
+  const parts = relPath.split(/[\\/]/).filter(Boolean);
+  return parts.length > 1 ? parts[0] : '';
+}
+
 async function readFileEntryWithRetry(entry, { maxAttempts = 3 } = {}) {
   let lastError = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {

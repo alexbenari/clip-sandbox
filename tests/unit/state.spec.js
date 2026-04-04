@@ -5,7 +5,7 @@ import {
   setCollectionInventory,
   setCurrentCollection,
   setCurrentDirHandle,
-} from '../../src/app/app-state.js';
+} from '../../src/app/app-session-state.js';
 
 describe('app state', () => {
   test('creates default state shape', () => {

@@ -6,7 +6,7 @@ export function createAddToCollectionDialogController({
   errorMessageEl,
   confirmBtn,
   cancelBtn,
-  newSelectionValue,
+  newChoiceValue,
   validateNewName = () => '',
   onConfirm = () => {},
   onCancel = () => {},
@@ -23,13 +23,14 @@ export function createAddToCollectionDialogController({
   const doc = dialog.ownerDocument || document;
   let hasSelection = false;
   let externalError = '';
+  let choiceByValue = new Map();
 
   function isOpen() {
     return !!dialog.open;
   }
 
   function isNewDestinationSelected() {
-    return destinationSelect.value === newSelectionValue;
+    return destinationSelect.value === newChoiceValue;
   }
 
   function clearExternalError() {
@@ -37,9 +38,10 @@ export function createAddToCollectionDialogController({
   }
 
   function currentDestination() {
+    const selectedChoice = choiceByValue.get(destinationSelect.value) || null;
     return isNewDestinationSelected()
       ? { kind: 'new', name: newCollectionNameInput.value || '' }
-      : { kind: 'existing', selectionValue: destinationSelect.value };
+      : { kind: 'existing', collectionRef: selectedChoice?.collectionRef || null };
   }
 
   function currentValidationError() {
@@ -62,20 +64,22 @@ export function createAddToCollectionDialogController({
   }
 
   function renderChoices(choices = [], { startWithNewCollection = false } = {}) {
+    choiceByValue = new Map();
     destinationSelect.innerHTML = '';
     for (const choice of Array.from(choices)) {
+      choiceByValue.set(choice.value, choice);
       const option = doc.createElement('option');
-      option.value = choice.selectionValue;
+      option.value = choice.value;
       option.textContent = choice.label;
       destinationSelect.appendChild(option);
     }
     const newOption = doc.createElement('option');
-    newOption.value = newSelectionValue;
+    newOption.value = newChoiceValue;
     newOption.textContent = 'New collection...';
     destinationSelect.appendChild(newOption);
     destinationSelect.value = startWithNewCollection
-      ? newSelectionValue
-      : choices[0]?.selectionValue || newSelectionValue;
+      ? newChoiceValue
+      : choices[0]?.value || newChoiceValue;
   }
 
   function open({

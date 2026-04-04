@@ -1,7 +1,8 @@
 import { describe, expect, test, vi } from 'vitest';
 import { runLoadClips } from '../../src/business-logic/load-clips.js';
 import { runLoadCollection, runLoadCollectionFromFile } from '../../src/business-logic/load-collection.js';
-import { runSaveOrder } from '../../src/business-logic/save-order.js';
+import { persistCollectionContent, runSaveOrder } from '../../src/business-logic/save-order.js';
+import { ClipCollectionContent } from '../../src/domain/clip-collection-content.js';
 
 describe('business logic modules', () => {
   test('runLoadClips filters, sorts, creates clips, and builds a collection', () => {
@@ -160,5 +161,29 @@ describe('business logic modules', () => {
     expect(mode).toBe('downloaded');
     expect(downloadText).toHaveBeenCalledWith('my-cut.txt', 'one.mp4\n');
     expect(showStatus).toHaveBeenCalledWith('Downloaded my-cut.txt');
+  });
+
+  test('persistCollectionContent serializes content and reuses save fallback behavior without status concerns', async () => {
+    const saveTextToDirectory = vi.fn(async () => {});
+    const downloadText = vi.fn();
+    const content = ClipCollectionContent.fromFilename({
+      filename: 'subset.txt',
+      orderedClipNames: ['one.mp4', 'two.webm'],
+    });
+
+    const result = await persistCollectionContent({
+      content,
+      currentDirHandle: { kind: 'directory', getFileHandle: vi.fn() },
+      saveTextToDirectory,
+      downloadText,
+    });
+
+    expect(result).toEqual({ mode: 'saved' });
+    expect(saveTextToDirectory).toHaveBeenCalledWith(
+      expect.anything(),
+      'subset.txt',
+      'one.mp4\ntwo.webm\n',
+    );
+    expect(downloadText).not.toHaveBeenCalled();
   });
 });

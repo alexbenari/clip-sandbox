@@ -4,12 +4,12 @@
 
 Users need to inspect a single clip at a larger size without leaving the main grid or entering fullscreen. The shipped behavior must feel like a focused UI component of the order/grid screen: double-click or `Z` opens one clip in a centered overlay, the clip restarts from the beginning with audio, the background grid remains visible and playing, and `Escape` or outside click closes the overlay.
 
-This plan implements zoom mode in a way that matches the approved spec in [zoom-mode-spec.md](/C:/dev/clip-sandbox/specs/zoom-mode-spec.md) while keeping the architecture clear: the zoom overlay is a dedicated UI component owned by its own controller, not ad hoc DOM logic embedded in `bootstrap.js`.
+This plan implements zoom mode in a way that matches the approved spec in [zoom-mode-spec.md](/C:/dev/clip-sandbox/specs/zoom-mode-spec.md) while keeping the architecture clear: the zoom overlay is a dedicated UI component owned by its own controller, not ad hoc DOM logic embedded in `app-controller.js`.
 
 ## Progress
 
 - [x] (2026-03-14 08:00Z) Approved feature spec recorded in `specs/zoom-mode-spec.md`.
-- [x] (2026-03-14 08:20Z) Execution-plan architecture direction fixed: `index.html` provides only a minimal zoom mount root, `src/ui/zoom-overlay-controller.js` owns overlay internals, and `src/app/bootstrap.js` only orchestrates the feature.
+- [x] (2026-03-14 08:20Z) Execution-plan architecture direction fixed: `index.html` provides only a minimal zoom mount root, `src/ui/zoom-overlay-controller.js` owns overlay internals, and `src/app/app-controller.js` only orchestrates the feature.
 - [x] (2026-03-14 09:10Z) Added zoom overlay mount root, component CSS, and `src/ui/zoom-overlay-controller.js`.
 - [x] (2026-03-14 09:35Z) Wired double-click, `Z`, `Escape`, and fullscreen coordination into the app bootstrap and clip-card interactions.
 - [x] (2026-03-14 09:55Z) Added unit/integration and Playwright regression coverage, including the start-from-beginning playback case.
@@ -17,8 +17,8 @@ This plan implements zoom mode in a way that matches the approved spec in [zoom-
 
 ## Surprises & Discoveries
 
-- Discovery: the current app already has centralized keyboard handling in `src/app/bootstrap.js` through `onKeyDown` and `onGlobalKeyDown`.
-  Evidence: `src/app/bootstrap.js` binds both through `bindGlobalEvents(...)` from `src/ui/events.js`.
+- Discovery: the current app already has centralized keyboard handling in `src/app/app-controller.js` through `onKeyDown` and `onGlobalKeyDown`.
+  Evidence: `src/app/app-controller.js` binds both through `bindGlobalEvents(...)` from `src/ui/events.js`.
 
 - Discovery: clip tiles are created in `src/ui/dom-factory.js` and already own click, drag, and metadata wiring, but they do not currently expose double-click behavior.
   Evidence: `createThumbCard(...)` attaches `click`, `dragstart`, `dragend`, `dragover`, `dragleave`, and `drop` listeners only.
@@ -33,12 +33,12 @@ This plan implements zoom mode in a way that matches the approved spec in [zoom-
   Evidence: fullscreen entry, exit, key handling, and slot randomization are all managed inside `createFullscreenSession(...)`.
 
 - Discovery: editable-input gating already exists and should be reused for the `Z` shortcut.
-  Evidence: `isEditableTarget(...)` in `src/ui/events.js` is already used in `src/app/bootstrap.js` to suppress delete behavior while typing.
+  Evidence: `isEditableTarget(...)` in `src/ui/events.js` is already used in `src/app/app-controller.js` to suppress delete behavior while typing.
 
 ## Decision Log
 
 - Decision: represent zoom mode as a dedicated UI component with its own controller module, `src/ui/zoom-overlay-controller.js`.
-  Rationale: the zoom overlay is a distinct UI concept with its own lifecycle, DOM, and event handling; keeping it in one controller avoids scattering overlay state and markup across `index.html`, `dom-factory.js`, and `bootstrap.js`.
+  Rationale: the zoom overlay is a distinct UI concept with its own lifecycle, DOM, and event handling; keeping it in one controller avoids scattering overlay state and markup across `index.html`, `dom-factory.js`, and `app-controller.js`.
   Date/Author: 2026-03-14 / Codex
 
 - Decision: `index.html` should provide only a minimal mount root such as `#zoomLayerRoot`, while the controller creates and destroys all internal overlay DOM lazily.
@@ -83,7 +83,7 @@ This repository is a browser-only local clip-review app with a small layered str
 
 - `index.html`: app shell markup and CSS.
 - `app.js`: compatibility entry point that re-exports app bootstrap.
-- `src/app/bootstrap.js`: composition root that locates DOM elements, creates controllers, and wires user actions.
+- `src/app/app-controller.js`: composition root that locates DOM elements, creates controllers, and wires user actions.
 - `src/ui/dom-factory.js`: creates clip tile DOM and updates per-card labels/duration.
 - `src/ui/drag-drop-controller.js`: selection and drag-reorder behavior for grid tiles.
 - `src/ui/events.js`: central event-binding helpers and editable-target detection.
@@ -93,9 +93,9 @@ This repository is a browser-only local clip-review app with a small layered str
 - `tests/e2e/scenarios.spec.js`: end-to-end behavior coverage using Playwright.
 
 Current zoom-relevant flow:
-1. `bootstrap.js` loads files and renders cards through `createThumbCard(...)` in `src/ui/dom-factory.js`.
+1. `app-controller.js` loads files and renders cards through `createThumbCard(...)` in `src/ui/dom-factory.js`.
 2. Card click delegates to `createThumbInteractionHandlers(...)`, which toggles `state.selectedThumb` and the `.selected` class.
-3. Global key events are bound in `src/ui/events.js` and handled in `bootstrap.js` plus `fullscreen-session.js`.
+3. Global key events are bound in `src/ui/events.js` and handled in `app-controller.js` plus `fullscreen-session.js`.
 4. Fullscreen behavior is active only when `body` has the `fs-active` class and `isFullScreenActive(document)` returns true.
 
 Important constraints for the implementation:
@@ -140,7 +140,7 @@ If this milestone fails, remove `src/ui/zoom-overlay-controller.js`, remove the 
 
 ### Scope
 
-Connect the new zoom component to clip selection, double-click, keyboard open/close, and fullscreen coordination without moving overlay internals into `bootstrap.js`.
+Connect the new zoom component to clip selection, double-click, keyboard open/close, and fullscreen coordination without moving overlay internals into `app-controller.js`.
 
 ### Changes
 
@@ -150,16 +150,16 @@ Connect the new zoom component to clip selection, double-click, keyboard open/cl
 - File: `src/ui/drag-drop-controller.js`
   Edit: expose or preserve selection behavior so double-click can ensure the target card becomes selected before zoom opens.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: create the zoom overlay controller instance from `#zoomLayerRoot` and add high-level helpers such as `openZoomForCard(card)` and `closeZoom()`.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: handle `Z` / `z` in normal grid view only, using `isEditableTarget(...)` to suppress the shortcut while typing and using `state.selectedThumb` as the source clip.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: handle `Escape` so it closes zoom before any unrelated behavior that should remain unaffected.
 
-- File: `src/app/bootstrap.js`
+- File: `src/app/app-controller.js`
   Edit: coordinate fullscreen entry so calling fullscreen while zoom is open closes zoom first, then continues into the existing fullscreen flow.
 
 - File: `src/ui/events.js`
@@ -178,7 +178,7 @@ Connect the new zoom component to clip selection, double-click, keyboard open/cl
 
 ### Rollback/Containment
 
-If this milestone fails, disconnect the controller instantiation and handlers in `bootstrap.js` while leaving the controller module and shell mount root in place. Existing click, drag, delete, and fullscreen behavior must continue to work.
+If this milestone fails, disconnect the controller instantiation and handlers in `app-controller.js` while leaving the controller module and shell mount root in place. Existing click, drag, delete, and fullscreen behavior must continue to work.
 
 ## Milestone 3 - Add end-to-end zoom regressions
 
@@ -234,4 +234,5 @@ Make the shipped surface coherent by updating any app hints or docs that must me
 ### Rollback/Containment
 
 If schedule pressure is high, runtime code and tests take priority over non-essential guide updates. However, any user-facing in-app hint changed in `index.html` should ship together with the feature.
+
 

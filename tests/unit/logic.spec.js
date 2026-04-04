@@ -11,7 +11,7 @@ import { formatDuration } from '../../src/ui/clip-collection-grid-controller.js'
 import {
   computeBestGrid,
   computeFsLayout,
-} from '../../src/app/display-layout-rules.js';
+} from '../../src/ui/display-layout-rules.js';
 
 describe('video helpers', () => {
   it('detects video by MIME and extension', () => {

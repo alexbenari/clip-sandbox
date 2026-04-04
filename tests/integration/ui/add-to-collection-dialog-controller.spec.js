@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createAddToCollectionDialogController } from '../../../src/ui/add-to-collection-dialog-controller.js';
+import { createSavedCollectionRef } from '../../../src/domain/collection-ref.js';
 
 function setup() {
   document.body.innerHTML = `
@@ -39,7 +40,7 @@ function setup() {
     errorMessageEl: error,
     confirmBtn,
     cancelBtn,
-    newSelectionValue: '__new_collection__',
+    newChoiceValue: '__new_collection__',
     validateNewName: (name) => (!name.trim() ? 'Enter a collection name.' : ''),
     onConfirm,
     onCancel,
@@ -74,7 +75,7 @@ describe('add-to-collection dialog controller', () => {
     } = setup();
 
     controller.open({
-      choices: [{ label: 'subset', selectionValue: 'subset.txt' }],
+      choices: [{ label: 'subset', value: 'subset.txt', collectionRef: createSavedCollectionRef('subset.txt') }],
       hasSelection: true,
       startWithNewCollection: true,
     });
@@ -101,7 +102,7 @@ describe('add-to-collection dialog controller', () => {
     } = setup();
 
     controller.open({
-      choices: [{ label: 'subset', selectionValue: 'subset.txt' }],
+      choices: [{ label: 'subset', value: 'subset.txt', collectionRef: createSavedCollectionRef('subset.txt') }],
       hasSelection: true,
       startWithNewCollection: true,
     });
@@ -125,7 +126,10 @@ describe('add-to-collection dialog controller', () => {
     expect(confirmBtn.disabled).toBe(false);
 
     confirmBtn.click();
-    expect(onConfirm).toHaveBeenLastCalledWith({ kind: 'existing', selectionValue: 'subset.txt' });
+    expect(onConfirm).toHaveBeenLastCalledWith({
+      kind: 'existing',
+      collectionRef: createSavedCollectionRef('subset.txt'),
+    });
 
     dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
     expect(onCancel).toHaveBeenCalledOnce();

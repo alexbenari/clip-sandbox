@@ -20,10 +20,10 @@ Users need collection management to feel folder-native instead of file-picker dr
   Evidence: [index.html](C:/dev/clip-sandbox/index.html) defines `#folderInput` with `webkitdirectory directory multiple`, and [load-clips.js](C:/dev/clip-sandbox/src/business-logic/load-clips.js) currently filters/sorts whatever file list it receives without depth filtering.
 
 - Discovery: the current app can write directly into the selected folder only when `showDirectoryPicker()` is available and returns a writable directory handle.
-  Evidence: [file-system-adapter.js](C:/dev/clip-sandbox/src/adapters/browser/file-system-adapter.js) exposes `pickDirectory()` and `saveTextToDirectory()`, while [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js) falls back to downloads when `currentDirHandle` is absent.
+  Evidence: [file-system-adapter.js](C:/dev/clip-sandbox/src/adapters/browser/file-system-adapter.js) exposes `pickDirectory()` and `saveTextToDirectory()`, while [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js) falls back to downloads when `currentDirHandle` is absent.
 
 - Discovery: collection loading today assumes the full folder clip set has already been materialized into `state.folderClips`, then derives a new `ClipCollection` from that in-memory list.
-  Evidence: [load-collection.js](C:/dev/clip-sandbox/src/business-logic/load-collection.js) builds `ClipCollection.fromClipNames(...)` from `folderClips`, and [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js) passes `state.folderClips` into collection loading.
+  Evidence: [load-collection.js](C:/dev/clip-sandbox/src/business-logic/load-collection.js) builds `ClipCollection.fromClipNames(...)` from `folderClips`, and [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js) passes `state.folderClips` into collection loading.
 
 - Discovery: there is no current dirty-state model, backing-file model, or pending-action model for the active collection.
   Evidence: [clip-collection.js](C:/dev/clip-sandbox/src/domain/clip-collection.js) stores only name/order/clips, and [app-state.js](C:/dev/clip-sandbox/src/app/app-state.js) stores only `currentDirHandle`, `folderClips`, and `currentCollection`.
@@ -109,7 +109,7 @@ Follow-up candidates:
 
 ## Context and orientation
 
-This repository is a browser-based local video-review app with no UI framework. The app shell is [index.html](C:/dev/clip-sandbox/index.html); runtime wiring happens in [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js). The deployed Windows workflow serves the app as static files through `miniserve`, so all browser filesystem behavior depends on standard web APIs plus the optional File System Access API.
+This repository is a browser-based local video-review app with no UI framework. The app shell is [index.html](C:/dev/clip-sandbox/index.html); runtime wiring happens in [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js). The deployed Windows workflow serves the app as static files through `miniserve`, so all browser filesystem behavior depends on standard web APIs plus the optional File System Access API.
 
 Key current modules:
 - [load-clips.js](C:/dev/clip-sandbox/src/business-logic/load-clips.js): filters/sorts files and creates a `ClipCollection` from a file list.
@@ -147,7 +147,7 @@ Reduce implementation risk around two browser-specific constraints:
 ### Files
 
 - [file-system-adapter.js](C:/dev/clip-sandbox/src/adapters/browser/file-system-adapter.js)
-- [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
 - [tests/unit/business-logic.spec.js](C:/dev/clip-sandbox/tests/unit/business-logic.spec.js)
 - [tests/e2e/scenarios.spec.js](C:/dev/clip-sandbox/tests/e2e/scenarios.spec.js)
 
@@ -235,7 +235,7 @@ Ship the new top-bar interaction model: folder-scoped collection selection via c
 ### Files
 
 - [index.html](C:/dev/clip-sandbox/index.html)
-- [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
 - [app-text.js](C:/dev/clip-sandbox/src/app/app-text.js)
 - [event-binding.js](C:/dev/clip-sandbox/src/app/event-binding.js)
 - [order-menu-controller.js](C:/dev/clip-sandbox/src/ui/order-menu-controller.js)
@@ -281,7 +281,7 @@ Change folder load so the app discovers inventory first, resolves the collection
 
 ### Files
 
-- [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
 - [file-system-adapter.js](C:/dev/clip-sandbox/src/adapters/browser/file-system-adapter.js)
 - [load-clips.js](C:/dev/clip-sandbox/src/business-logic/load-clips.js)
 - [load-collection.js](C:/dev/clip-sandbox/src/business-logic/load-collection.js)
@@ -326,7 +326,7 @@ Make save operations target the active collection file, refresh inventory correc
 ### Files
 
 - [save-order.js](C:/dev/clip-sandbox/src/business-logic/save-order.js) or a renamed replacement such as `save-collection-description.js`
-- [bootstrap.js](C:/dev/clip-sandbox/src/app/bootstrap.js)
+- [app-controller.js](C:/dev/clip-sandbox/src/app/app-controller.js)
 - [file-system-adapter.js](C:/dev/clip-sandbox/src/adapters/browser/file-system-adapter.js)
 - [app-text.js](C:/dev/clip-sandbox/src/app/app-text.js)
 - [index.html](C:/dev/clip-sandbox/index.html)
@@ -424,3 +424,4 @@ If doc cleanup uncovers deferred behavior that did not ship, keep the docs stric
 - Invalid collection descriptions are excluded from the dropdown and logged to `err.log` in writable-folder mode.
 - The app remains functional in fallback capability mode even when folder-local `err.log` append is unavailable.
 - Unit and E2E coverage verify the new behavior.
+

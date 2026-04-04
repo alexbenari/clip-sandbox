@@ -1,2 +1,3 @@
 // Backward-compatible entrypoint.
-export { initApp } from './src/app/bootstrap.js';
+export { initApp } from './src/app/app-controller.js';
+

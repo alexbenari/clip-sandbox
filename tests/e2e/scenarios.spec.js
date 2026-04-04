@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { test, expect } from '@playwright/test';
-import { computeFsLayout } from '../../src/app/display-layout-rules.js';
+import { computeFsLayout } from '../../src/ui/display-layout-rules.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appUrl = '/';

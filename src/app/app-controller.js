@@ -10,10 +10,11 @@ import {
   setCurrentCollection,
   setCurrentDirHandle,
   resetCollectionState,
-} from './app-state.js';
+} from './app-session-state.js';
 import {
   appendTextToDirectoryFile,
   canUseDirectoryPicker,
+  folderNameFromFiles,
   pickDirectory,
   readFilesFromDirectory,
   saveTextToDirectory,
@@ -27,16 +28,17 @@ import {
 import { delay, every, clear as clearClock } from '../adapters/browser/clock-adapter.js';
 import { showStatus as showStatusAdapter, applyGridLayout as applyGridLayoutAdapter, updateClipCount } from '../adapters/browser/dom-renderer-adapter.js';
 import { playBoundaryClank } from '../adapters/browser/audio-feedback-adapter.js';
-import { runSaveOrder } from '../business-logic/save-order.js';
+import { persistCollectionContent } from '../business-logic/save-order.js';
+import { CollectionManager } from '../business-logic/collection-manager.js';
 import { normalizeCollectionFilename, validateCollectionName } from '../business-logic/collection-name.js';
-import { createFullscreenSession } from '../business-logic/fullscreen-session.js';
+import { createFullscreenSession } from './fullscreen-session.js';
 import { bindControlEvents, bindGlobalEvents, isEditableTarget } from './event-binding.js';
-import { createLayoutController } from './display-layout-controller.js';
+import { createLayoutController } from '../ui/display-layout-controller.js';
 import {
   computeBestGrid,
   computeFsLayout,
   normalizeFsSlots,
-} from './display-layout-rules.js';
+} from '../ui/display-layout-rules.js';
 import {
   fullscreenSlotsText,
   loadedVideosText,
@@ -61,16 +63,21 @@ import {
 } from './app-text.js';
 import { createOrderMenuController } from '../ui/order-menu-controller.js';
 import { createAddToCollectionDialogController } from '../ui/add-to-collection-dialog-controller.js';
+import { renderActiveCollectionSelector } from '../ui/active-collection-selector.js';
+import {
+  createAddToCollectionChoice,
+  parseCollectionRefFromOptionValue,
+} from '../ui/collection-ref-presentation.js';
 import { createContextMenuController } from '../ui/context-menu-controller.js';
 import { createZoomOverlayController } from '../ui/zoom-overlay-controller.js';
 import { createClipCollectionGridController, formatLabel, updateCardLabel } from '../ui/clip-collection-grid-controller.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { ClipCollectionContent } from '../domain/clip-collection-content.js';
-import { CollectionManager } from './collection-manager.js';
+import { collectionRefsEqual } from '../domain/collection-ref.js';
 
 let initialized = false;
 const ERROR_LOG_FILENAME = 'err.log';
-const NEW_COLLECTION_SELECTION_VALUE = '__new_collection__';
+const NEW_COLLECTION_CHOICE_VALUE = '__new_collection__';
 
 export function initApp() {
   if (initialized) return;
@@ -146,7 +153,7 @@ export function initApp() {
     errorMessageEl: addToCollectionError,
     confirmBtn: confirmAddToCollectionBtn,
     cancelBtn: cancelAddToCollectionBtn,
-    newSelectionValue: NEW_COLLECTION_SELECTION_VALUE,
+    newChoiceValue: NEW_COLLECTION_CHOICE_VALUE,
     validateNewName: (name) => validateAddToCollectionName(name),
     onConfirm: (destination) => {
       void confirmAddToCollection(destination);
@@ -166,20 +173,16 @@ export function initApp() {
     return currentInventory()?.activeCollection() || null;
   }
 
+  function currentCollectionRef() {
+    return currentInventory()?.activeCollectionRef() || null;
+  }
+
   function currentCollectionName() {
     return state.currentCollection?.name || currentContent()?.collectionName || '';
   }
 
   function activeCollectionFilename() {
     return currentContent()?.filename || '';
-  }
-
-  function folderNameFromFiles(fileList) {
-    const firstFile = Array.from(fileList || [])[0];
-    const relPath = firstFile?.webkitRelativePath || '';
-    if (!relPath) return '';
-    const parts = relPath.split(/[\\/]/).filter(Boolean);
-    return parts.length > 1 ? parts[0] : '';
   }
 
   function isFullscreen() {
@@ -205,30 +208,12 @@ export function initApp() {
     const inventory = currentInventory();
     const label = activeCollectionText(currentCollectionName());
     document.title = activeCollectionTabText(currentCollectionName());
-    if (!(activeCollectionNameEl instanceof HTMLSelectElement)) return;
-
-    activeCollectionNameEl.innerHTML = '';
-    if (!inventory) {
-      const option = document.createElement('option');
-      option.value = '';
-      option.textContent = label || DEFAULT_APP_TITLE;
-      activeCollectionNameEl.appendChild(option);
-      activeCollectionNameEl.disabled = true;
-      activeCollectionNameEl.value = '';
-      activeCollectionNameEl.title = option.textContent;
-      return;
-    }
-
-    for (const collectionContent of inventory.selectableCollections()) {
-      const option = document.createElement('option');
-      option.value = inventory.selectionValueFor(collectionContent);
-      option.textContent = collectionContent.collectionName;
-      activeCollectionNameEl.appendChild(option);
-    }
-
-    activeCollectionNameEl.disabled = false;
-    activeCollectionNameEl.value = inventory.activeSelectionValue();
-    activeCollectionNameEl.title = label || DEFAULT_APP_TITLE;
+    renderActiveCollectionSelector({
+      selectEl: activeCollectionNameEl,
+      inventory,
+      label,
+      defaultTitle: DEFAULT_APP_TITLE,
+    });
   }
 
   function updateCount() {
@@ -310,7 +295,9 @@ export function initApp() {
   function addToCollectionChoices() {
     const inventory = currentInventory();
     if (!inventory) return [];
-    return collectionManager.addDestinationChoices(inventory, inventory.activeSelectionValue());
+    return inventory.eligibleDestinationCollections(inventory.activeCollectionRef())
+      .map((collection) => createAddToCollectionChoice(collection, inventory))
+      .filter(Boolean);
   }
 
   function openAddToCollectionDialog({ startWithNewCollection = false } = {}) {
@@ -327,7 +314,7 @@ export function initApp() {
 
     const result = await collectionManager.addSelectedClipsToCollection({
       selectedClipIds: gridController.getSelectedClipIds(),
-      sourceSelectionValue: currentInventory().activeSelectionValue(),
+      sourceCollectionRef: currentInventory().activeCollectionRef(),
       destination,
       currentCollection: state.currentCollection,
       inventory: currentInventory(),
@@ -599,7 +586,7 @@ export function initApp() {
       return;
     }
     if (pendingAction.type === 'switch-collection') {
-      await applyCollectionSelection(currentInventory()?.getCollectionBySelectionValue(pendingAction.selectionValue));
+      await applyCollectionSelection(currentInventory()?.getCollectionByRef(pendingAction.collectionRef));
       return;
     }
     renderCollectionSelector();
@@ -616,16 +603,17 @@ export function initApp() {
       filename: targetFilename,
     });
 
-    const mode = await runSaveOrder({
-      names: nextContent.orderedClipNames,
+    const { mode } = await persistCollectionContent({
+      content: nextContent,
       currentDirHandle: state.currentDirHandle,
       saveTextToDirectory,
       downloadText,
-      showStatus,
-      filename: nextContent.filename,
-      buildSavedStatus: savedCollectionFileText,
-      buildDownloadedStatus: downloadedCollectionFileText,
     });
+    showStatus(
+      mode === 'saved'
+        ? savedCollectionFileText(nextContent.filename)
+        : downloadedCollectionFileText(nextContent.filename)
+    );
 
     currentInventory().upsertCollectionContent(nextContent, { makeActive });
     if (makeActive) {
@@ -699,16 +687,16 @@ export function initApp() {
   }
 
   function openGridContextMenu(point) {
-    const inventory = currentInventory();
     const hasSelection = gridController.getSelectedClipIds().length > 0;
+    const choices = addToCollectionChoices();
     const items = hasSelection
-      ? collectionManager.addDestinationChoices(inventory, inventory?.activeSelectionValue()).map((choice) => ({
-        id: `add-to-${choice.selectionValue}`,
+      ? choices.map((choice) => ({
+        id: `add-to-${choice.value}`,
         label: `Add to ${choice.label}`,
         onSelect: () => {
           void runAddToCollection({
             kind: 'existing',
-            selectionValue: choice.selectionValue,
+            collectionRef: choice.collectionRef,
           });
         },
       }))
@@ -946,22 +934,26 @@ export function initApp() {
   });
   activeCollectionNameEl?.addEventListener('change', (e) => {
     if (!(e.target instanceof HTMLSelectElement)) return;
-    const selectedValue = e.target.value;
+    const selectedCollectionRef = parseCollectionRefFromOptionValue(e.target.value);
     if (!currentInventory()) {
       renderCollectionSelector();
       return;
     }
-    if (selectedValue === currentInventory().activeSelectionValue()) {
+    if (!selectedCollectionRef) {
+      renderCollectionSelector();
+      return;
+    }
+    if (collectionRefsEqual(selectedCollectionRef, currentCollectionRef())) {
       renderCollectionSelector();
       return;
     }
     if (currentInventory().hasDirtyChanges()) {
-      currentInventory().setPendingAction({ type: 'switch-collection', selectionValue: selectedValue });
+      currentInventory().setPendingAction({ type: 'switch-collection', collectionRef: selectedCollectionRef });
       renderCollectionSelector();
       openUnsavedDialog();
       return;
     }
-    void applyCollectionSelection(currentInventory().getCollectionBySelectionValue(selectedValue));
+    void applyCollectionSelection(currentInventory().getCollectionByRef(selectedCollectionRef));
   });
   confirmUnsavedChangesBtn?.addEventListener('click', () => void continuePendingAction({ saveFirst: true }));
   discardUnsavedChangesBtn?.addEventListener('click', () => void continuePendingAction({ saveFirst: false }));

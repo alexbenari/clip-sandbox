@@ -14,7 +14,7 @@ Users rely on Clip Sandbox for loading, ordering, and fullscreen review of local
 - [x] (2026-03-07 21:15Z) Milestone 3 complete: browser adapters added under `src/adapters/browser/*`.
 - [x] (2026-03-07 21:40Z) Milestone 4 complete: key business-logic modules added under `src/business-logic/*` and wired from runtime.
 - [x] (2026-03-07 22:44Z) Milestone 5 complete: dedicated `src/ui/*` modules added (`events`, `view-model`, `dom-factory`) with integration tests.
-- [x] (2026-03-07 22:45Z) Milestone 6 stabilization complete: `app.js` reduced to thin wrapper over `src/app/bootstrap.js`; full test suite green.
+- [x] (2026-03-07 22:45Z) Milestone 6 stabilization complete: `app.js` reduced to thin wrapper over `src/app/app-controller.js`; full test suite green.
 
 ## Surprises & Discoveries
 
@@ -36,8 +36,8 @@ Users rely on Clip Sandbox for loading, ordering, and fullscreen review of local
 - Discovery: existing E2E suite was already strong and required targeted additions rather than broad rewrites.
   Evidence: initial baseline was `12 passed`; post-M0 baseline is `18 passed`.
 
-- Discovery: `src/app/bootstrap.js` remained large after first-pass extraction and needed a second controller split.
-  Evidence: first pass `bootstrap.js` was ~`484` lines; second pass reduced it to ~`287` lines.
+- Discovery: `src/app/app-controller.js` remained large after first-pass extraction and needed a second controller split.
+  Evidence: first pass `app-controller.js` was ~`484` lines; second pass reduced it to ~`287` lines.
 
 ## Decision Log
 
@@ -53,7 +53,7 @@ Users rely on Clip Sandbox for loading, ordering, and fullscreen review of local
   Rationale: protects user-facing behavior during high-churn file moves.
   Date/Author: 2026-03-07 / Codex
 
-- Decision: move runtime implementation from root `app.js` to `src/app/bootstrap.js` and keep `app.js` as compatibility wrapper.
+- Decision: move runtime implementation from root `app.js` to `src/app/app-controller.js` and keep `app.js` as compatibility wrapper.
   Rationale: reduce entrypoint size while preserving existing import/bootstrap behavior.
   Date/Author: 2026-03-07 / Codex
 
@@ -61,8 +61,8 @@ Users rely on Clip Sandbox for loading, ordering, and fullscreen review of local
   Rationale: maintain momentum and avoid broad UI churn after successful adapter + business-logic extraction.
   Date/Author: 2026-03-07 / Codex
 
-- Decision: perform a second-pass decomposition of `bootstrap.js` into dedicated UI/business controllers.
-  Rationale: preserve behavior while making `bootstrap.js` a clearer composition root.
+- Decision: perform a second-pass decomposition of `app-controller.js` into dedicated UI/business controllers.
+  Rationale: preserve behavior while making `app-controller.js` a clearer composition root.
   Date/Author: 2026-03-07 / Codex
 
 ## Outcomes & Retrospective
@@ -72,7 +72,7 @@ Shipped outcomes in this execution:
 - Pure logic extracted into `src/domain/*` and consumed directly by app/tests.
 - Runtime state centralized in `src/state/app-state.js`.
 - Key browser adapters and business-logic modules introduced and wired into runtime flow.
-- Root `app.js` reduced to a thin compatibility entrypoint that re-exports `initApp` from `src/app/bootstrap.js`.
+- Root `app.js` reduced to a thin compatibility entrypoint that re-exports `initApp` from `src/app/app-controller.js`.
 - UI layer split completed into `src/ui/events.js`, `src/ui/view-model.js`, and `src/ui/dom-factory.js`.
 - Additional decomposition completed into `src/ui/layout-controller.js`, `src/ui/drag-drop-controller.js`, `src/ui/order-file-controller.js`, and `src/business-logic/fullscreen-session.js`.
 - Integration test layer added under `tests/integration/ui/*`.
@@ -325,7 +325,7 @@ Isolate rendering and event plumbing to dedicated UI modules.
 - `src/ui/events.js` (create)
 - `src/ui/view-model.js` (create)
 - `src/ui/dom-factory.js` (create)
-- `app.js` or `src/app/bootstrap.js` (edit)
+- `app.js` or `src/app/app-controller.js` (edit)
 - `tests/integration/ui/*.spec.js` (create)
 
 ### Changes
@@ -356,7 +356,7 @@ Finalize architecture boundaries and verify maintainability goals.
 ### Files
 
 - `app.js` (edit, reduce to bootstrap/wiring shell)
-- `src/app/bootstrap.js` (create if not already)
+- `src/app/app-controller.js` (create if not already)
 - `vitest.config.js` (optional edit for new test folders)
 - `docs/developer-guide.md` (edit to reflect final module map)
 - `docs/plans/refactoring.md` (update final sections)
@@ -398,3 +398,4 @@ During execution, update this document continuously:
 - append new discoveries with evidence,
 - log every material decision and rationale,
 - complete `Outcomes & Retrospective` with command evidence and follow-ups.
+

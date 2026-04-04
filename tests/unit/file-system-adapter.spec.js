@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { readFilesFromDirectory } from '../../src/adapters/browser/file-system-adapter.js';
+import { folderNameFromFiles, readFilesFromDirectory } from '../../src/adapters/browser/file-system-adapter.js';
 
 function createDirectoryHandle(entries) {
   return {
@@ -65,5 +65,21 @@ describe('readFilesFromDirectory', () => {
       attempts: 3,
       error: expect.any(Error),
     }));
+  });
+});
+
+describe('folderNameFromFiles', () => {
+  it('extracts the folder name from webkitRelativePath', () => {
+    const folderName = folderNameFromFiles([
+      { webkitRelativePath: 'my-folder/subdir/clip-01.mp4' },
+      { webkitRelativePath: 'my-folder/clip-02.mp4' },
+    ]);
+
+    expect(folderName).toBe('my-folder');
+  });
+
+  it('returns an empty string when files do not include a relative path', () => {
+    expect(folderNameFromFiles([{ name: 'clip-01.mp4' }])).toBe('');
+    expect(folderNameFromFiles([])).toBe('');
   });
 });

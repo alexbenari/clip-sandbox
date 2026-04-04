@@ -20,7 +20,7 @@ Current problems:
 2. the current working collection is represented indirectly by `folderFiles`, `activeCollectionNames`, and current grid state rather than by one first-class collection object,
 3. selection is stored as a selected DOM element rather than a stable clip identity,
 4. reorder behavior mutates the DOM first and then syncs model state back from the DOM,
-5. grid rendering and interaction are spread across `dom-factory`, `drag-drop-controller`, `layout-controller`, fullscreen logic, and `bootstrap.js`.
+5. grid rendering and interaction are spread across `dom-factory`, `drag-drop-controller`, `layout-controller`, fullscreen logic, and `app-controller.js`.
 
 This weakens encapsulation and makes it harder to reason about clip identity, collection identity, and the boundary between model and UI.
 
@@ -33,7 +33,7 @@ This weakens encapsulation and makes it harder to reason about clip identity, co
 3. Replace DOM-element identity for selection with clip-id identity.
 4. Introduce a `ClipCollectionGrid` UI component/controller that owns rendering and interaction for one collection view.
 5. Keep zoom, save/load, and fullscreen behavior working while moving them onto the new model boundaries.
-6. Reduce the amount of clip/collection logic embedded directly in `src/app/bootstrap.js`.
+6. Reduce the amount of clip/collection logic embedded directly in `src/app/app-controller.js`.
 
 ### 3.2 Non-Goals
 
@@ -200,14 +200,14 @@ Required ownership:
 
 ### 6.6 Bootstrap Responsibilities After Refactor
 
-`src/app/bootstrap.js` should still:
+`src/app/app-controller.js` should still:
 
 1. create clips and initial collections from loaded files,
 2. compose the grid, zoom overlay, fullscreen session, and persistence flows,
 3. respond to grid-emitted events by updating the collection model,
 4. hand selected/open clip identity to zoom and other higher-level features.
 
-`src/app/bootstrap.js` should no longer:
+`src/app/app-controller.js` should no longer:
 
 1. store selected DOM elements as app state,
 2. reconstruct collection order by scraping `grid.children`,
@@ -259,7 +259,7 @@ Expected major architectural pieces after the refactor:
   - owns ordered collection contents and collection operations.
 - `src/ui/clip-collection-grid-controller.*`
   - owns rendering and interaction for one collection grid.
-- `src/app/bootstrap.js`
+- `src/app/app-controller.js`
   - composes the new model/controller pieces with zoom, fullscreen, and persistence.
 
 Exact file naming may vary, but these responsibilities must be explicit.
@@ -276,7 +276,7 @@ Expected impact on current files:
   - likely folded into the new grid component.
 - `src/ui/layout-controller.js`
   - may remain separate in the first pass as a layout-focused helper used by the grid.
-- `src/app/bootstrap.js`
+- `src/app/app-controller.js`
   - should shrink in clip/grid-specific responsibilities.
 
 ### 8.3 Collection Mutation Strategy
@@ -334,6 +334,7 @@ This refactor is complete when:
 4. selection and zoom targeting no longer depend on storing a selected thumb DOM element in app state,
 5. save/load behavior operates through the collection model,
 6. existing user-visible grid, zoom, save/load, and fullscreen behaviors continue to pass regression tests.
+
 
 
 
