@@ -687,6 +687,7 @@ export function initApp() {
   }
 
   function openGridContextMenu(point) {
+    const inventory = currentInventory();
     const hasSelection = gridController.getSelectedClipIds().length > 0;
     const choices = addToCollectionChoices();
     const items = hasSelection
