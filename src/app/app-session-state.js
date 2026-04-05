@@ -1,7 +1,7 @@
 // Centralized runtime state for app session.
 export function createAppState() {
   return {
-    currentDirHandle: null,
+    currentFolderSession: null,
     idCounter: 0,
     currentCollection: null,
     collectionInventory: null,
@@ -13,8 +13,8 @@ export function nextClipId(state) {
   return `clip_${state.idCounter}`;
 }
 
-export function setCurrentDirHandle(state, handle) {
-  state.currentDirHandle = handle || null;
+export function setCurrentFolderSession(state, folderSession) {
+  state.currentFolderSession = folderSession || null;
 }
 
 export function setCurrentCollection(state, collection) {

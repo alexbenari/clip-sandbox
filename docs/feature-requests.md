@@ -1,24 +1,34 @@
 # Feature Requests
 
-## Design
+## Design and code quality
 - business logic -> move functionality into domain when needed (e.g. collection-name.js?)
 - layout controller and rules -> fold into grid controller when applicable, leave FS for future
 -  `ClipCollectionLoader`: file-level logic where the input is a folder and the output is a `ClipCollection`.
 -  Reusable UI components imported from a separate library: zoom view and rclick menu
+-  create a linear walthrough of the code (e.g, using showboat) to kck off agents
+-  Add a linter?
 
 ## Collection Mode (a.k.a Grid Mode)
 
 ### Clip Display
-
-- Compare mode:
-  - Compare two clips by opening them in side-by-side zoom and synchronizing their start.
-  - The `s` key or a resync button starts them again together from zero.
+- Delete a clip from disk
 - Control the number of clips on the grid via collection paging.
   - Add navigation to previous and next screens on the sides as needed.
   - Add a count showing total items and current screen position (`x/y`).
 
+#### Zoom mode
+- Compare mode:
+  - Compare two clips by opening them in side-by-side zoom and synchronizing their start.
+  - The `s` key or a resync button starts them again together from zero.
+- Playback control
+  - Pause/Play (toggle using spacebar)
+  - frame by frame (fwd/bwd arrows)
+
 ### Collections
 - ctrl+s saves the collection
+- Default collection: not-in-collections-yet
+  - if does not exist as file, created by default when a folder is opened
+  - contains all clips minus the ones already in non-default collections
 - Delete collection ->removes the file
 - Open in file expolorer -> opens the current context folder in file explorer
 - Allow renaming a collection.
@@ -46,7 +56,7 @@
 #### Actions
 Some quick manipulations on videos that generate new videos in the same collection named: [orig-name]-[action]-[serial]
 - Append to reverse of the video [to generate a perfect loop]
-- trim from start/end
+- trim from start/end to current frame
 - slow by X%
 
 ### App

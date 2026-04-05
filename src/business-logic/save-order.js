@@ -1,42 +1,33 @@
 export async function persistTextFile({
   text = '',
-  currentDirHandle,
-  saveTextToDirectory,
-  downloadText,
+  folderSession,
+  fileSystem,
   filename = 'default-collection.txt',
 }) {
-  if (currentDirHandle && currentDirHandle.kind === 'directory' && currentDirHandle.getFileHandle) {
-    try {
-      await saveTextToDirectory(currentDirHandle, filename, text);
-      return { mode: 'saved' };
-    } catch (err) {
-      console.warn('Direct save failed, falling back to download.', err);
-    }
-  }
-  downloadText(filename, text);
-  return { mode: 'downloaded' };
+  return fileSystem.saveTextFile({
+    folderSession,
+    filename,
+    text,
+  });
 }
 
 export async function persistCollectionContent({
   content,
-  currentDirHandle,
-  saveTextToDirectory,
-  downloadText,
+  folderSession,
+  fileSystem,
 }) {
   return persistTextFile({
     text: content?.toText?.() || '',
-    currentDirHandle,
-    saveTextToDirectory,
-    downloadText,
+    folderSession,
+    fileSystem,
     filename: content?.filename || 'default-collection.txt',
   });
 }
 
 export async function runSaveOrder({
   names,
-  currentDirHandle,
-  saveTextToDirectory,
-  downloadText,
+  folderSession,
+  fileSystem,
   showStatus,
   filename = 'default-collection.txt',
   buildSavedStatus = (name) => `Saved ${name} to the selected folder.`,
@@ -44,9 +35,8 @@ export async function runSaveOrder({
 }) {
   const { mode } = await persistTextFile({
     text: names.join('\n') + '\n',
-    currentDirHandle,
-    saveTextToDirectory,
-    downloadText,
+    folderSession,
+    fileSystem,
     filename,
   });
   if (mode === 'saved') {

@@ -20,6 +20,7 @@ This guide explains the current browser-only architecture and the collection-man
 - [`src/app`](/C:/dev/clip-sandbox/src/app): composition root, app state, text, layout rules, event binding
 - [`src/ui`](/C:/dev/clip-sandbox/src/ui): DOM-facing controllers such as the grid, order menu, reusable context menu, and zoom overlay
 - [`src/adapters/browser`](/C:/dev/clip-sandbox/src/adapters/browser): thin wrappers around browser APIs
+- [`src/adapters/browser/browser-file-system-service.js`](/C:/dev/clip-sandbox/src/adapters/browser/browser-file-system-service.js): app-facing browser filesystem boundary that maps browser capabilities into folder sessions plus save/log operations
 - [`tests/unit`](/C:/dev/clip-sandbox/tests/unit): unit coverage
 - [`tests/integration/ui`](/C:/dev/clip-sandbox/tests/integration/ui): UI-controller integration coverage
 - [`tests/e2e/scenarios.spec.js`](/C:/dev/clip-sandbox/tests/e2e/scenarios.spec.js): observable browser workflows
@@ -96,18 +97,38 @@ Important rule:
 
 The main collection-management flow is orchestrated in [`src/app/app-controller.js`](/C:/dev/clip-sandbox/src/app/app-controller.js).
 
+### Filesystem Service Boundary
+
+[`src/adapters/browser/browser-file-system-service.js`](/C:/dev/clip-sandbox/src/adapters/browser/browser-file-system-service.js)
+
+This service is the app-facing boundary for browser-backed file access.
+
+Responsibilities:
+- detect whether writable folder picking is available
+- translate browser folder selection into a folder session
+- distinguish writable `readwrite` sessions from fallback `read-only` sessions
+- centralize save/download fallback behavior
+- centralize append-to-log behavior
+
+Important rule:
+- `app-controller` should depend on folder sessions plus this service contract
+- browser-specific API details such as `showDirectoryPicker()` or `webkitdirectory` should not spread further into the app layer
+
 ### Folder Selection
 
 1. Browser input or directory picker provides raw files.
-2. [`splitTopLevelFolderEntries(...)`](/C:/dev/clip-sandbox/src/business-logic/load-clips.js) filters to top-level entries only.
-3. [`buildCollectionInventory(...)`](/C:/dev/clip-sandbox/src/business-logic/load-collection-inventory.js) builds a `ClipCollectionInventory` from:
+2. The browser filesystem service normalizes that into a folder session:
+   - `readwrite` session when `showDirectoryPicker()` returns a writable directory handle
+   - `read-only` session when the app falls back to the hidden `webkitdirectory` input
+3. [`splitTopLevelFolderEntries(...)`](/C:/dev/clip-sandbox/src/business-logic/load-clips.js) filters to top-level entries only.
+4. [`buildCollectionInventory(...)`](/C:/dev/clip-sandbox/src/business-logic/load-collection-inventory.js) builds a `ClipCollectionInventory` from:
    - top-level video files
    - valid top-level `.txt` files
-4. The default collection is resolved:
+5. The default collection is resolved:
    - existing `[folder-name]-default.txt` wins,
    - otherwise an implicit default description is synthesized from the top-level videos.
-5. [`materializeCollectionContent(...)`](/C:/dev/clip-sandbox/src/business-logic/materialize-collection.js) creates the active `ClipCollection`.
-6. The grid renders only the active collection's clips.
+6. [`materializeCollectionContent(...)`](/C:/dev/clip-sandbox/src/business-logic/materialize-collection.js) creates the active `ClipCollection`.
+7. The grid renders only the active collection's clips.
 
 ### Collection Switching
 
@@ -170,13 +191,14 @@ This matters especially for the fallback `webkitdirectory` path because browsers
 
 ## Error Logging
 
-For this feature, invalid collection-description diagnostics and selected runtime errors are appended to `err.log` in the selected folder when direct directory write access exists.
+For this feature, invalid collection-description diagnostics and selected runtime errors are appended to `err.log` in the selected folder when the active folder session is writable.
 
 Relevant adapter:
 - [`src/adapters/browser/file-system-adapter.js`](/C:/dev/clip-sandbox/src/adapters/browser/file-system-adapter.js)
+- [`src/adapters/browser/browser-file-system-service.js`](/C:/dev/clip-sandbox/src/adapters/browser/browser-file-system-service.js)
 
 Important limitation:
-- in fallback browser mode without a writable directory handle, the app cannot write `err.log` into the selected folder
+- in fallback browser mode with a read-only folder session, the app cannot write `err.log` into the selected folder
 - in that case the app still excludes invalid files and logs to the browser console
 
 ## UI Components
@@ -231,15 +253,17 @@ Responsibilities:
 
 ## App State
 
-[`src/app/app-state.js`](/C:/dev/clip-sandbox/src/app/app-state.js)
+[`src/app/app-session-state.js`](/C:/dev/clip-sandbox/src/app/app-session-state.js)
 
 Tracks:
-- current directory handle when available
+- current folder session when available
 - id counter for runtime clip ids
 - active `ClipCollection`
 - active `ClipCollectionInventory`
 
 Important rule:
+- the folder session is the app's filesystem access abstraction
+- avoid reintroducing raw browser handles into the app layer; the browser filesystem service owns those details
 - avoid reintroducing loose `folderClips` state; the inventory owns the folder-scoped video lookup
 
 ## Composition Root
@@ -249,6 +273,7 @@ Important rule:
 Owns orchestration of:
 - DOM element lookup
 - folder loading
+- folder session lifecycle
 - collection inventory construction
 - collection materialization
 - collection save and save-as-new

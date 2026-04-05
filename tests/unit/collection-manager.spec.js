@@ -40,9 +40,8 @@ function makeCurrentCollection() {
 
 describe('CollectionManager', () => {
   test('adds selected clips to an existing collection and saves immediately', async () => {
-    const saveTextToDirectory = vi.fn(async () => {});
-    const downloadText = vi.fn();
-    const manager = new CollectionManager({ saveTextToDirectory, downloadText });
+    const fileSystem = { saveTextFile: vi.fn(async () => ({ mode: 'saved' })) };
+    const manager = new CollectionManager({ fileSystem });
     const inventory = makeInventory();
     const currentCollection = makeCurrentCollection();
 
@@ -52,29 +51,20 @@ describe('CollectionManager', () => {
       destination: { kind: 'existing', collectionRef: createSavedCollectionRef('subset.txt') },
       currentCollection,
       inventory,
-      currentDirHandle: {
-        kind: 'directory',
-        getFileHandle: vi.fn(async () => ({
-          createWritable: async () => ({
-            write: async () => {},
-            close: async () => {},
-          }),
-        })),
-      },
+      currentFolderSession: { accessMode: 'readwrite' },
     });
 
     expect(result.ok).toBe(true);
     expect(result.destinationName).toBe('subset');
     expect(result.addedCount).toBe(1);
     expect(result.skippedCount).toBe(1);
-    expect(saveTextToDirectory).toHaveBeenCalledOnce();
-    expect(downloadText).not.toHaveBeenCalled();
+    expect(fileSystem.saveTextFile).toHaveBeenCalledOnce();
     expect(inventory.getCollectionByFilename('subset.txt')?.orderedClipNames).toEqual(['alpha.mp4', 'charlie.mp4']);
   });
 
   test('creates and saves a new collection from the selected set', async () => {
-    const saveTextToDirectory = vi.fn(async () => {});
-    const manager = new CollectionManager({ saveTextToDirectory, downloadText: vi.fn() });
+    const fileSystem = { saveTextFile: vi.fn(async () => ({ mode: 'saved' })) };
+    const manager = new CollectionManager({ fileSystem });
     const inventory = makeInventory();
     const currentCollection = makeCurrentCollection();
 
@@ -84,15 +74,7 @@ describe('CollectionManager', () => {
       destination: { kind: 'new', name: 'highlights' },
       currentCollection,
       inventory,
-      currentDirHandle: {
-        kind: 'directory',
-        getFileHandle: vi.fn(async () => ({
-          createWritable: async () => ({
-            write: async () => {},
-            close: async () => {},
-          }),
-        })),
-      },
+      currentFolderSession: { accessMode: 'readwrite' },
     });
 
     expect(result.ok).toBe(true);
@@ -102,7 +84,7 @@ describe('CollectionManager', () => {
   });
 
   test('updates the default collection entry when adding to the default destination', async () => {
-    const manager = new CollectionManager({ saveTextToDirectory: vi.fn(async () => {}), downloadText: vi.fn() });
+    const manager = new CollectionManager({ fileSystem: { saveTextFile: vi.fn(async () => ({ mode: 'saved' })) } });
     const inventory = makeInventory();
     inventory.upsertCollectionContent(
       ClipCollectionContent.fromFilename({
@@ -117,15 +99,7 @@ describe('CollectionManager', () => {
       destination: { kind: 'existing', collectionRef: createDefaultCollectionRef() },
       currentCollection: makeCurrentCollection(),
       inventory,
-      currentDirHandle: {
-        kind: 'directory',
-        getFileHandle: vi.fn(async () => ({
-          createWritable: async () => ({
-            write: async () => {},
-            close: async () => {},
-          }),
-        })),
-      },
+      currentFolderSession: { accessMode: 'readwrite' },
     });
 
     expect(result.ok).toBe(true);
@@ -138,8 +112,8 @@ describe('CollectionManager', () => {
   });
 
   test('returns a no-op result when all selected clips already exist in the destination', async () => {
-    const saveTextToDirectory = vi.fn(async () => {});
-    const manager = new CollectionManager({ saveTextToDirectory, downloadText: vi.fn() });
+    const fileSystem = { saveTextFile: vi.fn(async () => ({ mode: 'saved' })) };
+    const manager = new CollectionManager({ fileSystem });
 
     const result = await manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_1'],
@@ -147,15 +121,7 @@ describe('CollectionManager', () => {
       destination: { kind: 'existing', collectionRef: createSavedCollectionRef('subset.txt') },
       currentCollection: makeCurrentCollection(),
       inventory: makeInventory(),
-      currentDirHandle: {
-        kind: 'directory',
-        getFileHandle: vi.fn(async () => ({
-          createWritable: async () => ({
-            write: async () => {},
-            close: async () => {},
-          }),
-        })),
-      },
+      currentFolderSession: { accessMode: 'readwrite' },
     });
 
     expect(result).toMatchObject({
@@ -164,11 +130,11 @@ describe('CollectionManager', () => {
       addedCount: 0,
       skippedCount: 1,
     });
-    expect(saveTextToDirectory).not.toHaveBeenCalled();
+    expect(fileSystem.saveTextFile).not.toHaveBeenCalled();
   });
 
   test('rejects invalid or duplicate new collection names', async () => {
-    const manager = new CollectionManager({ saveTextToDirectory: vi.fn(async () => {}), downloadText: vi.fn() });
+    const manager = new CollectionManager({ fileSystem: { saveTextFile: vi.fn(async () => ({ mode: 'saved' })) } });
     const inventory = makeInventory();
 
     await expect(manager.addSelectedClipsToCollection({
@@ -177,7 +143,7 @@ describe('CollectionManager', () => {
       destination: { kind: 'new', name: 'bad:name' },
       currentCollection: makeCurrentCollection(),
       inventory,
-      currentDirHandle: null,
+      currentFolderSession: null,
     })).resolves.toMatchObject({ ok: false, code: 'illegal-chars' });
 
     await expect(manager.addSelectedClipsToCollection({
@@ -186,7 +152,7 @@ describe('CollectionManager', () => {
       destination: { kind: 'new', name: 'subset' },
       currentCollection: makeCurrentCollection(),
       inventory,
-      currentDirHandle: null,
+      currentFolderSession: null,
     })).resolves.toMatchObject({ ok: false, code: 'already-exists' });
   });
 });

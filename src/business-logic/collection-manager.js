@@ -4,15 +4,12 @@ import { collectionRefsEqual, normalizeCollectionRef } from '../domain/collectio
 import { validateCollectionName } from './collection-name.js';
 
 export class CollectionManager {
-  #saveTextToDirectory;
-  #downloadText;
+  #fileSystem;
 
   constructor({
-    saveTextToDirectory,
-    downloadText,
+    fileSystem,
   } = {}) {
-    this.#saveTextToDirectory = saveTextToDirectory;
-    this.#downloadText = downloadText;
+    this.#fileSystem = fileSystem;
   }
 
   async addSelectedClipsToCollection({
@@ -21,7 +18,7 @@ export class CollectionManager {
     destination = {},
     currentCollection,
     inventory,
-    currentDirHandle = null,
+    currentFolderSession = null,
   } = {}) {
     if (!inventory || !currentCollection) {
       return { ok: false, code: 'missing-context' };
@@ -55,9 +52,8 @@ export class CollectionManager {
     try {
       const { mode: saveMode } = await persistCollectionContent({
         content: persistableContent,
-        currentDirHandle,
-        saveTextToDirectory: this.#saveTextToDirectory,
-        downloadText: this.#downloadText,
+        folderSession: currentFolderSession,
+        fileSystem: this.#fileSystem,
       });
       inventory.upsertCollectionContent(persistableContent, { makeActive: false });
       return {

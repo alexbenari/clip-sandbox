@@ -8,23 +8,15 @@ import {
   nextClipId,
   setCollectionInventory,
   setCurrentCollection,
-  setCurrentDirHandle,
+  setCurrentFolderSession,
   resetCollectionState,
 } from './app-session-state.js';
-import {
-  appendTextToDirectoryFile,
-  canUseDirectoryPicker,
-  folderNameFromFiles,
-  pickDirectory,
-  readFilesFromDirectory,
-  saveTextToDirectory,
-  downloadText,
-} from '../adapters/browser/file-system-adapter.js';
 import {
   enterFullScreen as enterFullScreenAdapter,
   exitFullScreen as exitFullScreenAdapter,
   isFullScreenActive,
 } from '../adapters/browser/fullscreen-adapter.js';
+import { createBrowserFileSystemService } from '../adapters/browser/browser-file-system-service.js';
 import { delay, every, clear as clearClock } from '../adapters/browser/clock-adapter.js';
 import { showStatus as showStatusAdapter, applyGridLayout as applyGridLayoutAdapter, updateClipCount } from '../adapters/browser/dom-renderer-adapter.js';
 import { playBoundaryClank } from '../adapters/browser/audio-feedback-adapter.js';
@@ -139,7 +131,8 @@ export function initApp() {
   };
   const validator = new CollectionDescriptionValidator();
   const zoomOverlay = createZoomOverlayController({ mountEl: zoomLayerRoot, document });
-  const collectionManager = new CollectionManager({ saveTextToDirectory, downloadText });
+  const fileSystem = createBrowserFileSystemService({ win: window });
+  const collectionManager = new CollectionManager({ fileSystem });
   const clipContextMenuController = createContextMenuController({
     root: clipContextMenu,
     panel: clipContextMenuPanel,
@@ -318,7 +311,7 @@ export function initApp() {
       destination,
       currentCollection: state.currentCollection,
       inventory: currentInventory(),
-      currentDirHandle: state.currentDirHandle,
+      currentFolderSession: state.currentFolderSession,
     });
 
     if (!result.ok) {
@@ -365,43 +358,45 @@ export function initApp() {
     unsavedChangesDialog.removeAttribute('open');
   }
 
-  async function appendErrorLog(text, dirHandle = state.currentDirHandle) {
+  async function appendErrorLog(text, folderSession = state.currentFolderSession) {
     if (!text) return false;
-    if (dirHandle?.kind === 'directory' && dirHandle.getFileHandle) {
-      try {
-        await appendTextToDirectoryFile(dirHandle, ERROR_LOG_FILENAME, text);
-        return true;
-      } catch (err) {
-        console.warn('Failed to append err.log in selected folder.', err);
-      }
+    try {
+      const { mode } = await fileSystem.appendTextFile({
+        folderSession,
+        filename: ERROR_LOG_FILENAME,
+        text,
+      });
+      if (mode === 'saved') return true;
+    } catch (err) {
+      console.warn('Failed to append err.log in selected folder.', err);
     }
     console.warn(text.trim());
     return false;
   }
 
-  async function logInvalidDescription(result, dirHandle) {
-    await appendErrorLog(validator.formatLogEntry(result, 'Collection enumeration'), dirHandle);
+  async function logInvalidDescription(result, folderSession) {
+    await appendErrorLog(validator.formatLogEntry(result, 'Collection enumeration'), folderSession);
   }
 
-  async function logRuntimeError(problem, err, dirHandle = state.currentDirHandle) {
+  async function logRuntimeError(problem, err, folderSession = state.currentFolderSession) {
     const detail = `Runtime error\nProblem: ${problem}\nDetails: ${err?.message || err}\n\n`;
-    await appendErrorLog(detail, dirHandle);
+    await appendErrorLog(detail, folderSession);
   }
 
-  async function logDirectoryReadError({ filename = '', attempts = 0, error } = {}, dirHandle) {
+  async function logDirectoryReadError({ filename = '', attempts = 0, error } = {}, folderSession) {
     const problem = filename
       ? `Failed to read folder entry: ${filename}`
       : 'Failed to read folder entry';
     const detail = `Directory enumeration error\nProblem: ${problem}\nAttempts: ${attempts}\nDetails: ${error?.message || error}\n\n`;
-    await appendErrorLog(detail, dirHandle);
+    await appendErrorLog(detail, folderSession);
   }
 
-  function applyCollection(collection, { inventory = currentInventory(), dirHandle = state.currentDirHandle, statusText = '', timeout = 2500 } = {}) {
+  function applyCollection(collection, { inventory = currentInventory(), folderSession = state.currentFolderSession, statusText = '', timeout = 2500 } = {}) {
     hideCollectionConflict();
     pendingCollectionConflict = null;
     clipContextMenuController.close({ restoreFocus: false });
     addToCollectionDialogController.close();
-    setCurrentDirHandle(state, dirHandle || null);
+    setCurrentFolderSession(state, folderSession || null);
     setCollectionInventory(state, inventory || null);
     setCurrentCollection(state, collection || null);
     inventory?.refreshDirtyState(collection);
@@ -421,7 +416,7 @@ export function initApp() {
     closeZoom();
     gridController.destroy();
     resetCollectionState(state);
-    setCurrentDirHandle(state, null);
+    setCurrentFolderSession(state, null);
     renderCollectionSelector();
     updateCount();
     renderAddToCollectionButton();
@@ -450,7 +445,7 @@ export function initApp() {
     showCollectionConflictPanel(conflict, handlers);
   }
 
-  async function applyCollectionSelection(collectionContent, { inventory = currentInventory(), dirHandle = state.currentDirHandle } = {}) {
+  async function applyCollectionSelection(collectionContent, { inventory = currentInventory(), folderSession = state.currentFolderSession } = {}) {
     if (!inventory || !collectionContent) return;
     const result = materializeContent(inventory, collectionContent);
     if (result.kind === 'has-missing') {
@@ -464,7 +459,7 @@ export function initApp() {
           inventory.setActiveCollection(collectionContent);
           applyCollection(result.partialCollection, {
             inventory,
-            dirHandle,
+            folderSession,
             statusText: collectionPartiallyLoadedText(result.existingNamesInOrder.length, result.missingCount),
             timeout: 4000,
           });
@@ -479,18 +474,18 @@ export function initApp() {
     inventory.setActiveCollection(collectionContent);
     applyCollection(result.collection, {
       inventory,
-      dirHandle,
+      folderSession,
       statusText: collectionLoadedText(result.collection.orderedClips().length),
     });
   }
 
-  async function loadFolderSelection({ dirHandle = null, files = [], folderName = '' } = {}) {
+  async function loadFolderSelection({ folderSession = null, files = [], folderName = '' } = {}) {
     try {
       const { inventory } = await buildCollectionInventory({
         folderName,
         files,
         validator,
-        logInvalidDescription: (result) => logInvalidDescription(result, dirHandle),
+        logInvalidDescription: (result) => logInvalidDescription(result, folderSession),
       });
       inventory.setActiveCollection(inventory.defaultCollection());
       const initialCollection = inventory.activeCollection();
@@ -506,7 +501,7 @@ export function initApp() {
             inventory.setActiveCollection(initialCollection);
             applyCollection(result.partialCollection, {
               inventory,
-              dirHandle,
+              folderSession,
               statusText: collectionPartiallyLoadedText(result.existingNamesInOrder.length, result.missingCount),
               timeout: 4000,
             });
@@ -518,7 +513,7 @@ export function initApp() {
 
       applyCollection(result.collection, {
         inventory,
-        dirHandle,
+        folderSession,
         statusText: initialLoadStatusText(inventory, result),
       });
       if (result.collection.orderedClips().length > 0) {
@@ -526,24 +521,19 @@ export function initApp() {
         recomputeLayout();
       }
     } catch (err) {
-      await logRuntimeError('Failed to load the selected folder.', err, dirHandle);
+      await logRuntimeError('Failed to load the selected folder.', err, folderSession);
       showStatus(collectionReadErrorText(err), 4000);
     }
   }
 
   async function triggerFolderPicker() {
     hideCollectionConflict();
-    if (canUseDirectoryPicker()) {
+    if (fileSystem.canUseDirectoryPicker()) {
       try {
-        const dirHandle = await pickDirectory();
-        const files = await readFilesFromDirectory(dirHandle, {
-          onFileReadError: (info) => logDirectoryReadError(info, dirHandle),
+        const selection = await fileSystem.pickFolder({
+          onFileReadError: (info, folderSession) => logDirectoryReadError(info, folderSession),
         });
-        await loadFolderSelection({
-          dirHandle,
-          files,
-          folderName: dirHandle?.name || '',
-        });
+        await loadFolderSelection(selection);
         return;
       } catch (err) {
         if (err?.name === 'AbortError') return;
@@ -605,9 +595,8 @@ export function initApp() {
 
     const { mode } = await persistCollectionContent({
       content: nextContent,
-      currentDirHandle: state.currentDirHandle,
-      saveTextToDirectory,
-      downloadText,
+      folderSession: state.currentFolderSession,
+      fileSystem,
     });
     showStatus(
       mode === 'saved'
@@ -863,13 +852,9 @@ export function initApp() {
       e.target.value = '';
       return;
     }
-    const folderName = folderNameFromFiles(fileList);
+    const selection = fileSystem.selectionFromFileList(fileList);
     e.target.value = '';
-    void loadFolderSelection({
-      dirHandle: null,
-      files: fileList,
-      folderName,
-    });
+    void loadFolderSelection(selection);
   }
 
   function onToggleTitles() {

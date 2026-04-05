@@ -127,45 +127,53 @@ describe('business logic modules', () => {
   });
 
   test('runSaveOrder uses direct write when handle is available', async () => {
-    const saveTextToDirectory = vi.fn(async () => {});
-    const downloadText = vi.fn();
+    const fileSystem = {
+      saveTextFile: vi.fn(async () => ({ mode: 'saved' })),
+    };
     const showStatus = vi.fn();
     const mode = await runSaveOrder({
       names: ['one.mp4', 'two.webm'],
-      currentDirHandle: { kind: 'directory', getFileHandle: vi.fn() },
-      saveTextToDirectory,
-      downloadText,
+      folderSession: { accessMode: 'readwrite' },
+      fileSystem,
       showStatus,
     });
     expect(mode).toBe('saved');
-    expect(saveTextToDirectory).toHaveBeenCalledOnce();
-    expect(saveTextToDirectory).toHaveBeenCalledWith(expect.anything(), 'default-collection.txt', 'one.mp4\ntwo.webm\n');
-    expect(downloadText).not.toHaveBeenCalled();
+    expect(fileSystem.saveTextFile).toHaveBeenCalledOnce();
+    expect(fileSystem.saveTextFile).toHaveBeenCalledWith({
+      folderSession: { accessMode: 'readwrite' },
+      filename: 'default-collection.txt',
+      text: 'one.mp4\ntwo.webm\n',
+    });
     expect(showStatus).toHaveBeenCalledWith('Saved default-collection.txt to the selected folder.');
   });
 
   test('runSaveOrder supports named collection files', async () => {
-    const saveTextToDirectory = vi.fn(async () => {});
-    const downloadText = vi.fn();
+    const fileSystem = {
+      saveTextFile: vi.fn(async () => ({ mode: 'downloaded' })),
+    };
     const showStatus = vi.fn();
     const mode = await runSaveOrder({
       names: ['one.mp4'],
       filename: 'my-cut.txt',
-      currentDirHandle: null,
-      saveTextToDirectory,
-      downloadText,
+      folderSession: null,
+      fileSystem,
       showStatus,
       buildSavedStatus: (name) => `Saved ${name}`,
       buildDownloadedStatus: (name) => `Downloaded ${name}`,
     });
     expect(mode).toBe('downloaded');
-    expect(downloadText).toHaveBeenCalledWith('my-cut.txt', 'one.mp4\n');
+    expect(fileSystem.saveTextFile).toHaveBeenCalledWith({
+      folderSession: null,
+      filename: 'my-cut.txt',
+      text: 'one.mp4\n',
+    });
     expect(showStatus).toHaveBeenCalledWith('Downloaded my-cut.txt');
   });
 
   test('persistCollectionContent serializes content and reuses save fallback behavior without status concerns', async () => {
-    const saveTextToDirectory = vi.fn(async () => {});
-    const downloadText = vi.fn();
+    const fileSystem = {
+      saveTextFile: vi.fn(async () => ({ mode: 'saved' })),
+    };
     const content = ClipCollectionContent.fromFilename({
       filename: 'subset.txt',
       orderedClipNames: ['one.mp4', 'two.webm'],
@@ -173,17 +181,15 @@ describe('business logic modules', () => {
 
     const result = await persistCollectionContent({
       content,
-      currentDirHandle: { kind: 'directory', getFileHandle: vi.fn() },
-      saveTextToDirectory,
-      downloadText,
+      folderSession: { accessMode: 'readwrite' },
+      fileSystem,
     });
 
     expect(result).toEqual({ mode: 'saved' });
-    expect(saveTextToDirectory).toHaveBeenCalledWith(
-      expect.anything(),
-      'subset.txt',
-      'one.mp4\ntwo.webm\n',
-    );
-    expect(downloadText).not.toHaveBeenCalled();
+    expect(fileSystem.saveTextFile).toHaveBeenCalledWith({
+      folderSession: { accessMode: 'readwrite' },
+      filename: 'subset.txt',
+      text: 'one.mp4\ntwo.webm\n',
+    });
   });
 });
