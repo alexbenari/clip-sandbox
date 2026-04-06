@@ -100,6 +100,45 @@ export function addSelectedClipsFailedText(destinationName, err) {
   return `Failed to add selected clips to ${destinationName || 'the destination collection'}: ${detail}`;
 }
 
+export function deleteFromDiskPreflightText() {
+  return 'The current collection has unsaved changes. Save before deleting clips from disk?';
+}
+
+export function deleteFromDiskConfirmationText(clipCount, affectedSavedCollectionCount = 0) {
+  const clipText = `${clipCount} clip${clipCount === 1 ? '' : 's'}`;
+  if (affectedSavedCollectionCount === 0) {
+    return `Delete ${clipText} from disk? This does not affect any saved collections in this folder.`;
+  }
+  return `Delete ${clipText} from disk? This also removes them from ${affectedSavedCollectionCount} saved collection${affectedSavedCollectionCount === 1 ? '' : 's'} in this folder.`;
+}
+
+export function deleteFromDiskPreviewOverflowText(hiddenCount) {
+  return `...and ${hiddenCount} more`;
+}
+
+export function deleteFromDiskResultText({
+  deletedCount = 0,
+  failedDeleteCount = 0,
+  cleanedSavedCollectionCount = 0,
+  failedCollectionRewriteCount = 0,
+} = {}) {
+  if (deletedCount === 0) {
+    return 'Failed to delete the selected clips from disk.';
+  }
+
+  const parts = [`Deleted ${deletedCount} clip${deletedCount === 1 ? '' : 's'} from disk.`];
+  if (failedDeleteCount > 0) {
+    parts.push(`Failed to delete ${failedDeleteCount}.`);
+  }
+  if (cleanedSavedCollectionCount > 0) {
+    parts.push(`Removed deleted clips from ${cleanedSavedCollectionCount} saved collection${cleanedSavedCollectionCount === 1 ? '' : 's'}.`);
+  }
+  if (failedCollectionRewriteCount > 0) {
+    parts.push(`Failed to update ${failedCollectionRewriteCount} saved collection${failedCollectionRewriteCount === 1 ? '' : 's'}.`);
+  }
+  return parts.join(' ');
+}
+
 export function activeCollectionText(name) {
   return (name || '').trim() || DEFAULT_APP_TITLE;
 }

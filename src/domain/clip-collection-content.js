@@ -102,6 +102,27 @@ export class ClipCollectionContent {
     };
   }
 
+  removeClipNames(clipNames) {
+    const namesToRemove = new Set(ClipCollectionContent.#normalizedOrderedClipNames(clipNames));
+    const removedClipNames = [];
+    const remainingClipNames = [];
+
+    for (const clipName of this.#orderedClipNames) {
+      if (namesToRemove.has(clipName)) {
+        removedClipNames.push(clipName);
+        continue;
+      }
+      remainingClipNames.push(clipName);
+    }
+
+    return {
+      content: this.withOrderedClipNames(remainingClipNames),
+      removedClipNames,
+      removedCount: removedClipNames.length,
+      isNoOp: removedClipNames.length === 0,
+    };
+  }
+
   toText() {
     if (this.#orderedClipNames.length === 0) return '';
     return this.#orderedClipNames.join('\n') + '\n';

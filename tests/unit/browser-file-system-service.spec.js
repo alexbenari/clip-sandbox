@@ -105,4 +105,80 @@ describe('browser file system service', () => {
     expect(result).toEqual({ mode: 'unavailable' });
     expect(appendTextToDirectoryFileImpl).not.toHaveBeenCalled();
   });
+
+  it('deletes files in order when the session can mutate disk', async () => {
+    const deleteTopLevelEntryImpl = vi.fn(async () => {});
+    const service = createBrowserFileSystemService({ deleteTopLevelEntryImpl });
+    const folderSession = {
+      accessMode: 'readwrite',
+      directoryHandle: { kind: 'directory', getFileHandle: vi.fn() },
+    };
+
+    const result = await service.deleteFiles({
+      folderSession,
+      filenames: ['alpha.mp4', 'bravo.webm'],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      code: 'deleted',
+      results: [
+        { filename: 'alpha.mp4', ok: true },
+        { filename: 'bravo.webm', ok: true },
+      ],
+    });
+    expect(deleteTopLevelEntryImpl.mock.calls).toEqual([
+      [folderSession.directoryHandle, 'alpha.mp4'],
+      [folderSession.directoryHandle, 'bravo.webm'],
+    ]);
+  });
+
+  it('returns unavailable results without attempting deletion for read-only sessions', async () => {
+    const deleteTopLevelEntryImpl = vi.fn(async () => {});
+    const service = createBrowserFileSystemService({ deleteTopLevelEntryImpl });
+
+    const result = await service.deleteFiles({
+      folderSession: { accessMode: 'read-only' },
+      filenames: ['alpha.mp4'],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('unavailable');
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]).toMatchObject({
+      filename: 'alpha.mp4',
+      ok: false,
+      code: 'unavailable',
+    });
+    expect(result.results[0].error).toBeInstanceOf(Error);
+    expect(deleteTopLevelEntryImpl).not.toHaveBeenCalled();
+  });
+
+  it('keeps ordered mixed outcomes for partial delete results', async () => {
+    const deleteTopLevelEntryImpl = vi.fn(async (_handle, filename) => {
+      if (filename === 'bravo.webm') throw new Error('locked');
+    });
+    const service = createBrowserFileSystemService({ deleteTopLevelEntryImpl });
+    const folderSession = {
+      accessMode: 'readwrite',
+      directoryHandle: { kind: 'directory', getFileHandle: vi.fn() },
+    };
+
+    const result = await service.deleteFiles({
+      folderSession,
+      filenames: ['alpha.mp4', 'bravo.webm', 'charlie.mp4'],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('partial');
+    expect(result.results).toHaveLength(3);
+    expect(result.results[0]).toEqual({ filename: 'alpha.mp4', ok: true });
+    expect(result.results[1]).toMatchObject({
+      filename: 'bravo.webm',
+      ok: false,
+      code: 'delete-failed',
+    });
+    expect(result.results[1].error).toBeInstanceOf(Error);
+    expect(result.results[2]).toEqual({ filename: 'charlie.mp4', ok: true });
+  });
 });

@@ -1,9 +1,9 @@
-function menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn) {
-  return [loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn].filter((el) => el instanceof HTMLElement);
+function menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn) {
+  return [loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn].filter((el) => el instanceof HTMLElement);
 }
 
-function focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn) {
-  return menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn).filter((el) => !el.disabled);
+function focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn) {
+  return menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn).filter((el) => !el.disabled);
 }
 
 export function createOrderMenuController({
@@ -14,6 +14,7 @@ export function createOrderMenuController({
   saveBtn,
   saveAsNewBtn,
   addToCollectionBtn,
+  deleteFromDiskBtn,
 }) {
   if (!orderMenu || !orderMenuBtn || !orderMenuPanel) {
     return {
@@ -46,12 +47,12 @@ export function createOrderMenuController({
   }
 
   function focusFirstItem() {
-    const first = focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn)[0];
+    const first = focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn)[0];
     if (first) first.focus();
   }
 
   function moveItemFocus(step) {
-    const items = focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn);
+    const items = focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn);
     if (items.length === 0) return;
     const currentIndex = items.findIndex((el) => el === document.activeElement);
     const nextIndex = currentIndex < 0 ? 0 : (currentIndex + step + items.length) % items.length;
@@ -111,12 +112,12 @@ export function createOrderMenuController({
     }
     if (e.key === 'End') {
       e.preventDefault();
-      const items = focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn);
+      const items = focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn);
       if (items.length) items[items.length - 1].focus();
     }
   });
 
-  for (const item of menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn)) {
+  for (const item of menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn)) {
     item.addEventListener('click', () => close());
   }
 

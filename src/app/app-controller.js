@@ -48,6 +48,10 @@ import {
   removedClipsText,
   addedSelectedClipsText,
   addSelectedClipsFailedText,
+  deleteFromDiskPreflightText,
+  deleteFromDiskConfirmationText,
+  deleteFromDiskPreviewOverflowText,
+  deleteFromDiskResultText,
   activeCollectionText,
   activeCollectionTabText,
   niceNum,
@@ -80,6 +84,7 @@ export function initApp() {
   const saveBtn = document.getElementById('saveBtn');
   const saveAsNewBtn = document.getElementById('saveAsNewBtn');
   const addToCollectionBtn = document.getElementById('addToCollectionBtn');
+  const deleteFromDiskBtn = document.getElementById('deleteFromDiskBtn');
   const orderMenu = document.getElementById('orderMenu');
   const orderMenuBtn = document.getElementById('orderMenuBtn');
   const orderMenuPanel = document.getElementById('orderMenuPanel');
@@ -115,6 +120,16 @@ export function initApp() {
   const confirmUnsavedChangesBtn = document.getElementById('confirmUnsavedChangesBtn');
   const discardUnsavedChangesBtn = document.getElementById('discardUnsavedChangesBtn');
   const cancelUnsavedChangesBtn = document.getElementById('cancelUnsavedChangesBtn');
+  const deletePreflightDialog = document.getElementById('deletePreflightDialog');
+  const deletePreflightText = document.getElementById('deletePreflightText');
+  const confirmDeletePreflightBtn = document.getElementById('confirmDeletePreflightBtn');
+  const discardDeletePreflightBtn = document.getElementById('discardDeletePreflightBtn');
+  const cancelDeletePreflightBtn = document.getElementById('cancelDeletePreflightBtn');
+  const deleteFromDiskDialog = document.getElementById('deleteFromDiskDialog');
+  const deleteFromDiskSummary = document.getElementById('deleteFromDiskSummary');
+  const deleteFromDiskPreview = document.getElementById('deleteFromDiskPreview');
+  const confirmDeleteFromDiskBtn = document.getElementById('confirmDeleteFromDiskBtn');
+  const cancelDeleteFromDiskBtn = document.getElementById('cancelDeleteFromDiskBtn');
   const clipContextMenu = document.getElementById('clipContextMenu');
   const clipContextMenuPanel = document.getElementById('clipContextMenuPanel');
   const body = document.body;
@@ -153,6 +168,7 @@ export function initApp() {
     },
   });
   let pendingCollectionConflict = null;
+  let pendingDeleteRequest = null;
 
   function showStatus(msg, timeout = 2500) {
     showStatusAdapter(statusBar, msg, timeout);
@@ -175,7 +191,11 @@ export function initApp() {
   }
 
   function activeCollectionFilename() {
-    return currentContent()?.filename || '';
+    return currentInventory()?.backingFilenameFor(currentContent()) || '';
+  }
+
+  function canDeleteFromDisk() {
+    return fileSystem.canMutateDisk(state.currentFolderSession);
   }
 
   function isFullscreen() {
@@ -247,6 +267,9 @@ export function initApp() {
 
   function cancelSaveAsNewFlow() {
     closeSaveAsNewDialog();
+    if (pendingDeleteRequest?.awaitingSave) {
+      pendingDeleteRequest = null;
+    }
     currentInventory()?.clearPendingAction();
     renderCollectionSelector();
   }
@@ -279,10 +302,14 @@ export function initApp() {
     return addToCollectionValidationErrorText(validationCode);
   }
 
-  function renderAddToCollectionButton() {
-    if (!addToCollectionBtn) return;
+  function renderActionButtons() {
     const hasSelection = gridController?.getSelectedClipIds?.().length > 0;
-    addToCollectionBtn.disabled = !currentInventory() || !hasSelection;
+    if (addToCollectionBtn) {
+      addToCollectionBtn.disabled = !currentInventory() || !hasSelection;
+    }
+    if (deleteFromDiskBtn) {
+      deleteFromDiskBtn.disabled = !currentInventory() || !hasSelection || !canDeleteFromDisk();
+    }
   }
 
   function addToCollectionChoices() {
@@ -329,7 +356,7 @@ export function initApp() {
 
     addToCollectionDialogController.close();
     renderCollectionSelector();
-    renderAddToCollectionButton();
+    renderActionButtons();
     showStatus(addedSelectedClipsText(result.destinationName, result.addedCount, result.skippedCount), 4000);
     return result;
   }
@@ -356,6 +383,137 @@ export function initApp() {
       return;
     }
     unsavedChangesDialog.removeAttribute('open');
+  }
+
+  function buildDeleteRequestFromSelection() {
+    if (!state.currentCollection || !currentInventory()) return null;
+    const selectedClipIds = gridController.getSelectedClipIds();
+    if (selectedClipIds.length === 0) return null;
+    const selectedClipNames = state.currentCollection.clipNamesForIdsInOrder(selectedClipIds);
+    if (selectedClipNames.length === 0) return null;
+    return {
+      selectedClipIds,
+      selectedClipNames,
+      affectedSavedCollectionCount: currentInventory().savedCollectionEntriesContainingClipNames(selectedClipNames).length,
+    };
+  }
+
+  function closeDeletePreflightDialog() {
+    if (!deletePreflightDialog) return;
+    if (typeof deletePreflightDialog.close === 'function' && deletePreflightDialog.open) {
+      deletePreflightDialog.close();
+      return;
+    }
+    deletePreflightDialog.removeAttribute('open');
+  }
+
+  function openDeletePreflightDialog() {
+    if (!deletePreflightDialog) return;
+    if (deletePreflightText) {
+      deletePreflightText.textContent = deleteFromDiskPreflightText();
+    }
+    if (typeof deletePreflightDialog.showModal === 'function') {
+      deletePreflightDialog.showModal();
+      return;
+    }
+    deletePreflightDialog.setAttribute('open', '');
+  }
+
+  function closeDeleteFromDiskDialog() {
+    if (!deleteFromDiskDialog) return;
+    if (typeof deleteFromDiskDialog.close === 'function' && deleteFromDiskDialog.open) {
+      deleteFromDiskDialog.close();
+      return;
+    }
+    deleteFromDiskDialog.removeAttribute('open');
+  }
+
+  function openDeleteFromDiskDialog(deleteRequest) {
+    if (!deleteFromDiskDialog || !deleteRequest) return;
+    if (deleteFromDiskSummary) {
+      deleteFromDiskSummary.textContent = deleteFromDiskConfirmationText(
+        deleteRequest.selectedClipNames.length,
+        deleteRequest.affectedSavedCollectionCount,
+      );
+    }
+    if (deleteFromDiskPreview) {
+      const previewNames = deleteRequest.selectedClipNames.slice(0, 5);
+      const hiddenCount = Math.max(0, deleteRequest.selectedClipNames.length - previewNames.length);
+      deleteFromDiskPreview.textContent = hiddenCount > 0
+        ? `${previewNames.join('\n')}\n${deleteFromDiskPreviewOverflowText(hiddenCount)}`
+        : previewNames.join('\n');
+    }
+    if (typeof deleteFromDiskDialog.showModal === 'function') {
+      deleteFromDiskDialog.showModal();
+      return;
+    }
+    deleteFromDiskDialog.setAttribute('open', '');
+  }
+
+  function cancelPendingDeleteFlow() {
+    pendingDeleteRequest = null;
+    closeDeletePreflightDialog();
+    closeDeleteFromDiskDialog();
+  }
+
+  async function logDeleteFailures(result) {
+    for (const failedDelete of Array.from(result?.failedDeletes || [])) {
+      await appendErrorLog(
+        `Disk delete error\nFile: ${failedDelete.filename}\nDetails: ${failedDelete.error?.message || failedDelete.error || failedDelete.code}\n\n`
+      );
+    }
+    for (const failedRewrite of Array.from(result?.failedCollectionRewrites || [])) {
+      await appendErrorLog(
+        `Collection rewrite error\nFile: ${failedRewrite.filename}\nCollection: ${failedRewrite.collectionName}\nDetails: ${failedRewrite.error?.message || failedRewrite.error}\n\n`
+      );
+    }
+  }
+
+  async function confirmDeleteFromDisk() {
+    const deleteRequest = pendingDeleteRequest;
+    if (!deleteRequest || !state.currentCollection || !currentInventory()) return;
+    closeDeleteFromDiskDialog();
+    pendingDeleteRequest = null;
+
+    const result = await collectionManager.deleteSelectedClipsFromDisk({
+      selectedClipIds: deleteRequest.selectedClipIds,
+      currentCollection: state.currentCollection,
+      inventory: currentInventory(),
+      currentFolderSession: state.currentFolderSession,
+    });
+
+    if (result.deletedClipIds.length > 0) {
+      state.currentCollection.removeMany(result.deletedClipIds);
+      applyCollection(state.currentCollection, {
+        inventory: currentInventory(),
+        folderSession: state.currentFolderSession,
+      });
+    } else {
+      renderActionButtons();
+    }
+
+    if (result.failedDeletes.length > 0 || result.failedCollectionRewrites.length > 0) {
+      await logDeleteFailures(result);
+    }
+
+    showStatus(deleteFromDiskResultText({
+      deletedCount: result.deletedClipIds.length,
+      failedDeleteCount: result.failedDeletes.length,
+      cleanedSavedCollectionCount: result.cleanedSavedCollectionCount,
+      failedCollectionRewriteCount: result.failedCollectionRewrites.length,
+    }), 4500);
+  }
+
+  function openDeleteFromDiskFlow() {
+    if (!canDeleteFromDisk()) return;
+    const deleteRequest = buildDeleteRequestFromSelection();
+    if (!deleteRequest) return;
+    pendingDeleteRequest = deleteRequest;
+    if (currentInventory()?.hasDirtyChanges()) {
+      openDeletePreflightDialog();
+      return;
+    }
+    openDeleteFromDiskDialog(deleteRequest);
   }
 
   async function appendErrorLog(text, folderSession = state.currentFolderSession) {
@@ -402,15 +560,18 @@ export function initApp() {
     inventory?.refreshDirtyState(collection);
     gridController.renderCollection(collection);
     renderCollectionSelector();
-    renderAddToCollectionButton();
+    renderActionButtons();
     if (statusText) showStatus(statusText, timeout);
   }
 
   function clearLoadedState() {
     hideCollectionConflict();
     pendingCollectionConflict = null;
+    pendingDeleteRequest = null;
     closeSaveAsNewDialog();
     addToCollectionDialogController.close();
+    closeDeletePreflightDialog();
+    closeDeleteFromDiskDialog();
     clipContextMenuController.close({ restoreFocus: false });
     closeUnsavedDialog();
     closeZoom();
@@ -419,7 +580,7 @@ export function initApp() {
     setCurrentFolderSession(state, null);
     renderCollectionSelector();
     updateCount();
-    renderAddToCollectionButton();
+    renderActionButtons();
   }
 
   function initialLoadStatusText(inventory, result) {
@@ -631,6 +792,11 @@ export function initApp() {
     }
     await saveCollection(normalizeCollectionFilename(rawName), { makeActive: true });
     closeSaveAsNewDialog();
+    if (pendingDeleteRequest?.awaitingSave) {
+      pendingDeleteRequest.awaitingSave = false;
+      openDeleteFromDiskDialog(pendingDeleteRequest);
+      return;
+    }
     if (currentInventory()?.pendingAction()) {
       await continuePendingAction({ saveFirst: false });
     }
@@ -639,6 +805,22 @@ export function initApp() {
   async function confirmAddToCollection(destination) {
     if (!state.currentCollection || !currentInventory()) return;
     await runAddToCollection(destination, { showDialogValidation: true });
+  }
+
+  async function confirmDeletePreflightSave() {
+    if (!pendingDeleteRequest) return;
+    closeDeletePreflightDialog();
+    pendingDeleteRequest.awaitingSave = true;
+    const saveResult = await saveCollection();
+    if (saveResult?.deferred) return;
+    pendingDeleteRequest.awaitingSave = false;
+    openDeleteFromDiskDialog(pendingDeleteRequest);
+  }
+
+  function continueDeleteWithoutSaving() {
+    if (!pendingDeleteRequest) return;
+    closeDeletePreflightDialog();
+    openDeleteFromDiskDialog(pendingDeleteRequest);
   }
 
   function renderTitlesToggleButton() {
@@ -678,6 +860,7 @@ export function initApp() {
   function openGridContextMenu(point) {
     const inventory = currentInventory();
     const hasSelection = gridController.getSelectedClipIds().length > 0;
+    const canDeleteSelected = hasSelection && canDeleteFromDisk();
     const choices = addToCollectionChoices();
     const items = hasSelection
       ? choices.map((choice) => ({
@@ -703,6 +886,15 @@ export function initApp() {
         openAddToCollectionDialog({ startWithNewCollection: true });
       },
     });
+    if (canDeleteSelected) {
+      items.push({
+        id: 'delete-from-disk',
+        label: 'Delete from Disk...',
+        onSelect: () => {
+          openDeleteFromDiskFlow();
+        },
+      });
+    }
 
     clipContextMenuController.open({
       point,
@@ -717,7 +909,7 @@ export function initApp() {
     updateCount,
     recomputeLayout,
     onSelectionChange: () => {
-      renderAddToCollectionButton();
+      renderActionButtons();
     },
     onOrderChange: (orderedClipIds) => {
       if (!state.currentCollection) return;
@@ -792,6 +984,16 @@ export function initApp() {
       addToCollectionDialogController.close();
       return;
     }
+    if (deletePreflightDialog?.open && e.key === 'Escape') {
+      e.preventDefault();
+      cancelPendingDeleteFlow();
+      return;
+    }
+    if (deleteFromDiskDialog?.open && e.key === 'Escape') {
+      e.preventDefault();
+      cancelPendingDeleteFlow();
+      return;
+    }
     if (unsavedChangesDialog?.open && e.key === 'Escape') {
       e.preventDefault();
       currentInventory()?.clearPendingAction();
@@ -812,7 +1014,7 @@ export function initApp() {
       if (gridController.handleKeyDown(e)) return;
       return;
     }
-    if (addToCollectionDialogController.isOpen()) return;
+    if (addToCollectionDialogController.isOpen() || deletePreflightDialog?.open || deleteFromDiskDialog?.open) return;
     if (isEditableTarget(e.target)) return;
     if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'f' || e.key === 'F') && zoomOverlay.isOpen()) {
       closeZoom();
@@ -884,6 +1086,7 @@ export function initApp() {
     saveBtn,
     saveAsNewBtn,
     addToCollectionBtn,
+    deleteFromDiskBtn,
   });
 
   bindControlEvents({
@@ -892,6 +1095,7 @@ export function initApp() {
     saveBtn,
     saveAsNewBtn,
     addToCollectionBtn,
+    deleteFromDiskBtn,
     loadOrderBtn: null,
     orderFileInput: null,
     toggleTitlesBtn,
@@ -901,6 +1105,7 @@ export function initApp() {
     onSaveOrder: () => void saveCollection(),
     onSaveAsNew: openSaveAsNewDialog,
     onAddToCollection: openAddToCollectionDialog,
+    onDeleteFromDisk: openDeleteFromDiskFlow,
     onLoadOrderClick: () => {},
     onOrderFileChange: () => {},
     onToggleTitles,
@@ -953,6 +1158,19 @@ export function initApp() {
     currentInventory()?.clearPendingAction();
     closeUnsavedDialog();
     renderCollectionSelector();
+  });
+  confirmDeletePreflightBtn?.addEventListener('click', () => void confirmDeletePreflightSave());
+  discardDeletePreflightBtn?.addEventListener('click', continueDeleteWithoutSaving);
+  cancelDeletePreflightBtn?.addEventListener('click', cancelPendingDeleteFlow);
+  deletePreflightDialog?.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    cancelPendingDeleteFlow();
+  });
+  confirmDeleteFromDiskBtn?.addEventListener('click', () => void confirmDeleteFromDisk());
+  cancelDeleteFromDiskBtn?.addEventListener('click', cancelPendingDeleteFlow);
+  deleteFromDiskDialog?.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    cancelPendingDeleteFlow();
   });
 
   bindGlobalEvents({

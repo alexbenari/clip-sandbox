@@ -29,19 +29,23 @@ async function loadClips(page, scenario, { expectedVisibleCount } = {}) {
   await expect(page.locator('#grid .thumb')).toHaveCount(expectedCount);
 }
 
-async function loadClipsViaDirectoryPickerMock(page, files, { expectedVisibleCount } = {}) {
+async function loadClipsViaDirectoryPickerMock(page, files, { expectedVisibleCount, deleteFailures = [], directoryName = 'clips' } = {}) {
   await page.goto(appUrl);
   await page.waitForSelector('#pickBtn');
-  await page.evaluate((mockFiles) => {
+  await page.evaluate(({ mockFiles, deleteFailures: failingNames, directoryName: mockDirectoryName }) => {
     window.__savedOrderWrites = [];
+    window.__deletedEntries = [];
+    window.__mockDirectoryFiles = mockFiles.map((file) => ({ ...file }));
+    const deleteFailureSet = new Set(failingNames);
     const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
     window.showDirectoryPicker = async () => ({
       kind: 'directory',
-      name: 'clips',
+      name: mockDirectoryName,
       async *values() {
-        for (const f of mockFiles) {
+        for (const f of window.__mockDirectoryFiles) {
           yield {
             kind: 'file',
+            name: f.name,
             async getFile() {
               return toFile(f);
             },
@@ -58,13 +62,28 @@ async function loadClipsViaDirectoryPickerMock(page, files, { expectedVisibleCou
               },
               async close() {
                 window.__savedOrderWrites.push({ name, data, create: !!options.create });
+                const existingIndex = window.__mockDirectoryFiles.findIndex((file) => file.name === name);
+                const existingType = existingIndex >= 0 ? (window.__mockDirectoryFiles[existingIndex].type || 'text/plain') : 'text/plain';
+                if (existingIndex >= 0) window.__mockDirectoryFiles.splice(existingIndex, 1);
+                window.__mockDirectoryFiles.push({ name, type: existingType, content: data });
               },
             };
           },
         };
       },
+      async removeEntry(name) {
+        if (deleteFailureSet.has(name)) {
+          throw new Error(`Mock delete failure for ${name}`);
+        }
+        const existingIndex = window.__mockDirectoryFiles.findIndex((file) => file.name === name);
+        if (existingIndex < 0) {
+          throw new Error(`Entry not found: ${name}`);
+        }
+        window.__deletedEntries.push(name);
+        window.__mockDirectoryFiles.splice(existingIndex, 1);
+      },
     });
-  }, files);
+  }, { mockFiles: files, deleteFailures, directoryName });
   await page.click('#pickBtn');
   const expectedCount = Number.isInteger(expectedVisibleCount)
     ? expectedVisibleCount
@@ -339,6 +358,163 @@ test.describe('Delete selected clip', () => {
 
     await page.keyboard.press('Backspace');
     await expect(page.locator('#grid .thumb')).toHaveCount(2);
+  });
+});
+
+test.describe('Delete from disk', () => {
+  test('shows the top-menu action disabled in read-only sessions and omits the right-click action', async ({ page }) => {
+    await loadClips(page, 'delete');
+    await page.locator('#grid .thumb').first().click();
+
+    await openOrderMenu(page);
+    await expect(page.locator('#deleteFromDiskBtn')).toBeDisabled();
+
+    await openGridContextMenu(page, page.locator('#gridWrap'), { expectedCount: 1 });
+    await expect(page.locator('#clipContextMenu [role="menuitem"]')).toHaveText(['New collection...']);
+  });
+
+  test('shows zero affected saved collections in the confirmation copy', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'alpha.mp4', type: 'video/mp4', content: 'a' },
+      { name: 'bravo.webm', type: 'video/webm', content: 'b' },
+    ]);
+
+    await page.locator('#grid .thumb').first().click();
+    await openOrderMenu(page);
+    await page.click('#deleteFromDiskBtn');
+
+    await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
+    await expect(page.locator('#deleteFromDiskSummary')).toContainText('does not affect any saved collections');
+    await expect(page.locator('#deleteFromDiskPreview')).toContainText('alpha.mp4');
+
+    await page.click('#cancelDeleteFromDiskBtn');
+    await expect(page.locator('#deleteFromDiskDialog')).not.toHaveAttribute('open', '');
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+  });
+
+  test('right-click delete removes files from disk and one affected saved collection', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'alpha.mp4', type: 'video/mp4', content: 'a' },
+      { name: 'bravo.webm', type: 'video/webm', content: 'b' },
+      { name: 'subset.txt', type: 'text/plain', content: 'alpha.mp4\n' },
+    ]);
+
+    await page.locator('#grid .thumb').first().click();
+    await openGridContextMenu(page, page.locator('#gridWrap'), { expectedCount: 3 });
+    await expect(page.locator('#clipContextMenu [role="menuitem"]')).toHaveText([
+      'Add to subset',
+      'New collection...',
+      'Delete from Disk...',
+    ]);
+    await page.click('#clipContextMenu [data-item-id="delete-from-disk"]');
+
+    await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
+    await expect(page.locator('#deleteFromDiskSummary')).toContainText('1 saved collection');
+    await page.click('#confirmDeleteFromDiskBtn');
+
+    await expect(page.locator('#status')).toHaveText('Deleted 1 clip from disk. Removed deleted clips from 1 saved collection.');
+    await expect(page.locator('#grid .thumb')).toHaveCount(1);
+    await expect.poll(async () => (await getOrder(page)).join('|')).toBe('bravo.webm');
+
+    const state = await page.evaluate(() => ({
+      deletedEntries: window.__deletedEntries || [],
+      writes: window.__savedOrderWrites || [],
+    }));
+    expect(state.deletedEntries).toEqual(['alpha.mp4']);
+    expect(state.writes.map((write) => write.name)).toEqual(['subset.txt']);
+    const subsetWrite = state.writes.find((write) => write.name === 'subset.txt');
+    expect(subsetWrite.data).toBe('');
+  });
+
+  test('reports more than one affected saved collection in the confirmation copy and rewrites both', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'one.mp4', type: 'video/mp4', content: '1' },
+      { name: 'two.webm', type: 'video/webm', content: '2' },
+      { name: 'three.mp4', type: 'video/mp4', content: '3' },
+      { name: 'subset.txt', type: 'text/plain', content: 'one.mp4\n' },
+      { name: 'picks.txt', type: 'text/plain', content: 'one.mp4\nthree.mp4\n' },
+    ]);
+
+    await page.locator('#grid .thumb').first().click();
+    await openOrderMenu(page);
+    await page.click('#deleteFromDiskBtn');
+
+    await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
+    await expect(page.locator('#deleteFromDiskSummary')).toContainText('2 saved collections');
+    await page.click('#confirmDeleteFromDiskBtn');
+
+    await expect(page.locator('#status')).toHaveText('Deleted 1 clip from disk. Removed deleted clips from 2 saved collections.');
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+
+    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
+    expect(writes).toHaveLength(2);
+    expect(writes.map((write) => write.name).sort()).toEqual(['picks.txt', 'subset.txt']);
+    const subsetWrite = writes.find((write) => write.name === 'subset.txt');
+    const picksWrite = writes.find((write) => write.name === 'picks.txt');
+    expect(subsetWrite.data).toBe('');
+    expect(picksWrite.data.trim().split('\n')).toEqual(['three.mp4']);
+  });
+
+  test('keeps successful deletes and reports partial success when one selected file fails', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'alpha.mp4', type: 'video/mp4', content: 'a' },
+      { name: 'bravo.webm', type: 'video/webm', content: 'b' },
+      { name: 'charlie.mp4', type: 'video/mp4', content: 'c' },
+      { name: 'subset.txt', type: 'text/plain', content: 'alpha.mp4\n' },
+    ], { deleteFailures: ['charlie.mp4'] });
+
+    const first = page.locator('#grid .thumb').nth(0);
+    const third = page.locator('#grid .thumb').nth(2);
+    await first.click();
+    await third.click({ modifiers: ['Control'] });
+
+    await openOrderMenu(page);
+    await page.click('#deleteFromDiskBtn');
+    await page.click('#confirmDeleteFromDiskBtn');
+
+    await expect(page.locator('#status')).toHaveText('Deleted 1 clip from disk. Failed to delete 1. Removed deleted clips from 1 saved collection.');
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
+    await expect(page.locator('#grid .thumb.selected').first()).toHaveAttribute('data-name', 'charlie.mp4');
+
+    const state = await page.evaluate(() => ({
+      deletedEntries: window.__deletedEntries || [],
+      writes: window.__savedOrderWrites || [],
+    }));
+    expect(state.deletedEntries).toEqual(['alpha.mp4']);
+    expect(state.writes.map((write) => write.name).sort()).toEqual(['err.log', 'subset.txt']);
+    const subsetWrite = state.writes.find((write) => write.name === 'subset.txt');
+    const errLogWrite = state.writes.find((write) => write.name === 'err.log');
+    expect(subsetWrite.data).toBe('');
+    expect(errLogWrite.data).toContain('Disk delete error');
+    expect(errLogWrite.data).toContain('charlie.mp4');
+  });
+
+  test('prompts before deleting from disk when the active collection is dirty', async ({ page }) => {
+    await loadClipsViaDirectoryPickerMock(page, [
+      { name: 'alpha.mp4', type: 'video/mp4', content: 'a' },
+      { name: 'bravo.webm', type: 'video/webm', content: 'b' },
+      { name: 'subset.txt', type: 'text/plain', content: 'alpha.mp4\nbravo.webm\n' },
+    ], { expectedVisibleCount: 2 });
+
+    await selectCollection(page, 'subset.txt');
+    await page.locator('#grid .thumb').first().click();
+    await page.keyboard.press('Delete');
+    await expect(page.locator('#grid .thumb')).toHaveCount(1);
+
+    await page.locator('#grid .thumb').first().click();
+    await openOrderMenu(page);
+    await page.click('#deleteFromDiskBtn');
+
+    await expect(page.locator('#deletePreflightDialog')).toHaveAttribute('open', '');
+    await page.click('#discardDeletePreflightBtn');
+    await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
+    await expect(page.locator('#deleteFromDiskSummary')).toContainText('1 saved collection');
+    await page.click('#confirmDeleteFromDiskBtn');
+
+    await expect(page.locator('#status')).toHaveText('Deleted 1 clip from disk. Removed deleted clips from 1 saved collection.');
+    await expect(page.locator('#activeCollectionName')).toHaveValue('subset.txt');
+    await expect(page.locator('#grid .thumb')).toHaveCount(0);
   });
 });
 

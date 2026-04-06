@@ -97,6 +97,18 @@ describe('clip and collection models', () => {
     expect(merged.isNoOp).toBe(false);
   });
 
+  test('removes clip names while preserving remaining order', () => {
+    const content = ClipCollectionContent.fromFilename({
+      filename: 'subset.txt',
+      orderedClipNames: ['alpha.mp4', 'bravo.webm', 'charlie.mp4', 'delta.mp4'],
+    });
+    const pruned = content.removeClipNames(['bravo.webm', 'missing.mp4', 'delta.mp4']);
+    expect(pruned.removedClipNames).toEqual(['bravo.webm', 'delta.mp4']);
+    expect(pruned.removedCount).toBe(2);
+    expect(pruned.content.orderedClipNames).toEqual(['alpha.mp4', 'charlie.mp4']);
+    expect(pruned.isNoOp).toBe(false);
+  });
+
   test('creates a synthetic default collection and sorts explicit collections alphabetically', () => {
     const inventory = new ClipCollectionInventory({
       folderName: 'clips',
@@ -156,9 +168,11 @@ describe('clip and collection models', () => {
       'subset',
     ]);
     expect(inventory.defaultCollectionFilename()).toBe('clips-default.txt');
+    expect(inventory.defaultCollectionHasBackingFile()).toBe(true);
     expect(inventory.getCollectionByFilename('clips-default.txt')?.orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
     expect(inventory.getCollectionByRef(createDefaultCollectionRef())?.orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
     expect(inventory.getCollectionByRef(createSavedCollectionRef('subset.txt'))?.orderedClipNames).toEqual(['alpha.mp4']);
+    expect(inventory.savedCollectionEntries().map((entry) => entry.filename)).toEqual(['clips-default.txt', 'subset.txt']);
   });
 
   test('treats default-collection.txt as a regular explicit collection', () => {
@@ -214,6 +228,25 @@ describe('clip and collection models', () => {
     expect(inventory.refreshDirtyState(collection)).toBe(true);
     inventory.clearDirtyState();
     expect(inventory.hasDirtyChanges()).toBe(false);
+  });
+
+  test('prunes implicit default contents when deleted files leave the folder', () => {
+    const inventory = new ClipCollectionInventory({
+      folderName: 'clips',
+      videoFiles: [
+        new File(['a'], 'alpha.mp4'),
+        new File(['b'], 'bravo.webm'),
+        new File(['c'], 'charlie.mp4'),
+      ],
+    });
+
+    inventory.setVideoFiles([
+      new File(['a'], 'alpha.mp4'),
+      new File(['c'], 'charlie.mp4'),
+    ]);
+
+    expect(inventory.defaultCollectionHasBackingFile()).toBe(false);
+    expect(inventory.defaultCollection().orderedClipNames).toEqual(['alpha.mp4', 'charlie.mp4']);
   });
 
   test('validates collection description text and reports human-readable diagnostics', () => {

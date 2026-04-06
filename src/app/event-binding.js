@@ -10,6 +10,7 @@ export function bindControlEvents({
   saveBtn,
   saveAsNewBtn,
   addToCollectionBtn,
+  deleteFromDiskBtn,
   loadOrderBtn,
   orderFileInput,
   toggleTitlesBtn,
@@ -19,6 +20,7 @@ export function bindControlEvents({
   onSaveOrder,
   onSaveAsNew,
   onAddToCollection,
+  onDeleteFromDisk,
   onLoadOrderClick,
   onOrderFileChange,
   onToggleTitles,
@@ -29,6 +31,7 @@ export function bindControlEvents({
   saveBtn.addEventListener('click', onSaveOrder);
   saveAsNewBtn?.addEventListener('click', onSaveAsNew);
   addToCollectionBtn?.addEventListener('click', onAddToCollection);
+  deleteFromDiskBtn?.addEventListener('click', onDeleteFromDisk);
   loadOrderBtn?.addEventListener('click', onLoadOrderClick);
   orderFileInput?.addEventListener('change', onOrderFileChange);
   toggleTitlesBtn.addEventListener('click', onToggleTitles);

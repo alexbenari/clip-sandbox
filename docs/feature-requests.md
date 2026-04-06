@@ -6,6 +6,10 @@
 -  `ClipCollectionLoader`: file-level logic where the input is a folder and the output is a `ClipCollection`.
 -  Reusable UI components imported from a separate library: zoom view and rclick menu
 -  create a linear walthrough of the code (e.g, using showboat) to kck off agents
+-  make error log usable: 
+   -  one line message, timestamp, module, error message
+   -  save in available folder
+   -  allow viewing in the ui
 -  Add a linter?
 
 ## Collection Mode (a.k.a Grid Mode)

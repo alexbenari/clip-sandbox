@@ -1,6 +1,7 @@
 import {
   appendTextToDirectoryFile,
   canUseDirectoryPicker as canUseDirectoryPickerAdapter,
+  deleteTopLevelEntry,
   downloadText,
   folderNameFromFiles,
   pickDirectory,
@@ -27,6 +28,7 @@ export function createBrowserFileSystemService({
   win = window,
   appendTextToDirectoryFileImpl = appendTextToDirectoryFile,
   canUseDirectoryPickerImpl = canUseDirectoryPickerAdapter,
+  deleteTopLevelEntryImpl = deleteTopLevelEntry,
   downloadTextImpl = downloadText,
   folderNameFromFilesImpl = folderNameFromFiles,
   pickDirectoryImpl = pickDirectory,
@@ -96,10 +98,50 @@ export function createBrowserFileSystemService({
     return { mode: 'saved' };
   }
 
+  async function deleteFiles({
+    folderSession = null,
+    filenames = [],
+  } = {}) {
+    if (!canMutateDisk(folderSession)) {
+      return {
+        ok: false,
+        code: 'unavailable',
+        results: Array.from(filenames || []).map((filename) => ({
+          filename,
+          ok: false,
+          code: 'unavailable',
+          error: new Error('Disk mutation is unavailable for the current folder session.'),
+        })),
+      };
+    }
+
+    const results = [];
+    for (const filename of Array.from(filenames || [])) {
+      try {
+        await deleteTopLevelEntryImpl(folderSession.directoryHandle, filename);
+        results.push({ filename, ok: true });
+      } catch (error) {
+        results.push({
+          filename,
+          ok: false,
+          code: 'delete-failed',
+          error,
+        });
+      }
+    }
+
+    return {
+      ok: results.every((result) => result.ok),
+      code: results.every((result) => result.ok) ? 'deleted' : 'partial',
+      results,
+    };
+  }
+
   return {
     appendTextFile,
     canMutateDisk,
     canUseDirectoryPicker,
+    deleteFiles,
     pickFolder,
     saveTextFile,
     selectionFromFileList,

@@ -22,6 +22,7 @@ Collection management is folder-scoped:
 - **Save current collection**: save overwrites the currently selected collection file.
 - **Save as New**: save the current collection to a new `.txt` file and make it the active collection for the session.
 - **Add selected clips to another collection**: right-click the grid for direct destination choices, or use **Collection** -> **Add Selected to Collection...** as the dialog fallback.
+- **Delete selected clips from disk**: in writable folder sessions, use the grid right-click menu or **Collection** -> **Delete Selected from Disk...** for permanent file deletion plus saved-collection cleanup.
 - **Error log**: invalid collection-file diagnostics are written to `err.log` in the selected folder when direct folder write access is available.
 - **Zoom mode**: double-click a clip or press `Z`.
 - **Fullscreen mode**: click **Full Screen** or press `F`.
@@ -60,7 +61,7 @@ Supported video formats:
    - `Don't Save`: switch without saving,
    - `Cancel`: stay on the current collection.
 
-### 3. Reorder, Trim, or Copy Selected Clips
+### 3. Reorder, Trim, Copy, or Delete Selected Clips
 
 1. Drag a clip tile to change its order.
 2. Click a clip to select only that clip.
@@ -71,10 +72,35 @@ Supported video formats:
 7. In the dialog flow, choose another same-folder collection or `New collection...`.
 8. Existing destination entries are kept, selected clips already present are skipped, and new clips append at the end in the current selected order.
 9. The app stays on the current source collection after the add completes.
+10. In writable folder sessions, right-click also shows `Delete from Disk...` for permanent deletion of the current selection.
+11. The top **Collection** menu also includes **Delete Selected from Disk...** and disables it when the folder session is read-only or no clips are selected.
 
 Note: delete shortcuts are ignored while typing in inputs or selects.
+Note: `Delete` and `Backspace` remove selected clips only from the current collection view. They do not delete files from disk.
 
-### 4. Save the Current Collection
+### 4. Delete Selected Clips from Disk
+
+1. Select one or more clips.
+2. Open the grid right-click menu and choose `Delete from Disk...`, or open **Collection** and choose **Delete Selected from Disk...**.
+3. If the active collection has unsaved changes, choose one of:
+   - `Save and Continue`
+   - `Continue Without Saving`
+   - `Cancel`
+4. Review the confirmation text. It tells you:
+   - how many clips will be deleted,
+   - whether any saved collections in this folder will also be cleaned up,
+   - up to five filenames from the current selection.
+5. Click `Delete` to continue, or `Cancel` to stop.
+6. The app deletes each selected file independently.
+7. Any clip file deleted successfully is also removed from affected saved collections in the same folder.
+8. If some deletes fail, the successful deletes are kept and the status bar reports the partial success.
+
+Important:
+- this action is permanent,
+- it is available only when the folder was loaded with writable folder access,
+- if the app is in read-only fallback mode, the top-menu action stays disabled and the right-click action is hidden.
+
+### 5. Save the Current Collection
 
 1. Open **Collection**.
 2. Click **Save**.
@@ -84,7 +110,7 @@ Note: delete shortcuts are ignored while typing in inputs or selects.
 4. If folder write access is available, the file is written into the selected folder.
 5. If direct folder write is unavailable, the browser downloads the file instead.
 
-### 5. Save as New
+### 6. Save as New
 
 1. Open **Collection**.
 2. Click **Save as New**.
@@ -92,7 +118,7 @@ Note: delete shortcuts are ignored while typing in inputs or selects.
 4. The app adds `.txt` automatically.
 5. The new file becomes the active collection for the current session after save.
 
-### 6. Handle Missing Collection Entries
+### 7. Handle Missing Collection Entries
 
 If a selected collection lists filenames that are not present in the selected folder, the app shows an inline conflict panel.
 
@@ -102,25 +128,25 @@ Choices:
 
 `Display Existing Clips Only` keeps only the listed clips that still exist and preserves their order.
 
-### 7. Zoom a Clip
+### 8. Zoom a Clip
 
 1. Double-click a clip, or select it and press `Z`.
 2. The clip opens in zoom mode with audio controls available through the keyboard.
 3. Press `Escape` or click outside the zoom frame to close it.
 
-### 8. Hide or Show Titles
+### 9. Hide or Show Titles
 
 1. Click **Hide Titles** to remove filename overlays.
 2. Click **Show Titles** to restore them.
 
-### 9. Use Fullscreen Mode
+### 10. Use Fullscreen Mode
 
 1. Click **Full Screen** or press `F`.
 2. Titles are hidden automatically while fullscreen is active.
 3. Press `F` again to exit fullscreen.
 4. If zoom mode is open, the app closes zoom first.
 
-### 10. Change Fullscreen Slot Count
+### 11. Change Fullscreen Slot Count
 
 1. While in fullscreen, type digits such as `6` or `12`.
 2. After a short delay, the slot count updates.
@@ -130,6 +156,7 @@ Choices:
 
 - Invalid top-level `.txt` files are excluded from the collection dropdown.
 - When the app has direct write access to the selected folder, invalid collection diagnostics are appended to `err.log`.
+- Disk-delete and collection-cleanup failures are also appended to `err.log` when the app has direct write access to the selected folder.
 - In browser fallback mode without folder write access, the app still excludes invalid files, but `err.log` cannot be written into the folder.
 - Subfolders are ignored for both videos and collection files.
 

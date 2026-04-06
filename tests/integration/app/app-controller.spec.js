@@ -10,6 +10,7 @@ const baseDom = `
         <button id="saveBtn" disabled>Save</button>
         <button id="saveAsNewBtn" disabled>Save as New</button>
         <button id="addToCollectionBtn" disabled>Add Selected to Collection...</button>
+        <button id="deleteFromDiskBtn" disabled>Delete Selected from Disk...</button>
       </div>
     </div>
     <button id="toggleTitlesBtn">Hide Titles</button>
@@ -45,6 +46,18 @@ const baseDom = `
     <button id="confirmUnsavedChangesBtn">Save</button>
     <button id="discardUnsavedChangesBtn">Discard</button>
     <button id="cancelUnsavedChangesBtn">Cancel</button>
+  </dialog>
+  <dialog id="deletePreflightDialog">
+    <p id="deletePreflightText"></p>
+    <button id="confirmDeletePreflightBtn">Save and Continue</button>
+    <button id="discardDeletePreflightBtn">Continue Without Saving</button>
+    <button id="cancelDeletePreflightBtn">Cancel</button>
+  </dialog>
+  <dialog id="deleteFromDiskDialog">
+    <p id="deleteFromDiskSummary"></p>
+    <pre id="deleteFromDiskPreview"></pre>
+    <button id="confirmDeleteFromDiskBtn">Delete</button>
+    <button id="cancelDeleteFromDiskBtn">Cancel</button>
   </dialog>
   <div id="clipContextMenu" hidden><div id="clipContextMenuPanel"></div></div>
   <div id="gridWrap"><div id="grid" style="gap:10px"></div></div>

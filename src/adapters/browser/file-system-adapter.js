@@ -76,6 +76,10 @@ export async function appendTextToDirectoryFile(directoryHandle, filename, text)
   await writable.close();
 }
 
+export async function deleteTopLevelEntry(directoryHandle, filename) {
+  await directoryHandle.removeEntry(filename);
+}
+
 export function downloadText(filename, text) {
   const blob = new Blob([text], { type: 'text/plain' });
   const a = document.createElement('a');

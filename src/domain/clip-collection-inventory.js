@@ -11,6 +11,7 @@ export class ClipCollectionInventory {
   #videoFilesByName;
   #collectionsByFilename;
   #defaultCollection;
+  #defaultCollectionHasBackingFile;
   #activeCollection;
   #dirty;
   #pendingAction;
@@ -20,6 +21,7 @@ export class ClipCollectionInventory {
     this.#videoFilesByName = new Map();
     this.#collectionsByFilename = new Map();
     this.#defaultCollection = ClipCollectionContent.createDefault({ folderName: this.#folderName });
+    this.#defaultCollectionHasBackingFile = false;
     this.#activeCollection = this.#defaultCollection;
     this.#dirty = false;
     this.#pendingAction = null;
@@ -53,6 +55,7 @@ export class ClipCollectionInventory {
   setCollectionContents(collectionContents) {
     const nextCollectionsByFilename = new Map();
     let nextDefaultCollection = this.#defaultCollection;
+    let nextDefaultCollectionHasBackingFile = false;
     for (const collectionContent of Array.from(collectionContents || [])) {
       if (!(collectionContent instanceof ClipCollectionContent)) continue;
       if (this.isDefaultCollectionFilename(collectionContent.filename)) {
@@ -60,12 +63,14 @@ export class ClipCollectionInventory {
           folderName: this.#folderName,
           orderedClipNames: collectionContent.orderedClipNames,
         });
+        nextDefaultCollectionHasBackingFile = true;
         continue;
       }
       if (!collectionContent.hasBackingFile) continue;
       nextCollectionsByFilename.set(collectionContent.filename, collectionContent);
     }
     this.#defaultCollection = nextDefaultCollection;
+    this.#defaultCollectionHasBackingFile = nextDefaultCollectionHasBackingFile;
     this.#collectionsByFilename = nextCollectionsByFilename;
     if (!this.#activeCollection?.hasBackingFile
       || this.#activeCollection.collectionName === this.#defaultCollection.collectionName
@@ -83,6 +88,7 @@ export class ClipCollectionInventory {
         folderName: this.#folderName,
         orderedClipNames: collectionContent.orderedClipNames,
       });
+      this.#defaultCollectionHasBackingFile = true;
       if (makeActive) this.#activeCollection = this.#defaultCollection;
       return;
     }
@@ -93,6 +99,10 @@ export class ClipCollectionInventory {
 
   defaultCollection() {
     return this.#defaultCollection;
+  }
+
+  defaultCollectionHasBackingFile() {
+    return this.#defaultCollectionHasBackingFile;
   }
 
   activeCollection() {
@@ -115,6 +125,40 @@ export class ClipCollectionInventory {
     const normalizedFilename = String(filename || '').trim();
     if (this.isDefaultCollectionFilename(normalizedFilename)) return this.#defaultCollection;
     return this.#collectionsByFilename.get(normalizedFilename) || null;
+  }
+
+  backingFilenameFor(collectionContent) {
+    if (collectionContent?.isDefault) {
+      return this.#defaultCollectionHasBackingFile ? this.defaultCollectionFilename() : '';
+    }
+    return collectionContent?.filename || '';
+  }
+
+  savedCollectionEntries() {
+    const entries = [];
+    if (this.#defaultCollectionHasBackingFile) {
+      entries.push({
+        collectionContent: this.#defaultCollection,
+        filename: this.defaultCollectionFilename(),
+        isDefault: true,
+      });
+    }
+    for (const collectionContent of this.#collectionsByFilename.values()) {
+      entries.push({
+        collectionContent,
+        filename: collectionContent.filename,
+        isDefault: false,
+      });
+    }
+    return entries;
+  }
+
+  savedCollectionEntriesContainingClipNames(clipNames) {
+    const names = new Set(Array.from(clipNames || []).filter(Boolean));
+    if (names.size === 0) return [];
+    return this.savedCollectionEntries().filter(({ collectionContent }) =>
+      collectionContent.orderedClipNames.some((clipName) => names.has(clipName))
+    );
   }
 
   selectableCollections() {
@@ -187,9 +231,15 @@ export class ClipCollectionInventory {
   }
 
   #refreshDefaultCollection() {
-    const existingOrderedClipNames = this.#defaultCollection?.orderedClipNames?.length
-      ? this.#defaultCollection.orderedClipNames
-      : this.videoNames();
+    const availableNames = this.videoNames();
+    const availableNameSet = new Set(availableNames);
+    const currentDefaultNames = this.#defaultCollection?.orderedClipNames || [];
+    const existingOrderedClipNames = this.#defaultCollectionHasBackingFile
+      ? (currentDefaultNames.length > 0 ? currentDefaultNames : availableNames)
+      : (() => {
+          const filteredNames = currentDefaultNames.filter((name) => availableNameSet.has(name));
+          return filteredNames.length > 0 || availableNames.length === 0 ? filteredNames : availableNames;
+        })();
     this.#defaultCollection = ClipCollectionContent.createDefault({
       folderName: this.#folderName,
       orderedClipNames: existingOrderedClipNames,

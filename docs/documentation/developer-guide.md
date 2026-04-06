@@ -20,7 +20,7 @@ This guide explains the current browser-only architecture and the collection-man
 - [`src/app`](/C:/dev/clip-sandbox/src/app): composition root, app state, text, layout rules, event binding
 - [`src/ui`](/C:/dev/clip-sandbox/src/ui): DOM-facing controllers such as the grid, order menu, reusable context menu, and zoom overlay
 - [`src/adapters/browser`](/C:/dev/clip-sandbox/src/adapters/browser): thin wrappers around browser APIs
-- [`src/adapters/browser/browser-file-system-service.js`](/C:/dev/clip-sandbox/src/adapters/browser/browser-file-system-service.js): app-facing browser filesystem boundary that maps browser capabilities into folder sessions plus save/log operations
+- [`src/adapters/browser/browser-file-system-service.js`](/C:/dev/clip-sandbox/src/adapters/browser/browser-file-system-service.js): app-facing browser filesystem boundary that maps browser capabilities into folder sessions plus save/log/delete operations
 - [`tests/unit`](/C:/dev/clip-sandbox/tests/unit): unit coverage
 - [`tests/integration/ui`](/C:/dev/clip-sandbox/tests/integration/ui): UI-controller integration coverage
 - [`tests/e2e/scenarios.spec.js`](/C:/dev/clip-sandbox/tests/e2e/scenarios.spec.js): observable browser workflows
@@ -56,6 +56,7 @@ Fields:
 Important rule:
 - this class describes what should be in a collection file
 - it does not perform file I/O
+- collection-pruning helpers such as remove-by-filename belong here because they are pure content transforms
 
 ### `CollectionDescriptionValidator`
 
@@ -85,6 +86,7 @@ Responsibilities:
 - store the discovered top-level video-file lookup
 - store available collection descriptions
 - ensure the default collection always exists
+- track whether the default collection currently has a real backing file
 - track the active description
 - track dirty state
 - track pending actions such as collection switch or folder browse
@@ -108,6 +110,7 @@ Responsibilities:
 - translate browser folder selection into a folder session
 - distinguish writable `readwrite` sessions from fallback `read-only` sessions
 - centralize save/download fallback behavior
+- expose ordered best-effort top-level file deletion for writable sessions
 - centralize append-to-log behavior
 
 Important rule:
@@ -161,7 +164,7 @@ The add-to-collection workflow is split across three levels:
 2. [`src/ui/add-to-collection-dialog-controller.js`](/C:/dev/clip-sandbox/src/ui/add-to-collection-dialog-controller.js)
    - owns the add-to-collection dialog DOM, focus behavior, field visibility, and inline validation display
    - stays UI-only and receives shared validation results plus submit callbacks from the app layer
-3. [`src/app/collection-manager.js`](/C:/dev/clip-sandbox/src/app/collection-manager.js)
+3. [`src/business-logic/collection-manager.js`](/C:/dev/clip-sandbox/src/business-logic/collection-manager.js)
    - application service for collection operations such as adding selected clips to another collection
    - coordinates inventory lookups, domain merge behavior, and immediate destination save
 4. existing domain objects
@@ -173,6 +176,37 @@ Important rule:
 - keep merge rules on the domain objects
 - do not push DOM concerns into `CollectionManager`
 - do not push whole collection operations into `ClipCollectionInventory`
+
+### Delete Selected Clips from Disk
+
+The delete-from-disk workflow is split across the same boundaries:
+
+1. [`src/ui/context-menu-controller.js`](/C:/dev/clip-sandbox/src/ui/context-menu-controller.js) and [`src/ui/order-menu-controller.js`](/C:/dev/clip-sandbox/src/ui/order-menu-controller.js)
+   - expose the action only when the current selection is non-empty and the folder session is writable
+   - keep the right-click action hidden when unavailable
+   - keep the top-menu action visible but disabled when unavailable
+2. [`src/app/app-controller.js`](/C:/dev/clip-sandbox/src/app/app-controller.js)
+   - runs the dirty-state preflight dialog
+   - resumes the delete flow after `Save as New` when needed
+   - renders the destructive confirmation with selected-filename preview
+   - logs delete and rewrite failures through `err.log`
+3. [`src/business-logic/collection-manager.js`](/C:/dev/clip-sandbox/src/business-logic/collection-manager.js)
+   - resolves selected clip ids to filenames
+   - deletes files through the filesystem service
+   - identifies affected saved collections
+   - rewrites only the saved collections touched by successful deletes
+   - updates the in-memory inventory and returns a structured partial-success result
+4. [`src/domain/clip-collection-content.js`](/C:/dev/clip-sandbox/src/domain/clip-collection-content.js)
+   - removes successfully deleted filenames while preserving the remaining order
+5. [`src/domain/clip-collection-inventory.js`](/C:/dev/clip-sandbox/src/domain/clip-collection-inventory.js)
+   - distinguishes between an implicit default collection and a default collection that already has a backing `.txt` file
+   - excludes the implicit default from saved-collection rewrite work so delete never creates a default file on its own
+
+Important rules:
+- disk deletion is best-effort per file; one failed delete must not block the rest
+- only successfully deleted filenames are removed from saved collections
+- saved-collection rewrites are immediate folder writes, not download fallbacks
+- delete-from-disk remains unavailable in read-only fallback sessions
 
 ## Non-Recursive Rule
 
@@ -191,7 +225,7 @@ This matters especially for the fallback `webkitdirectory` path because browsers
 
 ## Error Logging
 
-For this feature, invalid collection-description diagnostics and selected runtime errors are appended to `err.log` in the selected folder when the active folder session is writable.
+Invalid collection-description diagnostics, selected runtime errors, and delete-from-disk failures are appended to `err.log` in the selected folder when the active folder session is writable.
 
 Relevant adapter:
 - [`src/adapters/browser/file-system-adapter.js`](/C:/dev/clip-sandbox/src/adapters/browser/file-system-adapter.js)
@@ -305,9 +339,10 @@ Important rule:
   - dropdown-based collection switching
   - dirty switch and dirty folder-change prompts
   - non-recursive filtering
-  - `err.log` behavior in writable-folder mode
-  - save/download/direct-write flows
-  - add-selected-to-collection flows
+- `err.log` behavior in writable-folder mode
+- save/download/direct-write flows
+- add-selected-to-collection flows
+- delete-from-disk full-success and partial-success flows
 
 ## Common Commands
 

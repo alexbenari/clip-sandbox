@@ -117,7 +117,7 @@
     }
     .order-menu-panel button:disabled{ opacity:.5; }
     .order-menu[data-open="true"] .order-menu-panel{
-      max-height:180px;
+      max-height:260px;
       opacity:1;
       pointer-events:auto;
       transform: translateY(0);
@@ -272,13 +272,52 @@
       justify-content:flex-end;
       flex-wrap:wrap;
     }
+    .delete-from-disk-dialog{
+      width:min(92vw, 520px);
+      border:1px solid rgba(239,68,68,.45);
+      border-radius:16px;
+      padding:18px 18px 16px;
+      background:rgba(15,23,42,.98);
+      color:var(--fg);
+      box-shadow: var(--shadow);
+    }
+    .delete-from-disk-dialog::backdrop{
+      background:rgba(2,6,23,.62);
+      backdrop-filter: blur(3px);
+    }
+    .delete-from-disk-dialog h2{
+      margin:0 0 8px;
+      font-size:18px;
+    }
+    .delete-from-disk-dialog p{
+      margin:0 0 12px;
+      color:var(--muted);
+    }
+    .delete-from-disk-preview{
+      margin:0 0 12px;
+      padding:10px 12px;
+      border-radius:10px;
+      background:rgba(2,6,23,.45);
+      color:#fecaca;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space:pre-wrap;
+      max-height:180px;
+      overflow:auto;
+    }
+    .delete-from-disk-actions{
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+    }
 
     .fs-active .toolbar{ display:none; }
     .fs-active #gridWrap{ height:100vh; padding:14px; display:block; }
     .fs-active .collection-conflict,
     .fs-active .save-as-new-dialog,
     .fs-active .unsaved-changes-dialog,
-    .fs-active .add-to-collection-dialog{ display:none !important; }
+    .fs-active .add-to-collection-dialog,
+    .fs-active .delete-from-disk-dialog{ display:none !important; }
 
     .fs-active .thumb{ background:#000 !important; border:none !important; box-shadow:none !important; }
     .fs-active .thumb.selected{ box-shadow:none !important; }
@@ -315,6 +354,7 @@
         <button id="saveBtn" role="menuitem" title="Save the selected collection file in the chosen folder (or download if permissions are unavailable)" disabled>Save</button>
         <button id="saveAsNewBtn" role="menuitem" title="Save the current collection to a new file" disabled>Save as New</button>
         <button id="addToCollectionBtn" role="menuitem" title="Add the current selected clips to another collection" disabled>Add Selected to Collection...</button>
+        <button id="deleteFromDiskBtn" role="menuitem" title="Delete the current selected clips from disk" disabled>Delete Selected from Disk...</button>
       </div>
     </div>
     <button id="toggleTitlesBtn" title="Hide or show clip titles">Hide Titles</button>
@@ -375,6 +415,26 @@
     <div class="add-to-collection-actions">
       <button id="cancelAddToCollectionBtn" type="button">Cancel</button>
       <button id="confirmAddToCollectionBtn" type="button" class="btn-primary">Add</button>
+    </div>
+  </dialog>
+
+  <dialog class="unsaved-changes-dialog" id="deletePreflightDialog">
+    <h2>Save changes before deleting?</h2>
+    <p id="deletePreflightText">The current collection has unsaved changes.</p>
+    <div class="unsaved-changes-actions">
+      <button id="cancelDeletePreflightBtn" type="button">Cancel</button>
+      <button id="discardDeletePreflightBtn" type="button">Continue Without Saving</button>
+      <button id="confirmDeletePreflightBtn" type="button" class="btn-primary">Save and Continue</button>
+    </div>
+  </dialog>
+
+  <dialog class="delete-from-disk-dialog" id="deleteFromDiskDialog">
+    <h2>Delete Clips from Disk</h2>
+    <p id="deleteFromDiskSummary">Delete the selected clips from disk?</p>
+    <pre class="delete-from-disk-preview" id="deleteFromDiskPreview"></pre>
+    <div class="delete-from-disk-actions">
+      <button id="cancelDeleteFromDiskBtn" type="button">Cancel</button>
+      <button id="confirmDeleteFromDiskBtn" type="button" class="btn-primary">Delete</button>
     </div>
   </dialog>
 

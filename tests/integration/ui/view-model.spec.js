@@ -13,6 +13,10 @@ import {
   savedCollectionFileText,
   downloadedCollectionFileText,
   removedClipsText,
+  deleteFromDiskPreflightText,
+  deleteFromDiskConfirmationText,
+  deleteFromDiskPreviewOverflowText,
+  deleteFromDiskResultText,
   activeCollectionText,
   activeCollectionTabText,
 } from '../../../src/app/app-text.js';
@@ -34,6 +38,16 @@ describe('app text helpers', () => {
     expect(downloadedCollectionFileText('my-cut.txt')).toBe('Downloaded my-cut.txt.');
     expect(removedClipsText(1)).toBe('Clip removed from view.');
     expect(removedClipsText(3)).toBe('Removed 3 clips from view.');
+    expect(deleteFromDiskPreflightText()).toContain('Save before deleting');
+    expect(deleteFromDiskConfirmationText(3, 0)).toContain('does not affect any saved collections');
+    expect(deleteFromDiskConfirmationText(3, 2)).toContain('2 saved collections');
+    expect(deleteFromDiskPreviewOverflowText(4)).toBe('...and 4 more');
+    expect(deleteFromDiskResultText({ deletedCount: 3, cleanedSavedCollectionCount: 2 })).toBe(
+      'Deleted 3 clips from disk. Removed deleted clips from 2 saved collections.'
+    );
+    expect(deleteFromDiskResultText({ deletedCount: 3, failedDeleteCount: 1, failedCollectionRewriteCount: 1 })).toBe(
+      'Deleted 3 clips from disk. Failed to delete 1. Failed to update 1 saved collection.'
+    );
   });
 
   test('formats collection errors and conflict summary', () => {
