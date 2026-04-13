@@ -1,7 +1,16 @@
-import { topLevelFiles } from '../adapters/browser/file-system-adapter.js';
-
 export const VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'mkv', 'mpg', 'mpeg']);
 export const COLLECTION_FILE_EXT = '.txt';
+
+export function isTopLevelFolderEntry(file) {
+  const relPath = String(file?.webkitRelativePath || file?.relativePath || '').trim();
+  if (!relPath) return true;
+  const parts = relPath.split(/[\\/]/).filter(Boolean);
+  return parts.length <= 2;
+}
+
+export function topLevelFiles(files) {
+  return Array.from(files || []).filter(isTopLevelFolderEntry);
+}
 
 export function isVideoFile(file) {
   if (file?.type && file.type.startsWith('video/')) return true;

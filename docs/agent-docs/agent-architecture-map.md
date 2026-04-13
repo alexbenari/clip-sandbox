@@ -6,15 +6,18 @@ Verified against:
 
 - `index.html`
 - `app.js`
+- `electron/main.cjs`
+- `electron/preload.cjs`
 - `src/app/*`
-- `src/adapters/browser/*`
+- `src/adapters/electron/*`
+- `src/adapters/browser/fullscreen-adapter.js`
 - `src/business-logic/*`
 - `src/domain/*`
 - `src/ui/*`
 - `tests/unit/*`
 - `tests/integration/*`
 - `tests/e2e/scenarios.spec.js`
-- `deployment/*`
+- `package.json`
 
 This is the canonical entrypoint for agent orientation. Read this before planning substantial work. Use it to narrow where to look. Do not treat it as an exhaustive walkthrough.
 
@@ -33,30 +36,31 @@ This is the canonical entrypoint for agent orientation. Read this before plannin
 
 ## Purpose
 
-Clip Sandbox is a browser-native local video review app. It loads top-level video files from a chosen folder, treats top-level `.txt` files as saved collections, and lets the user:
+Clip Sandbox is a local Electron desktop app for reviewing video clips from one selected folder at a time. It treats top-level `.txt` files as saved collections and lets the user:
 
 1. browse clips in a responsive grid,
 2. switch between collections,
 3. reorder or subset clips,
 4. save or create collections,
 5. add selected clips to another collection,
-6. delete selected clips from disk when the app has read-write folder access,
+6. delete selected clips from disk,
 7. zoom one clip,
 8. enter fullscreen review mode.
 
-The runtime is plain ES modules plus browser APIs. There is no framework and no backend.
+The renderer remains plain ES modules plus DOM APIs. There is still no frontend framework and no backend service. Electron replaces the old browser-plus-static-server runtime.
 
 ## Stable Concepts
 
 These concepts are worth knowing before reading code:
 
-1. `Clip` in [`src/domain/clip.js`](../../src/domain/clip.js): runtime clip object with generated id, underlying `File`, and optional duration.
+1. `Clip` in [`src/domain/clip.js`](../../src/domain/clip.js): runtime clip object with generated id, a renderer-side file-like object for identity, an optional explicit media source, and optional duration.
 2. `ClipCollection` in [`src/domain/clip-collection.js`](../../src/domain/clip-collection.js): runtime ordered collection of `Clip` objects used by the grid and mutation flows.
 3. `ClipCollectionContent` in [`src/domain/clip-collection-content.js`](../../src/domain/clip-collection-content.js): persisted collection description backed by ordered clip names and optional filename.
 4. `ClipCollectionInventory` in [`src/domain/clip-collection-inventory.js`](../../src/domain/clip-collection-inventory.js): folder-level registry of videos plus saved/default collection descriptions.
-5. `folderSession` in [`src/adapters/browser/browser-file-system-service.js`](../../src/adapters/browser/browser-file-system-service.js): access-mode wrapper that distinguishes read-only file-list usage from read-write directory-handle usage.
+5. `folderSession` in [`src/adapters/electron/electron-file-system-service.js`](../../src/adapters/electron/electron-file-system-service.js): direct-access desktop folder session backed by an absolute folder path.
+6. `clipSandboxDesktop` in [`electron/preload.cjs`](../../electron/preload.cjs): preload-exposed desktop API used by the renderer-facing filesystem service.
 
-The important split is runtime collection vs persisted collection description:
+The important split is still runtime collection vs persisted collection description:
 
 1. runtime UI works with `Clip` and `ClipCollection`,
 2. persistence and collection inventory work with `ClipCollectionContent` and `ClipCollectionInventory`.
@@ -65,12 +69,12 @@ The important split is runtime collection vs persisted collection description:
 
 These are normative defaults for future work. Do not violate them without a concrete reason and user approval.
 
-1. Keep the app browser-native and framework-free unless a larger architecture decision is approved.
+1. Keep the renderer framework-free unless a larger architecture decision is approved.
 2. Keep [`src/app/app-controller.js`](../../src/app/app-controller.js) as the composition root and orchestration layer, not the place for new domain rules or reusable UI internals.
 3. Keep durable collection state in domain models and inventory objects, not in DOM order or DOM-selected state.
-4. Keep browser file-system and fullscreen behavior behind adapters or services under [`src/adapters/browser/`](../../src/adapters/browser/).
+4. Keep Electron main/preload and local filesystem behavior behind adapters or services. Do not leak raw Electron or Node APIs broadly into renderer code.
 5. Keep reusable UI behavior in focused controllers under [`src/ui/`](../../src/ui/), even when the app controller wires them together.
-6. Preserve the read-write vs read-only session distinction. Direct disk mutation is allowed only when the folder session is read-write.
+6. The shipped app now assumes direct-access desktop folder sessions. The old read-only browser fallback is not part of the current product model.
 7. Treat `docs/agent-docs/` as the canonical agent-facing architecture knowledge base. Historical specs and plans are not canonical onboarding material.
 
 ## When This Doc Changes
@@ -98,13 +102,14 @@ Do not update it for:
 
 Start here for the current ownership map:
 
-1. App orchestration: [`src/app/app-controller.js`](../../src/app/app-controller.js), [`src/app/app-session-state.js`](../../src/app/app-session-state.js), [`src/app/fullscreen-session.js`](../../src/app/fullscreen-session.js), [`src/app/event-binding.js`](../../src/app/event-binding.js)
-2. Browser boundary: [`src/adapters/browser/browser-file-system-service.js`](../../src/adapters/browser/browser-file-system-service.js), [`src/adapters/browser/file-system-adapter.js`](../../src/adapters/browser/file-system-adapter.js), [`src/adapters/browser/fullscreen-adapter.js`](../../src/adapters/browser/fullscreen-adapter.js), [`src/adapters/browser/dom-renderer-adapter.js`](../../src/adapters/browser/dom-renderer-adapter.js)
-3. Load and persistence workflows: [`src/business-logic/clip-pipeline-loader.js`](../../src/business-logic/clip-pipeline-loader.js), [`src/business-logic/load-clips.js`](../../src/business-logic/load-clips.js), [`src/business-logic/load-collection-inventory.js`](../../src/business-logic/load-collection-inventory.js), [`src/business-logic/load-collection.js`](../../src/business-logic/load-collection.js), [`src/business-logic/persist-collection-content.js`](../../src/business-logic/persist-collection-content.js), [`src/business-logic/collection-manager.js`](../../src/business-logic/collection-manager.js), [`src/business-logic/clip-pipeline.js`](../../src/business-logic/clip-pipeline.js)
-4. Domain models and invariants: [`src/domain/clip.js`](../../src/domain/clip.js), [`src/domain/clip-collection.js`](../../src/domain/clip-collection.js), [`src/domain/clip-collection-content.js`](../../src/domain/clip-collection-content.js), [`src/domain/clip-collection-inventory.js`](../../src/domain/clip-collection-inventory.js), [`src/domain/collection-ref.js`](../../src/domain/collection-ref.js), [`src/domain/collection-description-validator.js`](../../src/domain/collection-description-validator.js)
-5. UI controllers: [`src/ui/clip-collection-grid-controller.js`](../../src/ui/clip-collection-grid-controller.js), [`src/ui/zoom-overlay-controller.js`](../../src/ui/zoom-overlay-controller.js), [`src/ui/display-layout-rules.js`](../../src/ui/display-layout-rules.js), [`src/ui/order-menu-controller.js`](../../src/ui/order-menu-controller.js), dialog controllers in [`src/ui/`](../../src/ui/)
-6. Static shell and bootstrap: [`index.html`](../../index.html), [`app.js`](../../app.js)
-7. Windows deployment: [`deployment/`](../../deployment/), [`tests/integration/deployment/deploy-script.spec.js`](../../tests/integration/deployment/deploy-script.spec.js)
+1. Electron shell: [`electron/main.cjs`](../../electron/main.cjs), [`electron/preload.cjs`](../../electron/preload.cjs)
+2. App orchestration: [`src/app/app-controller.js`](../../src/app/app-controller.js), [`src/app/app-session-state.js`](../../src/app/app-session-state.js), [`src/app/fullscreen-session.js`](../../src/app/fullscreen-session.js), [`src/app/event-binding.js`](../../src/app/event-binding.js)
+3. Desktop/runtime boundary: [`src/adapters/electron/electron-file-system-service.js`](../../src/adapters/electron/electron-file-system-service.js), browser-only fullscreen and DOM adapters under [`src/adapters/browser/`](../../src/adapters/browser/)
+4. Load and persistence workflows: [`src/business-logic/clip-pipeline-loader.js`](../../src/business-logic/clip-pipeline-loader.js), [`src/business-logic/load-clips.js`](../../src/business-logic/load-clips.js), [`src/business-logic/load-collection-inventory.js`](../../src/business-logic/load-collection-inventory.js), [`src/business-logic/load-collection.js`](../../src/business-logic/load-collection.js), [`src/business-logic/persist-collection-content.js`](../../src/business-logic/persist-collection-content.js), [`src/business-logic/collection-manager.js`](../../src/business-logic/collection-manager.js), [`src/business-logic/clip-pipeline.js`](../../src/business-logic/clip-pipeline.js)
+5. Domain models and invariants: [`src/domain/clip.js`](../../src/domain/clip.js), [`src/domain/clip-collection.js`](../../src/domain/clip-collection.js), [`src/domain/clip-collection-content.js`](../../src/domain/clip-collection-content.js), [`src/domain/clip-collection-inventory.js`](../../src/domain/clip-collection-inventory.js), [`src/domain/collection-ref.js`](../../src/domain/collection-ref.js), [`src/domain/collection-description-validator.js`](../../src/domain/collection-description-validator.js)
+6. UI controllers: [`src/ui/clip-collection-grid-controller.js`](../../src/ui/clip-collection-grid-controller.js), [`src/ui/zoom-overlay-controller.js`](../../src/ui/zoom-overlay-controller.js), [`src/ui/display-layout-rules.js`](../../src/ui/display-layout-rules.js), [`src/ui/order-menu-controller.js`](../../src/ui/order-menu-controller.js), dialog controllers in [`src/ui/`](../../src/ui/)
+7. Static shell and bootstrap: [`index.html`](../../index.html), [`app.js`](../../app.js)
+8. Desktop runtime docs and scripts: [`package.json`](../../package.json), [`docs/documentation/windows-deployment.md`](../../docs/documentation/windows-deployment.md)
 
 ## Core Runtime Flows
 
@@ -112,19 +117,21 @@ Start here for the current ownership map:
 
 Read these first:
 
-1. [`src/app/app-controller.js`](../../src/app/app-controller.js)
-2. [`src/adapters/browser/browser-file-system-service.js`](../../src/adapters/browser/browser-file-system-service.js)
-3. [`src/business-logic/clip-pipeline-loader.js`](../../src/business-logic/clip-pipeline-loader.js)
-4. [`src/business-logic/load-collection-inventory.js`](../../src/business-logic/load-collection-inventory.js)
-5. [`src/business-logic/load-collection.js`](../../src/business-logic/load-collection.js)
-6. [`src/ui/clip-collection-grid-controller.js`](../../src/ui/clip-collection-grid-controller.js)
+1. [`electron/preload.cjs`](../../electron/preload.cjs)
+2. [`src/adapters/electron/electron-file-system-service.js`](../../src/adapters/electron/electron-file-system-service.js)
+3. [`src/app/app-controller.js`](../../src/app/app-controller.js)
+4. [`src/business-logic/clip-pipeline-loader.js`](../../src/business-logic/clip-pipeline-loader.js)
+5. [`src/business-logic/load-collection-inventory.js`](../../src/business-logic/load-collection-inventory.js)
+6. [`src/business-logic/load-collection.js`](../../src/business-logic/load-collection.js)
 
 Flow:
 
-1. the app obtains either a read-write directory handle or a read-only file list via the browser file-system service,
-2. `ClipPipelineLoader.loadPipeline(...)` builds a `ClipCollectionInventory` from top-level videos and top-level `.txt` collection files,
-3. the default collection description is materialized into a runtime `ClipCollection` of `Clip` objects with generated ids,
-4. the grid controller renders that runtime collection and owns card DOM, selection UI, drag/drop, and object-URL lifecycle.
+1. the renderer asks the preload bridge to pick a folder,
+2. Electron main enumerates top-level files from the chosen folder and returns lightweight metadata plus collection-file text and video media URLs,
+3. the renderer-facing filesystem service converts those entries into renderer-safe file-like objects,
+4. `ClipPipelineLoader.loadPipeline(...)` builds a `ClipCollectionInventory` from top-level videos and top-level `.txt` collection files,
+5. the default collection description is materialized into a runtime `ClipCollection` of `Clip` objects with generated ids,
+6. the grid controller renders that runtime collection and owns card DOM, selection UI, drag/drop, and media-element lifecycle.
 
 ### Collection Switching and Persistence
 
@@ -134,14 +141,15 @@ Read these first:
 2. [`src/business-logic/clip-pipeline-loader.js`](../../src/business-logic/clip-pipeline-loader.js)
 3. [`src/business-logic/persist-collection-content.js`](../../src/business-logic/persist-collection-content.js)
 4. [`src/business-logic/collection-manager.js`](../../src/business-logic/collection-manager.js)
-5. [`src/app/app-controller.js`](../../src/app/app-controller.js)
+5. [`src/adapters/electron/electron-file-system-service.js`](../../src/adapters/electron/electron-file-system-service.js)
+6. [`src/app/app-controller.js`](../../src/app/app-controller.js)
 
 Flow:
 
 1. `ClipCollectionInventory` owns the persisted collection descriptions available for the current folder,
 2. switching collections re-materializes a runtime `ClipCollection` from inventory content plus the available video files,
 3. saving converts the runtime collection back into `ClipCollectionContent`,
-4. persistence writes directly when the session is read-write, otherwise it falls back to download,
+4. persistence writes directly through the Electron-backed filesystem service,
 5. add-to-collection and delete-from-disk flows also update persisted collection content through business-logic modules rather than through UI-only state.
 
 ### Grid Interaction, Zoom, and Fullscreen
@@ -157,41 +165,45 @@ Read these first:
 Flow:
 
 1. the grid controller owns selection state, card rendering, reorder drag/drop, and metadata updates,
-2. reorder emits ordered clip ids back to the app controller, which updates the runtime collection and dirty-state tracking,
-3. zoom is clip-centric at the app level but the overlay stays media-source-oriented,
-4. fullscreen is coordinated by `createFullscreenSession(...)`, using grid layout rules plus fullscreen adapters.
+2. Electron-backed videos render from `file://` media sources when present, falling back to blob URLs only when needed in renderer tests,
+3. reorder emits ordered clip ids back to the app controller, which updates the runtime collection and dirty-state tracking,
+4. zoom is clip-centric at the app level but the overlay stays media-source-oriented,
+5. fullscreen is coordinated by `createFullscreenSession(...)`, using grid layout rules plus fullscreen adapters.
 
 ## Where To Look By Task
 
 Use this section to avoid broad codebase reads.
 
-1. Change how folders, files, save, append, or delete interact with the browser:
-   Start with [`src/adapters/browser/browser-file-system-service.js`](../../src/adapters/browser/browser-file-system-service.js) and [`src/adapters/browser/file-system-adapter.js`](../../src/adapters/browser/file-system-adapter.js).
-2. Change how videos and collection files are discovered or classified:
+1. Change how folders, files, save, append, or delete interact with the desktop runtime:
+   Start with [`src/adapters/electron/electron-file-system-service.js`](../../src/adapters/electron/electron-file-system-service.js), [`electron/preload.cjs`](../../electron/preload.cjs), and [`electron/main.cjs`](../../electron/main.cjs).
+2. Change how Electron window creation or preload exposure works:
+   Start with [`electron/main.cjs`](../../electron/main.cjs) and [`electron/preload.cjs`](../../electron/preload.cjs).
+3. Change how videos and collection files are discovered or classified:
    Start with [`src/business-logic/load-clips.js`](../../src/business-logic/load-clips.js).
-3. Change how collection files are parsed into runtime collections:
+4. Change how collection files are parsed into runtime collections:
    Start with [`src/business-logic/load-collection-inventory.js`](../../src/business-logic/load-collection-inventory.js), [`src/business-logic/load-collection.js`](../../src/business-logic/load-collection.js), and [`src/domain/clip-collection-inventory.js`](../../src/domain/clip-collection-inventory.js).
-4. Change runtime collection mutation rules:
+5. Change runtime collection mutation rules:
    Start with [`src/domain/clip-collection.js`](../../src/domain/clip-collection.js), [`src/business-logic/collection-manager.js`](../../src/business-logic/collection-manager.js), and [`src/business-logic/clip-pipeline.js`](../../src/business-logic/clip-pipeline.js).
-5. Change grid rendering, selection, reorder, or per-card behavior:
+6. Change grid rendering, selection, reorder, or per-card behavior:
    Start with [`src/ui/clip-collection-grid-controller.js`](../../src/ui/clip-collection-grid-controller.js).
-6. Change zoom behavior:
+7. Change zoom behavior:
    Start with [`src/ui/zoom-overlay-controller.js`](../../src/ui/zoom-overlay-controller.js) and the zoom handling in [`src/app/app-controller.js`](../../src/app/app-controller.js).
-7. Change fullscreen behavior:
+8. Change fullscreen behavior:
    Start with [`src/app/fullscreen-session.js`](../../src/app/fullscreen-session.js) and [`src/ui/display-layout-rules.js`](../../src/ui/display-layout-rules.js).
-8. Change orchestration across multiple subsystems:
+9. Change orchestration across multiple subsystems:
    Start with [`src/app/app-controller.js`](../../src/app/app-controller.js). Expect the change to touch several lower-level modules as well.
-9. Change Windows packaging or launch behavior:
-   Start with [`deployment/deploy.ps1`](../../deployment/deploy.ps1), [`deployment/launch.ps1`](../../deployment/launch.ps1), and their integration tests.
+10. Change Electron e2e coverage:
+   Start with [`tests/e2e/scenarios.spec.js`](../../tests/e2e/scenarios.spec.js) and [`playwright.config.mjs`](../../playwright.config.mjs).
 
 ## Risky Seams
 
 These areas deserve extra care because they cross boundaries or carry more state.
 
 1. [`src/app/app-controller.js`](../../src/app/app-controller.js) is still the largest composition hotspot. Changes here can easily spread across loading, persistence, dialogs, zoom, and fullscreen.
-2. [`src/ui/clip-collection-grid-controller.js`](../../src/ui/clip-collection-grid-controller.js) owns DOM rendering, selection, drag/drop, and object URLs. Changes can affect both UI behavior and lifecycle cleanup.
-3. [`src/app/fullscreen-session.js`](../../src/app/fullscreen-session.js) is stateful and interacts with live DOM/video elements, making regressions more likely than in pure modules.
-4. Persistence behavior depends on `folderSession.accessMode`. A change that forgets the read-only vs read-write distinction can silently break save/delete semantics.
+2. [`src/ui/clip-collection-grid-controller.js`](../../src/ui/clip-collection-grid-controller.js) owns DOM rendering, selection, drag/drop, and media-element sources. Changes can affect both UI behavior and lifecycle cleanup.
+3. [`electron/preload.cjs`](../../electron/preload.cjs) and [`electron/main.cjs`](../../electron/main.cjs) define the desktop trust boundary. Over-broad IPC or preload exposure is the main architecture risk in this runtime.
+4. [`src/app/fullscreen-session.js`](../../src/app/fullscreen-session.js) is stateful and interacts with live DOM/video elements, making regressions more likely than in pure modules.
+5. The current clip contract is intentionally hybrid: renderer code still prefers `File`-like objects for names and collection text, but video playback depends on Electron-provided media URLs. Changes here can break both tests and runtime if they assume one representation everywhere.
 
 ## Validation Map
 
@@ -201,11 +213,8 @@ Use the smallest layer that can prove the behavior.
    [`tests/unit/clip-models.spec.js`](../../tests/unit/clip-models.spec.js), [`tests/unit/business-logic.spec.js`](../../tests/unit/business-logic.spec.js), [`tests/unit/collection-manager.spec.js`](../../tests/unit/collection-manager.spec.js), [`tests/unit/clip-pipeline.spec.js`](../../tests/unit/clip-pipeline.spec.js)
 2. UI controller and orchestration wiring:
    [`tests/integration/app/app-controller.spec.js`](../../tests/integration/app/app-controller.spec.js), UI integration specs under [`tests/integration/ui/`](../../tests/integration/ui/)
-3. Browser-visible behavior and high-confidence regressions:
+3. Electron-visible behavior and high-confidence regressions:
    [`tests/e2e/scenarios.spec.js`](../../tests/e2e/scenarios.spec.js)
-4. Windows deployment:
-   [`tests/integration/deployment/deploy-script.spec.js`](../../tests/integration/deployment/deploy-script.spec.js)
-
 If a change crosses multiple subsystems, the end-to-end suite is usually the safest final check.
 
 ## Knowledge Base Rules

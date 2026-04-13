@@ -2,13 +2,15 @@ export class Clip {
   #id;
   #file;
   #durationSec;
+  #mediaSource;
 
-  constructor({ id, file, durationSec = null } = {}) {
+  constructor({ id, file, durationSec = null, mediaSource = '' } = {}) {
     if (!id) throw new Error('Clip id is required.');
     if (!file) throw new Error('Clip file is required.');
     this.#id = id;
     this.#file = file;
     this.#durationSec = Number.isFinite(durationSec) ? durationSec : null;
+    this.#mediaSource = String(mediaSource || file?.mediaSource || '');
   }
 
   get id() {
@@ -21,6 +23,10 @@ export class Clip {
 
   get file() {
     return this.#file;
+  }
+
+  get mediaSource() {
+    return this.#mediaSource;
   }
 
   get durationSec() {

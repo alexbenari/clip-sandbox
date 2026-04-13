@@ -3,7 +3,6 @@ import { describe, it, beforeEach, expect } from 'vitest';
 const baseDom = `
   <header class="toolbar" id="toolbar">
     <button id="pickBtn"></button>
-    <input type="file" id="folderInput" webkitdirectory directory multiple />
     <div id="orderMenu" data-open="false">
       <button id="orderMenuBtn" aria-expanded="false">Collection</button>
       <div id="orderMenuPanel" role="menu">

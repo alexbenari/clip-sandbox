@@ -31,7 +31,7 @@ function materializedClips(names, filesByName, nextClipId) {
   return Array.from(names || [])
     .map((name) => filesByName.get(name))
     .filter(Boolean)
-    .map((file) => new Clip({ id: nextClipId(), file }));
+    .map((file) => new Clip({ id: nextClipId(), file, mediaSource: file?.mediaSource || '' }));
 }
 
 export function materializeCollectionContent({

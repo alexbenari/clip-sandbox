@@ -1,6 +1,3 @@
-import {
-  getVideosAndCollectionFiles,
-} from '../business-logic/load-clips.js';
 import { ClipPipelineLoader } from '../business-logic/clip-pipeline-loader.js';
 import { persistCollectionContent } from '../business-logic/persist-collection-content.js';
 import {
@@ -20,7 +17,7 @@ import {
   exitFullScreen as exitFullScreenAdapter,
   isFullScreenActive,
 } from '../adapters/browser/fullscreen-adapter.js';
-import { createBrowserFileSystemService } from '../adapters/browser/browser-file-system-service.js';
+import { createElectronFileSystemService } from '../adapters/electron/electron-file-system-service.js';
 import { delay, every, clear as clearClock } from '../adapters/browser/clock-adapter.js';
 import { showStatus as showStatusAdapter, applyGridLayout as applyGridLayoutAdapter, updateClipCount } from '../adapters/browser/dom-renderer-adapter.js';
 import { playBoundaryClank } from '../adapters/browser/audio-feedback-adapter.js';
@@ -47,7 +44,6 @@ import {
   saveAsNewInvalidNameText,
   collectionAlreadyExistsText,
   savedCollectionFileText,
-  downloadedCollectionFileText,
   removedClipsText,
   addedSelectedClipsText,
   addSelectedClipsFailedText,
@@ -97,7 +93,6 @@ export function initApp() {
   const orderMenu = document.getElementById('orderMenu');
   const orderMenuBtn = document.getElementById('orderMenuBtn');
   const orderMenuPanel = document.getElementById('orderMenuPanel');
-  const folderInput = document.getElementById('folderInput');
   const grid = document.getElementById('grid');
   const gridWrap = document.getElementById('gridWrap');
   const countSpan = document.getElementById('count');
@@ -155,7 +150,7 @@ export function initApp() {
   };
   const validator = new CollectionDescriptionValidator();
   const zoomOverlay = createZoomOverlayController({ mountEl: zoomLayerRoot, document });
-  const fileSystem = createBrowserFileSystemService({ win: window });
+  const fileSystem = createElectronFileSystemService({ win: window });
   const collectionManager = new CollectionManager({ fileSystem });
   const clipPipeline = new ClipPipeline({ fileSystem });
   const clipPipelineLoader = new ClipPipelineLoader();
@@ -651,23 +646,15 @@ export function initApp() {
 
   async function triggerFolderPicker() {
     hideCollectionConflict();
-    if (fileSystem.canUseDirectoryPicker()) {
-      try {
-        const selection = await fileSystem.pickFolder({
-          onFileReadError: (info, folderSession) => diagnostics.logDirectoryReadError(info, folderSession),
-        });
-        await loadPipeline(selection);
-        return;
-      } catch (err) {
-        if (err?.name === 'AbortError') return;
-        console.warn('Directory picker unavailable, falling back.', err);
-      }
-    }
     try {
-      if (typeof folderInput.showPicker === 'function') folderInput.showPicker();
-      else folderInput.click();
-    } catch {
-      folderInput.click();
+      const selection = await fileSystem.pickFolder({
+        onFileReadError: (info, folderSession) => diagnostics.logDirectoryReadError(info, folderSession),
+      });
+      await loadPipeline(selection);
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      await diagnostics.logRuntimeError('Failed to browse for a folder.', err, state.currentFolderSession);
+      showStatus(collectionReadErrorText(err), 4000);
     }
   }
 
@@ -724,9 +711,7 @@ export function initApp() {
       makeActive,
     });
     showStatus(
-      mode === 'saved'
-        ? savedCollectionFileText(nextContent.filename)
-        : downloadedCollectionFileText(nextContent.filename)
+      savedCollectionFileText(nextContent.filename)
     );
     if (makeActive) {
       currentInventory().setActiveCollection(nextContent);
@@ -995,18 +980,6 @@ export function initApp() {
     }
   }
 
-  function onFolderInputChange(e) {
-    const fileList = Array.from(e.target.files || []);
-    const { videos, collectionFiles } = getVideosAndCollectionFiles(fileList);
-    if (videos.length === 0 && collectionFiles.length === 0) {
-      e.target.value = '';
-      return;
-    }
-    const selection = fileSystem.selectionFromFileList(fileList);
-    e.target.value = '';
-    void loadPipeline(selection);
-  }
-
   function onToggleTitles() {
     setTitlesHidden(!gridController.areTitlesHidden());
   }
@@ -1037,20 +1010,18 @@ export function initApp() {
     deleteFromDiskBtn,
   });
 
-  bindControlEvents({
-    pickBtn,
-    folderInput,
-    saveBtn,
-    saveAsNewBtn,
+    bindControlEvents({
+      pickBtn,
+      saveBtn,
+      saveAsNewBtn,
     addToCollectionBtn,
     deleteFromDiskBtn,
     loadOrderBtn: null,
     orderFileInput: null,
     toggleTitlesBtn,
-    fsBtn,
-    onPickFolder: () => void onPickFolder(),
-    onFolderInputChange,
-    onSaveOrder: () => void saveCollection(),
+      fsBtn,
+      onPickFolder: () => void onPickFolder(),
+      onSaveOrder: () => void saveCollection(),
     onSaveAsNew: openSaveAsNewDialog,
     onAddToCollection: openAddToCollectionDialog,
     onDeleteFromDisk: openDeleteFromDiskFlow,

@@ -6,7 +6,7 @@ export function isEditableTarget(target) {
 
 export function bindControlEvents({
   pickBtn,
-  folderInput,
+  folderInput = null,
   saveBtn,
   saveAsNewBtn,
   addToCollectionBtn,
@@ -16,7 +16,7 @@ export function bindControlEvents({
   toggleTitlesBtn,
   fsBtn,
   onPickFolder,
-  onFolderInputChange,
+  onFolderInputChange = null,
   onSaveOrder,
   onSaveAsNew,
   onAddToCollection,
@@ -27,7 +27,7 @@ export function bindControlEvents({
   onFsToggle,
 }) {
   pickBtn.addEventListener('click', onPickFolder);
-  folderInput.addEventListener('change', onFolderInputChange);
+  folderInput?.addEventListener('change', onFolderInputChange);
   saveBtn.addEventListener('click', onSaveOrder);
   saveAsNewBtn?.addEventListener('click', onSaveAsNew);
   addToCollectionBtn?.addEventListener('click', onAddToCollection);

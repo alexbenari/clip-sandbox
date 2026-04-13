@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 const baseDom = `
   <header class="toolbar" id="toolbar">
     <button id="pickBtn">Browse Folder…</button>
-    <input type="file" id="folderInput" webkitdirectory directory multiple />
     <div id="orderMenu" data-open="false">
       <button id="orderMenuBtn" aria-expanded="false">Collection</button>
       <div id="orderMenuPanel" role="menu">
@@ -98,6 +97,24 @@ describe('app controller context menu wiring', () => {
     vi.resetModules();
     document.body.innerHTML = baseDom;
     document.title = '';
+    window.clipSandboxDesktop = {
+      pickFolder: vi.fn(async () => ({
+        canceled: false,
+        folderPath: 'C:/clips',
+        folderName: 'clips',
+        files: [{
+          name: 'alpha.mp4',
+          path: 'C:/clips/alpha.mp4',
+          relativePath: 'alpha.mp4',
+          mediaSource: 'file:///C:/clips/alpha.mp4',
+          type: 'video/mp4',
+          lastModifiedMs: Date.now(),
+        }],
+      })),
+      saveTextFile: vi.fn(async () => ({ mode: 'saved' })),
+      appendTextFile: vi.fn(async () => ({ mode: 'saved' })),
+      deleteFiles: vi.fn(async () => ({ ok: true, code: 'deleted', results: [] })),
+    };
     originalCreateObjectURL = URL.createObjectURL;
     originalRevokeObjectURL = URL.revokeObjectURL;
     originalPlay = HTMLMediaElement.prototype.play;
@@ -130,21 +147,14 @@ describe('app controller context menu wiring', () => {
     URL.createObjectURL = originalCreateObjectURL;
     URL.revokeObjectURL = originalRevokeObjectURL;
     HTMLMediaElement.prototype.play = originalPlay;
+    delete window.clipSandboxDesktop;
     document.body.innerHTML = '';
   });
 
   test('right-clicking a selected clip opens the app context menu', async () => {
     const { initApp } = await import('../../../app.js');
     initApp();
-
-    const file = new File(['video'], 'alpha.mp4', { type: 'video/mp4' });
-    Object.defineProperty(file, 'webkitRelativePath', { value: 'clips/alpha.mp4' });
-    const folderInput = document.getElementById('folderInput');
-    Object.defineProperty(folderInput, 'files', {
-      configurable: true,
-      value: [file],
-    });
-    folderInput.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('pickBtn').click();
 
     await waitFor(() => {
       expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1);
@@ -160,8 +170,11 @@ describe('app controller context menu wiring', () => {
 
     await waitFor(() => {
       const items = document.querySelectorAll('#clipContextMenu [role="menuitem"]');
-      expect(items).toHaveLength(1);
-      expect(items[0].textContent).toBe('New collection...');
+      expect(items).toHaveLength(2);
+      expect(Array.from(items).map((item) => item.textContent)).toEqual([
+        'New collection...',
+        'Delete from Disk...',
+      ]);
     });
   });
 });

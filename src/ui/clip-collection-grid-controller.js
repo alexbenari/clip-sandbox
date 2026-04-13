@@ -63,7 +63,7 @@ function setCardDuration(card, seconds, formatLabel) {
 function clearGridCards(grid) {
   for (const el of Array.from(grid.children)) {
     const url = el.dataset.objectUrl;
-    if (url) URL.revokeObjectURL(url);
+    if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
   }
   grid.innerHTML = '';
 }
@@ -81,7 +81,7 @@ function isEditableTarget(target) {
 function createThumbCard({
   clip,
   cardId,
-  objectUrl,
+  mediaSource,
   formatLabel,
   onSelect,
   onDoubleClick,
@@ -99,11 +99,11 @@ function createThumbCard({
   card.draggable = true;
   card.dataset.clipId = clip.id;
   card.dataset.name = clip.name;
-  card.dataset.objectUrl = objectUrl;
+  card.dataset.objectUrl = mediaSource;
   card.dataset.durationSeconds = Number.isFinite(clip.durationSec) ? clip.durationSec : '';
 
   const vid = document.createElement('video');
-  vid.src = objectUrl;
+  vid.src = mediaSource;
   vid.loop = true;
   vid.autoplay = true;
   vid.muted = true;
@@ -452,11 +452,11 @@ export function createClipCollectionGridController({
       return;
     }
     for (const clip of currentCollection.orderedClips()) {
-      const objectUrl = URL.createObjectURL(clip.file);
+      const mediaSource = clip.mediaSource || URL.createObjectURL(clip.file);
       const card = createThumbCard({
         clip,
         cardId: `card-${clip.id}`,
-        objectUrl,
+        mediaSource,
         formatLabel: formatClipLabel,
         onLoadedMetadata,
         onSelect,

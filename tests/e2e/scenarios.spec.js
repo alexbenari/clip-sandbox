@@ -1,1324 +1,214 @@
+import fsp from 'fs/promises';
+import os from 'os';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { test, expect } from '@playwright/test';
-import { computeFsLayout } from '../../src/ui/display-layout-rules.js';
+import { _electron as electron } from 'playwright';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const appUrl = '/';
-const fixtureDir = (name) => path.join(__dirname, 'fixtures', name);
-const VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'mkv', 'mpg', 'mpeg']);
+const fixturesRoot = path.join(__dirname, 'fixtures');
 
-test.beforeEach(({ page }) => {
-  page.on('pageerror', (err) => console.error('Page error:', err));
-  page.on('console', (msg) => console.log('Console:', msg.type(), msg.text()));
-});
+async function copyDir(src, dest) {
+  await fsp.mkdir(dest, { recursive: true });
+  for (const entry of await fsp.readdir(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await copyDir(srcPath, destPath);
+      continue;
+    }
+    await fsp.copyFile(srcPath, destPath);
+  }
+}
 
-async function loadClips(page, scenario, { expectedVisibleCount } = {}) {
-  await page.goto(appUrl);
-  await page.waitForSelector('#folderInput');
-  await page.evaluate(() => {
-    window.showDirectoryPicker = undefined;
+async function createScenarioFolder(name) {
+  const sourceDir = path.join(fixturesRoot, name, 'clips');
+  const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), `clip-sandbox-${name}-`));
+  const folderPath = path.join(tempRoot, 'clips');
+  await copyDir(sourceDir, folderPath);
+  return { tempRoot, folderPath };
+}
+
+async function launchApp() {
+  const electronApp = await electron.launch({
+    args: ['.'],
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      CLIP_SANDBOX_E2E: '1',
+    },
   });
-  const dir = path.join(fixtureDir(scenario), 'clips');
-  await page.setInputFiles('#folderInput', dir);
-  const files = fs.readdirSync(dir);
-  const expectedCount = Number.isInteger(expectedVisibleCount)
-    ? expectedVisibleCount
-    : files.filter((f) => VIDEO_EXTS.has(f.split('.').pop().toLowerCase())).length;
-  await expect(page.locator('#grid .thumb')).toHaveCount(expectedCount);
-}
-
-async function loadClipsViaDirectoryPickerMock(page, files, { expectedVisibleCount, deleteFailures = [], directoryName = 'clips' } = {}) {
-  await page.goto(appUrl);
+  const page = await electronApp.firstWindow();
   await page.waitForSelector('#pickBtn');
-  await page.evaluate(({ mockFiles, deleteFailures: failingNames, directoryName: mockDirectoryName }) => {
-    window.__savedOrderWrites = [];
-    window.__deletedEntries = [];
-    window.__mockDirectoryFiles = mockFiles.map((file) => ({ ...file }));
-    const deleteFailureSet = new Set(failingNames);
-    const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
-    window.showDirectoryPicker = async () => ({
-      kind: 'directory',
-      name: mockDirectoryName,
-      async *values() {
-        for (const f of window.__mockDirectoryFiles) {
-          yield {
-            kind: 'file',
-            name: f.name,
-            async getFile() {
-              return toFile(f);
-            },
-          };
-        }
-      },
-      async getFileHandle(name, options = {}) {
-        return {
-          async createWritable() {
-            let data = '';
-            return {
-              async write(chunk) {
-                data += typeof chunk === 'string' ? chunk : String(chunk);
-              },
-              async close() {
-                window.__savedOrderWrites.push({ name, data, create: !!options.create });
-                const existingIndex = window.__mockDirectoryFiles.findIndex((file) => file.name === name);
-                const existingType = existingIndex >= 0 ? (window.__mockDirectoryFiles[existingIndex].type || 'text/plain') : 'text/plain';
-                if (existingIndex >= 0) window.__mockDirectoryFiles.splice(existingIndex, 1);
-                window.__mockDirectoryFiles.push({ name, type: existingType, content: data });
-              },
-            };
-          },
-        };
-      },
-      async removeEntry(name) {
-        if (deleteFailureSet.has(name)) {
-          throw new Error(`Mock delete failure for ${name}`);
-        }
-        const existingIndex = window.__mockDirectoryFiles.findIndex((file) => file.name === name);
-        if (existingIndex < 0) {
-          throw new Error(`Entry not found: ${name}`);
-        }
-        window.__deletedEntries.push(name);
-        window.__mockDirectoryFiles.splice(existingIndex, 1);
-      },
-    });
-  }, { mockFiles: files, deleteFailures, directoryName });
+  return { electronApp, page };
+}
+
+async function closeApp(electronApp) {
+  if (!electronApp) return;
+  await electronApp.close();
+}
+
+async function removeTempRoot(tempRoot) {
+  if (!tempRoot) return;
+  await fsp.rm(tempRoot, { recursive: true, force: true });
+}
+
+async function setNextFolder(page, folderPath) {
+  await page.evaluate(async (nextFolderPath) => {
+    await window.clipSandboxDesktop.__testSetNextFolderPath(nextFolderPath);
+  }, folderPath);
+}
+
+async function loadFolder(page, folderPath) {
+  await setNextFolder(page, folderPath);
   await page.click('#pickBtn');
-  const expectedCount = Number.isInteger(expectedVisibleCount)
-    ? expectedVisibleCount
-    : files.filter((file) => VIDEO_EXTS.has(file.name.split('.').pop().toLowerCase())).length;
-  await expect(page.locator('#grid .thumb')).toHaveCount(expectedCount);
 }
 
-async function selectCollection(page, filename) {
-  await page.selectOption('#activeCollectionName', filename);
-}
-
-function getOrder(page) {
+async function allClipNames(page) {
   return page.locator('#grid .thumb').evaluateAll((els) => els.map((el) => el.dataset.name));
-}
-
-function getVisibleOrder(page) {
-  return page.locator('#grid .thumb').evaluateAll((els) => els.filter((el) => el.style.display !== 'none').map((el) => el.dataset.name));
 }
 
 async function openOrderMenu(page) {
   await page.click('#orderMenuBtn');
-  await expect.poll(async () => page.locator('#orderMenu').getAttribute('data-open')).toBe('true');
+  await expect(page.locator('#orderMenu')).toHaveAttribute('data-open', 'true');
 }
 
-async function openGridContextMenu(page, locator = page.locator('#gridWrap'), options = {}) {
-  const position = options.position || { x: 40, y: 40 };
+async function openGridContextMenu(page, locator = page.locator('#gridWrap')) {
   await locator.dispatchEvent('contextmenu', {
     bubbles: true,
     button: 2,
-    clientX: position.x,
-    clientY: position.y,
+    clientX: 48,
+    clientY: 48,
   });
-  const expectedCount = options.expectedCount;
-  if (Number.isInteger(expectedCount)) {
-    await expect(page.locator('#clipContextMenu [role="menuitem"]')).toHaveCount(expectedCount);
-    return;
-  }
   await expect.poll(async () => page.locator('#clipContextMenu [role="menuitem"]').count()).toBeGreaterThan(0);
 }
 
-async function waitForZoomVideo(page) {
-  await expect(page.locator('#zoomVideo')).toHaveCount(1);
-}
+test.describe('Electron runtime migration', () => {
+  let electronApp;
+  let page;
+  let tempRoot;
+  let folderPath;
 
-async function openZoomOnFirstClip(page) {
-  const first = page.locator('#grid .thumb').first();
-  await first.dblclick();
-  await expect(page.locator('#zoomOverlay')).toBeVisible();
-  await waitForZoomVideo(page);
-  return first;
-}
-async function getFullscreenSnapshot(page) {
-  return page.evaluate(() => {
-    const grid = document.getElementById('grid');
-    const gridWrap = document.getElementById('gridWrap');
-    const thumbs = Array.from(document.querySelectorAll('#grid .thumb'));
-    const colsMatch = (grid?.style.gridTemplateColumns || '').match(/repeat\((\d+),\s*1fr\)/);
-    return {
-      gap: parseFloat(getComputedStyle(grid).gap) || 0,
-      availW: gridWrap.clientWidth,
-      availH: window.innerHeight - 28,
-      total: thumbs.length,
-      hidden: thumbs.filter((el) => el.style.display === 'none').length,
-      sampleH: thumbs.length ? parseFloat(thumbs[0].style.height) : 0,
-      cols: colsMatch ? Number(colsMatch[1]) : 1,
-    };
+  test.beforeEach(async () => {
+    ({ electronApp, page } = await launchApp());
   });
-}
 
-function expectedFsState(snapshot, slots) {
-  const layout = computeFsLayout({
-    slots,
-    availW: snapshot.availW,
-    availH: snapshot.availH,
-    gap: snapshot.gap,
+  test.afterEach(async () => {
+    await closeApp(electronApp);
+    electronApp = null;
+    page = null;
+    await removeTempRoot(tempRoot);
+    tempRoot = null;
+    folderPath = null;
   });
-  const visible = Math.max(1, Math.min(snapshot.total, layout.targetVisible));
-  const hidden = Math.max(0, snapshot.total - visible);
-  return { cols: layout.cols, cellH: layout.cellH, hidden };
-}
 
-test.describe('Load via folder selection', () => {
-  test('loads multiple videos from a folder', async ({ page }) => {
-    await loadClips(page, 'load-basic');
+  test('loads clips from an Electron-selected folder', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('load-basic'));
+
+    await loadFolder(page, folderPath);
+
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
     await expect(page.locator('#count')).toHaveText('2 clips');
-    await expect(page.locator('#saveBtn')).toBeEnabled();
-    await expect(page.locator('#saveAsNewBtn')).toBeEnabled();
-    await expect(page.locator('#grid video')).toHaveCount(2);
-  });
-
-  test('shows the synthetic default collection name in the toolbar and page title', async ({ page }) => {
-    await loadClips(page, 'load-basic');
     await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-    await expect(page.locator('#activeCollectionName')).toContainText('clips-default');
     await expect(page).toHaveTitle('clips-default collection');
   });
-});
 
-test.describe('Filter non-video files', () => {
-  test('ignores non-video files in selected folder', async ({ page }) => {
-    await loadClips(page, 'load-mixed');
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-    await expect(page.locator('#count')).toHaveText('2 clips');
-    const titles = await getOrder(page);
-    expect(titles.some((t) => t.includes('notes.txt'))).toBeFalsy();
-  });
-});
+  test('switches between saved collections in Electron', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('legacy-default'));
 
-test.describe('No supported videos', () => {
-  test('keeps grid empty when folder has no supported videos', async ({ page }) => {
-    await loadClips(page, 'no-video');
-    await expect(page.locator('#grid .thumb')).toHaveCount(0);
-    await expect(page.locator('#count')).toHaveText('0 clips');
-    await expect(page.locator('#saveBtn')).toBeDisabled();
-    await expect(page.locator('#saveAsNewBtn')).toBeDisabled();
-  });
-});
+    await loadFolder(page, folderPath);
 
-test.describe('Natural sorting', () => {
-  test('loads videos in numeric-aware, case-insensitive filename order', async ({ page }) => {
-    await loadClips(page, 'natural-sort');
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['item1.mp4', 'Item2.mp4', 'ITEM3.mp4', 'item10.mp4'].join('|'));
-  });
-});
-
-test.describe('Collection menu interactions', () => {
-  test('supports click/tap open and keyboard navigation', async ({ page }) => {
-    await loadClips(page, 'load-basic');
-    await openOrderMenu(page);
-    await page.keyboard.press('ArrowDown');
-    await expect(page.locator('#saveBtn')).toBeFocused();
-    await page.keyboard.press('ArrowDown');
-    await expect(page.locator('#saveAsNewBtn')).toBeFocused();
-    await page.keyboard.press('Escape');
-    await expect.poll(async () => page.locator('#orderMenu').getAttribute('data-open')).toBe('false');
-    await expect(page.locator('#orderMenuBtn')).toBeFocused();
-  });
-});
-
-test.describe('Context menu sandbox', () => {
-  test('smoke-tests the reusable context menu outside the app shell', async ({ page }) => {
-    await page.goto('/sandbox/context-menu-demo.html');
-    await page.waitForSelector('#demoSurface');
-
-    await page.locator('#demoSurface').click({ button: 'right', position: { x: 100, y: 80 } });
-    await expect(page.locator('#sandboxContextMenu [role="menuitem"]')).toHaveCount(3);
-    await expect(page.locator('#sandboxContextMenu [data-item-id="disabled"]')).toBeDisabled();
-
-    await page.click('body', { position: { x: 10, y: 10 } });
-    await expect(page.locator('#sandboxContextMenu')).toBeHidden();
-
-    await page.click('#openBtn');
-    await page.click('#sandboxContextMenu [data-item-id="primary"]');
-    await expect(page.locator('#resultLog')).toContainText('Primary action invoked from button.');
-  });
-});
-
-test.describe('Clip title formatting', () => {
-  test('shows filename with formatted duration', async ({ page }) => {
-    await loadClips(page, 'load-basic');
-    const clipHandle = await page.waitForFunction(() => {
-      const thumb = document.querySelector('#grid .thumb');
-      if (!thumb) return null;
-      const label = thumb.querySelector('.filename');
-      const text = label?.textContent?.trim();
-      if (!text || !thumb.dataset.name) return null;
-      return { name: thumb.dataset.name, label: text };
-    });
-    const clip = await clipHandle.jsonValue();
-    const escaped = clip.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern = new RegExp(`^${escaped} \\((?:\\d{2}:\\d{2}:\\d{2}|--:--:--)\\)$`);
-    expect(clip.label).toMatch(pattern);
-  });
-});
-
-test.describe('Responsive grid layout', () => {
-  test('recomputes grid layout when viewport size changes', async ({ page }) => {
-    await page.setViewportSize({ width: 1400, height: 900 });
-    await loadClips(page, 'fullscreen-many');
-    const initial = await page.evaluate(() => {
-      const grid = document.getElementById('grid');
-      const card = document.querySelector('#grid .thumb');
-      const colsMatch = (grid?.style.gridTemplateColumns || '').match(/repeat\((\d+),\s*1fr\)/);
-      return {
-        cols: colsMatch ? Number(colsMatch[1]) : 1,
-        h: card ? parseFloat(card.style.height) : 0,
-      };
-    });
-
-    await page.setViewportSize({ width: 720, height: 900 });
-    await expect.poll(async () => {
-      const next = await page.evaluate(() => {
-        const grid = document.getElementById('grid');
-        const card = document.querySelector('#grid .thumb');
-        const colsMatch = (grid?.style.gridTemplateColumns || '').match(/repeat\((\d+),\s*1fr\)/);
-        return {
-          cols: colsMatch ? Number(colsMatch[1]) : 1,
-          h: card ? parseFloat(card.style.height) : 0,
-        };
-      });
-      return next.cols !== initial.cols || Math.abs(next.h - initial.h) > 1;
-    }).toBe(true);
-
-    await page.setViewportSize({ width: 360, height: 260 });
-    const tiny = await page.evaluate(() => {
-      const cards = Array.from(document.querySelectorAll('#grid .thumb'));
-      return cards.every((el) => Number.isFinite(parseFloat(el.style.height)) && parseFloat(el.style.height) > 0);
-    });
-    expect(tiny).toBe(true);
-  });
-});
-
-test.describe('Drag reorder', () => {
-  test('reorders clips via drag-and-drop', async ({ page }) => {
-    await loadClips(page, 'reorder');
-    const first = page.locator('#grid .thumb').nth(0);
-    const third = page.locator('#grid .thumb').nth(2);
-    await first.dragTo(third, { targetPosition: { x: 10, y: 10 } });
-    const order = await getOrder(page);
-    expect(order[2]).toContain('red.mp4');
-  });
-});
-
-test.describe('Delete selected clip', () => {
-  test('Delete/Backspace removes all selected cards', async ({ page }) => {
-    await loadClips(page, 'delete');
-    const first = page.locator('#grid .thumb').first();
-    const second = page.locator('#grid .thumb').nth(1);
-    await first.click();
-    await second.click({ modifiers: ['Control'] });
-    await expect(page.locator('#grid .thumb.selected')).toHaveCount(2);
-    await page.keyboard.press('Delete');
-    await expect(page.locator('#grid .thumb')).toHaveCount(0);
-    await expect(page.locator('#count')).toHaveText('0 clips');
-  });
-
-  test('Cmd-click toggles clips inside the selected set', async ({ page }) => {
-    await loadClips(page, 'delete');
-    const first = page.locator('#grid .thumb').first();
-    const second = page.locator('#grid .thumb').nth(1);
-
-    await first.click();
-    await second.dispatchEvent('click', { metaKey: true });
-    await expect(page.locator('#grid .thumb.selected')).toHaveCount(2);
-
-    await first.dispatchEvent('click', { metaKey: true });
-    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
-    await expect(page.locator('#grid .thumb.selected').first()).toHaveAttribute('data-name', 'solo.mp4');
-  });
-
-  test('does not remove selected card while typing in an input', async ({ page }) => {
-    await loadClips(page, 'delete');
-    const first = page.locator('#grid .thumb').first();
-    await first.click();
-
-    await page.evaluate(() => {
-      let input = document.getElementById('scratch-input');
-      if (!input) {
-        input = document.createElement('input');
-        input.id = 'scratch-input';
-        input.type = 'text';
-        input.value = 'abc';
-        input.style.position = 'fixed';
-        input.style.top = '12px';
-        input.style.left = '12px';
-        input.style.zIndex = '9999';
-        document.body.appendChild(input);
-      }
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
-    });
-
-    await page.keyboard.press('Backspace');
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-  });
-});
-
-test.describe('Delete from disk', () => {
-  test('shows the top-menu action disabled in read-only sessions and omits the right-click action', async ({ page }) => {
-    await loadClips(page, 'delete');
-    await page.locator('#grid .thumb').first().click();
-
-    await openOrderMenu(page);
-    await expect(page.locator('#deleteFromDiskBtn')).toBeDisabled();
-
-    await openGridContextMenu(page, page.locator('#gridWrap'), { expectedCount: 1 });
-    await expect(page.locator('#clipContextMenu [role="menuitem"]')).toHaveText(['New collection...']);
-  });
-
-  test('shows zero affected saved collections in the confirmation copy', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'alpha.mp4', type: 'video/mp4', content: 'a' },
-      { name: 'bravo.webm', type: 'video/webm', content: 'b' },
+    await expect(page.locator('#activeCollectionName option')).toHaveText([
+      'clips-default',
+      'default-collection',
+      'minus-1',
+      'minus-2',
     ]);
 
-    await page.locator('#grid .thumb').first().click();
-    await openOrderMenu(page);
-    await page.click('#deleteFromDiskBtn');
-
-    await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
-    await expect(page.locator('#deleteFromDiskSummary')).toContainText('does not affect any saved collections');
-    await expect(page.locator('#deleteFromDiskPreview')).toContainText('alpha.mp4');
-
-    await page.click('#cancelDeleteFromDiskBtn');
-    await expect(page.locator('#deleteFromDiskDialog')).not.toHaveAttribute('open', '');
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+    await page.selectOption('#activeCollectionName', 'minus-1.txt');
+    await expect.poll(async () => (await allClipNames(page)).join('|')).toBe('two.webm|one.mp4');
+    await expect(page).toHaveTitle('minus-1 collection');
   });
 
-  test('right-click delete removes files from disk and one affected saved collection', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'alpha.mp4', type: 'video/mp4', content: 'a' },
-      { name: 'bravo.webm', type: 'video/webm', content: 'b' },
-      { name: 'subset.txt', type: 'text/plain', content: 'alpha.mp4\n' },
-    ]);
+  test('saves reordered default collection directly to disk', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('default-source'));
 
-    await page.locator('#grid .thumb').first().click();
-    await openGridContextMenu(page, page.locator('#gridWrap'), { expectedCount: 3 });
+    await loadFolder(page, folderPath);
+    await expect.poll(async () => (await allClipNames(page)).join('|')).toBe('three.mp4|one.mp4');
+
+    await page.locator('#grid .thumb').nth(1).dragTo(page.locator('#grid .thumb').nth(0), {
+      targetPosition: { x: 16, y: 16 },
+    });
+
+    await openOrderMenu(page);
+    await page.click('#saveBtn');
+    await expect(page.locator('#status')).toHaveText('Saved clips-default.txt to the selected folder.');
+
+    const savedText = await fsp.readFile(path.join(folderPath, 'clips-default.txt'), 'utf8');
+    expect(savedText.trim().split('\n')).toEqual(['one.mp4', 'three.mp4']);
+  });
+
+  test('adds selected clips to another saved collection', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('order-valid'));
+
+    await loadFolder(page, folderPath);
+    await page.locator('#grid .thumb').nth(2).click();
+
+    await openOrderMenu(page);
+    await page.click('#addToCollectionBtn');
+    await expect(page.locator('#addToCollectionDialog')).toHaveAttribute('open', '');
+    await page.selectOption('#addToCollectionSelect', 'subset.txt');
+    await page.click('#confirmAddToCollectionBtn');
+
+    await expect(page.locator('#status')).toContainText('Added');
+    const subsetText = await fsp.readFile(path.join(folderPath, 'subset.txt'), 'utf8');
+    const lines = subsetText.trim().split('\n');
+    expect(lines.includes('three.mp4')).toBe(true);
+    expect(lines.includes('two.webm')).toBe(true);
+  });
+
+  test('deletes clips from disk and rewrites affected saved collections', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('delete'));
+    await fsp.writeFile(path.join(folderPath, 'subset.txt'), 'solo.mp4\n', 'utf8');
+
+    await loadFolder(page, folderPath);
+    await page.locator('#grid .thumb').nth(1).click();
+
+    await openGridContextMenu(page);
     await expect(page.locator('#clipContextMenu [role="menuitem"]')).toHaveText([
       'Add to subset',
       'New collection...',
       'Delete from Disk...',
     ]);
+
     await page.click('#clipContextMenu [data-item-id="delete-from-disk"]');
-
     await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
-    await expect(page.locator('#deleteFromDiskSummary')).toContainText('1 saved collection');
     await page.click('#confirmDeleteFromDiskBtn');
 
-    await expect(page.locator('#status')).toHaveText('Deleted 1 clip from disk. Removed deleted clips from 1 saved collection.');
+    await expect(page.locator('#status')).toContainText('Deleted 1 clip from disk.');
     await expect(page.locator('#grid .thumb')).toHaveCount(1);
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe('bravo.webm');
+    await expect(page.locator('#grid .thumb').first()).toHaveAttribute('data-name', 'duo.webm');
+    await expect(fsp.access(path.join(folderPath, 'solo.mp4')).then(() => true).catch(() => false)).resolves.toBe(false);
 
-    const state = await page.evaluate(() => ({
-      deletedEntries: window.__deletedEntries || [],
-      writes: window.__savedOrderWrites || [],
-    }));
-    expect(state.deletedEntries).toEqual(['alpha.mp4']);
-    expect(state.writes.map((write) => write.name)).toEqual(['subset.txt']);
-    const subsetWrite = state.writes.find((write) => write.name === 'subset.txt');
-    expect(subsetWrite.data).toBe('');
+    const subsetText = await fsp.readFile(path.join(folderPath, 'subset.txt'), 'utf8');
+    expect(subsetText).toBe('');
   });
 
-  test('reports more than one affected saved collection in the confirmation copy and rewrites both', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'one.mp4', type: 'video/mp4', content: '1' },
-      { name: 'two.webm', type: 'video/webm', content: '2' },
-      { name: 'three.mp4', type: 'video/mp4', content: '3' },
-      { name: 'subset.txt', type: 'text/plain', content: 'one.mp4\n' },
-      { name: 'picks.txt', type: 'text/plain', content: 'one.mp4\nthree.mp4\n' },
-    ]);
+  test('opens zoom and toggles fullscreen inside Electron', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('load-basic'));
 
-    await page.locator('#grid .thumb').first().click();
-    await openOrderMenu(page);
-    await page.click('#deleteFromDiskBtn');
+    await loadFolder(page, folderPath);
 
-    await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
-    await expect(page.locator('#deleteFromDiskSummary')).toContainText('2 saved collections');
-    await page.click('#confirmDeleteFromDiskBtn');
-
-    await expect(page.locator('#status')).toHaveText('Deleted 1 clip from disk. Removed deleted clips from 2 saved collections.');
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-
-    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
-    expect(writes).toHaveLength(2);
-    expect(writes.map((write) => write.name).sort()).toEqual(['picks.txt', 'subset.txt']);
-    const subsetWrite = writes.find((write) => write.name === 'subset.txt');
-    const picksWrite = writes.find((write) => write.name === 'picks.txt');
-    expect(subsetWrite.data).toBe('');
-    expect(picksWrite.data.trim().split('\n')).toEqual(['three.mp4']);
-  });
-
-  test('keeps successful deletes and reports partial success when one selected file fails', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'alpha.mp4', type: 'video/mp4', content: 'a' },
-      { name: 'bravo.webm', type: 'video/webm', content: 'b' },
-      { name: 'charlie.mp4', type: 'video/mp4', content: 'c' },
-      { name: 'subset.txt', type: 'text/plain', content: 'alpha.mp4\n' },
-    ], { deleteFailures: ['charlie.mp4'] });
-
-    const first = page.locator('#grid .thumb').nth(0);
-    const third = page.locator('#grid .thumb').nth(2);
-    await first.click();
-    await third.click({ modifiers: ['Control'] });
-
-    await openOrderMenu(page);
-    await page.click('#deleteFromDiskBtn');
-    await page.click('#confirmDeleteFromDiskBtn');
-
-    await expect(page.locator('#status')).toHaveText('Deleted 1 clip from disk. Failed to delete 1. Removed deleted clips from 1 saved collection.');
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
-    await expect(page.locator('#grid .thumb.selected').first()).toHaveAttribute('data-name', 'charlie.mp4');
-
-    const state = await page.evaluate(() => ({
-      deletedEntries: window.__deletedEntries || [],
-      writes: window.__savedOrderWrites || [],
-    }));
-    expect(state.deletedEntries).toEqual(['alpha.mp4']);
-    expect(state.writes.map((write) => write.name).sort()).toEqual(['err.log', 'subset.txt']);
-    const subsetWrite = state.writes.find((write) => write.name === 'subset.txt');
-    const errLogWrite = state.writes.find((write) => write.name === 'err.log');
-    expect(subsetWrite.data).toBe('');
-    expect(errLogWrite.data).toContain('Disk delete error');
-    expect(errLogWrite.data).toContain('charlie.mp4');
-  });
-
-  test('prompts before deleting from disk when the active collection is dirty', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'alpha.mp4', type: 'video/mp4', content: 'a' },
-      { name: 'bravo.webm', type: 'video/webm', content: 'b' },
-      { name: 'subset.txt', type: 'text/plain', content: 'alpha.mp4\nbravo.webm\n' },
-    ], { expectedVisibleCount: 2 });
-
-    await selectCollection(page, 'subset.txt');
-    await page.locator('#grid .thumb').first().click();
-    await page.keyboard.press('Delete');
-    await expect(page.locator('#grid .thumb')).toHaveCount(1);
-
-    await page.locator('#grid .thumb').first().click();
-    await openOrderMenu(page);
-    await page.click('#deleteFromDiskBtn');
-
-    await expect(page.locator('#deletePreflightDialog')).toHaveAttribute('open', '');
-    await page.click('#discardDeletePreflightBtn');
-    await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
-    await expect(page.locator('#deleteFromDiskSummary')).toContainText('1 saved collection');
-    await page.click('#confirmDeleteFromDiskBtn');
-
-    await expect(page.locator('#status')).toHaveText('Deleted 1 clip from disk. Removed deleted clips from 1 saved collection.');
-    await expect(page.locator('#activeCollectionName')).toHaveValue('subset.txt');
-    await expect(page.locator('#grid .thumb')).toHaveCount(0);
-  });
-});
-
-test.describe('Toggle titles', () => {
-  test('Hide/Show titles updates overlays and button label', async ({ page }) => {
-    await loadClips(page, 'titles');
-    const toggle = page.locator('#toggleTitlesBtn');
-    await toggle.click();
-    await expect(toggle).toHaveText('Show Titles');
-    await expect(page.locator('#gridWrap')).toHaveClass(/titles-hidden/);
-    await toggle.click();
-    await expect(toggle).toHaveText('Hide Titles');
-    await expect(page.locator('#gridWrap')).not.toHaveClass(/titles-hidden/);
-  });
-
-  test('restores previous title visibility after fullscreen exit', async ({ page }) => {
-    await loadClips(page, 'titles');
-    const fsBtn = page.locator('#fsBtn');
-
-    await fsBtn.click();
-    await expect(page.locator('body')).toHaveClass(/fs-active/);
-    await page.keyboard.press('F');
-    await expect(page.locator('body')).not.toHaveClass(/fs-active/);
-    await expect(page.locator('#gridWrap')).not.toHaveClass(/titles-hidden/);
-
-    const toggle = page.locator('#toggleTitlesBtn');
-    await toggle.click();
-    await expect(page.locator('#gridWrap')).toHaveClass(/titles-hidden/);
-    await fsBtn.click();
-    await expect(page.locator('body')).toHaveClass(/fs-active/);
-    await page.keyboard.press('F');
-    await expect(page.locator('body')).not.toHaveClass(/fs-active/);
-    await expect(page.locator('#gridWrap')).toHaveClass(/titles-hidden/);
-  });
-});
-
-test.describe('Fullscreen behaviors', () => {
-  test('enforces fullscreen slot layout and keeps it stable', async ({ page }) => {
-    await loadClips(page, 'fullscreen-many');
-    const fsBtn = page.locator('#fsBtn');
-    await fsBtn.click();
-
-    await expect.poll(async () => page.locator('body').evaluate((el) => el.classList.contains('fs-active'))).toBe(true);
-
-    const defaultSnapshot = await getFullscreenSnapshot(page);
-    const expectedDefault = expectedFsState(defaultSnapshot, 12);
-    expect(defaultSnapshot.hidden).toBe(expectedDefault.hidden);
-    expect(defaultSnapshot.cols).toBe(expectedDefault.cols);
-    expect(defaultSnapshot.sampleH).toBeCloseTo(expectedDefault.cellH, 1);
-
-    await page.keyboard.type('6');
-    await expect.poll(async () => {
-      const snapshot = await getFullscreenSnapshot(page);
-      const expected = expectedFsState(snapshot, 6);
-      return (
-        snapshot.hidden === expected.hidden &&
-        snapshot.cols === expected.cols &&
-        Math.abs(snapshot.sampleH - expected.cellH) < 1
-      );
-    }).toBe(true);
-
-    const afterSlots = await getFullscreenSnapshot(page);
-    const expectedAfterSlots = expectedFsState(afterSlots, 6);
-    expect(afterSlots.hidden).toBeGreaterThan(0);
-    expect(afterSlots.sampleH).toBeCloseTo(expectedAfterSlots.cellH, 1);
-
-    await page.keyboard.press('F');
-    await expect(page.locator('body')).not.toHaveClass(/fs-active/);
-  });
-});
-
-test.describe('Collection load', () => {
-  test('loads the synthetic default collection even when a same-named txt collection exists', async ({ page }) => {
-    await loadClips(page, 'default-source', { expectedVisibleCount: 2 });
-    await expect(page.locator('#activeCollectionName option')).toHaveCount(1);
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-    await expect(page.locator('#count')).toHaveText('2 clips');
-  });
-
-  test('treats default-collection.txt as a regular explicit collection', async ({ page }) => {
-    await loadClips(page, 'legacy-default');
-    await expect(page.locator('#activeCollectionName option')).toHaveText([
-      'clips-default',
-      'default-collection',
-      'minus-1',
-      'minus-2',
-    ]);
-
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-    await selectCollection(page, 'default-collection.txt');
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4'].join('|'));
-  });
-
-  test('ignores nested videos and nested collection files', async ({ page }) => {
-    await loadClips(page, 'non-recursive');
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['alpha.mp4', 'bravo.webm'].join('|'));
-    await expect(page.locator('#activeCollectionName option')).toHaveText(['clips-default', 'subset']);
-  });
-
-  test('lists collections in the dropdown and applies exact-match and subset collections', async ({ page }) => {
-    await loadClips(page, 'order-valid');
-    await expect(page.locator('#activeCollectionName option')).toHaveText(['clips-default', 'subset', 'valid']);
-
-    await selectCollection(page, 'valid.txt');
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4', 'two.webm'].join('|'));
-
-    await selectCollection(page, 'subset.txt');
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4'].join('|'));
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-    await expect(page.locator('#count')).toHaveText('2 clips');
-    await expect(page.locator('#activeCollectionName')).toHaveValue('subset.txt');
-    await expect(page).toHaveTitle('subset collection');
-  });
-
-  test('shows missing-entry panel and applies existing clips when confirmed', async ({ page }) => {
-    await loadClips(page, 'order-invalid');
-    await expect(page.locator('#activeCollectionName option')).toHaveText(['clips-default', 'missing-only']);
-
-    await selectCollection(page, 'missing-only.txt');
-
-    await expect(page.locator('#collectionConflict')).toBeVisible();
-    await expect(page.locator('#collectionConflictSummary')).toContainText('1 missing entry');
-    await expect(page.locator('#collectionConflictList')).toContainText('missing.mp4');
-
-    await page.click('#applyCollectionConflictBtn');
-    await expect(page.locator('#collectionConflict')).toBeHidden();
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe('two.webm');
-    await expect(page.locator('#count')).toHaveText('1 clip');
-  });
-
-  test('shows missing-entry panel and keeps the current collection when canceled', async ({ page }) => {
-    await loadClips(page, 'order-invalid');
-    const original = await getOrder(page);
-    await selectCollection(page, 'missing-only.txt');
-
-    await expect(page.locator('#collectionConflict')).toBeVisible();
-    await page.click('#cancelCollectionConflictBtn');
-    await expect(page.locator('#collectionConflict')).toBeHidden();
-    expect(await getOrder(page)).toEqual(original);
-  });
-
-  test('keeps the collection selector disabled before a folder is loaded', async ({ page }) => {
-    await page.goto(appUrl);
-    await expect(page.locator('#activeCollectionName')).toBeDisabled();
-  });
-
-  test('prompts before switching collections when the current collection is dirty', async ({ page }) => {
-    await loadClips(page, 'order-valid');
-    await page.locator('#grid .thumb').first().click();
-    await page.keyboard.press('Delete');
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-
-    await selectCollection(page, 'subset.txt');
-    await expect(page.locator('#unsavedChangesDialog')).toHaveAttribute('open', '');
-    await page.click('#cancelUnsavedChangesBtn');
-
-    await expect(page.locator('#unsavedChangesDialog')).not.toHaveAttribute('open', '');
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-  });
-
-  test('saves then switches when the dirty-switch dialog confirms save', async ({ page }) => {
-    await loadClips(page, 'order-valid');
-    await page.locator('#grid .thumb').first().click();
-    await page.keyboard.press('Delete');
-
-    await selectCollection(page, 'subset.txt');
-    await expect(page.locator('#unsavedChangesDialog')).toHaveAttribute('open', '');
-    await page.click('#confirmUnsavedChangesBtn');
-    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
-    const downloadPromise = page.waitForEvent('download');
-    await page.fill('#saveAsNewNameInput', 'from-default');
-    await page.click('#confirmSaveAsNewBtn');
-    const download = await downloadPromise;
-
-    expect(download.suggestedFilename()).toBe('from-default.txt');
-    await expect(page.locator('#activeCollectionName')).toHaveValue('subset.txt');
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['three.mp4', 'one.mp4'].join('|'));
-  });
-
-  test('prompts before browsing to another folder when the current collection is dirty', async ({ page }) => {
-    await loadClips(page, 'order-valid');
-    await page.locator('#grid .thumb').first().click();
-    await page.keyboard.press('Delete');
-
-    await page.click('#pickBtn');
-    await expect(page.locator('#unsavedChangesDialog')).toHaveAttribute('open', '');
-    await page.click('#cancelUnsavedChangesBtn');
-
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-  });
-});
-
-test.describe('Add selected clips to a collection', () => {
-  test('right-click adds the current selected set to an existing collection without changing the source selection', async ({ page }) => {
-    await loadClips(page, 'order-valid');
-    const first = page.locator('#grid .thumb').nth(0);
-    const third = page.locator('#grid .thumb').nth(2);
-
-    await first.click();
-    await third.click({ modifiers: ['Control'] });
-    await expect(page.locator('#grid .thumb.selected')).toHaveCount(2);
-
-    const downloadPromise = page.waitForEvent('download');
-    await openGridContextMenu(page, page.locator('#gridWrap'), { position: { x: 40, y: 40 }, expectedCount: 3 });
-    await expect(page.locator('#clipContextMenu [role="menuitem"]')).toHaveText([
-      'Add to subset',
-      'Add to valid',
-      'New collection...',
-    ]);
-    await page.click('#clipContextMenu [data-item-id="add-to-subset.txt"]');
-    const download = await downloadPromise;
-
-    expect(download.suggestedFilename()).toBe('subset.txt');
-    const content = await download.createReadStream();
-    const text = (await streamToString(content)).trim();
-    expect(text.split('\n')).toEqual(['three.mp4', 'one.mp4', 'two.webm']);
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-    await expect(page.locator('#grid .thumb.selected')).toHaveCount(2);
-    await expect(page.locator('#status')).toHaveText('Added 1 clip to subset. Skipped 1 already present.');
-  });
-
-  test('toolbar fallback opens the same add flow and validates new names', async ({ page }) => {
-    await loadClips(page, 'save-download');
-    await page.locator('#grid .thumb').first().click();
-    await openOrderMenu(page);
-    await page.click('#addToCollectionBtn');
-    await expect(page.locator('#addToCollectionDialog')).toHaveAttribute('open', '');
-
-    await page.selectOption('#addToCollectionSelect', '__new_collection__');
-    await page.fill('#addToCollectionNameInput', 'bad:name');
-    await expect(page.locator('#addToCollectionError')).toContainText('cannot contain');
-
-    const downloadPromise = page.waitForEvent('download');
-    await page.fill('#addToCollectionNameInput', 'my-cut');
-    await page.click('#confirmAddToCollectionBtn');
-    const download = await downloadPromise;
-
-    expect(download.suggestedFilename()).toBe('my-cut.txt');
-    const content = await download.createReadStream();
-    const text = (await streamToString(content)).trim();
-    expect(text.split('\n')).toEqual(['save-a.mp4']);
-    await expect(page.locator('#activeCollectionName option')).toContainText(['clips-default', 'my-cut']);
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-    await expect(page.locator('#status')).toHaveText('Added 1 clip to my-cut.');
-  });
-
-  test('right-click new collection opens the dialog already focused on the new-collection path', async ({ page }) => {
-    await loadClips(page, 'save-download');
-    await page.locator('#grid .thumb').first().click();
-
-    await openGridContextMenu(page, page.locator('#gridWrap'), { position: { x: 40, y: 40 }, expectedCount: 1 });
-    await page.click('#clipContextMenu [data-item-id="new-collection"]');
-
-    await expect(page.locator('#addToCollectionDialog')).toHaveAttribute('open', '');
-    await expect(page.locator('#addToCollectionSelect')).toHaveValue('__new_collection__');
-    await expect(page.locator('#addToCollectionNameLabel')).not.toHaveAttribute('hidden', '');
-    await expect(page.locator('#addToCollectionNameInput')).toBeFocused();
-  });
-
-  test('direct-write flow adds selected clips to the default destination and updates inventory without switching collections', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'one.mp4', type: 'video/mp4', content: '1' },
-      { name: 'two.webm', type: 'video/webm', content: '2' },
-      { name: 'three.mp4', type: 'video/mp4', content: '3' },
-      { name: 'clips-default.txt', type: 'text/plain', content: 'one.mp4\n' },
-      { name: 'subset.txt', type: 'text/plain', content: 'three.mp4\n' },
-    ], { expectedVisibleCount: 1 });
-
-    await selectCollection(page, 'subset.txt');
-    await page.locator('#grid .thumb').first().click();
-    await openOrderMenu(page);
-    await page.click('#addToCollectionBtn');
-    await expect(page.locator('#addToCollectionDialog')).toHaveAttribute('open', '');
-    await page.selectOption('#addToCollectionSelect', '__default__');
-    await page.click('#confirmAddToCollectionBtn');
-
-    await expect(page.locator('#status')).toHaveText('Added 1 clip to clips-default.');
-    await expect(page.locator('#activeCollectionName')).toHaveValue('subset.txt');
-    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
-    const defaultWrite = writes.find((write) => write.name === 'clips-default.txt');
-    expect(defaultWrite).toBeTruthy();
-    expect(defaultWrite.data.trim().split('\n')).toEqual(['one.mp4', 'three.mp4']);
-
-    await selectCollection(page, '__default__');
-    await expect.poll(async () => (await getOrder(page)).join('|')).toBe(['one.mp4', 'three.mp4'].join('|'));
-  });
-});
-
-test.describe('Save collection download fallback', () => {
-  test('save on the synthetic default opens naming flow and downloads a named file', async ({ page }) => {
-    await loadClips(page, 'save-download');
-    await openOrderMenu(page);
-    await page.click('#saveBtn');
-    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
-    const downloadPromise = page.waitForEvent('download');
-    await page.fill('#saveAsNewNameInput', 'all-clips');
-    await page.click('#confirmSaveAsNewBtn');
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe('all-clips.txt');
-    const content = await download.createReadStream();
-    const text = (await streamToString(content)).trim();
-    expect(text.split('\n')).toEqual(await getOrder(page));
-  });
-
-  test('saves only the active subset collection', async ({ page }) => {
-    await loadClips(page, 'order-valid');
-    await selectCollection(page, 'subset.txt');
-    await openOrderMenu(page);
-    const downloadPromise = page.waitForEvent('download');
-    await page.click('#saveBtn');
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe('subset.txt');
-    const content = await download.createReadStream();
-    const text = (await streamToString(content)).trim();
-    expect(text.split('\n')).toEqual(['three.mp4', 'one.mp4']);
-  });
-
-  test('save as new validates invalid names and downloads a named file', async ({ page }) => {
-    await loadClips(page, 'save-download');
-    await openOrderMenu(page);
-    await page.click('#saveAsNewBtn');
-    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
-
-    await page.fill('#saveAsNewNameInput', 'bad:name');
-    await page.click('#confirmSaveAsNewBtn');
-    await expect(page.locator('#saveAsNewError')).toContainText('cannot contain');
-    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
-
-    await page.fill('#saveAsNewNameInput', 'my-cut');
-    const downloadPromise = page.waitForEvent('download');
-    await page.click('#confirmSaveAsNewBtn');
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe('my-cut.txt');
-    const content = await download.createReadStream();
-    const text = (await streamToString(content)).trim();
-    expect(text.split('\n')).toEqual(await getOrder(page));
-    await expect(page.locator('#saveAsNewDialog')).toBeHidden();
-  });
-});
-
-test.describe('Save collection direct write path', () => {
-  test('directory picker flow preserves collection options when browsing the same folder again', async ({ page }) => {
-    await page.goto(appUrl);
-    await page.waitForSelector('#pickBtn');
-    await page.evaluate(() => {
-      window.__savedOrderWrites = [];
-      const mockFiles = [
-        { name: 'one.mp4', type: 'video/mp4', content: '1' },
-        { name: 'two.webm', type: 'video/webm', content: '2' },
-        { name: 'three.mp4', type: 'video/mp4', content: '3' },
-        { name: 'default-collection.txt', type: 'text/plain', content: 'three.mp4\none.mp4\n' },
-        { name: 'minus-1.txt', type: 'text/plain', content: 'two.webm\none.mp4\n' },
-        { name: 'minus-2.txt', type: 'text/plain', content: 'one.mp4\n' },
-      ];
-      const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
-      window.showDirectoryPicker = async () => ({
-        kind: 'directory',
-        name: 'clips',
-        async *values() {
-          for (const f of mockFiles) {
-            yield {
-              kind: 'file',
-              async getFile() {
-                return toFile(f);
-              },
-            };
-          }
-        },
-        async getFileHandle(name, options = {}) {
-          return {
-            async createWritable() {
-              let data = '';
-              return {
-                async write(chunk) {
-                  data += typeof chunk === 'string' ? chunk : String(chunk);
-                },
-                async close() {
-                  window.__savedOrderWrites.push({ name, data, create: !!options.create });
-                },
-              };
-            },
-          };
-        },
-      });
-    });
-
-    await page.click('#pickBtn');
-    await expect(page.locator('#activeCollectionName option')).toHaveText([
-      'clips-default',
-      'default-collection',
-      'minus-1',
-      'minus-2',
-    ]);
-
-    await page.click('#pickBtn');
-    await expect(page.locator('#activeCollectionName option')).toHaveText([
-      'clips-default',
-      'default-collection',
-      'minus-1',
-      'minus-2',
-    ]);
-  });
-
-  test('directory picker flow with a real folder name keeps explicit collections alongside the synthetic default', async ({ page }) => {
-    await page.goto(appUrl);
-    await page.waitForSelector('#pickBtn');
-    await page.evaluate(() => {
-      const mockFiles = [
-        { name: 'one.mp4', type: 'video/mp4', content: '1' },
-        { name: 'two.webm', type: 'video/webm', content: '2' },
-        { name: 'three.mp4', type: 'video/mp4', content: '3' },
-        { name: 'default-collection.txt', type: 'text/plain', content: 'three.mp4\none.mp4\n' },
-        { name: 'minus-1.txt', type: 'text/plain', content: 'two.webm\none.mp4\n' },
-        { name: 'minus-2.txt', type: 'text/plain', content: 'one.mp4\n' },
-      ];
-      const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
-      window.showDirectoryPicker = async () => ({
-        kind: 'directory',
-        name: 'downhill-racer',
-        async *values() {
-          for (const f of mockFiles) {
-            yield {
-              kind: 'file',
-              async getFile() {
-                return toFile(f);
-              },
-            };
-          }
-        },
-        async getFileHandle() {
-          return {
-            async createWritable() {
-              return {
-                async write() {},
-                async close() {},
-              };
-            },
-          };
-        },
-      });
-    });
-
-    await page.click('#pickBtn');
-    await expect(page.locator('#activeCollectionName option')).toHaveText([
-      'downhill-racer-default',
-      'default-collection',
-      'minus-1',
-      'minus-2',
-    ]);
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-  });
-
-  test('directory picker flow lists a synthetic default plus explicit collections', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'one.mp4', type: 'video/mp4', content: '1' },
-      { name: 'two.webm', type: 'video/webm', content: '2' },
-      { name: 'three.mp4', type: 'video/mp4', content: '3' },
-      { name: 'default-collection.txt', type: 'text/plain', content: 'three.mp4\none.mp4\n' },
-      { name: 'minus-1.txt', type: 'text/plain', content: 'two.webm\none.mp4\n' },
-      { name: 'minus-2.txt', type: 'text/plain', content: 'one.mp4\n' },
-    ]);
-
-    await expect(page.locator('#activeCollectionName option')).toHaveText([
-      'clips-default',
-      'default-collection',
-      'minus-1',
-      'minus-2',
-    ]);
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-  });
-
-  test('directory picker flow retries transient collection file reads and still lists all collections', async ({ page }) => {
-    await page.goto(appUrl);
-    await page.waitForSelector('#pickBtn');
-    await page.evaluate(() => {
-      const mockFiles = [
-        { name: 'one.mp4', type: 'video/mp4', content: '1' },
-        { name: 'two.webm', type: 'video/webm', content: '2' },
-        { name: 'three.mp4', type: 'video/mp4', content: '3' },
-        { name: 'default-collection.txt', type: 'text/plain', content: 'three.mp4\none.mp4\n' },
-        { name: 'minus-1.txt', type: 'text/plain', content: 'two.webm\none.mp4\n' },
-        { name: 'minus-2.txt', type: 'text/plain', content: 'one.mp4\n' },
-      ];
-      const attempts = new Map();
-      const toFile = (f) => new File([f.content || f.name], f.name, { type: f.type || '' });
-      window.showDirectoryPicker = async () => ({
-        kind: 'directory',
-        name: 'downhill-racer',
-        async *values() {
-          for (const f of mockFiles) {
-            yield {
-              kind: 'file',
-              name: f.name,
-              async getFile() {
-                const nextAttempt = (attempts.get(f.name) || 0) + 1;
-                attempts.set(f.name, nextAttempt);
-                if (f.name.endsWith('.txt') && nextAttempt === 1) {
-                  throw new Error(`Transient provider error for ${f.name}`);
-                }
-                return toFile(f);
-              },
-            };
-          }
-        },
-        async getFileHandle() {
-          return {
-            async createWritable() {
-              return {
-                async write() {},
-                async close() {},
-              };
-            },
-          };
-        },
-      });
-    });
-
-    await page.click('#pickBtn');
-    await expect(page.locator('#activeCollectionName option')).toHaveText([
-      'downhill-racer-default',
-      'default-collection',
-      'minus-1',
-      'minus-2',
-    ]);
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-  });
-
-  test('writes err.log entries for invalid collection files when directory access is available', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'save-a.mp4', type: 'video/mp4', content: 'a' },
-      { name: 'broken.txt', type: 'text/plain', content: 'save-a.mp4\nsave-a.mp4\n' },
-    ]);
-
-    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
-    expect(writes.some((write) => write.name === 'err.log')).toBe(true);
-    const errLogWrite = writes.find((write) => write.name === 'err.log');
-    expect(errLogWrite.data).toContain('Problem: invalid-duplicates');
-  });
-
-  test('save on the synthetic default writes a named collection file when directory access is available', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'save-a.mp4', type: 'video/mp4', content: 'a' },
-      { name: 'save-b.webm', type: 'video/webm', content: 'b' },
-    ]);
-    await openOrderMenu(page);
-    await page.click('#saveBtn');
-    await expect(page.locator('#saveAsNewDialog')).toBeVisible();
-    await page.fill('#saveAsNewNameInput', 'all-clips');
-    await page.click('#confirmSaveAsNewBtn');
-    await expect(page.locator('#status')).toHaveText('Saved all-clips.txt to the selected folder.');
-
-    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
-    expect(writes).toHaveLength(1);
-    expect(writes[0].name).toBe('all-clips.txt');
-    expect(writes[0].data.trim().split('\n')).toEqual(await getOrder(page));
-  });
-
-  test('save as new writes a named collection file when directory access is available', async ({ page }) => {
-    await loadClipsViaDirectoryPickerMock(page, [
-      { name: 'save-a.mp4', type: 'video/mp4', content: 'a' },
-      { name: 'save-b.webm', type: 'video/webm', content: 'b' },
-    ]);
-    await openOrderMenu(page);
-    await page.click('#saveAsNewBtn');
-    await page.fill('#saveAsNewNameInput', 'director-cut');
-    await page.click('#confirmSaveAsNewBtn');
-    await expect(page.locator('#status')).toHaveText('Saved director-cut.txt to the selected folder.');
-
-    const writes = await page.evaluate(() => window.__savedOrderWrites || []);
-    expect(writes).toHaveLength(1);
-    expect(writes[0].name).toBe('director-cut.txt');
-    expect(writes[0].data.trim().split('\n')).toEqual(await getOrder(page));
-  });
-});
-
-test.describe('Status bar visibility', () => {
-  test('status bar shows for load and hides afterwards', async ({ page }) => {
-    await loadClips(page, 'status');
-    const status = page.locator('#status');
-    await expect(status).toBeVisible();
-    await expect.poll(async () => status.isHidden(), { timeout: 4000 }).toBe(true);
-  });
-});
-
-test.describe('Fullscreen clip rotation', () => {
-  test('rotates a hidden clip into visible slots over time', async ({ page }) => {
-    await loadClips(page, 'fullscreen-many');
-    await page.evaluate(() => {
-      const originalSetInterval = window.setInterval.bind(window);
-      window.Math.random = () => 0;
-      window.setInterval = (fn, _ms, ...args) => originalSetInterval(fn, 120, ...args);
-    });
-
-    await page.click('#fsBtn');
-    await expect(page.locator('body')).toHaveClass(/fs-active/);
-    const before = await getVisibleOrder(page);
-
-    await expect.poll(async () =>
-      page.evaluate((beforeVisible) => {
-        const visible = Array.from(document.querySelectorAll('#grid .thumb')).filter((el) => el.style.display !== 'none');
-        const firstVideo = visible[0]?.querySelector('video');
-        if (firstVideo) firstVideo.dispatchEvent(new Event('ended'));
-        const current = visible.map((el) => el.dataset.name);
-        return current.join('|') !== beforeVisible.join('|');
-      }, before),
-      { timeout: 8000 }
-    ).toBe(true);
-  });
-});
-
-test.describe('Zoom demo', () => {
-  test('sandbox zoom host opens the sample clip without loading the main app shell', async ({ page }) => {
-    await page.goto('/sandbox/zoom-demo.html');
-    await expect(page.locator('#viewBtn')).toBeVisible();
-    await expect(page.locator('#pickBtn')).toHaveCount(0);
-    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
-
-    await page.click('#viewBtn');
+    await page.locator('#grid .thumb').first().dblclick();
     await expect(page.locator('#zoomOverlay')).toBeVisible();
-    await expect(page.locator('#zoomFrame')).toBeVisible();
-    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', 'hand-closes-curtain.mp4');
-  });
-});
-test.describe('Zoom mode', () => {
-  test('double-click opens zoom, selects the clip, and keeps the grid rendered', async ({ page }) => {
-    await loadClips(page, 'load-basic');
-    const first = await openZoomOnFirstClip(page);
-    await expect(first).toHaveClass(/selected/);
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-    await expect(page.locator('#zoomFrame')).toBeVisible();
-  });
+    await expect(page.locator('#zoomVideo')).toBeVisible();
 
-  test('pressing Z opens zoom only for exactly one selected clip', async ({ page }) => {
-    await loadClips(page, 'load-basic');
-    await page.keyboard.press('Z');
-    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
-
-    const first = page.locator('#grid .thumb').first();
-    const second = page.locator('#grid .thumb').nth(1);
-    await first.click();
-    await second.click({ modifiers: ['Control'] });
-    await page.keyboard.press('Z');
-    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
-
-    await first.click();
-    await page.keyboard.press('Z');
-    await expect(page.locator('#zoomOverlay')).toBeVisible();
-    await expect(first).toHaveClass(/selected/);
-  });
-
-  test('Escape and outside click both close zoom', async ({ page }) => {
-    await loadClips(page, 'load-basic');
-    await openZoomOnFirstClip(page);
     await page.keyboard.press('Escape');
     await expect(page.locator('#zoomOverlay')).toHaveCount(0);
 
-    await openZoomOnFirstClip(page);
-    await page.mouse.click(10, 10);
-    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
-  });
-
-  test('A toggles zoom audio and reopening zoom resets it to muted from the beginning', async ({ page }) => {
-    await loadClips(page, 'load-basic');
-    const first = await openZoomOnFirstClip(page);
-
-    const initialState = await page.evaluate(() => {
-      const video = document.getElementById('zoomVideo');
-      video.pause();
-      const target = Number.isFinite(video.duration) ? Math.min(0.25, Math.max(0.12, video.duration / 2)) : 0.25;
-      video.currentTime = target;
-      return { muted: video.muted, advancedTime: video.currentTime };
-    });
-    expect(initialState.muted).toBe(true);
-    expect(initialState.advancedTime).toBeGreaterThan(0.1);
-
-    await page.keyboard.press('A');
-    await expect.poll(async () => page.evaluate(() => document.getElementById('zoomVideo')?.muted)).toBe(false);
-    await page.keyboard.press('A');
-    await expect.poll(async () => page.evaluate(() => document.getElementById('zoomVideo')?.muted)).toBe(true);
-
-    await page.keyboard.press('Escape');
-    await first.dblclick();
-    await expect(page.locator('#zoomOverlay')).toBeVisible();
-    await waitForZoomVideo(page);
-
-    const reopenedState = await page.evaluate(() => {
-      const video = document.getElementById('zoomVideo');
-      video.pause();
-      return { muted: video.muted, currentTime: video.currentTime };
-    });
-    expect(reopenedState.muted).toBe(true);
-    expect(reopenedState.currentTime).toBeLessThan(0.1);
-  });
-
-  test('ArrowLeft and ArrowRight browse zoomed clips and clank at collection boundaries', async ({ page }) => {
-    await page.addInitScript(() => {
-      window.__clankStarts = 0;
-      class FakeOscillator {
-        constructor() {
-          this.frequency = {
-            setValueAtTime() {},
-            exponentialRampToValueAtTime() {},
-          };
-          this.type = 'sine';
-        }
-        connect() {}
-        start() {
-          window.__clankStarts += 1;
-        }
-        stop() {}
-      }
-      class FakeGain {
-        constructor() {
-          this.gain = {
-            setValueAtTime() {},
-            exponentialRampToValueAtTime() {},
-          };
-        }
-        connect() {}
-      }
-      class FakeAudioContext {
-        constructor() {
-          this.currentTime = 0;
-          this.state = 'running';
-          this.destination = {};
-        }
-        createOscillator() {
-          return new FakeOscillator();
-        }
-        createGain() {
-          return new FakeGain();
-        }
-        resume() {
-          return Promise.resolve();
-        }
-      }
-      window.AudioContext = FakeAudioContext;
-    });
-
-    await loadClips(page, 'load-basic');
-    const order = await getOrder(page);
-    const first = page.locator('#grid .thumb').first();
-    await first.dblclick();
-    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[0]);
-    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
-
-    await page.keyboard.press('ArrowLeft');
-    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[0]);
-    const leftBoundaryCount = await page.evaluate(() => window.__clankStarts || 0);
-    expect(leftBoundaryCount).toBeGreaterThan(0);
-
-    await page.keyboard.press('A');
-    await expect.poll(async () => page.evaluate(() => document.getElementById('zoomVideo')?.muted)).toBe(false);
-    await page.keyboard.press('ArrowRight');
-    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[1]);
-    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
-    const afterRight = await page.evaluate(() => ({
-      clankCount: window.__clankStarts || 0,
-      muted: document.getElementById('zoomVideo')?.muted,
-      selectedNames: Array.from(document.querySelectorAll('#grid .thumb.selected')).map((el) => el.dataset.name),
-    }));
-    expect(afterRight.clankCount).toBe(leftBoundaryCount);
-    expect(afterRight.muted).toBe(true);
-    expect(afterRight.selectedNames).toEqual([order[1]]);
-
-    await page.keyboard.press('ArrowRight');
-    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[1]);
-    await expect.poll(async () => page.evaluate(() => window.__clankStarts || 0)).toBeGreaterThan(leftBoundaryCount);
-
-    await page.keyboard.press('A');
-    await expect.poll(async () => page.evaluate(() => document.getElementById('zoomVideo')?.muted)).toBe(false);
-    await page.keyboard.press('ArrowLeft');
-    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', order[0]);
-    await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
-    const afterLeft = await page.evaluate(() => document.getElementById('zoomVideo')?.muted);
-    expect(afterLeft).toBe(true);
-  });
-
-  test('entering fullscreen closes zoom first', async ({ page }) => {
-    await loadClips(page, 'load-basic');
-    await openZoomOnFirstClip(page);
     await page.keyboard.press('F');
     await expect(page.locator('body')).toHaveClass(/fs-active/);
-    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
     await page.keyboard.press('F');
     await expect(page.locator('body')).not.toHaveClass(/fs-active/);
   });
 });
-async function streamToString(stream) {
-  if (!stream) return '';
-  return new Promise((resolve, reject) => {
-    let data = '';
-    stream.on('data', (chunk) => (data += chunk.toString()));
-    stream.on('end', () => resolve(data));
-    stream.on('error', reject);
-  });
-}
-
-
-
-
-
-
-

@@ -2,10 +2,11 @@
   "name": "clip-sandbox",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
-    "test": "playwright test",
+    "start": "electron .",
+    "test": "npm run e2e",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "unit": "vitest --run",
@@ -17,7 +18,7 @@
   "license": "ISC",
   "devDependencies": {
     "@playwright/test": "^1.57.0",
-    "http-server": "^14.1.1",
+    "electron": "^37.2.0",
     "husky": "^9.1.7",
     "jsdom": "22.1.0",
     "vitest": "0.34.6"
