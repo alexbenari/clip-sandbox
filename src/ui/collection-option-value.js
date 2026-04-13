@@ -17,13 +17,3 @@ export function parseCollectionRefFromOptionValue(optionValue = '') {
     ? createDefaultCollectionRef()
     : createSavedCollectionRef(trimmed);
 }
-
-export function createAddToCollectionChoice(collection, inventory) {
-  if (!inventory || !collection) return null;
-  const collectionRef = inventory.collectionRefFor(collection);
-  return {
-    label: collection.collectionName,
-    value: serializeCollectionRefToOptionValue(collectionRef),
-    collectionRef,
-  };
-}

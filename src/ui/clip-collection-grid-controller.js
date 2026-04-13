@@ -157,9 +157,14 @@ export function formatLabel(name, durationSeconds) {
 export function createClipCollectionGridController({
   grid,
   gridRoot = grid?.parentElement || null,
+  toolbar = null,
+  fullscreenState = null,
   formatLabel: formatClipLabel = formatLabel,
+  computeBestGrid = null,
+  computeFsLayout = null,
+  applyGridLayout = null,
+  isFullscreen = null,
   updateCount,
-  recomputeLayout,
   onSelectionChange,
   onOrderChange,
   onOpenClip,
@@ -170,10 +175,94 @@ export function createClipCollectionGridController({
   let currentCollection = null;
   let selectedClipIds = new Set();
   let dragSourceCardId = null;
+  let hiddenCards = [];
 
   ensureClipCollectionGridStyles(doc);
   gridRoot?.classList.add('clip-collection-grid-root');
   grid?.classList.add('clip-collection-grid');
+
+  function hiddenCardBuffer() {
+    return fullscreenState?.hiddenCards || hiddenCards;
+  }
+
+  function replaceHiddenCards(nextHiddenCards) {
+    if (fullscreenState?.hiddenCards) fullscreenState.hiddenCards = nextHiddenCards;
+    else hiddenCards = nextHiddenCards;
+  }
+
+  function readGridMetrics(mode) {
+    const gap = parseFloat(getComputedStyle(grid).gap) || 0;
+    const availW = gridRoot?.clientWidth || grid?.clientWidth || 0;
+    const toolbarHeight = toolbar ? Math.ceil(toolbar.getBoundingClientRect().height) : 0;
+    const chromeH = mode === 'fullscreen' ? 28 : toolbarHeight + 28;
+    const availH = window.innerHeight - chromeH;
+    return { gap, availW, availH };
+  }
+
+  function computeGrid() {
+    const n = grid.children.length;
+    if (n === 0) {
+      grid.style.gridTemplateColumns = 'repeat(1, 1fr)';
+      return;
+    }
+    if (!computeBestGrid || !applyGridLayout) return;
+    const { gap, availW, availH } = readGridMetrics('normal');
+    const { cols, cellH } = computeBestGrid({ count: n, availW, availH, gap });
+    applyGridLayout(cols, cellH);
+  }
+
+  function fsComputeAndApplyGrid() {
+    if (!computeFsLayout || !applyGridLayout) {
+      return { targetVisible: grid.children.length };
+    }
+    const { gap, availW, availH } = readGridMetrics('fullscreen');
+    const best = computeFsLayout({ slots: fullscreenState?.slots, availW, availH, gap });
+    applyGridLayout(best.cols, best.cellH);
+    return best;
+  }
+
+  function fsRestore() {
+    const cardsToRestore = hiddenCardBuffer();
+    if (cardsToRestore.length === 0) return;
+    cardsToRestore.forEach((el) => {
+      el.style.display = '';
+    });
+    replaceHiddenCards([]);
+  }
+
+  function fsApplySlots() {
+    fsRestore();
+    const best = fsComputeAndApplyGrid();
+    const children = Array.from(grid.children);
+    const total = children.length;
+    if (total === 0) return;
+    const targetVisible = Math.max(1, Math.min(total, best.targetVisible));
+    let toHide = Math.max(0, total - targetVisible);
+    const nextHiddenCards = [];
+    for (let i = 0; i < total; i++) {
+      const el = children[i];
+      if (i === total - 1) {
+        el.style.display = '';
+        continue;
+      }
+      if (toHide > 0) {
+        el.style.display = 'none';
+        nextHiddenCards.push(el);
+        toHide--;
+      } else {
+        el.style.display = '';
+      }
+    }
+    replaceHiddenCards(nextHiddenCards);
+  }
+
+  function recomputeLayout() {
+    if (isFullscreen?.()) {
+      fsApplySlots();
+      return;
+    }
+    computeGrid();
+  }
 
   function notifySelectionChange() {
     onSelectionChange?.(getSelectedClipId(), getSelectedClipIds());
@@ -344,6 +433,7 @@ export function createClipCollectionGridController({
   }
 
   function destroy() {
+    fsRestore();
     clearGridCards(grid);
     selectedClipIds = new Set();
     dragSourceCardId = null;
@@ -410,5 +500,9 @@ export function createClipCollectionGridController({
     areTitlesHidden,
     setTitlesHidden,
     handleKeyDown,
+    recomputeLayout,
+    computeGrid,
+    fsApplySlots,
+    fsRestore,
   };
 }

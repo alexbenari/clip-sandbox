@@ -1,21 +1,16 @@
 # Feature Requests
 
 ## Design and code quality
-- business logic -> move functionality into domain when needed (e.g. collection-name.js?)
-- layout controller and rules -> fold into grid controller when applicable, leave FS for future
--  `ClipCollectionLoader`: file-level logic where the input is a folder and the output is a `ClipCollection`.
--  Reusable UI components imported from a separate library: zoom view and rclick menu
--  create a linear walthrough of the code (e.g, using showboat) to kck off agents
+-  create a linear walthrough of the code (e.g, using showboat) to kick off agents
 -  make error log usable: 
    -  one line message, timestamp, module, error message
    -  save in available folder
    -  allow viewing in the ui
--  Add a linter?
+-  Create project level resource describing code and architecture
 
 ## Collection Mode (a.k.a Grid Mode)
 
 ### Clip Display
-- Delete a clip from disk
 - Control the number of clips on the grid via collection paging.
   - Add navigation to previous and next screens on the sides as needed.
   - Add a count showing total items and current screen position (`x/y`).

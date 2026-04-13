@@ -22,6 +22,17 @@ export function folderNameFromFiles(fileList) {
   return parts.length > 1 ? parts[0] : '';
 }
 
+export function isTopLevelFolderEntry(file) {
+  const relPath = String(file?.webkitRelativePath || '').trim();
+  if (!relPath) return true;
+  const parts = relPath.split(/[\\/]/).filter(Boolean);
+  return parts.length <= 2;
+}
+
+export function topLevelFiles(files) {
+  return Array.from(files || []).filter(isTopLevelFolderEntry);
+}
+
 async function readFileEntryWithRetry(entry, { maxAttempts = 3 } = {}) {
   let lastError = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {

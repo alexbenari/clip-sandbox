@@ -5,8 +5,6 @@ import {
   loadedVideosText,
   collectionLoadedText,
   collectionPartiallyLoadedText,
-  collectionEmptyErrorText,
-  collectionDuplicateErrorText,
   collectionConflictSummaryText,
   saveAsNewNameRequiredText,
   saveAsNewInvalidNameText,
@@ -50,9 +48,7 @@ describe('app text helpers', () => {
     );
   });
 
-  test('formats collection errors and conflict summary', () => {
-    expect(collectionEmptyErrorText()).toContain('empty');
-    expect(collectionDuplicateErrorText(['a.mp4 (x2)'])).toContain('a.mp4');
+  test('formats collection conflict and validation text', () => {
     expect(collectionConflictSummaryText(2, 1)).toContain('1 missing entry');
     expect(saveAsNewNameRequiredText()).toContain('Enter');
     expect(saveAsNewInvalidNameText()).toContain('< > :');

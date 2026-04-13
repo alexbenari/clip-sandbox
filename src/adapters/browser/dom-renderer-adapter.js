@@ -1,5 +1,3 @@
-import { countText } from '../../app/app-text.js';
-
 export function showStatus(statusEl, message, timeout = 2500) {
   statusEl.textContent = message;
   statusEl.hidden = false;
@@ -14,10 +12,10 @@ export function applyGridLayout(gridEl, cols, cellHeight) {
   for (const el of gridEl.children) el.style.height = `${cellHeight}px`;
 }
 
-export function updateClipCount(countEl, buttons, count, niceNum) {
-  countEl.textContent = countText(count, niceNum);
+export function updateClipCount(countEl, buttons, { text = '', disableButtons = false } = {}) {
+  countEl.textContent = text;
   const actionButtons = Array.isArray(buttons) ? buttons : [buttons];
   for (const button of actionButtons.filter(Boolean)) {
-    button.disabled = count === 0;
+    button.disabled = !!disableButtons;
   }
 }

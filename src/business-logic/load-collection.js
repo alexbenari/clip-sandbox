@@ -1,83 +1,62 @@
-import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { ClipCollection } from '../domain/clip-collection.js';
-import { materializeCollectionContent } from './materialize-collection.js';
+import { Clip } from '../domain/clip.js';
 
-const defaultValidator = new CollectionDescriptionValidator();
-
-export function runLoadCollection({
-  lines,
-  file,
-  folderClips = [],
-  folderClipNames = [],
-  currentCollectionName = '',
-} = {}) {
-  const parsed = defaultValidator.parseLines({
-    lines,
-    filename: file?.name || currentCollectionName,
-  });
-
-  if (!parsed.ok) {
-    return {
-      kind: parsed.code,
-      collectionName: parsed.filename?.replace(/\.txt$/i, '') || currentCollectionName,
-      duplicateNames: parsed.duplicateNames || [],
-    };
-  }
-  const requestedNames = parsed.content.orderedClipNames;
-  const folderNames = Array.from(folderClipNames || []);
+function requestedNameAnalysis(content, availableNames = []) {
+  const requestedNames = content?.orderedClipNames || [];
+  const normalizedAvailableNames = Array.from(availableNames || []);
+  const availableSet = new Set(normalizedAvailableNames);
   const requestedSet = new Set(requestedNames);
-  const folderSet = new Set(folderNames);
-  const missingNames = requestedNames.filter((name) => !folderSet.has(name));
-  const existingNamesInOrder = requestedNames.filter((name) => folderSet.has(name));
+  const missingNames = requestedNames.filter((name) => !availableSet.has(name));
+  const existingNamesInOrder = requestedNames.filter((name) => availableSet.has(name));
+  const isExactMatch = requestedSet.size === normalizedAvailableNames.length
+    && normalizedAvailableNames.every((name) => requestedSet.has(name));
 
-  if (missingNames.length > 0) {
-    return {
-      kind: 'has-missing',
-      content: parsed.content,
-      collectionName: parsed.content.collectionName,
-      requestedNames,
-      existingNamesInOrder,
-      missingNames,
-      missingCount: missingNames.length,
-      partialCollection: ClipCollection.fromClipNames({
-        name: parsed.content.collectionName,
-        orderedNames: existingNamesInOrder,
-        clips: folderClips,
-      }),
-    };
-  }
-
-  const exact = requestedSet.size === folderNames.length
-    && folderNames.every((name) => requestedSet.has(name));
   return {
-    kind: 'loaded',
-    content: parsed.content,
-    collectionName: parsed.content.collectionName,
+    content,
+    collectionName: content?.collectionName || '',
     requestedNames,
-    matchKind: exact ? 'exact-match' : 'subset-match',
-    collection: ClipCollection.fromClipNames({
-      name: parsed.content.collectionName,
-      orderedNames: requestedNames,
-      clips: folderClips,
-    }),
+    existingNamesInOrder,
+    missingNames,
+    missingCount: missingNames.length,
+    matchKind: isExactMatch ? 'exact-match' : 'subset-match',
   };
 }
 
-export async function runLoadCollectionFromFile({
-  file,
-  folderClips = [],
-  folderClipNames = [],
-  currentCollectionName = '',
-} = {}) {
-  const text = await file.text();
-  const lines = text.replace(/\r/g, '').split('\n');
-  return runLoadCollection({
-    lines,
-    file,
-    folderClips,
-    folderClipNames,
-    currentCollectionName,
-  });
+function toFileMap(availableVideoFiles) {
+  if (availableVideoFiles instanceof Map) return new Map(availableVideoFiles);
+  return new Map(Array.from(availableVideoFiles || []).map((file) => [file.name, file]));
 }
 
-export { materializeCollectionContent };
+function materializedClips(names, filesByName, nextClipId) {
+  return Array.from(names || [])
+    .map((name) => filesByName.get(name))
+    .filter(Boolean)
+    .map((file) => new Clip({ id: nextClipId(), file }));
+}
+
+export function materializeCollectionContent({
+  content,
+  availableVideoFiles = [],
+  nextClipId,
+} = {}) {
+  const filesByName = toFileMap(availableVideoFiles);
+  const analysis = requestedNameAnalysis(content, filesByName.keys());
+  const partialCollection = new ClipCollection({
+    name: analysis.collectionName,
+    clips: materializedClips(analysis.existingNamesInOrder, filesByName, nextClipId),
+  });
+
+  if (analysis.missingNames.length > 0) {
+    return {
+      kind: 'has-missing',
+      ...analysis,
+      partialCollection,
+    };
+  }
+
+  return {
+    kind: 'loaded',
+    ...analysis,
+    collection: partialCollection,
+  };
+}

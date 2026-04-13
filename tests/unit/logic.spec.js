@@ -3,9 +3,9 @@ import {
   isVideoFile,
   filterAndSortFiles,
   isCollectionFile,
-  isTopLevelFolderEntry,
   getVideosAndCollectionFiles,
 } from '../../src/business-logic/load-clips.js';
+import { isTopLevelFolderEntry } from '../../src/adapters/browser/file-system-adapter.js';
 import { niceNum } from '../../src/app/app-text.js';
 import { formatDuration } from '../../src/ui/clip-collection-grid-controller.js';
 import {

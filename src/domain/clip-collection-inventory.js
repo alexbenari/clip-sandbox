@@ -13,8 +13,6 @@ export class ClipCollectionInventory {
   #defaultCollection;
   #defaultCollectionHasBackingFile;
   #activeCollection;
-  #dirty;
-  #pendingAction;
 
   constructor({ folderName = '', videoFiles = [], collectionContents = [] } = {}) {
     this.#folderName = String(folderName || '').trim();
@@ -23,8 +21,6 @@ export class ClipCollectionInventory {
     this.#defaultCollection = ClipCollectionContent.createDefault({ folderName: this.#folderName });
     this.#defaultCollectionHasBackingFile = false;
     this.#activeCollection = this.#defaultCollection;
-    this.#dirty = false;
-    this.#pendingAction = null;
     this.setVideoFiles(videoFiles);
     this.setCollectionContents(collectionContents);
   }
@@ -200,34 +196,6 @@ export class ClipCollectionInventory {
 
   activeCollectionRef() {
     return this.collectionRefFor(this.activeCollection());
-  }
-
-  hasDirtyChanges() {
-    return this.#dirty;
-  }
-
-  refreshDirtyState(collection) {
-    const baseline = this.activeCollection()?.orderedClipNames || [];
-    const currentNames = collection?.clipNamesInOrder?.() || [];
-    this.#dirty = currentNames.length !== baseline.length
-      || currentNames.some((name, index) => name !== baseline[index]);
-    return this.#dirty;
-  }
-
-  clearDirtyState() {
-    this.#dirty = false;
-  }
-
-  setPendingAction(action) {
-    this.#pendingAction = action || null;
-  }
-
-  pendingAction() {
-    return this.#pendingAction;
-  }
-
-  clearPendingAction() {
-    this.#pendingAction = null;
   }
 
   #refreshDefaultCollection() {

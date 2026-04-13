@@ -1,14 +1,18 @@
 import {
   getVideosAndCollectionFiles,
 } from '../business-logic/load-clips.js';
-import { materializeCollectionContent } from '../business-logic/load-collection.js';
-import { buildCollectionInventory } from '../business-logic/load-collection-inventory.js';
+import { ClipPipelineLoader } from '../business-logic/clip-pipeline-loader.js';
+import { persistCollectionContent } from '../business-logic/persist-collection-content.js';
 import {
   createAppState,
+  clearPendingCollectionAction,
   nextClipId,
+  pendingCollectionAction,
+  refreshDirtyCollectionState,
   setCollectionInventory,
   setCurrentCollection,
   setCurrentFolderSession,
+  setPendingCollectionAction,
   resetCollectionState,
 } from './app-session-state.js';
 import {
@@ -20,12 +24,11 @@ import { createBrowserFileSystemService } from '../adapters/browser/browser-file
 import { delay, every, clear as clearClock } from '../adapters/browser/clock-adapter.js';
 import { showStatus as showStatusAdapter, applyGridLayout as applyGridLayoutAdapter, updateClipCount } from '../adapters/browser/dom-renderer-adapter.js';
 import { playBoundaryClank } from '../adapters/browser/audio-feedback-adapter.js';
-import { persistCollectionContent } from '../business-logic/save-order.js';
+import { ClipPipeline } from '../business-logic/clip-pipeline.js';
 import { CollectionManager } from '../business-logic/collection-manager.js';
-import { normalizeCollectionFilename, validateCollectionName } from '../business-logic/collection-name.js';
 import { createFullscreenSession } from './fullscreen-session.js';
+import { createAppDiagnostics } from './app-diagnostics.js';
 import { bindControlEvents, bindGlobalEvents, isEditableTarget } from './event-binding.js';
-import { createLayoutController } from '../ui/display-layout-controller.js';
 import {
   computeBestGrid,
   computeFsLayout,
@@ -54,19 +57,25 @@ import {
   deleteFromDiskResultText,
   activeCollectionText,
   activeCollectionTabText,
+  countText,
   niceNum,
   DEFAULT_APP_TITLE,
 } from './app-text.js';
 import { createOrderMenuController } from '../ui/order-menu-controller.js';
 import { createAddToCollectionDialogController } from '../ui/add-to-collection-dialog-controller.js';
 import { renderActiveCollectionSelector } from '../ui/active-collection-selector.js';
+import { createCollectionOptionForCollection } from '../ui/collection-option.js';
 import {
-  createAddToCollectionChoice,
   parseCollectionRefFromOptionValue,
-} from '../ui/collection-ref-presentation.js';
+  serializeCollectionRefToOptionValue,
+} from '../ui/collection-option-value.js';
 import { createContextMenuController } from '../ui/context-menu-controller.js';
 import { createZoomOverlayController } from '../ui/zoom-overlay-controller.js';
 import { createClipCollectionGridController, formatLabel, updateCardLabel } from '../ui/clip-collection-grid-controller.js';
+import { createCollectionConflictController } from '../ui/collection-conflict-controller.js';
+import { createDeleteFromDiskDialogController } from '../ui/delete-from-disk-dialog-controller.js';
+import { createSaveAsNewDialogController } from '../ui/save-as-new-dialog-controller.js';
+import { createUnsavedChangesDialogController } from '../ui/unsaved-changes-dialog-controller.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { ClipCollectionContent } from '../domain/clip-collection-content.js';
 import { collectionRefsEqual } from '../domain/collection-ref.js';
@@ -148,6 +157,14 @@ export function initApp() {
   const zoomOverlay = createZoomOverlayController({ mountEl: zoomLayerRoot, document });
   const fileSystem = createBrowserFileSystemService({ win: window });
   const collectionManager = new CollectionManager({ fileSystem });
+  const clipPipeline = new ClipPipeline({ fileSystem });
+  const clipPipelineLoader = new ClipPipelineLoader();
+  const diagnostics = createAppDiagnostics({
+    fileSystem,
+    validator,
+    errorLogFilename: ERROR_LOG_FILENAME,
+    getCurrentFolderSession: () => state.currentFolderSession,
+  });
   const clipContextMenuController = createContextMenuController({
     root: clipContextMenu,
     panel: clipContextMenuPanel,
@@ -167,7 +184,44 @@ export function initApp() {
       void confirmAddToCollection(destination);
     },
   });
-  let pendingCollectionConflict = null;
+  const collectionConflictController = createCollectionConflictController({
+    root: collectionConflict,
+    summaryEl: collectionConflictSummary,
+    listEl: collectionConflictList,
+    applyBtn: applyCollectionConflictBtn,
+    cancelBtn: cancelCollectionConflictBtn,
+  });
+  const saveAsNewDialogController = createSaveAsNewDialogController({
+    dialog: saveAsNewDialog,
+    nameInput: saveAsNewNameInput,
+    errorMessageEl: saveAsNewError,
+    confirmBtn: confirmSaveAsNewBtn,
+    cancelBtn: cancelSaveAsNewBtn,
+    validateName: (name) => validateSaveAsNewName(name),
+    onConfirm: (name) => {
+      void confirmSaveAsNew(name);
+    },
+    onCancel: cancelSaveAsNewFlow,
+  });
+  const unsavedChangesDialogController = createUnsavedChangesDialogController({
+    dialog: unsavedChangesDialog,
+    messageEl: unsavedChangesText,
+    confirmBtn: confirmUnsavedChangesBtn,
+    discardBtn: discardUnsavedChangesBtn,
+    cancelBtn: cancelUnsavedChangesBtn,
+  });
+  const deleteFromDiskDialogController = createDeleteFromDiskDialogController({
+    preflightDialog: deletePreflightDialog,
+    preflightTextEl: deletePreflightText,
+    confirmPreflightBtn: confirmDeletePreflightBtn,
+    discardPreflightBtn: discardDeletePreflightBtn,
+    cancelPreflightBtn: cancelDeletePreflightBtn,
+    confirmDialog: deleteFromDiskDialog,
+    confirmSummaryEl: deleteFromDiskSummary,
+    confirmPreviewEl: deleteFromDiskPreview,
+    confirmDeleteBtn: confirmDeleteFromDiskBtn,
+    cancelDeleteBtn: cancelDeleteFromDiskBtn,
+  });
   let pendingDeleteRequest = null;
 
   function showStatus(msg, timeout = 2500) {
@@ -190,6 +244,13 @@ export function initApp() {
     return state.currentCollection?.name || currentContent()?.collectionName || '';
   }
 
+  function activeCollectionOptions(inventory = currentInventory()) {
+    if (!inventory) return [];
+    return inventory.selectableCollections()
+      .map((collection) => createCollectionOptionForCollection(collection, inventory))
+      .filter(Boolean);
+  }
+
   function activeCollectionFilename() {
     return currentInventory()?.backingFilenameFor(currentContent()) || '';
   }
@@ -206,31 +267,25 @@ export function initApp() {
     applyGridLayoutAdapter(grid, cols, cellH);
   }
 
-  const { recomputeLayout, computeGrid, fsApplySlots, fsRestore } = createLayoutController({
-    grid,
-    gridWrap,
-    toolbar,
-    fullscreenState,
-    computeBestGrid,
-    computeFsLayout,
-    applyGridLayout,
-    isFullscreen,
-  });
-
   function renderCollectionSelector() {
     const inventory = currentInventory();
     const label = activeCollectionText(currentCollectionName());
     document.title = activeCollectionTabText(currentCollectionName());
     renderActiveCollectionSelector({
       selectEl: activeCollectionNameEl,
-      inventory,
+      options: activeCollectionOptions(inventory),
+      selectedValue: serializeCollectionRefToOptionValue(inventory?.activeCollectionRef()),
       label,
       defaultTitle: DEFAULT_APP_TITLE,
     });
   }
 
   function updateCount() {
-    updateClipCount(countSpan, [saveBtn, saveAsNewBtn], grid.children.length, niceNum);
+    const count = grid.children.length;
+    updateClipCount(countSpan, [saveBtn, saveAsNewBtn], {
+      text: countText(count, niceNum),
+      disableButtons: count === 0,
+    });
   }
 
   function closeZoom() {
@@ -238,52 +293,32 @@ export function initApp() {
   }
 
   function hideCollectionConflict() {
-    if (collectionConflict) collectionConflict.hidden = true;
-    if (collectionConflictSummary) collectionConflictSummary.textContent = '';
-    if (collectionConflictList) collectionConflictList.textContent = '';
+    collectionConflictController.hide();
   }
 
   function showCollectionConflictPanel(conflict, handlers) {
-    pendingCollectionConflict = { conflict, handlers };
-    if (collectionConflictSummary) {
-      collectionConflictSummary.textContent = collectionConflictSummaryText(
+    collectionConflictController.show({
+      summary: collectionConflictSummaryText(
         conflict.existingNamesInOrder.length,
         conflict.missingCount
-      );
-    }
-    if (collectionConflictList) collectionConflictList.textContent = collectionConflictListText(conflict.missingNames);
-    if (collectionConflict) collectionConflict.hidden = false;
-  }
-
-  function clearSaveAsNewError() {
-    if (saveAsNewError) saveAsNewError.textContent = '';
-  }
-
-  function closeSaveAsNewDialog() {
-    if (saveAsNewDialog) saveAsNewDialog.hidden = true;
-    if (saveAsNewNameInput) saveAsNewNameInput.value = '';
-    clearSaveAsNewError();
+      ),
+      list: collectionConflictListText(conflict.missingNames),
+      onApply: handlers?.onApply,
+      onCancel: handlers?.onCancel,
+    });
   }
 
   function cancelSaveAsNewFlow() {
-    closeSaveAsNewDialog();
+    saveAsNewDialogController.close();
     if (pendingDeleteRequest?.awaitingSave) {
       pendingDeleteRequest = null;
     }
-    currentInventory()?.clearPendingAction();
+    clearPendingCollectionAction(state);
     renderCollectionSelector();
   }
 
   function openSaveAsNewDialog() {
-    if (!saveAsNewDialog || !saveAsNewNameInput) return;
-    clearSaveAsNewError();
-    saveAsNewDialog.hidden = false;
-    saveAsNewNameInput.value = '';
-    saveAsNewNameInput.focus();
-  }
-
-  function showSaveAsNewError(text) {
-    if (saveAsNewError) saveAsNewError.textContent = text;
+    saveAsNewDialogController.open();
   }
 
   function addToCollectionValidationErrorText(code) {
@@ -294,9 +329,9 @@ export function initApp() {
   }
 
   function validateAddToCollectionName(name) {
-    let validationCode = validateCollectionName(name).code;
+    let validationCode = ClipCollectionContent.validateCollectionName(name).code;
     if (!validationCode) {
-      const candidateFilename = normalizeCollectionFilename(name || '');
+      const candidateFilename = ClipCollectionContent.filenameFromCollectionName(name || '');
       if (currentInventory()?.getCollectionByFilename(candidateFilename)) validationCode = 'already-exists';
     }
     return addToCollectionValidationErrorText(validationCode);
@@ -316,7 +351,7 @@ export function initApp() {
     const inventory = currentInventory();
     if (!inventory) return [];
     return inventory.eligibleDestinationCollections(inventory.activeCollectionRef())
-      .map((collection) => createAddToCollectionChoice(collection, inventory))
+      .map((collection) => createCollectionOptionForCollection(collection, inventory))
       .filter(Boolean);
   }
 
@@ -362,27 +397,26 @@ export function initApp() {
   }
 
   function openUnsavedDialog() {
-    if (!unsavedChangesDialog) return;
-    if (unsavedChangesText) {
-      const action = currentInventory()?.pendingAction();
-      unsavedChangesText.textContent = action?.type === 'browse-folder'
+    const action = pendingCollectionAction(state);
+    unsavedChangesDialogController.open({
+      message: action?.type === 'browse-folder'
         ? 'The current collection has unsaved changes. Save before browsing to another folder?'
-        : 'The current collection has unsaved changes. Save before switching collections?';
-    }
-    if (typeof unsavedChangesDialog.showModal === 'function') {
-      unsavedChangesDialog.showModal();
-      return;
-    }
-    unsavedChangesDialog.setAttribute('open', '');
+        : 'The current collection has unsaved changes. Save before switching collections?',
+      onSave: () => {
+        void continuePendingAction({ saveFirst: true });
+      },
+      onDiscard: () => {
+        void continuePendingAction({ saveFirst: false });
+      },
+      onCancel: () => {
+        clearPendingCollectionAction(state);
+        renderCollectionSelector();
+      },
+    });
   }
 
   function closeUnsavedDialog() {
-    if (!unsavedChangesDialog) return;
-    if (typeof unsavedChangesDialog.close === 'function' && unsavedChangesDialog.open) {
-      unsavedChangesDialog.close();
-      return;
-    }
-    unsavedChangesDialog.removeAttribute('open');
+    unsavedChangesDialogController.close();
   }
 
   function buildDeleteRequestFromSelection() {
@@ -398,84 +432,50 @@ export function initApp() {
     };
   }
 
-  function closeDeletePreflightDialog() {
-    if (!deletePreflightDialog) return;
-    if (typeof deletePreflightDialog.close === 'function' && deletePreflightDialog.open) {
-      deletePreflightDialog.close();
-      return;
-    }
-    deletePreflightDialog.removeAttribute('open');
-  }
-
   function openDeletePreflightDialog() {
-    if (!deletePreflightDialog) return;
-    if (deletePreflightText) {
-      deletePreflightText.textContent = deleteFromDiskPreflightText();
-    }
-    if (typeof deletePreflightDialog.showModal === 'function') {
-      deletePreflightDialog.showModal();
-      return;
-    }
-    deletePreflightDialog.setAttribute('open', '');
-  }
-
-  function closeDeleteFromDiskDialog() {
-    if (!deleteFromDiskDialog) return;
-    if (typeof deleteFromDiskDialog.close === 'function' && deleteFromDiskDialog.open) {
-      deleteFromDiskDialog.close();
-      return;
-    }
-    deleteFromDiskDialog.removeAttribute('open');
+    deleteFromDiskDialogController.openPreflight({
+      text: deleteFromDiskPreflightText(),
+      onSave: () => {
+        void confirmDeletePreflightSave();
+      },
+      onDiscard: continueDeleteWithoutSaving,
+      onCancel: cancelPendingDeleteFlow,
+    });
   }
 
   function openDeleteFromDiskDialog(deleteRequest) {
-    if (!deleteFromDiskDialog || !deleteRequest) return;
-    if (deleteFromDiskSummary) {
-      deleteFromDiskSummary.textContent = deleteFromDiskConfirmationText(
+    if (!deleteRequest) return;
+    const summary = deleteFromDiskConfirmationText(
         deleteRequest.selectedClipNames.length,
         deleteRequest.affectedSavedCollectionCount,
       );
-    }
-    if (deleteFromDiskPreview) {
-      const previewNames = deleteRequest.selectedClipNames.slice(0, 5);
-      const hiddenCount = Math.max(0, deleteRequest.selectedClipNames.length - previewNames.length);
-      deleteFromDiskPreview.textContent = hiddenCount > 0
-        ? `${previewNames.join('\n')}\n${deleteFromDiskPreviewOverflowText(hiddenCount)}`
-        : previewNames.join('\n');
-    }
-    if (typeof deleteFromDiskDialog.showModal === 'function') {
-      deleteFromDiskDialog.showModal();
-      return;
-    }
-    deleteFromDiskDialog.setAttribute('open', '');
+    const previewNames = deleteRequest.selectedClipNames.slice(0, 5);
+    const hiddenCount = Math.max(0, deleteRequest.selectedClipNames.length - previewNames.length);
+    const preview = hiddenCount > 0
+      ? `${previewNames.join('\n')}\n${deleteFromDiskPreviewOverflowText(hiddenCount)}`
+      : previewNames.join('\n');
+    deleteFromDiskDialogController.openConfirm({
+      summary,
+      preview,
+      onConfirm: () => {
+        void confirmDeleteFromDisk();
+      },
+      onCancel: cancelPendingDeleteFlow,
+    });
   }
 
   function cancelPendingDeleteFlow() {
     pendingDeleteRequest = null;
-    closeDeletePreflightDialog();
-    closeDeleteFromDiskDialog();
-  }
-
-  async function logDeleteFailures(result) {
-    for (const failedDelete of Array.from(result?.failedDeletes || [])) {
-      await appendErrorLog(
-        `Disk delete error\nFile: ${failedDelete.filename}\nDetails: ${failedDelete.error?.message || failedDelete.error || failedDelete.code}\n\n`
-      );
-    }
-    for (const failedRewrite of Array.from(result?.failedCollectionRewrites || [])) {
-      await appendErrorLog(
-        `Collection rewrite error\nFile: ${failedRewrite.filename}\nCollection: ${failedRewrite.collectionName}\nDetails: ${failedRewrite.error?.message || failedRewrite.error}\n\n`
-      );
-    }
+    deleteFromDiskDialogController.closeAll();
   }
 
   async function confirmDeleteFromDisk() {
     const deleteRequest = pendingDeleteRequest;
     if (!deleteRequest || !state.currentCollection || !currentInventory()) return;
-    closeDeleteFromDiskDialog();
+    deleteFromDiskDialogController.closeConfirm();
     pendingDeleteRequest = null;
 
-    const result = await collectionManager.deleteSelectedClipsFromDisk({
+    const result = await clipPipeline.deleteSelectedClipsFromDisk({
       selectedClipIds: deleteRequest.selectedClipIds,
       currentCollection: state.currentCollection,
       inventory: currentInventory(),
@@ -493,7 +493,7 @@ export function initApp() {
     }
 
     if (result.failedDeletes.length > 0 || result.failedCollectionRewrites.length > 0) {
-      await logDeleteFailures(result);
+      await diagnostics.logDeleteFailures(result);
     }
 
     showStatus(deleteFromDiskResultText({
@@ -509,55 +509,21 @@ export function initApp() {
     const deleteRequest = buildDeleteRequestFromSelection();
     if (!deleteRequest) return;
     pendingDeleteRequest = deleteRequest;
-    if (currentInventory()?.hasDirtyChanges()) {
+    if (state.hasDirtyCollectionChanges) {
       openDeletePreflightDialog();
       return;
     }
     openDeleteFromDiskDialog(deleteRequest);
   }
 
-  async function appendErrorLog(text, folderSession = state.currentFolderSession) {
-    if (!text) return false;
-    try {
-      const { mode } = await fileSystem.appendTextFile({
-        folderSession,
-        filename: ERROR_LOG_FILENAME,
-        text,
-      });
-      if (mode === 'saved') return true;
-    } catch (err) {
-      console.warn('Failed to append err.log in selected folder.', err);
-    }
-    console.warn(text.trim());
-    return false;
-  }
-
-  async function logInvalidDescription(result, folderSession) {
-    await appendErrorLog(validator.formatLogEntry(result, 'Collection enumeration'), folderSession);
-  }
-
-  async function logRuntimeError(problem, err, folderSession = state.currentFolderSession) {
-    const detail = `Runtime error\nProblem: ${problem}\nDetails: ${err?.message || err}\n\n`;
-    await appendErrorLog(detail, folderSession);
-  }
-
-  async function logDirectoryReadError({ filename = '', attempts = 0, error } = {}, folderSession) {
-    const problem = filename
-      ? `Failed to read folder entry: ${filename}`
-      : 'Failed to read folder entry';
-    const detail = `Directory enumeration error\nProblem: ${problem}\nAttempts: ${attempts}\nDetails: ${error?.message || error}\n\n`;
-    await appendErrorLog(detail, folderSession);
-  }
-
   function applyCollection(collection, { inventory = currentInventory(), folderSession = state.currentFolderSession, statusText = '', timeout = 2500 } = {}) {
     hideCollectionConflict();
-    pendingCollectionConflict = null;
     clipContextMenuController.close({ restoreFocus: false });
     addToCollectionDialogController.close();
     setCurrentFolderSession(state, folderSession || null);
     setCollectionInventory(state, inventory || null);
     setCurrentCollection(state, collection || null);
-    inventory?.refreshDirtyState(collection);
+    refreshDirtyCollectionState(state, { collection, inventory });
     gridController.renderCollection(collection);
     renderCollectionSelector();
     renderActionButtons();
@@ -566,12 +532,10 @@ export function initApp() {
 
   function clearLoadedState() {
     hideCollectionConflict();
-    pendingCollectionConflict = null;
     pendingDeleteRequest = null;
-    closeSaveAsNewDialog();
+    saveAsNewDialogController.close();
     addToCollectionDialogController.close();
-    closeDeletePreflightDialog();
-    closeDeleteFromDiskDialog();
+    deleteFromDiskDialogController.closeAll();
     clipContextMenuController.close({ restoreFocus: false });
     closeUnsavedDialog();
     closeZoom();
@@ -594,21 +558,20 @@ export function initApp() {
     return collectionLoadedText(result.collection.orderedClips().length);
   }
 
-  function materializeContent(inventory, collectionContent) {
-    return materializeCollectionContent({
-      content: collectionContent,
-      availableVideoFiles: inventory.videoFiles(),
-      nextClipId: () => nextClipId(state),
-    });
-  }
-
   function queueMissingConflict(conflict, handlers) {
     showCollectionConflictPanel(conflict, handlers);
   }
 
   async function applyCollectionSelection(collectionContent, { inventory = currentInventory(), folderSession = state.currentFolderSession } = {}) {
     if (!inventory || !collectionContent) return;
-    const result = materializeContent(inventory, collectionContent);
+    const collectionRef = inventory.collectionRefFor(collectionContent);
+    const loaded = clipPipelineLoader.loadCollectionByRef({
+      inventory,
+      collectionRef,
+      nextClipId: () => nextClipId(state),
+    });
+    if (!loaded) return;
+    const { collectionContent: resolvedCollectionContent, materialization: result } = loaded;
     if (result.kind === 'has-missing') {
       queueMissingConflict(result, {
         onApply: () => {
@@ -617,7 +580,7 @@ export function initApp() {
             showStatus(noCollectionMatchesText(result.missingCount), 4500);
             return;
           }
-          inventory.setActiveCollection(collectionContent);
+          inventory.setActiveCollection(resolvedCollectionContent);
           applyCollection(result.partialCollection, {
             inventory,
             folderSession,
@@ -632,7 +595,7 @@ export function initApp() {
       return;
     }
 
-    inventory.setActiveCollection(collectionContent);
+    inventory.setActiveCollection(resolvedCollectionContent);
     applyCollection(result.collection, {
       inventory,
       folderSession,
@@ -640,17 +603,16 @@ export function initApp() {
     });
   }
 
-  async function loadFolderSelection({ folderSession = null, files = [], folderName = '' } = {}) {
+  async function loadPipeline({ folderSession = null, files = [], folderName = '' } = {}) {
     try {
-      const { inventory } = await buildCollectionInventory({
+      const loaded = await clipPipelineLoader.loadPipeline({
         folderName,
         files,
         validator,
-        logInvalidDescription: (result) => logInvalidDescription(result, folderSession),
+        logInvalidDescription: (result) => diagnostics.logInvalidDescription(result, folderSession),
+        nextClipId: () => nextClipId(state),
       });
-      inventory.setActiveCollection(inventory.defaultCollection());
-      const initialCollection = inventory.activeCollection();
-      const result = materializeContent(inventory, initialCollection);
+      const { inventory, initialCollectionContent, materialization: result } = loaded;
 
       if (result.kind === 'has-missing') {
         queueMissingConflict(result, {
@@ -659,7 +621,7 @@ export function initApp() {
               showStatus(noCollectionMatchesText(result.missingCount), 4500);
               return;
             }
-            inventory.setActiveCollection(initialCollection);
+            inventory.setActiveCollection(initialCollectionContent);
             applyCollection(result.partialCollection, {
               inventory,
               folderSession,
@@ -682,7 +644,7 @@ export function initApp() {
         recomputeLayout();
       }
     } catch (err) {
-      await logRuntimeError('Failed to load the selected folder.', err, folderSession);
+      await diagnostics.logRuntimeError('Failed to load the selected folder.', err, folderSession);
       showStatus(collectionReadErrorText(err), 4000);
     }
   }
@@ -692,9 +654,9 @@ export function initApp() {
     if (fileSystem.canUseDirectoryPicker()) {
       try {
         const selection = await fileSystem.pickFolder({
-          onFileReadError: (info, folderSession) => logDirectoryReadError(info, folderSession),
+          onFileReadError: (info, folderSession) => diagnostics.logDirectoryReadError(info, folderSession),
         });
-        await loadFolderSelection(selection);
+        await loadPipeline(selection);
         return;
       } catch (err) {
         if (err?.name === 'AbortError') return;
@@ -710,8 +672,8 @@ export function initApp() {
   }
 
   async function onPickFolder() {
-    if (currentInventory()?.hasDirtyChanges()) {
-      currentInventory().setPendingAction({ type: 'browse-folder' });
+    if (state.hasDirtyCollectionChanges) {
+      setPendingCollectionAction(state, { type: 'browse-folder' });
       renderCollectionSelector();
       openUnsavedDialog();
       return;
@@ -721,9 +683,9 @@ export function initApp() {
 
   async function continuePendingAction({ saveFirst }) {
     const inventory = currentInventory();
-    const pendingAction = inventory?.pendingAction();
+    const nextPendingAction = pendingCollectionAction(state);
     closeUnsavedDialog();
-    if (!pendingAction) {
+    if (!nextPendingAction) {
       renderCollectionSelector();
       return;
     }
@@ -731,13 +693,13 @@ export function initApp() {
       const saveResult = await saveCollection();
       if (saveResult?.deferred) return;
     }
-    inventory?.clearPendingAction();
-    if (pendingAction.type === 'browse-folder') {
+    clearPendingCollectionAction(state);
+    if (nextPendingAction.type === 'browse-folder') {
       await triggerFolderPicker();
       return;
     }
-    if (pendingAction.type === 'switch-collection') {
-      await applyCollectionSelection(currentInventory()?.getCollectionByRef(pendingAction.collectionRef));
+    if (nextPendingAction.type === 'switch-collection') {
+      await applyCollectionSelection(currentInventory()?.getCollectionByRef(nextPendingAction.collectionRef));
       return;
     }
     renderCollectionSelector();
@@ -755,49 +717,47 @@ export function initApp() {
     });
 
     const { mode } = await persistCollectionContent({
-      content: nextContent,
-      folderSession: state.currentFolderSession,
       fileSystem,
+      content: nextContent,
+      currentFolderSession: state.currentFolderSession,
+      inventory: currentInventory(),
+      makeActive,
     });
     showStatus(
       mode === 'saved'
         ? savedCollectionFileText(nextContent.filename)
         : downloadedCollectionFileText(nextContent.filename)
     );
-
-    currentInventory().upsertCollectionContent(nextContent, { makeActive });
     if (makeActive) {
       currentInventory().setActiveCollection(nextContent);
       state.currentCollection.rename(nextContent.collectionName);
     }
-    currentInventory().refreshDirtyState(state.currentCollection);
+    refreshDirtyCollectionState(state);
     renderCollectionSelector();
     return { mode, content: nextContent };
   }
 
   function validateSaveAsNewName(name) {
-    const validation = validateCollectionName(name);
+    const validation = ClipCollectionContent.validateCollectionName(name);
     if (validation.code === 'required') return saveAsNewNameRequiredText();
     if (validation.code === 'illegal-chars') return saveAsNewInvalidNameText();
     return '';
   }
 
-  async function confirmSaveAsNew() {
-    const rawName = saveAsNewNameInput?.value || '';
+  async function confirmSaveAsNew(rawName) {
     const validationError = validateSaveAsNewName(rawName);
     if (validationError) {
-      showSaveAsNewError(validationError);
-      saveAsNewNameInput?.focus();
+      saveAsNewDialogController.showValidationError(validationError, { focusInput: true });
       return;
     }
-    await saveCollection(normalizeCollectionFilename(rawName), { makeActive: true });
-    closeSaveAsNewDialog();
+    await saveCollection(ClipCollectionContent.filenameFromCollectionName(rawName), { makeActive: true });
+    saveAsNewDialogController.close();
     if (pendingDeleteRequest?.awaitingSave) {
       pendingDeleteRequest.awaitingSave = false;
       openDeleteFromDiskDialog(pendingDeleteRequest);
       return;
     }
-    if (currentInventory()?.pendingAction()) {
+    if (pendingCollectionAction(state)) {
       await continuePendingAction({ saveFirst: false });
     }
   }
@@ -809,7 +769,7 @@ export function initApp() {
 
   async function confirmDeletePreflightSave() {
     if (!pendingDeleteRequest) return;
-    closeDeletePreflightDialog();
+    deleteFromDiskDialogController.closePreflight();
     pendingDeleteRequest.awaitingSave = true;
     const saveResult = await saveCollection();
     if (saveResult?.deferred) return;
@@ -819,7 +779,7 @@ export function initApp() {
 
   function continueDeleteWithoutSaving() {
     if (!pendingDeleteRequest) return;
-    closeDeletePreflightDialog();
+    deleteFromDiskDialogController.closePreflight();
     openDeleteFromDiskDialog(pendingDeleteRequest);
   }
 
@@ -905,16 +865,21 @@ export function initApp() {
   const gridController = createClipCollectionGridController({
     grid,
     gridRoot: gridWrap,
+    toolbar,
+    fullscreenState,
     formatLabel,
+    computeBestGrid,
+    computeFsLayout,
+    applyGridLayout,
+    isFullscreen,
     updateCount,
-    recomputeLayout,
     onSelectionChange: () => {
       renderActionButtons();
     },
     onOrderChange: (orderedClipIds) => {
       if (!state.currentCollection) return;
       state.currentCollection.replaceOrder(orderedClipIds);
-      currentInventory()?.refreshDirtyState(state.currentCollection);
+      refreshDirtyCollectionState(state);
       renderCollectionSelector();
     },
     onOpenClip: openZoomForClipId,
@@ -922,7 +887,7 @@ export function initApp() {
       if (zoomOverlay.isOpen() || !state.currentCollection) return;
       const removedClipIds = state.currentCollection.removeMany(orderedSelectedClipIds);
       if (removedClipIds.length === 0) return;
-      currentInventory()?.refreshDirtyState(state.currentCollection);
+      refreshDirtyCollectionState(state);
       gridController.renderCollection(state.currentCollection);
       renderCollectionSelector();
       showStatus(removedClipsText(removedClipIds.length));
@@ -932,6 +897,8 @@ export function initApp() {
       openGridContextMenu(point);
     },
   });
+
+  const { recomputeLayout, computeGrid, fsApplySlots, fsRestore } = gridController;
 
   const fullscreenSession = createFullscreenSession({
     fullscreenState,
@@ -955,27 +922,12 @@ export function initApp() {
     formatLabel,
   });
 
-  function onApplyCollectionConflict() {
-    const pending = pendingCollectionConflict;
-    hideCollectionConflict();
-    pendingCollectionConflict = null;
-    pending?.handlers?.onApply?.();
-  }
-
-  function onCancelCollectionConflict() {
-    const pending = pendingCollectionConflict;
-    hideCollectionConflict();
-    pendingCollectionConflict = null;
-    pending?.handlers?.onCancel?.();
-  }
-
   function onGlobalKeyDown(e) {
     fullscreenSession.onGlobalKeyDown(e);
   }
 
   function onKeyDown(e) {
-    if (saveAsNewDialog && !saveAsNewDialog.hidden && e.key === 'Escape') {
-      cancelSaveAsNewFlow();
+    if (saveAsNewDialogController.handleGlobalKeyDown(e)) {
       e.preventDefault();
       return;
     }
@@ -984,21 +936,12 @@ export function initApp() {
       addToCollectionDialogController.close();
       return;
     }
-    if (deletePreflightDialog?.open && e.key === 'Escape') {
+    if (deleteFromDiskDialogController.handleGlobalKeyDown(e)) {
       e.preventDefault();
-      cancelPendingDeleteFlow();
       return;
     }
-    if (deleteFromDiskDialog?.open && e.key === 'Escape') {
+    if (unsavedChangesDialogController.handleGlobalKeyDown(e)) {
       e.preventDefault();
-      cancelPendingDeleteFlow();
-      return;
-    }
-    if (unsavedChangesDialog?.open && e.key === 'Escape') {
-      e.preventDefault();
-      currentInventory()?.clearPendingAction();
-      closeUnsavedDialog();
-      renderCollectionSelector();
       return;
     }
     if (e.key === 'Escape' && zoomOverlay.isOpen()) {
@@ -1014,7 +957,12 @@ export function initApp() {
       if (gridController.handleKeyDown(e)) return;
       return;
     }
-    if (addToCollectionDialogController.isOpen() || deletePreflightDialog?.open || deleteFromDiskDialog?.open) return;
+    if (
+      saveAsNewDialogController.isOpen()
+      || addToCollectionDialogController.isOpen()
+      || deleteFromDiskDialogController.isOpen()
+      || unsavedChangesDialogController.isOpen()
+    ) return;
     if (isEditableTarget(e.target)) return;
     if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'f' || e.key === 'F') && zoomOverlay.isOpen()) {
       closeZoom();
@@ -1056,7 +1004,7 @@ export function initApp() {
     }
     const selection = fileSystem.selectionFromFileList(fileList);
     e.target.value = '';
-    void loadFolderSelection(selection);
+    void loadPipeline(selection);
   }
 
   function onToggleTitles() {
@@ -1112,17 +1060,6 @@ export function initApp() {
     onFsToggle,
   });
 
-  applyCollectionConflictBtn?.addEventListener('click', onApplyCollectionConflict);
-  cancelCollectionConflictBtn?.addEventListener('click', onCancelCollectionConflict);
-  confirmSaveAsNewBtn?.addEventListener('click', () => void confirmSaveAsNew());
-  cancelSaveAsNewBtn?.addEventListener('click', cancelSaveAsNewFlow);
-  saveAsNewNameInput?.addEventListener('input', clearSaveAsNewError);
-  saveAsNewNameInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      void confirmSaveAsNew();
-    }
-  });
   activeCollectionNameEl?.addEventListener('change', (e) => {
     if (!(e.target instanceof HTMLSelectElement)) return;
     const selectedCollectionRef = parseCollectionRefFromOptionValue(e.target.value);
@@ -1138,39 +1075,13 @@ export function initApp() {
       renderCollectionSelector();
       return;
     }
-    if (currentInventory().hasDirtyChanges()) {
-      currentInventory().setPendingAction({ type: 'switch-collection', collectionRef: selectedCollectionRef });
+    if (state.hasDirtyCollectionChanges) {
+      setPendingCollectionAction(state, { type: 'switch-collection', collectionRef: selectedCollectionRef });
       renderCollectionSelector();
       openUnsavedDialog();
       return;
     }
     void applyCollectionSelection(currentInventory().getCollectionByRef(selectedCollectionRef));
-  });
-  confirmUnsavedChangesBtn?.addEventListener('click', () => void continuePendingAction({ saveFirst: true }));
-  discardUnsavedChangesBtn?.addEventListener('click', () => void continuePendingAction({ saveFirst: false }));
-  cancelUnsavedChangesBtn?.addEventListener('click', () => {
-    currentInventory()?.clearPendingAction();
-    closeUnsavedDialog();
-    renderCollectionSelector();
-  });
-  unsavedChangesDialog?.addEventListener('cancel', (e) => {
-    e.preventDefault();
-    currentInventory()?.clearPendingAction();
-    closeUnsavedDialog();
-    renderCollectionSelector();
-  });
-  confirmDeletePreflightBtn?.addEventListener('click', () => void confirmDeletePreflightSave());
-  discardDeletePreflightBtn?.addEventListener('click', continueDeleteWithoutSaving);
-  cancelDeletePreflightBtn?.addEventListener('click', cancelPendingDeleteFlow);
-  deletePreflightDialog?.addEventListener('cancel', (e) => {
-    e.preventDefault();
-    cancelPendingDeleteFlow();
-  });
-  confirmDeleteFromDiskBtn?.addEventListener('click', () => void confirmDeleteFromDisk());
-  cancelDeleteFromDiskBtn?.addEventListener('click', cancelPendingDeleteFlow);
-  deleteFromDiskDialog?.addEventListener('cancel', (e) => {
-    e.preventDefault();
-    cancelPendingDeleteFlow();
   });
 
   bindGlobalEvents({

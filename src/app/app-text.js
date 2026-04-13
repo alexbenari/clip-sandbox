@@ -1,5 +1,4 @@
 export const DEFAULT_APP_TITLE = 'Local Video Grid Reviewer';
-export const DEFAULT_ACTIVE_COLLECTION_NAME = 'All Clips';
 
 export function niceNum(n) {
   return new Intl.NumberFormat().format(n);
@@ -25,20 +24,8 @@ export function collectionPartiallyLoadedText(count, missingCount) {
   return `Loaded ${count} clip${count === 1 ? '' : 's'} from the collection. Skipped ${missingCount} missing entr${missingCount === 1 ? 'y' : 'ies'}.`;
 }
 
-export function collectionEmptyErrorText() {
-  return 'Could not load collection: the file is empty.';
-}
-
-export function collectionDuplicateErrorText(duplicateNames) {
-  return `Could not load collection: duplicate entries were found. ${duplicateNames.join(', ')}`;
-}
-
 export function collectionReadErrorText(err) {
   return 'Failed to read collection file: ' + (err?.message || err);
-}
-
-export function collectionFirstUnavailableText() {
-  return 'Load the folder first, then load the collection file.';
 }
 
 export function collectionConflictSummaryText(existingCount, missingCount) {
@@ -63,14 +50,6 @@ export function saveAsNewInvalidNameText() {
 
 export function collectionAlreadyExistsText() {
   return 'A collection with that name already exists.';
-}
-
-export function saveAsNewHeadingText() {
-  return 'Save current collection as a new file';
-}
-
-export function saveAsNewHelpText() {
-  return 'Enter a file name. The app will add .txt automatically.';
 }
 
 export function savedCollectionFileText(filename) {

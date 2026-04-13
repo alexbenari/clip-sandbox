@@ -34,6 +34,17 @@ describe('clip collection grid controller', () => {
     });
   }
 
+  function makeThreeClipCollection() {
+    return new ClipCollection({
+      name: 'demo',
+      clips: [
+        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
+        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm', { type: 'video/webm' }) }),
+        new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4', { type: 'video/mp4' }) }),
+      ],
+    });
+  }
+
   test('tracks single and modifier-based multi-selection by clip id', () => {
     const selectionChanges = [];
     const controller = createClipCollectionGridController({
@@ -154,6 +165,42 @@ describe('clip collection grid controller', () => {
     controller.setTitlesHidden(true);
     expect(controller.areTitlesHidden()).toBe(true);
     expect(document.getElementById('gridWrap').classList.contains('titles-hidden')).toBe(true);
+  });
+
+  test('owns normal and fullscreen layout application for grid cards', () => {
+    const grid = document.getElementById('grid');
+    const gridRoot = document.getElementById('gridWrap');
+    const toolbar = document.createElement('div');
+    document.body.appendChild(toolbar);
+    Object.defineProperty(gridRoot, 'clientWidth', { value: 900, configurable: true });
+    toolbar.getBoundingClientRect = () => ({ height: 48 });
+    let fullscreen = false;
+    const applyGridLayout = vi.fn();
+    const controller = createClipCollectionGridController({
+      grid,
+      gridRoot,
+      toolbar,
+      fullscreenState: { slots: 6, hiddenCards: [] },
+      formatLabel: (name) => name,
+      computeBestGrid: vi.fn(() => ({ cols: 2, cellH: 180 })),
+      computeFsLayout: vi.fn(() => ({ cols: 2, cellH: 220, targetVisible: 2 })),
+      applyGridLayout,
+      isFullscreen: () => fullscreen,
+      updateCount: vi.fn(),
+    });
+
+    controller.renderCollection(makeThreeClipCollection());
+    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 180);
+
+    fullscreen = true;
+    controller.recomputeLayout();
+    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 220);
+
+    const cards = Array.from(document.querySelectorAll('#grid .thumb'));
+    expect(cards.filter((card) => card.style.display === 'none')).toHaveLength(1);
+
+    controller.fsRestore();
+    expect(cards.every((card) => card.style.display === '')).toBe(true);
   });
 
   test('revokes object urls and clears drag-over state when rerendering or destroying', () => {

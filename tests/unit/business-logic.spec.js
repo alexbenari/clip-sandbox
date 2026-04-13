@@ -1,195 +1,89 @@
 import { describe, expect, test, vi } from 'vitest';
-import { runLoadClips } from '../../src/business-logic/load-clips.js';
-import { runLoadCollection, runLoadCollectionFromFile } from '../../src/business-logic/load-collection.js';
-import { persistCollectionContent, runSaveOrder } from '../../src/business-logic/save-order.js';
+import { getVideosAndCollectionFiles } from '../../src/business-logic/load-clips.js';
+import { materializeCollectionContent } from '../../src/business-logic/load-collection.js';
+import { persistCollectionContent } from '../../src/business-logic/persist-collection-content.js';
 import { ClipCollectionContent } from '../../src/domain/clip-collection-content.js';
 
 describe('business logic modules', () => {
-  test('runLoadClips filters, sorts, creates clips, and builds a collection', () => {
-    const result = runLoadClips({
-      fileList: [
-        { name: 'b.mp4', type: 'video/mp4' },
-        { name: 'note.txt', type: 'text/plain' },
-        { name: 'a.mp4', type: 'video/mp4' },
+  test('getVideosAndCollectionFiles classifies and sorts top-level folder entries', () => {
+    const topVideoB = new File(['b'], 'b.mp4', { type: 'video/mp4' });
+    Object.defineProperty(topVideoB, 'webkitRelativePath', { value: 'clips/b.mp4' });
+    const topVideoA = new File(['a'], 'a.mp4', { type: 'video/mp4' });
+    Object.defineProperty(topVideoA, 'webkitRelativePath', { value: 'clips/a.mp4' });
+    const collection = new File(['a.mp4\n'], 'subset.txt', { type: 'text/plain' });
+    Object.defineProperty(collection, 'webkitRelativePath', { value: 'clips/subset.txt' });
+    const nested = new File(['n'], 'nested.mp4', { type: 'video/mp4' });
+    Object.defineProperty(nested, 'webkitRelativePath', { value: 'clips/nested/nested.mp4' });
+
+    const result = getVideosAndCollectionFiles([topVideoB, collection, topVideoA, nested]);
+
+    expect(result.videos.map((file) => file.name)).toEqual(['a.mp4', 'b.mp4']);
+    expect(result.collectionFiles.map((file) => file.name)).toEqual(['subset.txt']);
+  });
+
+  test('materializeCollectionContent builds a collection and reports missing entries', () => {
+    const result = materializeCollectionContent({
+      content: ClipCollectionContent.fromFilename({
+        filename: 'subset.txt',
+        orderedClipNames: ['bravo.mp4', 'missing.mp4', 'alpha.mp4'],
+      }),
+      availableVideoFiles: [
+        new File(['a'], 'alpha.mp4', { type: 'video/mp4' }),
+        new File(['b'], 'bravo.mp4', { type: 'video/mp4' }),
       ],
-      collectionName: 'Folder A',
-      defaultCollectionName: 'All Clips',
       nextClipId: vi.fn().mockReturnValueOnce('clip_1').mockReturnValueOnce('clip_2'),
     });
-    expect(result.files.map((file) => file.name)).toEqual(['a.mp4', 'b.mp4']);
-    expect(result.clips.map((clip) => clip.id)).toEqual(['clip_1', 'clip_2']);
-    expect(result.collection.name).toBe('Folder A');
-    expect(result.collection.orderedClips().map((clip) => clip.id)).toEqual(['clip_1', 'clip_2']);
-    expect(result.count).toBe(2);
-  });
 
-  test('runLoadClips leaves collection name empty when no videos are present', () => {
-    const result = runLoadClips({
-      fileList: [{ name: 'note.txt', type: 'text/plain' }],
-      collectionName: 'Folder A',
-      defaultCollectionName: 'All Clips',
-      nextClipId: vi.fn(),
-    });
-    expect(result.count).toBe(0);
-    expect(result.collection.name).toBe('');
-    expect(result.collection.orderedClips()).toEqual([]);
-  });
-
-  test('runLoadCollection rejects blank collections', () => {
-    const result = runLoadCollection({
-      lines: ['', '  '],
-      file: { name: 'subset.txt' },
-      folderClipNames: ['a.mp4'],
-      folderClips: [],
-      currentCollectionName: 'All Clips',
-    });
-    expect(result.kind).toBe('invalid-empty');
-    expect(result.collectionName).toBe('subset');
-  });
-
-  test('runLoadCollection rejects duplicate entries', () => {
-    const result = runLoadCollection({
-      lines: ['a.mp4', 'a.mp4'],
-      file: { name: 'subset.txt' },
-      folderClipNames: ['a.mp4', 'b.mp4'],
-      folderClips: [],
-      currentCollectionName: 'All Clips',
-    });
-    expect(result.kind).toBe('invalid-duplicates');
-    expect(result.duplicateNames).toContain('a.mp4 (x2)');
-  });
-
-  test('runLoadCollection builds exact-match and subset collections', () => {
-    const clips = [
-      { id: 'clip_1', name: 'a.mp4' },
-      { id: 'clip_2', name: 'b.mp4' },
-      { id: 'clip_3', name: 'c.mp4' },
-    ];
-    const exact = runLoadCollection({
-      lines: ['b.mp4', 'a.mp4', 'c.mp4'],
-      file: { name: 'ordered.txt' },
-      folderClipNames: ['a.mp4', 'b.mp4', 'c.mp4'],
-      folderClips: clips,
-      currentCollectionName: 'All Clips',
-    });
-    expect(exact.kind).toBe('loaded');
-    expect(exact.matchKind).toBe('exact-match');
-    expect(exact.collection.name).toBe('ordered');
-    expect(exact.collection.orderedClips().map((clip) => clip.id)).toEqual(['clip_2', 'clip_1', 'clip_3']);
-
-    const subset = runLoadCollection({
-      lines: ['c.mp4', 'a.mp4'],
-      file: { name: 'subset.txt' },
-      folderClipNames: ['a.mp4', 'b.mp4', 'c.mp4'],
-      folderClips: clips,
-      currentCollectionName: 'All Clips',
-    });
-    expect(subset.kind).toBe('loaded');
-    expect(subset.matchKind).toBe('subset-match');
-    expect(subset.collection.orderedClips().map((clip) => clip.id)).toEqual(['clip_3', 'clip_1']);
-  });
-
-  test('runLoadCollection returns conflict details and partial collection for missing entries', () => {
-    const clips = [
-      { id: 'clip_1', name: 'a.mp4' },
-      { id: 'clip_2', name: 'b.mp4' },
-    ];
-    const result = runLoadCollection({
-      lines: ['b.mp4', 'missing.mp4', 'a.mp4'],
-      file: { name: 'subset.txt' },
-      folderClipNames: ['a.mp4', 'b.mp4'],
-      folderClips: clips,
-      currentCollectionName: 'All Clips',
-    });
     expect(result.kind).toBe('has-missing');
     expect(result.missingNames).toEqual(['missing.mp4']);
-    expect(result.existingNamesInOrder).toEqual(['b.mp4', 'a.mp4']);
-    expect(result.partialCollection.orderedClips().map((clip) => clip.id)).toEqual(['clip_2', 'clip_1']);
+    expect(result.existingNamesInOrder).toEqual(['bravo.mp4', 'alpha.mp4']);
+    expect(result.partialCollection.orderedClips().map((clip) => clip.id)).toEqual(['clip_1', 'clip_2']);
   });
 
-  test('runLoadCollectionFromFile reads file text and delegates to collection loading', async () => {
-    const result = await runLoadCollectionFromFile({
-      file: {
-        name: 'subset.txt',
-        text: () => Promise.resolve('b.mp4\r\na.mp4\n'),
-      },
-      folderClipNames: ['a.mp4', 'b.mp4'],
-      folderClips: [
-        { id: 'clip_1', name: 'a.mp4' },
-        { id: 'clip_2', name: 'b.mp4' },
-      ],
-      currentCollectionName: 'All Clips',
-    });
-
-    expect(result.kind).toBe('loaded');
-    expect(result.collection.name).toBe('subset');
-    expect(result.collection.orderedClips().map((clip) => clip.id)).toEqual(['clip_2', 'clip_1']);
-  });
-
-  test('runSaveOrder uses direct write when handle is available', async () => {
-    const fileSystem = {
-      saveTextFile: vi.fn(async () => ({ mode: 'saved' })),
-    };
-    const showStatus = vi.fn();
-    const mode = await runSaveOrder({
-      names: ['one.mp4', 'two.webm'],
-      folderSession: { accessMode: 'readwrite' },
-      fileSystem,
-      showStatus,
-    });
-    expect(mode).toBe('saved');
-    expect(fileSystem.saveTextFile).toHaveBeenCalledOnce();
-    expect(fileSystem.saveTextFile).toHaveBeenCalledWith({
-      folderSession: { accessMode: 'readwrite' },
-      filename: 'default-collection.txt',
-      text: 'one.mp4\ntwo.webm\n',
-    });
-    expect(showStatus).toHaveBeenCalledWith('Saved default-collection.txt to the selected folder.');
-  });
-
-  test('runSaveOrder supports named collection files', async () => {
-    const fileSystem = {
-      saveTextFile: vi.fn(async () => ({ mode: 'downloaded' })),
-    };
-    const showStatus = vi.fn();
-    const mode = await runSaveOrder({
-      names: ['one.mp4'],
-      filename: 'my-cut.txt',
-      folderSession: null,
-      fileSystem,
-      showStatus,
-      buildSavedStatus: (name) => `Saved ${name}`,
-      buildDownloadedStatus: (name) => `Downloaded ${name}`,
-    });
-    expect(mode).toBe('downloaded');
-    expect(fileSystem.saveTextFile).toHaveBeenCalledWith({
-      folderSession: null,
-      filename: 'my-cut.txt',
-      text: 'one.mp4\n',
-    });
-    expect(showStatus).toHaveBeenCalledWith('Downloaded my-cut.txt');
-  });
-
-  test('persistCollectionContent serializes content and reuses save fallback behavior without status concerns', async () => {
-    const fileSystem = {
-      saveTextFile: vi.fn(async () => ({ mode: 'saved' })),
-    };
+  test('persistCollectionContent writes content and updates inventory when allowed', async () => {
     const content = ClipCollectionContent.fromFilename({
       filename: 'subset.txt',
-      orderedClipNames: ['one.mp4', 'two.webm'],
+      orderedClipNames: ['alpha.mp4'],
     });
+    const fileSystem = {
+      saveTextFile: vi.fn().mockResolvedValue({ mode: 'saved' }),
+    };
+    const inventory = {
+      upsertCollectionContent: vi.fn(),
+    };
 
     const result = await persistCollectionContent({
-      content,
-      folderSession: { accessMode: 'readwrite' },
       fileSystem,
+      content,
+      inventory,
+      makeActive: true,
     });
 
-    expect(result).toEqual({ mode: 'saved' });
-    expect(fileSystem.saveTextFile).toHaveBeenCalledWith({
-      folderSession: { accessMode: 'readwrite' },
+    expect(result.ok).toBe(true);
+    expect(result.mode).toBe('saved');
+    expect(inventory.upsertCollectionContent).toHaveBeenCalledWith(content, { makeActive: true });
+  });
+
+  test('persistCollectionContent can require a direct save before updating inventory', async () => {
+    const content = ClipCollectionContent.fromFilename({
       filename: 'subset.txt',
-      text: 'one.mp4\ntwo.webm\n',
+      orderedClipNames: ['alpha.mp4'],
     });
+    const fileSystem = {
+      saveTextFile: vi.fn().mockResolvedValue({ mode: 'downloaded' }),
+    };
+    const inventory = {
+      upsertCollectionContent: vi.fn(),
+    };
+
+    const result = await persistCollectionContent({
+      fileSystem,
+      content,
+      inventory,
+      requireDirectSave: true,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(inventory.upsertCollectionContent).not.toHaveBeenCalled();
   });
 });

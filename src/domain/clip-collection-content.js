@@ -1,4 +1,5 @@
 export class ClipCollectionContent {
+  static ILLEGAL_COLLECTION_NAME_CHARS = /[<>:"/\\|?*]/;
   #collectionName;
   #filename;
   #orderedClipNames;
@@ -33,6 +34,32 @@ export class ClipCollectionContent {
     const trimmed = ClipCollectionContent.#normalizedText(collectionName);
     if (!trimmed) return '';
     return trimmed.toLowerCase().endsWith('.txt') ? trimmed : `${trimmed}.txt`;
+  }
+
+  static validateCollectionName(name) {
+    const trimmed = ClipCollectionContent.#normalizedText(name);
+    if (!trimmed) {
+      return {
+        ok: false,
+        code: 'required',
+        name: '',
+        filename: '',
+      };
+    }
+    if (ClipCollectionContent.ILLEGAL_COLLECTION_NAME_CHARS.test(trimmed)) {
+      return {
+        ok: false,
+        code: 'illegal-chars',
+        name: trimmed,
+        filename: '',
+      };
+    }
+    return {
+      ok: true,
+      code: '',
+      name: trimmed,
+      filename: ClipCollectionContent.filenameFromCollectionName(trimmed),
+    };
   }
 
   static defaultCollectionNameForFolder(folderName) {

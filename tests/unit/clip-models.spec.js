@@ -85,6 +85,23 @@ describe('clip and collection models', () => {
     expect(content.toText()).toBe('alpha.mp4\nbravo.webm\n');
   });
 
+  test('validates persisted collection names through ClipCollectionContent', () => {
+    expect(ClipCollectionContent.validateCollectionName(' highlights ')).toEqual({
+      ok: true,
+      code: '',
+      name: 'highlights',
+      filename: 'highlights.txt',
+    });
+    expect(ClipCollectionContent.validateCollectionName('')).toMatchObject({
+      ok: false,
+      code: 'required',
+    });
+    expect(ClipCollectionContent.validateCollectionName('bad:name')).toMatchObject({
+      ok: false,
+      code: 'illegal-chars',
+    });
+  });
+
   test('appends only missing clip names while preserving destination order', () => {
     const content = ClipCollectionContent.fromFilename({
       filename: 'subset.txt',
@@ -205,29 +222,6 @@ describe('clip and collection models', () => {
       'minus-1',
       'minus-2',
     ]);
-  });
-
-  test('tracks dirty state against the active collection content', () => {
-    const inventory = new ClipCollectionInventory({
-      folderName: 'clips',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4'),
-        new File(['b'], 'bravo.webm'),
-      ],
-    });
-    const collection = new ClipCollection({
-      name: 'clips-default',
-      clips: [
-        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
-      ],
-    });
-
-    expect(inventory.refreshDirtyState(collection)).toBe(false);
-    collection.remove('clip_2');
-    expect(inventory.refreshDirtyState(collection)).toBe(true);
-    inventory.clearDirtyState();
-    expect(inventory.hasDirtyChanges()).toBe(false);
   });
 
   test('prunes implicit default contents when deleted files leave the folder', () => {

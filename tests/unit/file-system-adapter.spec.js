@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { folderNameFromFiles, readFilesFromDirectory } from '../../src/adapters/browser/file-system-adapter.js';
+import {
+  folderNameFromFiles,
+  isTopLevelFolderEntry,
+  readFilesFromDirectory,
+  topLevelFiles,
+} from '../../src/adapters/browser/file-system-adapter.js';
 
 function createDirectoryHandle(entries) {
   return {
@@ -81,5 +86,22 @@ describe('folderNameFromFiles', () => {
   it('returns an empty string when files do not include a relative path', () => {
     expect(folderNameFromFiles([{ name: 'clip-01.mp4' }])).toBe('');
     expect(folderNameFromFiles([])).toBe('');
+  });
+});
+
+describe('top-level folder entry helpers', () => {
+  it('detects top-level folder entries from webkitRelativePath', () => {
+    expect(isTopLevelFolderEntry({ webkitRelativePath: 'clips/one.mp4' })).toBe(true);
+    expect(isTopLevelFolderEntry({ webkitRelativePath: 'clips/sub/one.mp4' })).toBe(false);
+  });
+
+  it('filters nested files out of a folder selection', () => {
+    const files = topLevelFiles([
+      { name: 'one.mp4', webkitRelativePath: 'clips/one.mp4' },
+      { name: 'two.mp4', webkitRelativePath: 'clips/sub/two.mp4' },
+      { name: 'subset.txt', webkitRelativePath: 'clips/subset.txt' },
+    ]);
+
+    expect(files.map((file) => file.name)).toEqual(['one.mp4', 'subset.txt']);
   });
 });
