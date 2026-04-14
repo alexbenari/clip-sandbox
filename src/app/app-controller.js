@@ -2,15 +2,16 @@ import { ClipPipelineLoader } from '../business-logic/clip-pipeline-loader.js';
 import { persistCollectionContent } from '../business-logic/persist-collection-content.js';
 import {
   createAppState,
-  clearPendingCollectionAction,
+  clearPendingSourceAction,
   nextClipId,
-  pendingCollectionAction,
-  refreshDirtyCollectionState,
-  setCollectionInventory,
-  setCurrentCollection,
+  pendingSourceAction,
+  refreshDirtyClipSequenceState,
+  setActiveSource,
+  setCurrentClipSequence,
+  setCurrentPipeline,
   setCurrentFolderSession,
-  setPendingCollectionAction,
-  resetCollectionState,
+  setPendingSourceAction,
+  resetClipSequenceState,
 } from './app-session-state.js';
 import {
   enterFullScreen as enterFullScreenAdapter,
@@ -59,12 +60,12 @@ import {
 } from './app-text.js';
 import { createOrderMenuController } from '../ui/order-menu-controller.js';
 import { createAddToCollectionDialogController } from '../ui/add-to-collection-dialog-controller.js';
-import { renderActiveCollectionSelector } from '../ui/active-collection-selector.js';
-import { createCollectionOptionForCollection } from '../ui/collection-option.js';
+import { renderActiveSourceSelector } from '../ui/active-source-selector.js';
+import { createSourceOption } from '../ui/source-option.js';
 import {
-  parseCollectionRefFromOptionValue,
-  serializeCollectionRefToOptionValue,
-} from '../ui/collection-option-value.js';
+  parseSourceIdFromOptionValue,
+  serializeSourceIdToOptionValue,
+} from '../ui/source-option-value.js';
 import { createContextMenuController } from '../ui/context-menu-controller.js';
 import { createZoomOverlayController } from '../ui/zoom-overlay-controller.js';
 import { createClipCollectionGridController, formatLabel, updateCardLabel } from '../ui/clip-collection-grid-controller.js';
@@ -73,8 +74,14 @@ import { createDeleteFromDiskDialogController } from '../ui/delete-from-disk-dia
 import { createSaveAsNewDialogController } from '../ui/save-as-new-dialog-controller.js';
 import { createUnsavedChangesDialogController } from '../ui/unsaved-changes-dialog-controller.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
-import { ClipCollectionContent } from '../domain/clip-collection-content.js';
-import { collectionRefsEqual } from '../domain/collection-ref.js';
+import { Collection } from '../domain/collection.js';
+import {
+  sourceIdOf,
+  sourceLabelOf,
+  supportsNonPhysicalDelete,
+  supportsSaveToExisting,
+} from '../domain/clip-sequence-source.js';
+import { sourceIdsEqual } from '../domain/source-id.js';
 
 let initialized = false;
 const ERROR_LOG_FILENAME = 'err.log';
@@ -108,6 +115,8 @@ export function initApp() {
   const applyCollectionConflictBtn = document.getElementById('applyCollectionConflictBtn');
   const cancelCollectionConflictBtn = document.getElementById('cancelCollectionConflictBtn');
   const saveAsNewDialog = document.getElementById('saveAsNewDialog');
+  const saveAsNewDialogTitle = saveAsNewDialog?.querySelector('h2');
+  const saveAsNewDialogText = saveAsNewDialog?.querySelector('p');
   const saveAsNewNameInput = document.getElementById('saveAsNewNameInput');
   const saveAsNewError = document.getElementById('saveAsNewError');
   const confirmSaveAsNewBtn = document.getElementById('confirmSaveAsNewBtn');
@@ -223,31 +232,31 @@ export function initApp() {
     showStatusAdapter(statusBar, msg, timeout);
   }
 
-  function currentInventory() {
-    return state.collectionInventory;
+  function currentPipeline() {
+    return state.currentPipeline;
   }
 
-  function currentContent() {
-    return currentInventory()?.activeCollection() || null;
+  function activeSource() {
+    return state.activeSource;
   }
 
-  function currentCollectionRef() {
-    return currentInventory()?.activeCollectionRef() || null;
+  function activeSourceId() {
+    return activeSource() ? sourceIdOf(activeSource()) : null;
   }
 
-  function currentCollectionName() {
-    return state.currentCollection?.name || currentContent()?.collectionName || '';
+  function currentSequenceName() {
+    return state.currentClipSequence?.name || (activeSource() ? sourceLabelOf(activeSource()) : '') || '';
   }
 
-  function activeCollectionOptions(inventory = currentInventory()) {
-    if (!inventory) return [];
-    return inventory.selectableCollections()
-      .map((collection) => createCollectionOptionForCollection(collection, inventory))
+  function activeSourceOptions(pipeline = currentPipeline()) {
+    if (!pipeline) return [];
+    return pipeline.selectableSources()
+      .map((source) => createSourceOption(source))
       .filter(Boolean);
   }
 
-  function activeCollectionFilename() {
-    return currentInventory()?.backingFilenameFor(currentContent()) || '';
+  function activeSourceFilename() {
+    return activeSource()?.existingSaveFilename?.() || '';
   }
 
   function canDeleteFromDisk() {
@@ -263,13 +272,12 @@ export function initApp() {
   }
 
   function renderCollectionSelector() {
-    const inventory = currentInventory();
-    const label = activeCollectionText(currentCollectionName());
-    document.title = activeCollectionTabText(currentCollectionName());
-    renderActiveCollectionSelector({
+    const label = activeCollectionText(currentSequenceName());
+    document.title = activeCollectionTabText(currentSequenceName());
+    renderActiveSourceSelector({
       selectEl: activeCollectionNameEl,
-      options: activeCollectionOptions(inventory),
-      selectedValue: serializeCollectionRefToOptionValue(inventory?.activeCollectionRef()),
+      options: activeSourceOptions(currentPipeline()),
+      selectedValue: serializeSourceIdToOptionValue(activeSourceId()),
       label,
       defaultTitle: DEFAULT_APP_TITLE,
     });
@@ -308,11 +316,12 @@ export function initApp() {
     if (pendingDeleteRequest?.awaitingSave) {
       pendingDeleteRequest = null;
     }
-    clearPendingCollectionAction(state);
+    clearPendingSourceAction(state);
     renderCollectionSelector();
   }
 
   function openSaveAsNewDialog() {
+    updateSaveDialogCopy();
     saveAsNewDialogController.open();
   }
 
@@ -324,10 +333,10 @@ export function initApp() {
   }
 
   function validateAddToCollectionName(name) {
-    let validationCode = ClipCollectionContent.validateCollectionName(name).code;
+    let validationCode = Collection.validateCollectionName(name).code;
     if (!validationCode) {
-      const candidateFilename = ClipCollectionContent.filenameFromCollectionName(name || '');
-      if (currentInventory()?.getCollectionByFilename(candidateFilename)) validationCode = 'already-exists';
+      const candidateFilename = Collection.filenameFromCollectionName(name || '');
+      if (currentPipeline()?.getCollectionByFilename(candidateFilename)) validationCode = 'already-exists';
     }
     return addToCollectionValidationErrorText(validationCode);
   }
@@ -335,23 +344,23 @@ export function initApp() {
   function renderActionButtons() {
     const hasSelection = gridController?.getSelectedClipIds?.().length > 0;
     if (addToCollectionBtn) {
-      addToCollectionBtn.disabled = !currentInventory() || !hasSelection;
+      addToCollectionBtn.disabled = !currentPipeline() || !hasSelection;
     }
     if (deleteFromDiskBtn) {
-      deleteFromDiskBtn.disabled = !currentInventory() || !hasSelection || !canDeleteFromDisk();
+      deleteFromDiskBtn.disabled = !currentPipeline() || !hasSelection || !canDeleteFromDisk();
     }
   }
 
   function addToCollectionChoices() {
-    const inventory = currentInventory();
-    if (!inventory) return [];
-    return inventory.eligibleDestinationCollections(inventory.activeCollectionRef())
-      .map((collection) => createCollectionOptionForCollection(collection, inventory))
+    const pipeline = currentPipeline();
+    if (!pipeline) return [];
+    return pipeline.eligibleDestinationCollections(activeSourceId())
+      .map((collection) => createSourceOption(collection))
       .filter(Boolean);
   }
 
   function openAddToCollectionDialog({ startWithNewCollection = false } = {}) {
-    if (!currentInventory()) return;
+    if (!currentPipeline()) return;
     addToCollectionDialogController.open({
       choices: addToCollectionChoices(),
       hasSelection: gridController?.getSelectedClipIds?.().length > 0,
@@ -360,14 +369,14 @@ export function initApp() {
   }
 
   async function runAddToCollection(destination, { showDialogValidation = false } = {}) {
-    if (!state.currentCollection || !currentInventory()) return { ok: false, code: 'missing-context' };
+    if (!state.currentClipSequence || !currentPipeline()) return { ok: false, code: 'missing-context' };
 
     const result = await collectionManager.addSelectedClipsToCollection({
       selectedClipIds: gridController.getSelectedClipIds(),
-      sourceCollectionRef: currentInventory().activeCollectionRef(),
+      sourceId: activeSourceId(),
       destination,
-      currentCollection: state.currentCollection,
-      inventory: currentInventory(),
+      currentClipSequence: state.currentClipSequence,
+      pipeline: currentPipeline(),
       currentFolderSession: state.currentFolderSession,
     });
 
@@ -392,11 +401,11 @@ export function initApp() {
   }
 
   function openUnsavedDialog() {
-    const action = pendingCollectionAction(state);
+    const action = pendingSourceAction(state);
     unsavedChangesDialogController.open({
       message: action?.type === 'browse-folder'
-        ? 'The current collection has unsaved changes. Save before browsing to another folder?'
-        : 'The current collection has unsaved changes. Save before switching collections?',
+        ? 'The current view has unsaved changes. Save before browsing to another folder?'
+        : 'The current view has unsaved changes. Save before switching views?',
       onSave: () => {
         void continuePendingAction({ saveFirst: true });
       },
@@ -404,7 +413,7 @@ export function initApp() {
         void continuePendingAction({ saveFirst: false });
       },
       onCancel: () => {
-        clearPendingCollectionAction(state);
+        clearPendingSourceAction(state);
         renderCollectionSelector();
       },
     });
@@ -415,15 +424,15 @@ export function initApp() {
   }
 
   function buildDeleteRequestFromSelection() {
-    if (!state.currentCollection || !currentInventory()) return null;
+    if (!state.currentClipSequence || !currentPipeline()) return null;
     const selectedClipIds = gridController.getSelectedClipIds();
     if (selectedClipIds.length === 0) return null;
-    const selectedClipNames = state.currentCollection.clipNamesForIdsInOrder(selectedClipIds);
+    const selectedClipNames = state.currentClipSequence.clipNamesForIdsInOrder(selectedClipIds);
     if (selectedClipNames.length === 0) return null;
     return {
       selectedClipIds,
       selectedClipNames,
-      affectedSavedCollectionCount: currentInventory().savedCollectionEntriesContainingClipNames(selectedClipNames).length,
+      affectedSavedCollectionCount: currentPipeline().savedCollectionEntriesContainingClipNames(selectedClipNames).length,
     };
   }
 
@@ -466,21 +475,21 @@ export function initApp() {
 
   async function confirmDeleteFromDisk() {
     const deleteRequest = pendingDeleteRequest;
-    if (!deleteRequest || !state.currentCollection || !currentInventory()) return;
+    if (!deleteRequest || !state.currentClipSequence || !currentPipeline()) return;
     deleteFromDiskDialogController.closeConfirm();
     pendingDeleteRequest = null;
 
     const result = await clipPipeline.deleteSelectedClipsFromDisk({
       selectedClipIds: deleteRequest.selectedClipIds,
-      currentCollection: state.currentCollection,
-      inventory: currentInventory(),
+      currentClipSequence: state.currentClipSequence,
+      pipeline: currentPipeline(),
       currentFolderSession: state.currentFolderSession,
     });
 
     if (result.deletedClipIds.length > 0) {
-      state.currentCollection.removeMany(result.deletedClipIds);
-      applyCollection(state.currentCollection, {
-        inventory: currentInventory(),
+      await reloadActiveSource({
+        pipeline: currentPipeline(),
+        source: activeSource(),
         folderSession: state.currentFolderSession,
       });
     } else {
@@ -504,24 +513,32 @@ export function initApp() {
     const deleteRequest = buildDeleteRequestFromSelection();
     if (!deleteRequest) return;
     pendingDeleteRequest = deleteRequest;
-    if (state.hasDirtyCollectionChanges) {
+    if (state.hasDirtyClipSequenceChanges) {
       openDeletePreflightDialog();
       return;
     }
     openDeleteFromDiskDialog(deleteRequest);
   }
 
-  function applyCollection(collection, { inventory = currentInventory(), folderSession = state.currentFolderSession, statusText = '', timeout = 2500 } = {}) {
+  function applySource(clipSequence, {
+    pipeline = currentPipeline(),
+    source = activeSource(),
+    folderSession = state.currentFolderSession,
+    statusText = '',
+    timeout = 2500,
+  } = {}) {
     hideCollectionConflict();
     clipContextMenuController.close({ restoreFocus: false });
     addToCollectionDialogController.close();
     setCurrentFolderSession(state, folderSession || null);
-    setCollectionInventory(state, inventory || null);
-    setCurrentCollection(state, collection || null);
-    refreshDirtyCollectionState(state, { collection, inventory });
-    gridController.renderCollection(collection);
+    setCurrentPipeline(state, pipeline || null);
+    setActiveSource(state, source || null);
+    setCurrentClipSequence(state, clipSequence || null);
+    refreshDirtyClipSequenceState(state, { clipSequence, activeSource: source });
+    gridController.renderCollection(clipSequence);
     renderCollectionSelector();
     renderActionButtons();
+    renderSaveCommands();
     if (statusText) showStatus(statusText, timeout);
   }
 
@@ -535,38 +552,37 @@ export function initApp() {
     closeUnsavedDialog();
     closeZoom();
     gridController.destroy();
-    resetCollectionState(state);
+    resetClipSequenceState(state);
     setCurrentFolderSession(state, null);
     renderCollectionSelector();
     updateCount();
     renderActionButtons();
+    renderSaveCommands();
   }
 
-  function initialLoadStatusText(inventory, result) {
-    const activeCollection = inventory.activeCollection();
-    if (inventory.videoNames().length === 0 && activeCollection?.isDefault) {
+  function initialLoadStatusText(pipeline, source, result) {
+    if (pipeline.videoNames().length === 0 && source === pipeline) {
       return 'No video files found in the selected folder.';
     }
-    if (activeCollection?.isDefault) {
-      return loadedVideosText(result.collection.orderedClips().length);
+    if (source === pipeline) {
+      return loadedVideosText(result.sequence.orderedClips().length);
     }
-    return collectionLoadedText(result.collection.orderedClips().length);
+    return collectionLoadedText(result.sequence.orderedClips().length);
   }
 
   function queueMissingConflict(conflict, handlers) {
     showCollectionConflictPanel(conflict, handlers);
   }
 
-  async function applyCollectionSelection(collectionContent, { inventory = currentInventory(), folderSession = state.currentFolderSession } = {}) {
-    if (!inventory || !collectionContent) return;
-    const collectionRef = inventory.collectionRefFor(collectionContent);
-    const loaded = clipPipelineLoader.loadCollectionByRef({
-      inventory,
-      collectionRef,
+  async function reloadActiveSource({ pipeline = currentPipeline(), source = activeSource(), folderSession = state.currentFolderSession } = {}) {
+    if (!pipeline || !source) return;
+    const loaded = clipPipelineLoader.loadSourceById({
+      pipeline,
+      sourceId: sourceIdOf(source),
       nextClipId: () => nextClipId(state),
     });
     if (!loaded) return;
-    const { collectionContent: resolvedCollectionContent, materialization: result } = loaded;
+    const { source: resolvedSource, materialization: result } = loaded;
     if (result.kind === 'has-missing') {
       queueMissingConflict(result, {
         onApply: () => {
@@ -575,9 +591,9 @@ export function initApp() {
             showStatus(noCollectionMatchesText(result.missingCount), 4500);
             return;
           }
-          inventory.setActiveCollection(resolvedCollectionContent);
-          applyCollection(result.partialCollection, {
-            inventory,
+          applySource(result.partialSequence, {
+            pipeline,
+            source: resolvedSource,
             folderSession,
             statusText: collectionPartiallyLoadedText(result.existingNamesInOrder.length, result.missingCount),
             timeout: 4000,
@@ -590,11 +606,13 @@ export function initApp() {
       return;
     }
 
-    inventory.setActiveCollection(resolvedCollectionContent);
-    applyCollection(result.collection, {
-      inventory,
+    applySource(result.sequence, {
+      pipeline,
+      source: resolvedSource,
       folderSession,
-      statusText: collectionLoadedText(result.collection.orderedClips().length),
+      statusText: resolvedSource === pipeline
+        ? loadedVideosText(result.sequence.orderedClips().length)
+        : collectionLoadedText(result.sequence.orderedClips().length),
     });
   }
 
@@ -607,34 +625,15 @@ export function initApp() {
         logInvalidDescription: (result) => diagnostics.logInvalidDescription(result, folderSession),
         nextClipId: () => nextClipId(state),
       });
-      const { inventory, initialCollectionContent, materialization: result } = loaded;
+      const { pipeline, initialSource, materialization: result } = loaded;
 
-      if (result.kind === 'has-missing') {
-        queueMissingConflict(result, {
-          onApply: () => {
-            if (result.existingNamesInOrder.length === 0) {
-              showStatus(noCollectionMatchesText(result.missingCount), 4500);
-              return;
-            }
-            inventory.setActiveCollection(initialCollectionContent);
-            applyCollection(result.partialCollection, {
-              inventory,
-              folderSession,
-              statusText: collectionPartiallyLoadedText(result.existingNamesInOrder.length, result.missingCount),
-              timeout: 4000,
-            });
-          },
-          onCancel: () => {},
-        });
-        return;
-      }
-
-      applyCollection(result.collection, {
-        inventory,
+      applySource(result.sequence, {
+        pipeline,
+        source: initialSource,
         folderSession,
-        statusText: initialLoadStatusText(inventory, result),
+        statusText: initialLoadStatusText(pipeline, initialSource, result),
       });
-      if (result.collection.orderedClips().length > 0) {
+      if (result.sequence.orderedClips().length > 0) {
         await delay(20);
         recomputeLayout();
       }
@@ -659,8 +658,8 @@ export function initApp() {
   }
 
   async function onPickFolder() {
-    if (state.hasDirtyCollectionChanges) {
-      setPendingCollectionAction(state, { type: 'browse-folder' });
+    if (state.hasDirtyClipSequenceChanges) {
+      setPendingSourceAction(state, { type: 'browse-folder' });
       renderCollectionSelector();
       openUnsavedDialog();
       return;
@@ -669,63 +668,88 @@ export function initApp() {
   }
 
   async function continuePendingAction({ saveFirst }) {
-    const inventory = currentInventory();
-    const nextPendingAction = pendingCollectionAction(state);
+    const nextPendingAction = pendingSourceAction(state);
     closeUnsavedDialog();
     if (!nextPendingAction) {
       renderCollectionSelector();
       return;
     }
     if (saveFirst) {
-      const saveResult = await saveCollection();
+      const saveResult = await saveActiveSource();
       if (saveResult?.deferred) return;
     }
-    clearPendingCollectionAction(state);
+    clearPendingSourceAction(state);
     if (nextPendingAction.type === 'browse-folder') {
       await triggerFolderPicker();
       return;
     }
-    if (nextPendingAction.type === 'switch-collection') {
-      await applyCollectionSelection(currentInventory()?.getCollectionByRef(nextPendingAction.collectionRef));
+    if (nextPendingAction.type === 'switch-source') {
+      await reloadActiveSource({
+        pipeline: currentPipeline(),
+        source: currentPipeline()?.resolveSource(nextPendingAction.sourceId),
+      });
       return;
     }
     renderCollectionSelector();
   }
 
-  async function saveCollection(filename = activeCollectionFilename(), { makeActive = true } = {}) {
-    if (!state.currentCollection || !currentInventory()) return null;
-    const targetFilename = ClipCollectionContent.filenameFromCollectionName(filename || '');
-    if (!targetFilename) {
+  function renderSaveCommands() {
+    const source = activeSource();
+    if (!saveBtn || !saveAsNewBtn) return;
+    saveBtn.disabled = !supportsSaveToExisting(source) || grid.children.length === 0;
+    saveAsNewBtn.disabled = !state.currentClipSequence || grid.children.length === 0;
+    saveAsNewBtn.textContent = source === currentPipeline()
+      ? 'Save as Collection'
+      : 'Save Collection As...';
+    saveAsNewBtn.title = source === currentPipeline()
+      ? 'Save the current pipeline view as a new collection file'
+      : 'Save the current collection as another collection file';
+  }
+
+  function updateSaveDialogCopy() {
+    const source = activeSource();
+    if (source === currentPipeline()) {
+      if (saveAsNewDialogTitle) saveAsNewDialogTitle.textContent = 'Save current pipeline view as a collection';
+      if (saveAsNewDialogText) saveAsNewDialogText.textContent = 'Enter a collection name. The app will add .txt automatically.';
+      if (confirmSaveAsNewBtn) confirmSaveAsNewBtn.textContent = 'Save Collection';
+      return;
+    }
+    if (saveAsNewDialogTitle) saveAsNewDialogTitle.textContent = 'Save current collection as another collection';
+    if (saveAsNewDialogText) saveAsNewDialogText.textContent = 'Enter a collection name. The app will add .txt automatically.';
+    if (confirmSaveAsNewBtn) confirmSaveAsNewBtn.textContent = 'Save Collection';
+  }
+
+  async function saveActiveSource() {
+    if (!state.currentClipSequence || !currentPipeline()) return null;
+    if (!supportsSaveToExisting(activeSource())) {
       openSaveAsNewDialog();
       return { deferred: true };
     }
-    const nextContent = state.currentCollection.toCollectionContent({
-      filename: targetFilename,
+    const nextCollection = state.currentClipSequence.toCollection({
+      filename: activeSourceFilename(),
     });
 
     const { mode } = await persistCollectionContent({
       fileSystem,
-      content: nextContent,
+      content: nextCollection,
       currentFolderSession: state.currentFolderSession,
-      inventory: currentInventory(),
-      makeActive,
+      pipeline: currentPipeline(),
     });
-    showStatus(
-      savedCollectionFileText(nextContent.filename)
-    );
-    if (makeActive) {
-      currentInventory().setActiveCollection(nextContent);
-      state.currentCollection.rename(nextContent.collectionName);
-    }
-    refreshDirtyCollectionState(state);
+    const savedSource = currentPipeline().getCollectionByFilename(nextCollection.filename) || nextCollection;
+    state.currentClipSequence.rename(nextCollection.collectionName);
+    setActiveSource(state, savedSource);
+    refreshDirtyClipSequenceState(state);
     renderCollectionSelector();
-    return { mode, content: nextContent };
+    renderSaveCommands();
+    showStatus(savedCollectionFileText(nextCollection.filename));
+    return { mode, content: nextCollection };
   }
 
   function validateSaveAsNewName(name) {
-    const validation = ClipCollectionContent.validateCollectionName(name);
+    const validation = Collection.validateCollectionName(name);
     if (validation.code === 'required') return saveAsNewNameRequiredText();
     if (validation.code === 'illegal-chars') return saveAsNewInvalidNameText();
+    if (!validation.code && currentPipeline()?.getCollectionByFilename(validation.filename)) return collectionAlreadyExistsText();
     return '';
   }
 
@@ -735,20 +759,38 @@ export function initApp() {
       saveAsNewDialogController.showValidationError(validationError, { focusInput: true });
       return;
     }
-    await saveCollection(ClipCollectionContent.filenameFromCollectionName(rawName), { makeActive: true });
+    const filename = Collection.filenameFromCollectionName(rawName);
+    const nextCollection = state.currentClipSequence.toCollection({ filename });
+    const { mode } = await persistCollectionContent({
+      fileSystem,
+      content: nextCollection,
+      currentFolderSession: state.currentFolderSession,
+      pipeline: currentPipeline(),
+    });
+    const savedSource = currentPipeline().getCollectionByFilename(filename) || nextCollection;
+    setActiveSource(state, savedSource);
+    state.currentClipSequence.rename(savedSource.collectionName);
+    refreshDirtyClipSequenceState(state, {
+      clipSequence: state.currentClipSequence,
+      activeSource: savedSource,
+    });
     saveAsNewDialogController.close();
+    renderCollectionSelector();
+    renderSaveCommands();
+    showStatus(savedCollectionFileText(filename));
     if (pendingDeleteRequest?.awaitingSave) {
       pendingDeleteRequest.awaitingSave = false;
       openDeleteFromDiskDialog(pendingDeleteRequest);
       return;
     }
-    if (pendingCollectionAction(state)) {
+    if (pendingSourceAction(state)) {
       await continuePendingAction({ saveFirst: false });
     }
+    return { mode, collection: nextCollection };
   }
 
   async function confirmAddToCollection(destination) {
-    if (!state.currentCollection || !currentInventory()) return;
+    if (!state.currentClipSequence || !currentPipeline()) return;
     await runAddToCollection(destination, { showDialogValidation: true });
   }
 
@@ -756,7 +798,7 @@ export function initApp() {
     if (!pendingDeleteRequest) return;
     deleteFromDiskDialogController.closePreflight();
     pendingDeleteRequest.awaitingSave = true;
-    const saveResult = await saveCollection();
+    const saveResult = await saveActiveSource();
     if (saveResult?.deferred) return;
     pendingDeleteRequest.awaitingSave = false;
     openDeleteFromDiskDialog(pendingDeleteRequest);
@@ -803,7 +845,6 @@ export function initApp() {
   }
 
   function openGridContextMenu(point) {
-    const inventory = currentInventory();
     const hasSelection = gridController.getSelectedClipIds().length > 0;
     const canDeleteSelected = hasSelection && canDeleteFromDisk();
     const choices = addToCollectionChoices();
@@ -814,7 +855,7 @@ export function initApp() {
         onSelect: () => {
           void runAddToCollection({
             kind: 'existing',
-            collectionRef: choice.collectionRef,
+            sourceId: choice.sourceId,
           });
         },
       }))
@@ -826,7 +867,7 @@ export function initApp() {
     items.push({
       id: 'new-collection',
       label: 'New collection...',
-      disabled: !inventory || !hasSelection,
+      disabled: !currentPipeline() || !hasSelection,
       onSelect: () => {
         openAddToCollectionDialog({ startWithNewCollection: true });
       },
@@ -862,19 +903,25 @@ export function initApp() {
       renderActionButtons();
     },
     onOrderChange: (orderedClipIds) => {
-      if (!state.currentCollection) return;
-      state.currentCollection.replaceOrder(orderedClipIds);
-      refreshDirtyCollectionState(state);
+      if (!state.currentClipSequence) return;
+      state.currentClipSequence.replaceOrder(orderedClipIds);
+      refreshDirtyClipSequenceState(state);
       renderCollectionSelector();
+      renderSaveCommands();
     },
     onOpenClip: openZoomForClipId,
     onRemoveSelected: (orderedSelectedClipIds) => {
-      if (zoomOverlay.isOpen() || !state.currentCollection) return;
-      const removedClipIds = state.currentCollection.removeMany(orderedSelectedClipIds);
+      if (zoomOverlay.isOpen() || !state.currentClipSequence) return;
+      if (!supportsNonPhysicalDelete(activeSource())) {
+        openDeleteFromDiskFlow();
+        return;
+      }
+      const removedClipIds = state.currentClipSequence.removeMany(orderedSelectedClipIds);
       if (removedClipIds.length === 0) return;
-      refreshDirtyCollectionState(state);
-      gridController.renderCollection(state.currentCollection);
+      refreshDirtyClipSequenceState(state);
+      gridController.renderCollection(state.currentClipSequence);
       renderCollectionSelector();
+      renderSaveCommands();
       showStatus(removedClipsText(removedClipIds.length));
     },
     onContextMenu: ({ point }) => {
@@ -992,8 +1039,8 @@ export function initApp() {
   function onFsChange() {
     if (isFullscreen() && zoomOverlay.isOpen()) closeZoom();
     fullscreenSession.onFsChange();
-    if (!isFullscreen() && state.currentCollection) {
-      gridController.renderCollection(state.currentCollection);
+    if (!isFullscreen() && state.currentClipSequence) {
+      gridController.renderCollection(state.currentClipSequence);
     }
   }
 
@@ -1010,18 +1057,18 @@ export function initApp() {
     deleteFromDiskBtn,
   });
 
-    bindControlEvents({
-      pickBtn,
-      saveBtn,
-      saveAsNewBtn,
+  bindControlEvents({
+    pickBtn,
+    saveBtn,
+    saveAsNewBtn,
     addToCollectionBtn,
     deleteFromDiskBtn,
     loadOrderBtn: null,
     orderFileInput: null,
     toggleTitlesBtn,
-      fsBtn,
-      onPickFolder: () => void onPickFolder(),
-      onSaveOrder: () => void saveCollection(),
+    fsBtn,
+    onPickFolder: () => void onPickFolder(),
+    onSaveOrder: () => void saveActiveSource(),
     onSaveAsNew: openSaveAsNewDialog,
     onAddToCollection: openAddToCollectionDialog,
     onDeleteFromDisk: openDeleteFromDiskFlow,
@@ -1033,26 +1080,29 @@ export function initApp() {
 
   activeCollectionNameEl?.addEventListener('change', (e) => {
     if (!(e.target instanceof HTMLSelectElement)) return;
-    const selectedCollectionRef = parseCollectionRefFromOptionValue(e.target.value);
-    if (!currentInventory()) {
+    const selectedSourceId = parseSourceIdFromOptionValue(e.target.value);
+    if (!currentPipeline()) {
       renderCollectionSelector();
       return;
     }
-    if (!selectedCollectionRef) {
+    if (!selectedSourceId) {
       renderCollectionSelector();
       return;
     }
-    if (collectionRefsEqual(selectedCollectionRef, currentCollectionRef())) {
+    if (sourceIdsEqual(selectedSourceId, activeSourceId())) {
       renderCollectionSelector();
       return;
     }
-    if (state.hasDirtyCollectionChanges) {
-      setPendingCollectionAction(state, { type: 'switch-collection', collectionRef: selectedCollectionRef });
+    if (state.hasDirtyClipSequenceChanges) {
+      setPendingSourceAction(state, { type: 'switch-source', sourceId: selectedSourceId });
       renderCollectionSelector();
       openUnsavedDialog();
       return;
     }
-    void applyCollectionSelection(currentInventory().getCollectionByRef(selectedCollectionRef));
+    void reloadActiveSource({
+      pipeline: currentPipeline(),
+      source: currentPipeline().resolveSource(selectedSourceId),
+    });
   });
 
   bindGlobalEvents({
@@ -1067,4 +1117,5 @@ export function initApp() {
   clearLoadedState();
   recomputeLayout();
   setTitlesHidden(false);
+  renderSaveCommands();
 }

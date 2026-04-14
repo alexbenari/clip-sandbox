@@ -11,15 +11,15 @@ export class ClipPipeline {
 
   async deleteSelectedClipsFromDisk({
     selectedClipIds = [],
-    currentCollection,
-    inventory,
+    currentClipSequence,
+    pipeline,
     currentFolderSession = null,
   } = {}) {
-    if (!inventory || !currentCollection) {
+    if (!pipeline || !currentClipSequence) {
       return { ok: false, code: 'missing-context' };
     }
 
-    const selectedClips = currentCollection.clipsForIdsInOrder(selectedClipIds);
+    const selectedClips = currentClipSequence.clipsForIdsInOrder(selectedClipIds);
     if (selectedClips.length === 0) {
       return { ok: false, code: 'no-selection' };
     }
@@ -46,27 +46,27 @@ export class ClipPipeline {
       .map((clip) => clip.id);
 
     const failedDeletes = deleteResult.results.filter((result) => !result.ok);
-    const affectedSavedCollections = inventory.savedCollectionEntriesContainingClipNames(deletedClipNames);
+    const affectedCollections = pipeline.savedCollectionEntriesContainingClipNames(deletedClipNames);
     const failedCollectionRewrites = [];
     let cleanedSavedCollectionCount = 0;
 
-    for (const entry of affectedSavedCollections) {
-      const pruned = entry.collectionContent.removeClipNames(deletedClipNames);
+    for (const entry of affectedCollections) {
+      const pruned = entry.collection.withoutClipNames(deletedClipNames);
       if (pruned.isNoOp) continue;
 
-      const persistableContent = pruned.content.withFilename(entry.filename);
+      const persistableCollection = pruned.collection.withFilename(entry.filename);
       try {
         const { ok, mode: saveMode } = await persistCollectionContent({
           fileSystem: this.#fileSystem,
-          content: persistableContent,
+          content: persistableCollection,
           currentFolderSession,
-          inventory,
+          pipeline,
           requireDirectSave: true,
         });
         if (!ok || saveMode !== 'saved') {
           failedCollectionRewrites.push({
             filename: entry.filename,
-            collectionName: entry.collectionContent.collectionName,
+            collectionName: entry.collection.collectionName,
             error: new Error(`Collection rewrite did not save directly for ${entry.filename}.`),
           });
           continue;
@@ -75,15 +75,15 @@ export class ClipPipeline {
       } catch (error) {
         failedCollectionRewrites.push({
           filename: entry.filename,
-          collectionName: entry.collectionContent.collectionName,
+          collectionName: entry.collection.collectionName,
           error,
         });
       }
     }
 
     if (deletedClipNames.length > 0) {
-      const remainingFiles = inventory.videoFiles().filter((file) => !deletedClipNameSet.has(file.name));
-      inventory.setVideoFiles(remainingFiles);
+      const remainingFiles = pipeline.videoFiles().filter((file) => !deletedClipNameSet.has(file.name));
+      pipeline.setVideoFiles(remainingFiles);
     }
 
     return {
@@ -96,7 +96,7 @@ export class ClipPipeline {
       deletedClipIds,
       deletedClipNames,
       failedDeletes,
-      targetedSavedCollectionCount: affectedSavedCollections.length,
+      targetedSavedCollectionCount: affectedCollections.length,
       cleanedSavedCollectionCount,
       failedCollectionRewrites,
     };

@@ -9,7 +9,7 @@ export function countText(count, niceNum) {
 }
 
 export function loadedVideosText(count) {
-  return `Loaded ${count} video${count === 1 ? '' : 's'}.`;
+  return `Loaded pipeline with ${count} clip${count === 1 ? '' : 's'}.`;
 }
 
 export function fullscreenSlotsText(slots) {
@@ -29,7 +29,7 @@ export function collectionReadErrorText(err) {
 }
 
 export function collectionConflictSummaryText(existingCount, missingCount) {
-  return `The collection lists ${missingCount} missing entr${missingCount === 1 ? 'y' : 'ies'}. ${existingCount} clip${existingCount === 1 ? '' : 's'} from the collection still exist in the selected folder.`;
+  return `The collection lists ${missingCount} missing entr${missingCount === 1 ? 'y' : 'ies'}. ${existingCount} clip${existingCount === 1 ? '' : 's'} from the collection still exist in the current pipeline.`;
 }
 
 export function collectionConflictListText(missingNames) {
@@ -37,7 +37,7 @@ export function collectionConflictListText(missingNames) {
 }
 
 export function noCollectionMatchesText(missingCount) {
-  return `None of the ${missingCount} missing collection entr${missingCount === 1 ? 'y matches' : 'ies match'} files in the selected folder.`;
+  return `None of the ${missingCount} missing collection entr${missingCount === 1 ? 'y matches' : 'ies match'} clips in the current pipeline.`;
 }
 
 export function saveAsNewNameRequiredText() {
@@ -53,7 +53,7 @@ export function collectionAlreadyExistsText() {
 }
 
 export function savedCollectionFileText(filename) {
-  return `Saved ${filename} to the selected folder.`;
+  return `Saved ${filename} to the current pipeline folder.`;
 }
 
 export function downloadedCollectionFileText(filename) {
@@ -80,15 +80,15 @@ export function addSelectedClipsFailedText(destinationName, err) {
 }
 
 export function deleteFromDiskPreflightText() {
-  return 'The current collection has unsaved changes. Save before deleting clips from disk?';
+  return 'The current view has unsaved changes. Save before deleting clips from disk?';
 }
 
 export function deleteFromDiskConfirmationText(clipCount, affectedSavedCollectionCount = 0) {
   const clipText = `${clipCount} clip${clipCount === 1 ? '' : 's'}`;
   if (affectedSavedCollectionCount === 0) {
-    return `Delete ${clipText} from disk? This does not affect any saved collections in this folder.`;
+    return `Delete ${clipText} from disk? This does not affect any saved collections in this pipeline.`;
   }
-  return `Delete ${clipText} from disk? This also removes them from ${affectedSavedCollectionCount} saved collection${affectedSavedCollectionCount === 1 ? '' : 's'} in this folder.`;
+  return `Delete ${clipText} from disk? This also removes them from ${affectedSavedCollectionCount} saved collection${affectedSavedCollectionCount === 1 ? '' : 's'} in this pipeline.`;
 }
 
 export function deleteFromDiskPreviewOverflowText(hiddenCount) {
@@ -124,5 +124,5 @@ export function activeCollectionText(name) {
 
 export function activeCollectionTabText(name) {
   const trimmed = (name || '').trim();
-  return trimmed ? `${trimmed} collection` : DEFAULT_APP_TITLE;
+  return trimmed || DEFAULT_APP_TITLE;
 }

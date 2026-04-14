@@ -1,4 +1,4 @@
-import { ClipCollectionContent } from './clip-collection-content.js';
+import { Collection } from './collection.js';
 
 export class CollectionDescriptionValidator {
   parseText({ text = '', filename = '' } = {}) {
@@ -31,7 +31,7 @@ export class CollectionDescriptionValidator {
     return {
       ok: true,
       filename,
-      content: ClipCollectionContent.fromFilename({
+      content: Collection.fromFilename({
         filename,
         orderedClipNames,
       }),

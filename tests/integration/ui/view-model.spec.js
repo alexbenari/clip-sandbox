@@ -27,12 +27,12 @@ describe('app text helpers', () => {
   });
 
   test('formats status messages', () => {
-    expect(loadedVideosText(1)).toBe('Loaded 1 video.');
-    expect(loadedVideosText(3)).toBe('Loaded 3 videos.');
+    expect(loadedVideosText(1)).toBe('Loaded pipeline with 1 clip.');
+    expect(loadedVideosText(3)).toBe('Loaded pipeline with 3 clips.');
     expect(fullscreenSlotsText(6)).toBe('Fullscreen slots: 6 (showing 5)');
     expect(collectionLoadedText(2)).toBe('Loaded collection with 2 clips.');
     expect(collectionPartiallyLoadedText(1, 2)).toContain('Skipped 2 missing entries.');
-    expect(savedCollectionFileText('my-cut.txt')).toBe('Saved my-cut.txt to the selected folder.');
+    expect(savedCollectionFileText('my-cut.txt')).toBe('Saved my-cut.txt to the current pipeline folder.');
     expect(downloadedCollectionFileText('my-cut.txt')).toBe('Downloaded my-cut.txt.');
     expect(removedClipsText(1)).toBe('Clip removed from view.');
     expect(removedClipsText(3)).toBe('Removed 3 clips from view.');
@@ -54,10 +54,10 @@ describe('app text helpers', () => {
     expect(saveAsNewInvalidNameText()).toContain('< > :');
   });
 
-  test('formats active collection text for app and tab', () => {
+  test('formats active source text for app and tab', () => {
     expect(activeCollectionText('subset')).toBe('subset');
     expect(activeCollectionText('')).toBe('Local Video Grid Reviewer');
-    expect(activeCollectionTabText('subset')).toBe('subset collection');
+    expect(activeCollectionTabText('subset')).toBe('subset');
     expect(activeCollectionTabText('')).toBe('Local Video Grid Reviewer');
   });
 });

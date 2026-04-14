@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { Clip } from '../../src/domain/clip.js';
-import { ClipCollection } from '../../src/domain/clip-collection.js';
-import { ClipCollectionContent } from '../../src/domain/clip-collection-content.js';
-import { ClipCollectionInventory } from '../../src/domain/clip-collection-inventory.js';
-import { createDefaultCollectionRef, createSavedCollectionRef } from '../../src/domain/collection-ref.js';
+import { ClipSequence } from '../../src/domain/clip-sequence.js';
+import { Collection } from '../../src/domain/collection.js';
+import { Pipeline } from '../../src/domain/pipeline.js';
 import { CollectionDescriptionValidator } from '../../src/domain/collection-description-validator.js';
 
-describe('clip and collection models', () => {
+describe('clip and sequence models', () => {
   test('creates clips with stable identity and mutable duration', () => {
     const clip = new Clip({
       id: 'clip_1',
@@ -19,213 +18,131 @@ describe('clip and collection models', () => {
     expect(clip.durationSec).toBe(12.5);
   });
 
-  test('maintains ordered collection contents and supports full-order replacement', () => {
+  test('maintains ordered clip-sequence contents and supports full-order replacement', () => {
     const clips = [
       new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
       new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
       new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4') }),
     ];
-    const collection = new ClipCollection({ name: 'set-a', clips });
-    expect(collection.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.webm', 'charlie.mp4']);
-    collection.replaceOrder(['clip_3', 'clip_1', 'clip_2']);
-    expect(collection.orderedClips().map((clip) => clip.id)).toEqual(['clip_3', 'clip_1', 'clip_2']);
-    collection.rename('set-b');
-    expect(collection.name).toBe('set-b');
-    expect(collection.getClip('clip_2')?.name).toBe('bravo.webm');
+    const sequence = new ClipSequence({ name: 'pipeline-view', clips });
+    expect(sequence.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.webm', 'charlie.mp4']);
+    sequence.replaceOrder(['clip_3', 'clip_1', 'clip_2']);
+    expect(sequence.orderedClips().map((clip) => clip.id)).toEqual(['clip_3', 'clip_1', 'clip_2']);
+    sequence.rename('subset');
+    expect(sequence.name).toBe('subset');
+    expect(sequence.getClip('clip_2')?.name).toBe('bravo.webm');
   });
 
-  test('supports removal, batch removal, and collection construction from ordered names', () => {
-    const clips = [
-      new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-      new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
-      new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4') }),
-    ];
-    const collection = ClipCollection.fromClipNames({
-      name: 'subset',
-      orderedNames: ['charlie.mp4', 'alpha.mp4'],
-      clips,
+  test('supports removal, batch removal, and ordered lookup by clip ids', () => {
+    const sequence = new ClipSequence({
+      name: 'full',
+      clips: [
+        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
+        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
+        new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4') }),
+      ],
     });
-    expect(collection.clipNamesInOrder()).toEqual(['charlie.mp4', 'alpha.mp4']);
-    expect(collection.remove('clip_3')).toBe(true);
-    expect(collection.clipNamesInOrder()).toEqual(['alpha.mp4']);
 
-    const batchCollection = new ClipCollection({ name: 'full', clips });
-    expect(batchCollection.removeMany(['clip_3', 'missing', 'clip_1'])).toEqual(['clip_3', 'clip_1']);
-    expect(batchCollection.clipNamesInOrder()).toEqual(['bravo.webm']);
+    expect(sequence.remove('clip_2')).toBe(true);
+    expect(sequence.clipNamesInOrder()).toEqual(['alpha.mp4', 'charlie.mp4']);
+
+    const batchSequence = new ClipSequence({
+      name: 'full',
+      clips: [
+        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
+        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
+        new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4') }),
+      ],
+    });
+    expect(batchSequence.removeMany(['clip_3', 'missing', 'clip_1'])).toEqual(['clip_3', 'clip_1']);
+    expect(batchSequence.clipNamesInOrder()).toEqual(['bravo.webm']);
+    expect(batchSequence.clipsForIdsInOrder(['clip_2', 'missing']).map((clip) => clip.id)).toEqual(['clip_2']);
+    expect(batchSequence.clipNamesForIdsInOrder(['clip_2', 'missing'])).toEqual(['bravo.webm']);
   });
 
-  test('returns ordered clips and clip names for a supplied id list', () => {
-    const clips = [
-      new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-      new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
-      new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4') }),
-    ];
-    const collection = new ClipCollection({ name: 'full', clips });
-    expect(collection.clipsForIdsInOrder(['clip_3', 'missing', 'clip_1']).map((clip) => clip.id)).toEqual([
-      'clip_3',
-      'clip_1',
-    ]);
-    expect(collection.clipNamesForIdsInOrder(['clip_3', 'missing', 'clip_1'])).toEqual([
-      'charlie.mp4',
-      'alpha.mp4',
-    ]);
+  test('builds collections from runtime clip sequences', () => {
+    const sequence = new ClipSequence({
+      name: 'director-cut',
+      clips: [
+        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
+        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
+      ],
+    });
+    const collection = sequence.toCollection({ filename: 'director-cut.txt' });
+    expect(collection).toBeInstanceOf(Collection);
+    expect(collection.collectionName).toBe('director-cut');
+    expect(collection.filename).toBe('director-cut.txt');
+    expect(collection.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm']);
+    expect(collection.toText()).toBe('alpha.mp4\nbravo.webm\n');
   });
 
-  test('builds collection content from runtime collections', () => {
-    const clips = [
-      new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-      new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
-    ];
-    const collection = new ClipCollection({ name: 'director-cut', clips });
-    const content = collection.toCollectionContent({ filename: 'director-cut.txt' });
-    expect(content).toBeInstanceOf(ClipCollectionContent);
-    expect(content.collectionName).toBe('director-cut');
-    expect(content.filename).toBe('director-cut.txt');
-    expect(content.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm']);
-    expect(content.toText()).toBe('alpha.mp4\nbravo.webm\n');
-  });
-
-  test('validates persisted collection names through ClipCollectionContent', () => {
-    expect(ClipCollectionContent.validateCollectionName(' highlights ')).toEqual({
+  test('validates collection names and preserves append/remove semantics', () => {
+    expect(Collection.validateCollectionName(' highlights ')).toEqual({
       ok: true,
       code: '',
       name: 'highlights',
       filename: 'highlights.txt',
     });
-    expect(ClipCollectionContent.validateCollectionName('')).toMatchObject({
+    expect(Collection.validateCollectionName('')).toMatchObject({
       ok: false,
       code: 'required',
     });
-    expect(ClipCollectionContent.validateCollectionName('bad:name')).toMatchObject({
+    expect(Collection.validateCollectionName('bad:name')).toMatchObject({
       ok: false,
       code: 'illegal-chars',
     });
-  });
 
-  test('appends only missing clip names while preserving destination order', () => {
-    const content = ClipCollectionContent.fromFilename({
+    const collection = Collection.fromFilename({
       filename: 'subset.txt',
       orderedClipNames: ['alpha.mp4', 'bravo.webm'],
     });
-    const merged = content.appendMissingClipNames(['bravo.webm', 'charlie.mp4', 'delta.mp4', 'charlie.mp4']);
+    const merged = collection.appendMissingClipNames(['bravo.webm', 'charlie.mp4', 'delta.mp4', 'charlie.mp4']);
     expect(merged.addedClipNames).toEqual(['charlie.mp4', 'delta.mp4']);
     expect(merged.skippedClipNames).toEqual(['bravo.webm', 'charlie.mp4']);
-    expect(merged.content.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm', 'charlie.mp4', 'delta.mp4']);
-    expect(merged.isNoOp).toBe(false);
-  });
+    expect(merged.collection.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm', 'charlie.mp4', 'delta.mp4']);
 
-  test('removes clip names while preserving remaining order', () => {
-    const content = ClipCollectionContent.fromFilename({
-      filename: 'subset.txt',
-      orderedClipNames: ['alpha.mp4', 'bravo.webm', 'charlie.mp4', 'delta.mp4'],
-    });
-    const pruned = content.removeClipNames(['bravo.webm', 'missing.mp4', 'delta.mp4']);
+    const pruned = merged.collection.withoutClipNames(['bravo.webm', 'missing.mp4', 'delta.mp4']);
     expect(pruned.removedClipNames).toEqual(['bravo.webm', 'delta.mp4']);
-    expect(pruned.removedCount).toBe(2);
-    expect(pruned.content.orderedClipNames).toEqual(['alpha.mp4', 'charlie.mp4']);
-    expect(pruned.isNoOp).toBe(false);
+    expect(pruned.collection.orderedClipNames).toEqual(['alpha.mp4', 'charlie.mp4']);
   });
 
-  test('creates a synthetic default collection and sorts explicit collections alphabetically', () => {
-    const inventory = new ClipCollectionInventory({
+  test('treats the pipeline as the primary source and explicit collections as ordered subsets', () => {
+    const pipeline = new Pipeline({
       folderName: 'clips',
       videoFiles: [
         new File(['b'], 'bravo.webm'),
         new File(['a'], 'alpha.mp4'),
+        new File(['c'], 'charlie.mp4'),
       ],
-      collectionContents: [
-        ClipCollectionContent.fromFilename({
+      collections: [
+        Collection.fromFilename({
           filename: 'zeta.txt',
           orderedClipNames: ['bravo.webm'],
         }),
-        ClipCollectionContent.fromFilename({
+        Collection.fromFilename({
+          filename: 'clips-default.txt',
+          orderedClipNames: ['charlie.mp4', 'alpha.mp4'],
+        }),
+        Collection.fromFilename({
           filename: 'beta.txt',
           orderedClipNames: ['alpha.mp4'],
         }),
       ],
     });
 
-    expect(inventory.defaultCollection().collectionName).toBe(
-      ClipCollectionContent.defaultCollectionNameForFolder('clips')
-    );
-    expect(inventory.defaultCollection().filename).toBeNull();
-    expect(inventory.defaultCollection().orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm']);
-    expect(inventory.activeCollection().isDefault).toBe(true);
-    expect(inventory.activeCollectionRef()).toEqual(createDefaultCollectionRef());
-    expect(inventory.selectableCollections().map((collectionContent) => collectionContent.collectionName)).toEqual([
-      'clips-default',
+    expect(pipeline.videoNames()).toEqual(['alpha.mp4', 'bravo.webm', 'charlie.mp4']);
+    expect(pipeline.displayLabel()).toBe('clips');
+    expect(pipeline.selectableSources().map((source) => source.displayLabel())).toEqual([
+      'clips',
       'beta',
+      'clips-default',
       'zeta',
     ]);
+    expect(pipeline.getCollectionByFilename('clips-default.txt')?.orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
   });
 
-  test('absorbs the default collection backing file into the default collection entry', () => {
-    const inventory = new ClipCollectionInventory({
-      folderName: 'clips',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4'),
-        new File(['b'], 'bravo.webm'),
-        new File(['c'], 'charlie.mp4'),
-      ],
-      collectionContents: [
-        ClipCollectionContent.fromFilename({
-          filename: 'clips-default.txt',
-          orderedClipNames: ['charlie.mp4', 'alpha.mp4'],
-        }),
-        ClipCollectionContent.fromFilename({
-          filename: 'subset.txt',
-          orderedClipNames: ['alpha.mp4'],
-        }),
-      ],
-    });
-
-    expect(inventory.defaultCollection().orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
-    expect(inventory.selectableCollections().map((collectionContent) => collectionContent.collectionName)).toEqual([
-      'clips-default',
-      'subset',
-    ]);
-    expect(inventory.defaultCollectionFilename()).toBe('clips-default.txt');
-    expect(inventory.defaultCollectionHasBackingFile()).toBe(true);
-    expect(inventory.getCollectionByFilename('clips-default.txt')?.orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
-    expect(inventory.getCollectionByRef(createDefaultCollectionRef())?.orderedClipNames).toEqual(['charlie.mp4', 'alpha.mp4']);
-    expect(inventory.getCollectionByRef(createSavedCollectionRef('subset.txt'))?.orderedClipNames).toEqual(['alpha.mp4']);
-    expect(inventory.savedCollectionEntries().map((entry) => entry.filename)).toEqual(['clips-default.txt', 'subset.txt']);
-  });
-
-  test('treats default-collection.txt as a regular explicit collection', () => {
-    const inventory = new ClipCollectionInventory({
-      folderName: 'downhill-racer',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4'),
-        new File(['b'], 'bravo.webm'),
-        new File(['c'], 'charlie.mp4'),
-      ],
-      collectionContents: [
-        ClipCollectionContent.fromFilename({
-          filename: 'default-collection.txt',
-          orderedClipNames: ['charlie.mp4', 'alpha.mp4'],
-        }),
-        ClipCollectionContent.fromFilename({
-          filename: 'minus-1.txt',
-          orderedClipNames: ['alpha.mp4'],
-        }),
-        ClipCollectionContent.fromFilename({
-          filename: 'minus-2.txt',
-          orderedClipNames: ['bravo.webm'],
-        }),
-      ],
-    });
-
-    expect(inventory.selectableCollections().map((collectionContent) => collectionContent.collectionName)).toEqual([
-      'downhill-racer-default',
-      'default-collection',
-      'minus-1',
-      'minus-2',
-    ]);
-  });
-
-  test('prunes implicit default contents when deleted files leave the folder', () => {
-    const inventory = new ClipCollectionInventory({
+  test('updates pipeline clip membership when files are removed from disk', () => {
+    const pipeline = new Pipeline({
       folderName: 'clips',
       videoFiles: [
         new File(['a'], 'alpha.mp4'),
@@ -234,13 +151,12 @@ describe('clip and collection models', () => {
       ],
     });
 
-    inventory.setVideoFiles([
+    pipeline.setVideoFiles([
       new File(['a'], 'alpha.mp4'),
       new File(['c'], 'charlie.mp4'),
     ]);
 
-    expect(inventory.defaultCollectionHasBackingFile()).toBe(false);
-    expect(inventory.defaultCollection().orderedClipNames).toEqual(['alpha.mp4', 'charlie.mp4']);
+    expect(pipeline.videoNames()).toEqual(['alpha.mp4', 'charlie.mp4']);
   });
 
   test('validates collection description text and reports human-readable diagnostics', () => {

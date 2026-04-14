@@ -41,7 +41,7 @@ export function createAddToCollectionDialogController({
     const selectedChoice = choiceByValue.get(destinationSelect.value) || null;
     return isNewDestinationSelected()
       ? { kind: 'new', name: newCollectionNameInput.value || '' }
-      : { kind: 'existing', collectionRef: selectedChoice?.collectionRef || null };
+      : { kind: 'existing', sourceId: selectedChoice?.sourceId || selectedChoice?.collectionRef || null };
   }
 
   function currentValidationError() {

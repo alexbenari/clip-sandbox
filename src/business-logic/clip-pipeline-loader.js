@@ -1,5 +1,6 @@
-import { buildCollectionInventory } from './load-collection-inventory.js';
-import { materializeCollectionContent } from './load-collection.js';
+import { buildPipeline } from './load-collection-inventory.js';
+import { materializeSource } from './load-collection.js';
+import { createPipelineSourceId, normalizeSourceId } from '../domain/source-id.js';
 
 export class ClipPipelineLoader {
   async loadPipeline({
@@ -9,55 +10,55 @@ export class ClipPipelineLoader {
     logInvalidDescription,
     nextClipId,
   } = {}) {
-    const buildResult = await buildCollectionInventory({
+    const buildResult = await buildPipeline({
       folderName,
       files,
       validator,
       logInvalidDescription,
     });
-    const { inventory } = buildResult;
-    const initialCollectionContent = inventory.defaultCollection();
-    inventory.setActiveCollection(initialCollectionContent);
+    const { pipeline } = buildResult;
+    const initialSource = pipeline;
 
     return {
       ...buildResult,
-      inventory,
-      initialCollectionContent,
-      materialization: this.materializeCollectionContent({
-        inventory,
-        collectionContent: initialCollectionContent,
+      pipeline,
+      initialSource,
+      initialSourceId: createPipelineSourceId(),
+      materialization: this.materializeSource({
+        pipeline,
+        source: initialSource,
         nextClipId,
       }),
     };
   }
 
-  loadCollectionByRef({
-    inventory,
-    collectionRef,
+  loadSourceById({
+    pipeline,
+    sourceId,
     nextClipId,
   } = {}) {
-    if (!inventory || !collectionRef) return null;
-    const collectionContent = inventory.getCollectionByRef(collectionRef);
-    if (!collectionContent) return null;
+    const normalizedSourceId = normalizeSourceId(sourceId);
+    if (!pipeline || !normalizedSourceId) return null;
+    const source = pipeline.resolveSource(normalizedSourceId);
+    if (!source) return null;
     return {
-      collectionContent,
-      materialization: this.materializeCollectionContent({
-        inventory,
-        collectionContent,
+      source,
+      materialization: this.materializeSource({
+        pipeline,
+        source,
         nextClipId,
       }),
     };
   }
 
-  materializeCollectionContent({
-    inventory,
-    collectionContent,
+  materializeSource({
+    pipeline,
+    source,
     nextClipId,
   } = {}) {
-    if (!inventory || !collectionContent || !nextClipId) return null;
-    return materializeCollectionContent({
-      content: collectionContent,
-      availableVideoFiles: inventory.videoFiles(),
+    return materializeSource({
+      pipeline,
+      source,
       nextClipId,
     });
   }

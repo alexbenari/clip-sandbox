@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'vitest';
-import { renderActiveCollectionSelector } from '../../src/ui/active-collection-selector.js';
+import { renderActiveSourceSelector } from '../../src/ui/active-source-selector.js';
 
-describe('active collection selector', () => {
+describe('active source selector', () => {
   afterEach(() => {
     document.body.innerHTML = '';
   });
@@ -10,7 +10,7 @@ describe('active collection selector', () => {
     document.body.innerHTML = '<select id="select"></select>';
     const selectEl = document.getElementById('select');
 
-    renderActiveCollectionSelector({
+    renderActiveSourceSelector({
       selectEl,
       options: [],
       label: 'Local Video Grid Reviewer',
@@ -26,10 +26,10 @@ describe('active collection selector', () => {
     document.body.innerHTML = '<select id="select"></select>';
     const selectEl = document.getElementById('select');
 
-    renderActiveCollectionSelector({
+    renderActiveSourceSelector({
       selectEl,
       options: [
-        { label: 'clips-default', value: '__default__' },
+        { label: 'clips', value: '__pipeline__' },
         { label: 'subset', value: 'subset.txt' },
       ],
       selectedValue: 'subset.txt',
@@ -38,7 +38,7 @@ describe('active collection selector', () => {
     });
 
     expect(selectEl.disabled).toBe(false);
-    expect(Array.from(selectEl.options).map((option) => option.textContent)).toEqual(['clips-default', 'subset']);
+    expect(Array.from(selectEl.options).map((option) => option.textContent)).toEqual(['clips', 'subset']);
     expect(selectEl.value).toBe('subset.txt');
   });
 });

@@ -1,6 +1,6 @@
-import { ClipCollectionContent } from './clip-collection-content.js';
+import { Collection } from './collection.js';
 
-export class ClipCollection {
+export class ClipSequence {
   #name;
   #orderedClipIds;
   #clipMap;
@@ -12,14 +12,6 @@ export class ClipCollection {
     for (const clip of Array.from(clips || [])) {
       this.#addClip(clip);
     }
-  }
-
-  static fromClipNames({ name = '', orderedNames = [], clips = [] } = {}) {
-    const clipsByName = new Map(Array.from(clips || []).map((clip) => [clip.name, clip]));
-    const ordered = Array.from(orderedNames || [])
-      .map((clipName) => clipsByName.get(clipName))
-      .filter(Boolean);
-    return new ClipCollection({ name, clips: ordered });
   }
 
   get name() {
@@ -86,8 +78,8 @@ export class ClipCollection {
     return this.orderedClips().map((clip) => clip.name);
   }
 
-  toCollectionContent({ filename = null, collectionName = '' } = {}) {
-    return new ClipCollectionContent({
+  toCollection({ filename = null, collectionName = '' } = {}) {
+    return new Collection({
       collectionName,
       filename,
       orderedClipNames: this.clipNamesInOrder(),

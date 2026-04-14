@@ -348,22 +348,22 @@
   <header class="toolbar" id="toolbar">
     <button id="pickBtn" class="btn-primary">Browse Folder…</button>
     <div class="order-menu" id="orderMenu" data-open="false">
-      <button id="orderMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="orderMenuPanel">Collection</button>
-      <div class="order-menu-panel" id="orderMenuPanel" role="menu" aria-label="Collection actions">
-        <button id="saveBtn" role="menuitem" title="Save the selected collection file in the chosen folder (or download if permissions are unavailable)" disabled>Save</button>
-        <button id="saveAsNewBtn" role="menuitem" title="Save the current collection to a new file" disabled>Save as New</button>
+      <button id="orderMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="orderMenuPanel">Actions</button>
+      <div class="order-menu-panel" id="orderMenuPanel" role="menu" aria-label="View actions">
+        <button id="saveBtn" role="menuitem" title="Save the active collection file in the current pipeline folder" disabled>Save</button>
+        <button id="saveAsNewBtn" role="menuitem" title="Save the current sequence as a collection file" disabled>Save as Collection</button>
         <button id="addToCollectionBtn" role="menuitem" title="Add the current selected clips to another collection" disabled>Add Selected to Collection...</button>
         <button id="deleteFromDiskBtn" role="menuitem" title="Delete the current selected clips from disk" disabled>Delete Selected from Disk...</button>
       </div>
     </div>
     <button id="toggleTitlesBtn" title="Hide or show clip titles">Hide Titles</button>
     <button id="fsBtn" title="Full screen (hides titles)">Full Screen</button>
-    <select class="active-collection-name" id="activeCollectionName" aria-label="Active collection" disabled>
+    <select class="active-collection-name" id="activeCollectionName" aria-label="Active pipeline view or collection" disabled>
       <option value="">Local Video Grid Reviewer</option>
     </select>
     <div class="spacer"></div>
     <span class="count" id="count">0 clips</span>
-    <span class="hint">drag to reorder • click to select • Ctrl/Cmd-click to multi-select • right-click for direct add-to-collection or use Collection • double-click or Z to zoom • press Delete to remove selected clips • press F for fullscreen</span>
+    <span class="hint">drag to reorder • click to select • Ctrl/Cmd-click to multi-select • right-click for direct add-to-collection or use Actions • double-click or Z to zoom • press Delete to remove from a collection or delete from disk in pipeline view • press F for fullscreen</span>
   </header>
 
   <section class="collection-conflict" id="collectionConflict" hidden aria-live="polite">
@@ -376,22 +376,22 @@
   </section>
 
   <section class="save-as-new-dialog" id="saveAsNewDialog" hidden aria-live="polite">
-    <h2>Save current collection as a new file</h2>
-    <p>Enter a file name. The app will add .txt automatically.</p>
+    <h2>Save current sequence as a collection</h2>
+    <p>Enter a collection name. The app will add .txt automatically.</p>
     <label for="saveAsNewNameInput">
       Collection name
       <input id="saveAsNewNameInput" type="text" autocomplete="off" spellcheck="false" />
     </label>
     <div class="save-as-new-error" id="saveAsNewError"></div>
     <div class="save-as-new-actions">
-      <button id="confirmSaveAsNewBtn" type="button">Save New</button>
+      <button id="confirmSaveAsNewBtn" type="button">Save Collection</button>
       <button id="cancelSaveAsNewBtn" type="button">Cancel</button>
     </div>
   </section>
 
   <dialog class="unsaved-changes-dialog" id="unsavedChangesDialog">
     <h2>Save changes before switching?</h2>
-    <p id="unsavedChangesText">The current collection has unsaved changes.</p>
+    <p id="unsavedChangesText">The current view has unsaved changes.</p>
     <div class="unsaved-changes-actions">
       <button id="cancelUnsavedChangesBtn" type="button">Cancel</button>
       <button id="discardUnsavedChangesBtn" type="button">Don't Save</button>
@@ -401,7 +401,7 @@
 
   <dialog class="add-to-collection-dialog" id="addToCollectionDialog">
     <h2>Add Selected to Collection</h2>
-    <p>Choose another collection in this folder, or create a new one from the current selected clips.</p>
+    <p>Choose another collection in this pipeline, or create a new one from the current selected clips.</p>
     <label for="addToCollectionSelect">
       Destination
       <select id="addToCollectionSelect"></select>
@@ -419,7 +419,7 @@
 
   <dialog class="unsaved-changes-dialog" id="deletePreflightDialog">
     <h2>Save changes before deleting?</h2>
-    <p id="deletePreflightText">The current collection has unsaved changes.</p>
+    <p id="deletePreflightText">The current view has unsaved changes.</p>
     <div class="unsaved-changes-actions">
       <button id="cancelDeletePreflightBtn" type="button">Cancel</button>
       <button id="discardDeletePreflightBtn" type="button">Continue Without Saving</button>

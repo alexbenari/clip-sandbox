@@ -1,5 +1,5 @@
-import { ClipCollectionContent } from '../domain/clip-collection-content.js';
-import { collectionRefsEqual, normalizeCollectionRef } from '../domain/collection-ref.js';
+import { Collection } from '../domain/collection.js';
+import { normalizeSourceId, sourceIdsEqual } from '../domain/source-id.js';
 import { persistCollectionContent } from './persist-collection-content.js';
 
 export class CollectionManager {
@@ -13,96 +13,94 @@ export class CollectionManager {
 
   async addSelectedClipsToCollection({
     selectedClipIds = [],
-    sourceCollectionRef = null,
+    sourceId = null,
     destination = {},
-    currentCollection,
-    inventory,
+    currentClipSequence,
+    pipeline,
     currentFolderSession = null,
   } = {}) {
-    if (!inventory || !currentCollection) {
+    if (!pipeline || !currentClipSequence) {
       return { ok: false, code: 'missing-context' };
     }
 
-    const selectedClipNames = currentCollection.clipNamesForIdsInOrder(selectedClipIds);
+    const selectedClipNames = currentClipSequence.clipNamesForIdsInOrder(selectedClipIds);
     if (selectedClipNames.length === 0) {
       return { ok: false, code: 'no-selection' };
     }
 
     const destinationResolution = this.#resolveDestination({
       destination,
-      inventory,
-      sourceCollectionRef,
+      pipeline,
+      sourceId,
     });
     if (!destinationResolution.ok) return destinationResolution;
 
-    const merged = destinationResolution.collectionContent.appendMissingClipNames(selectedClipNames);
+    const merged = destinationResolution.collection.appendMissingClipNames(selectedClipNames);
     if (merged.isNoOp) {
       return {
         ok: true,
         code: 'no-op',
-        destinationName: destinationResolution.collectionContent.collectionName,
+        destinationName: destinationResolution.collection.collectionName,
         addedCount: 0,
         skippedCount: merged.skippedCount,
         saveMode: null,
       };
     }
 
-    const persistableContent = merged.content.withFilename(destinationResolution.filename);
+    const persistableCollection = merged.collection.withFilename(destinationResolution.filename);
     try {
       const { mode: saveMode } = await persistCollectionContent({
         fileSystem: this.#fileSystem,
-        content: persistableContent,
+        content: persistableCollection,
         currentFolderSession,
-        inventory,
+        pipeline,
       });
       return {
         ok: true,
         code: 'added',
-        destinationName: persistableContent.collectionName,
+        destinationName: persistableCollection.collectionName,
         addedCount: merged.addedCount,
         skippedCount: merged.skippedCount,
         saveMode,
-        content: persistableContent,
+        collection: persistableCollection,
       };
     } catch (error) {
       return {
         ok: false,
         code: 'save-failed',
         error,
-        destinationName: persistableContent.collectionName,
+        destinationName: persistableCollection.collectionName,
       };
     }
   }
 
-  #resolveDestination({ destination, inventory, sourceCollectionRef }) {
+  #resolveDestination({ destination, pipeline, sourceId }) {
     if (destination?.kind === 'existing') {
-      const destinationCollectionRef = normalizeCollectionRef(destination.collectionRef);
-      if (!destinationCollectionRef || collectionRefsEqual(destinationCollectionRef, sourceCollectionRef)) {
+      const destinationSourceId = normalizeSourceId(destination.sourceId || destination.collectionRef);
+      if (!destinationSourceId || destinationSourceId.kind !== 'collection' || sourceIdsEqual(destinationSourceId, sourceId)) {
         return { ok: false, code: 'invalid-destination' };
       }
-      const collectionContent = inventory.getCollectionByRef(destinationCollectionRef);
-      if (!collectionContent) return { ok: false, code: 'invalid-destination' };
+      const collection = pipeline.resolveSource(destinationSourceId);
+      if (!collection) return { ok: false, code: 'invalid-destination' };
       return {
         ok: true,
-        collectionContent,
-        filename: collectionContent.isDefault
-          ? inventory.defaultCollectionFilename()
-          : collectionContent.filename,
+        collection,
+        filename: collection.filename,
       };
     }
 
     if (destination?.kind === 'new') {
-      const validation = ClipCollectionContent.validateCollectionName(destination.name);
+      const validation = Collection.validateCollectionName(destination.name);
       if (!validation.ok) return { ok: false, code: validation.code };
-      if (sourceCollectionRef?.kind === 'saved' && validation.filename === sourceCollectionRef.filename) {
+      if (sourceId?.kind === 'collection' && validation.filename === sourceId.filename) {
         return { ok: false, code: 'invalid-destination' };
       }
-      if (inventory.getCollectionByFilename(validation.filename)) {
+      if (pipeline.getCollectionByFilename(validation.filename)) {
         return { ok: false, code: 'already-exists' };
       }
       return {
         ok: true,
-        collectionContent: ClipCollectionContent.fromFilename({
+        collection: Collection.fromFilename({
           filename: validation.filename,
           orderedClipNames: [],
         }),

@@ -4,11 +4,11 @@ import { createOrderMenuController } from '../../../src/ui/order-menu-controller
 function setupDom() {
   document.body.innerHTML = `
     <div id="orderMenu" data-open="false">
-      <button id="orderMenuBtn" aria-expanded="false">Collection</button>
+      <button id="orderMenuBtn" aria-expanded="false">Actions</button>
       <div id="orderMenuPanel" role="menu">
         <button id="loadOrderBtn" role="menuitem">Load</button>
         <button id="saveBtn" role="menuitem">Save</button>
-        <button id="saveAsNewBtn" role="menuitem">Save as New</button>
+        <button id="saveAsNewBtn" role="menuitem">Save as Collection</button>
         <button id="addToCollectionBtn" role="menuitem">Add Selected to Collection...</button>
         <button id="deleteFromDiskBtn" role="menuitem">Delete Selected from Disk...</button>
       </div>

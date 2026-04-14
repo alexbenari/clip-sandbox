@@ -1,10 +1,13 @@
 # Feature Requests
 
 ## Design and code quality
+-  Code review flow -> put in place [find a good one or add my own instructions]
 -  make error log usable: 
    -  one line message, timestamp, module, error message
    -  save in available folder
    -  allow viewing in the ui
+   -  place in log folder, not in the pipeline folder as now
+-  app/app-controller.js is still huge. Understand why and if and what can be done.
 
 ## Workspace window
 - bug: the collection drop down selection overrides the info text on the top bar

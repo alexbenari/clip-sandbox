@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
 import { Clip } from '../../../src/domain/clip.js';
-import { ClipCollection } from '../../../src/domain/clip-collection.js';
+import { ClipSequence } from '../../../src/domain/clip-sequence.js';
 import { createClipCollectionGridController, updateCardLabel } from '../../../src/ui/clip-collection-grid-controller.js';
 
 describe('clip collection grid controller', () => {
@@ -25,7 +25,7 @@ describe('clip collection grid controller', () => {
   });
 
   function makeCollection() {
-    return new ClipCollection({
+    return new ClipSequence({
       name: 'demo',
       clips: [
         new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
@@ -35,7 +35,7 @@ describe('clip collection grid controller', () => {
   }
 
   function makeThreeClipCollection() {
-    return new ClipCollection({
+    return new ClipSequence({
       name: 'demo',
       clips: [
         new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
@@ -133,7 +133,7 @@ describe('clip collection grid controller', () => {
     });
 
     controller.renderCollection(
-      new ClipCollection({
+      new ClipSequence({
         name: 'demo',
         clips: [new Clip({ id: 'clip_1', file: new File(['a'], '<img src=x>.mp4', { type: 'video/mp4' }) })],
       })
@@ -250,7 +250,7 @@ describe('clip collection grid controller', () => {
     });
 
     controller.renderCollection(
-      new ClipCollection({
+      new ClipSequence({
         name: 'demo',
         clips: [
           new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
@@ -276,7 +276,7 @@ describe('clip collection grid controller', () => {
     expect(controller.handleKeyDown(inputDelete)).toBe(false);
 
     controller.renderCollection(
-      new ClipCollection({
+      new ClipSequence({
         name: 'subset',
         clips: [new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4', { type: 'video/mp4' }) })],
       })
@@ -297,7 +297,7 @@ describe('clip collection grid controller', () => {
     });
 
     controller.renderCollection(
-      new ClipCollection({
+      new ClipSequence({
         name: 'demo',
         clips: [
           new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),

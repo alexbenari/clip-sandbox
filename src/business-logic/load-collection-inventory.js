@@ -1,37 +1,37 @@
-import { ClipCollectionInventory } from '../domain/clip-collection-inventory.js';
+import { Pipeline } from '../domain/pipeline.js';
 import { getVideosAndCollectionFiles } from './load-clips.js';
 
-export async function buildCollectionInventory({
+export async function buildPipeline({
   folderName = '',
   files = [],
   validator,
   logInvalidDescription,
 } = {}) {
   const { videos, collectionFiles } = getVideosAndCollectionFiles(files);
-  const validCollectionContents = [];
+  const validCollections = [];
   const invalidDescriptions = [];
 
   for (const file of collectionFiles) {
     const result = await validator.parseFile(file);
     if (result.ok) {
-      validCollectionContents.push(result.content);
+      validCollections.push(result.content);
       continue;
     }
     invalidDescriptions.push(result);
     await logInvalidDescription?.(result);
   }
 
-  const inventory = new ClipCollectionInventory({
+  const pipeline = new Pipeline({
     folderName,
     videoFiles: videos,
-    collectionContents: validCollectionContents,
+    collections: validCollections,
   });
 
   return {
-    inventory,
+    pipeline,
     videos,
     collectionFiles,
-    validCollectionContents,
+    validCollections,
     invalidDescriptions,
   };
 }

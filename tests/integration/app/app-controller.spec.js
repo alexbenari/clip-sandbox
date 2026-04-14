@@ -4,10 +4,10 @@ const baseDom = `
   <header class="toolbar" id="toolbar">
     <button id="pickBtn">Browse Folder…</button>
     <div id="orderMenu" data-open="false">
-      <button id="orderMenuBtn" aria-expanded="false">Collection</button>
+      <button id="orderMenuBtn" aria-expanded="false">Actions</button>
       <div id="orderMenuPanel" role="menu">
         <button id="saveBtn" disabled>Save</button>
-        <button id="saveAsNewBtn" disabled>Save as New</button>
+        <button id="saveAsNewBtn" disabled>Save as Collection</button>
         <button id="addToCollectionBtn" disabled>Add Selected to Collection...</button>
         <button id="deleteFromDiskBtn" disabled>Delete Selected from Disk...</button>
       </div>

@@ -1,12 +1,15 @@
+import { sourceBaselineClipNames } from '../domain/clip-sequence-source.js';
+
 // Centralized runtime state for app session.
 export function createAppState() {
   return {
     currentFolderSession: null,
     idCounter: 0,
-    currentCollection: null,
-    collectionInventory: null,
-    hasDirtyCollectionChanges: false,
-    pendingCollectionAction: null,
+    currentClipSequence: null,
+    currentPipeline: null,
+    activeSource: null,
+    hasDirtyClipSequenceChanges: false,
+    pendingSourceAction: null,
   };
 }
 
@@ -19,41 +22,52 @@ export function setCurrentFolderSession(state, folderSession) {
   state.currentFolderSession = folderSession || null;
 }
 
-export function setCurrentCollection(state, collection) {
-  state.currentCollection = collection || null;
+export function setCurrentClipSequence(state, clipSequence) {
+  state.currentClipSequence = clipSequence || null;
 }
 
-export function setCollectionInventory(state, inventory) {
-  state.collectionInventory = inventory || null;
+export function setCurrentPipeline(state, pipeline) {
+  state.currentPipeline = pipeline || null;
 }
 
-export function refreshDirtyCollectionState(state, { collection = state.currentCollection, inventory = state.collectionInventory } = {}) {
-  const baseline = inventory?.activeCollection?.()?.orderedClipNames || [];
-  const currentNames = collection?.clipNamesInOrder?.() || [];
-  state.hasDirtyCollectionChanges = currentNames.length !== baseline.length
+export function setActiveSource(state, source) {
+  state.activeSource = source || null;
+}
+
+export function refreshDirtyClipSequenceState(
+  state,
+  {
+    clipSequence = state.currentClipSequence,
+    activeSource = state.activeSource,
+  } = {},
+) {
+  const baseline = sourceBaselineClipNames(activeSource || null);
+  const currentNames = clipSequence?.clipNamesInOrder?.() || [];
+  state.hasDirtyClipSequenceChanges = currentNames.length !== baseline.length
     || currentNames.some((name, index) => name !== baseline[index]);
-  return state.hasDirtyCollectionChanges;
+  return state.hasDirtyClipSequenceChanges;
 }
 
-export function clearDirtyCollectionState(state) {
-  state.hasDirtyCollectionChanges = false;
+export function clearDirtyClipSequenceState(state) {
+  state.hasDirtyClipSequenceChanges = false;
 }
 
-export function setPendingCollectionAction(state, action) {
-  state.pendingCollectionAction = action || null;
+export function setPendingSourceAction(state, action) {
+  state.pendingSourceAction = action || null;
 }
 
-export function pendingCollectionAction(state) {
-  return state.pendingCollectionAction;
+export function pendingSourceAction(state) {
+  return state.pendingSourceAction;
 }
 
-export function clearPendingCollectionAction(state) {
-  state.pendingCollectionAction = null;
+export function clearPendingSourceAction(state) {
+  state.pendingSourceAction = null;
 }
 
-export function resetCollectionState(state) {
-  state.currentCollection = null;
-  state.collectionInventory = null;
-  state.hasDirtyCollectionChanges = false;
-  state.pendingCollectionAction = null;
+export function resetClipSequenceState(state) {
+  state.currentClipSequence = null;
+  state.currentPipeline = null;
+  state.activeSource = null;
+  state.hasDirtyClipSequenceChanges = false;
+  state.pendingSourceAction = null;
 }

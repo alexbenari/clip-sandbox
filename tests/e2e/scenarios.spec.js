@@ -109,8 +109,8 @@ test.describe('Electron runtime migration', () => {
 
     await expect(page.locator('#grid .thumb')).toHaveCount(2);
     await expect(page.locator('#count')).toHaveText('2 clips');
-    await expect(page.locator('#activeCollectionName')).toHaveValue('__default__');
-    await expect(page).toHaveTitle('clips-default collection');
+    await expect(page.locator('#activeCollectionName')).toHaveValue('__pipeline__');
+    await expect(page).toHaveTitle('clips');
   });
 
   test('switches between saved collections in Electron', async () => {
@@ -119,7 +119,7 @@ test.describe('Electron runtime migration', () => {
     await loadFolder(page, folderPath);
 
     await expect(page.locator('#activeCollectionName option')).toHaveText([
-      'clips-default',
+      'clips',
       'default-collection',
       'minus-1',
       'minus-2',
@@ -127,25 +127,28 @@ test.describe('Electron runtime migration', () => {
 
     await page.selectOption('#activeCollectionName', 'minus-1.txt');
     await expect.poll(async () => (await allClipNames(page)).join('|')).toBe('two.webm|one.mp4');
-    await expect(page).toHaveTitle('minus-1 collection');
+    await expect(page).toHaveTitle('minus-1');
   });
 
-  test('saves reordered default collection directly to disk', async () => {
+  test('saves a reordered pipeline view as a collection', async () => {
     ({ tempRoot, folderPath } = await createScenarioFolder('default-source'));
 
     await loadFolder(page, folderPath);
-    await expect.poll(async () => (await allClipNames(page)).join('|')).toBe('three.mp4|one.mp4');
+    await expect.poll(async () => (await allClipNames(page)).join('|')).toBe('one.mp4|three.mp4|two.webm');
 
     await page.locator('#grid .thumb').nth(1).dragTo(page.locator('#grid .thumb').nth(0), {
       targetPosition: { x: 16, y: 16 },
     });
 
     await openOrderMenu(page);
-    await page.click('#saveBtn');
-    await expect(page.locator('#status')).toHaveText('Saved clips-default.txt to the selected folder.');
+    await expect(page.locator('#saveBtn')).toBeDisabled();
+    await page.click('#saveAsNewBtn');
+    await page.fill('#saveAsNewNameInput', 'pipeline-order');
+    await page.click('#confirmSaveAsNewBtn');
+    await expect(page.locator('#status')).toHaveText('Saved pipeline-order.txt to the current pipeline folder.');
 
-    const savedText = await fsp.readFile(path.join(folderPath, 'clips-default.txt'), 'utf8');
-    expect(savedText.trim().split('\n')).toEqual(['one.mp4', 'three.mp4']);
+    const savedText = await fsp.readFile(path.join(folderPath, 'pipeline-order.txt'), 'utf8');
+    expect(savedText.trim().split('\n')).toEqual(['three.mp4', 'one.mp4', 'two.webm']);
   });
 
   test('adds selected clips to another saved collection', async () => {
