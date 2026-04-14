@@ -1,4 +1,6 @@
-import { createCollectionSourceId, createPipelineSourceId, normalizeSourceId } from '../domain/source-id.js';
+import { Collection } from '../domain/collection.js';
+import { Pipeline } from '../domain/pipeline.js';
+import { normalizeSourceId } from '../domain/source-id.js';
 
 export const PIPELINE_SOURCE_OPTION_VALUE = '__pipeline__';
 
@@ -14,6 +16,6 @@ export function parseSourceIdFromOptionValue(optionValue = '') {
   const trimmed = String(optionValue || '').trim();
   if (!trimmed) return null;
   return trimmed === PIPELINE_SOURCE_OPTION_VALUE
-    ? createPipelineSourceId()
-    : createCollectionSourceId(trimmed);
+    ? Pipeline.sourceIdValue()
+    : Collection.sourceIdForFilename(trimmed);
 }

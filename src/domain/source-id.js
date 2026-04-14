@@ -1,32 +1,41 @@
-function normalizedFilename(filename) {
-  const trimmed = String(filename || '').trim();
-  return trimmed || '';
-}
+/**
+ * @typedef {{ kind: 'pipeline' }} PipelineSourceId
+ * @typedef {{ kind: 'collection', filename: string }} CollectionSourceId
+ * @typedef {PipelineSourceId | CollectionSourceId} SourceId
+ */
 
-export function createPipelineSourceId() {
-  return { kind: 'pipeline' };
-}
-
-export function createCollectionSourceId(filename = '') {
-  const normalized = normalizedFilename(filename);
-  if (!normalized) return null;
-  return {
-    kind: 'collection',
-    filename: normalized,
-  };
-}
-
+/**
+ * @param {SourceId | null | undefined} sourceId
+ * @returns {SourceId | null}
+ */
 export function normalizeSourceId(sourceId) {
-  if (sourceId?.kind === 'pipeline') return createPipelineSourceId();
-  if (sourceId?.kind === 'collection') return createCollectionSourceId(sourceId.filename);
+  if (!sourceId) return null;
+  if (sourceId.kind === 'pipeline') {
+    return { kind: 'pipeline' };
+  }
+  if (sourceId.kind === 'collection') {
+    const filename = String(sourceId.filename || '').trim();
+    if (!filename) return null;
+    return {
+      kind: 'collection',
+      filename,
+    };
+  }
   return null;
 }
 
+/**
+ * @param {SourceId | null | undefined} left
+ * @param {SourceId | null | undefined} right
+ * @returns {boolean}
+ */
 export function sourceIdsEqual(left, right) {
   const normalizedLeft = normalizeSourceId(left);
   const normalizedRight = normalizeSourceId(right);
   if (!normalizedLeft || !normalizedRight) return false;
-  if (normalizedLeft.kind !== normalizedRight.kind) return false;
-  return normalizedLeft.kind === 'pipeline'
-    || normalizedLeft.filename === normalizedRight.filename;
+  if (normalizedLeft.kind === 'pipeline' && normalizedRight.kind === 'pipeline') return true;
+  if (normalizedLeft.kind === 'collection' && normalizedRight.kind === 'collection') {
+    return normalizedLeft.filename === normalizedRight.filename;
+  }
+  return false;
 }

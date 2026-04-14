@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/domain/clip.js",
+    "src/domain/clip-sequence.js",
+    "src/domain/collection.js",
+    "src/domain/pipeline.js",
+    "src/domain/source-id.js",
+    "src/domain/clip-sequence-source.js"
+  ]
+}

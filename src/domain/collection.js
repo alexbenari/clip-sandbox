@@ -1,19 +1,47 @@
 import { ClipSequence } from './clip-sequence.js';
 import { Clip } from './clip.js';
-import { createCollectionSourceId } from './source-id.js';
+import {
+  IClipSequenceSource,
+  IExistingSaveSource,
+  ICollectionConvertibleSource,
+  INonPhysicalDeleteSource,
+} from './clip-sequence-source.js';
 
+/**
+ * @param {ReadonlyArray<import('./clip.js').ClipFile> | Map<string, import('./clip.js').ClipFile>} availableVideoFiles
+ * @returns {Map<string, import('./clip.js').ClipFile>}
+ */
 function toFileMap(availableVideoFiles) {
   if (availableVideoFiles instanceof Map) return new Map(availableVideoFiles);
   return new Map(Array.from(availableVideoFiles || []).map((file) => [file.name, file]));
 }
 
+/**
+ * @param {Iterable<string>} names
+ * @param {Map<string, import('./clip.js').ClipFile>} filesByName
+ * @param {() => string} nextClipId
+ * @returns {Clip[]}
+ */
 function materializedClips(names, filesByName, nextClipId) {
-  return Array.from(names || [])
-    .map((name) => filesByName.get(name))
-    .filter(Boolean)
-    .map((file) => new Clip({ id: nextClipId(), file, mediaSource: file?.mediaSource || '' }));
+  return Array.from(names || []).flatMap((name) => {
+    const file = filesByName.get(name);
+    return file ? [new Clip({ id: nextClipId(), file, mediaSource: file.mediaSource || '' })] : [];
+  });
 }
 
+/**
+ * @param {Collection} collection
+ * @param {Iterable<string>} [availableNames=[]]
+ * @returns {{
+ *   collection: Collection,
+ *   collectionName: string,
+ *   requestedNames: string[],
+ *   existingNamesInOrder: string[],
+ *   missingNames: string[],
+ *   missingCount: number,
+ *   matchKind: 'exact-match' | 'subset-match'
+ * }}
+ */
 function requestedNameAnalysis(collection, availableNames = []) {
   const requestedNames = collection?.orderedClipNames || [];
   const normalizedAvailableNames = Array.from(availableNames || []);
@@ -35,12 +63,34 @@ function requestedNameAnalysis(collection, availableNames = []) {
   };
 }
 
+/**
+ * @implements {IClipSequenceSource}
+ * @implements {IExistingSaveSource}
+ * @implements {ICollectionConvertibleSource}
+ * @implements {INonPhysicalDeleteSource}
+ */
 export class Collection {
   static ILLEGAL_COLLECTION_NAME_CHARS = /[<>:"/\\|?*]/;
   #collectionName;
   #filename;
   #orderedClipNames;
 
+  /**
+   * @param {string | null | undefined} filename
+   * @returns {import('./source-id.js').CollectionSourceId | null}
+   */
+  static sourceIdForFilename(filename) {
+    const normalizedFilename = String(filename || '').trim();
+    if (!normalizedFilename) return null;
+    return {
+      kind: 'collection',
+      filename: normalizedFilename,
+    };
+  }
+
+  /**
+   * @param {{ collectionName?: string, filename?: string | null, orderedClipNames?: Iterable<string> }} [params]
+   */
   constructor({
     collectionName = '',
     filename = null,
@@ -52,6 +102,10 @@ export class Collection {
     this.#orderedClipNames = Collection.#normalizedOrderedClipNames(orderedClipNames);
   }
 
+  /**
+   * @param {{ filename?: string, orderedClipNames?: Iterable<string> }} [params]
+   * @returns {Collection}
+   */
   static fromFilename({ filename = '', orderedClipNames = [] } = {}) {
     return new Collection({
       filename,
@@ -59,12 +113,20 @@ export class Collection {
     });
   }
 
+  /**
+   * @param {string} collectionName
+   * @returns {string}
+   */
   static filenameFromCollectionName(collectionName) {
     const trimmed = Collection.#normalizedText(collectionName);
     if (!trimmed) return '';
     return trimmed.toLowerCase().endsWith('.txt') ? trimmed : `${trimmed}.txt`;
   }
 
+  /**
+   * @param {string} name
+   * @returns {{ ok: true, code: '', name: string, filename: string } | { ok: false, code: 'required' | 'illegal-chars', name: string, filename: string }}
+   */
   static validateCollectionName(name) {
     const trimmed = Collection.#normalizedText(name);
     if (!trimmed) {
@@ -107,22 +169,34 @@ export class Collection {
     return !!this.#filename;
   }
 
+  /** @returns {import('./source-id.js').CollectionSourceId} */
   sourceId() {
-    return createCollectionSourceId(this.#filename);
+    const sourceId = Collection.sourceIdForFilename(this.#filename);
+    if (!sourceId) {
+      throw new Error('A collection needs a backing filename before it can act as a sequence source.');
+    }
+    return sourceId;
   }
 
+  /** @returns {string} */
   displayLabel() {
     return this.#collectionName;
   }
 
+  /** @returns {string[]} */
   baselineClipNames() {
     return this.orderedClipNames;
   }
 
+  /** @returns {string} */
   existingSaveFilename() {
     return this.#filename || '';
   }
 
+  /**
+   * @param {Iterable<string>} orderedClipNames
+   * @returns {Collection}
+   */
   withOrderedClipNames(orderedClipNames) {
     return new Collection({
       collectionName: this.#collectionName,
@@ -131,6 +205,10 @@ export class Collection {
     });
   }
 
+  /**
+   * @param {string | null | undefined} filename
+   * @returns {Collection}
+   */
   withFilename(filename) {
     return new Collection({
       collectionName: this.#collectionName,
@@ -139,6 +217,10 @@ export class Collection {
     });
   }
 
+  /**
+   * @param {Iterable<string>} orderedClipNames
+   * @returns {{ collection: Collection, addedClipNames: string[], skippedClipNames: string[], addedCount: number, skippedCount: number, isNoOp: boolean }}
+   */
   appendMissingClipNames(orderedClipNames) {
     const existingNames = this.orderedClipNames;
     const seenNames = new Set(existingNames);
@@ -165,6 +247,10 @@ export class Collection {
     };
   }
 
+  /**
+   * @param {Iterable<string>} clipNames
+   * @returns {{ collection: Collection, removedClipNames: string[], removedCount: number, isNoOp: boolean }}
+   */
   withoutClipNames(clipNames) {
     const namesToRemove = new Set(Collection.#normalizedOrderedClipNames(clipNames));
     const removedClipNames = [];
@@ -186,14 +272,25 @@ export class Collection {
     };
   }
 
+  /**
+   * @param {{ filename?: string | null }} [options]
+   * @returns {Collection}
+   */
   toCollection({ filename = this.#filename } = {}) {
     return this.withFilename(filename);
   }
 
+  /**
+   * @param {import('./clip-sequence-source.js').MaterializeClipSequenceOptions} [options]
+   * @returns {import('./clip-sequence-source.js').MaterializedClipSequenceResult}
+   */
   materializeClipSequence({
     availableVideoFiles = [],
     nextClipId,
   } = {}) {
+    if (typeof nextClipId !== 'function') {
+      throw new Error('A nextClipId function is required to materialize a collection sequence.');
+    }
     const filesByName = toFileMap(availableVideoFiles);
     const analysis = requestedNameAnalysis(this, filesByName.keys());
     const partialSequence = new ClipSequence({
@@ -218,24 +315,41 @@ export class Collection {
     };
   }
 
+  /** @returns {string} */
   toText() {
     if (this.#orderedClipNames.length === 0) return '';
     return this.#orderedClipNames.join('\n') + '\n';
   }
 
+  /**
+   * @param {unknown} value
+   * @returns {string}
+   */
   static #normalizedText(value) {
     return String(value || '').trim();
   }
 
+  /**
+   * @param {string | null | undefined} filename
+   * @returns {string | null}
+   */
   static #normalizedFilename(filename) {
     const trimmed = Collection.#normalizedText(filename);
     return trimmed ? Collection.filenameFromCollectionName(trimmed) : null;
   }
 
+  /**
+   * @param {string | null | undefined} filename
+   * @returns {string}
+   */
   static #collectionNameFromFilename(filename) {
     return Collection.#normalizedText((filename || '').replace(/\.txt$/i, ''));
   }
 
+  /**
+   * @param {Iterable<string>} names
+   * @returns {string[]}
+   */
   static #normalizedOrderedClipNames(names) {
     return Array.from(names || [])
       .map((name) => Collection.#normalizedText(name))

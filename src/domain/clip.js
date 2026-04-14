@@ -1,15 +1,22 @@
+/**
+ * @typedef {File & { mediaSource?: string }} ClipFile
+ */
+
 export class Clip {
   #id;
   #file;
   #durationSec;
   #mediaSource;
 
+  /**
+   * @param {{ id?: string, file?: ClipFile, durationSec?: number | null, mediaSource?: string }} [params]
+   */
   constructor({ id, file, durationSec = null, mediaSource = '' } = {}) {
     if (!id) throw new Error('Clip id is required.');
     if (!file) throw new Error('Clip file is required.');
     this.#id = id;
     this.#file = file;
-    this.#durationSec = Number.isFinite(durationSec) ? durationSec : null;
+    this.#durationSec = typeof durationSec === 'number' && Number.isFinite(durationSec) ? durationSec : null;
     this.#mediaSource = String(mediaSource || file?.mediaSource || '');
   }
 
@@ -33,7 +40,11 @@ export class Clip {
     return this.#durationSec;
   }
 
+  /**
+   * @param {number | null | undefined} durationSec
+   * @returns {void}
+   */
   setDuration(durationSec) {
-    this.#durationSec = Number.isFinite(durationSec) ? durationSec : null;
+    this.#durationSec = typeof durationSec === 'number' && Number.isFinite(durationSec) ? durationSec : null;
   }
 }

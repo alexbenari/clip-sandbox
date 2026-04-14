@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createAddToCollectionDialogController } from '../../../src/ui/add-to-collection-dialog-controller.js';
-import { createCollectionSourceId } from '../../../src/domain/source-id.js';
+import { Collection } from '../../../src/domain/collection.js';
 
 function setup() {
   document.body.innerHTML = `
@@ -75,7 +75,7 @@ describe('add-to-collection dialog controller', () => {
     } = setup();
 
     controller.open({
-      choices: [{ label: 'subset', value: 'subset.txt', sourceId: createCollectionSourceId('subset.txt') }],
+      choices: [{ label: 'subset', value: 'subset.txt', sourceId: Collection.sourceIdForFilename('subset.txt') }],
       hasSelection: true,
       startWithNewCollection: true,
     });
@@ -102,7 +102,7 @@ describe('add-to-collection dialog controller', () => {
     } = setup();
 
     controller.open({
-      choices: [{ label: 'subset', value: 'subset.txt', sourceId: createCollectionSourceId('subset.txt') }],
+      choices: [{ label: 'subset', value: 'subset.txt', sourceId: Collection.sourceIdForFilename('subset.txt') }],
       hasSelection: true,
       startWithNewCollection: true,
     });
@@ -128,7 +128,7 @@ describe('add-to-collection dialog controller', () => {
     confirmBtn.click();
     expect(onConfirm).toHaveBeenLastCalledWith({
       kind: 'existing',
-      sourceId: createCollectionSourceId('subset.txt'),
+      sourceId: Collection.sourceIdForFilename('subset.txt'),
     });
 
     dialog.dispatchEvent(new Event('cancel', { cancelable: true }));

@@ -1,7 +1,8 @@
 import { describe, expect, test, vi } from 'vitest';
 import { ClipPipelineLoader } from '../../src/business-logic/clip-pipeline-loader.js';
 import { CollectionDescriptionValidator } from '../../src/domain/collection-description-validator.js';
-import { createCollectionSourceId, createPipelineSourceId } from '../../src/domain/source-id.js';
+import { Collection } from '../../src/domain/collection.js';
+import { Pipeline } from '../../src/domain/pipeline.js';
 
 describe('clip pipeline loader', () => {
   function createFile(content, name, type) {
@@ -29,7 +30,7 @@ describe('clip pipeline loader', () => {
 
     expect(result.pipeline.folderName).toBe('clips');
     expect(result.initialSource).toBe(result.pipeline);
-    expect(result.initialSourceId).toEqual(createPipelineSourceId());
+    expect(result.initialSourceId).toEqual(Pipeline.sourceIdValue());
     expect(result.pipeline.selectableSources().map((source) => source.displayLabel())).toEqual(['clips', 'subset']);
     expect(result.materialization.kind).toBe('loaded');
     expect(result.materialization.sequence.orderedClips().map((clip) => clip.id)).toEqual(['clip_1', 'clip_2']);
@@ -53,7 +54,7 @@ describe('clip pipeline loader', () => {
 
     const result = loader.loadSourceById({
       pipeline: loadedPipeline.pipeline,
-      sourceId: createCollectionSourceId('subset.txt'),
+      sourceId: Collection.sourceIdForFilename('subset.txt'),
       nextClipId: vi.fn().mockReturnValueOnce('clip_3'),
     });
 

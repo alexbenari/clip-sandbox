@@ -1,6 +1,7 @@
 import { buildPipeline } from './load-collection-inventory.js';
 import { materializeSource } from './load-collection.js';
-import { createPipelineSourceId, normalizeSourceId } from '../domain/source-id.js';
+import { Pipeline } from '../domain/pipeline.js';
+import { normalizeSourceId } from '../domain/source-id.js';
 
 export class ClipPipelineLoader {
   async loadPipeline({
@@ -23,7 +24,7 @@ export class ClipPipelineLoader {
       ...buildResult,
       pipeline,
       initialSource,
-      initialSourceId: createPipelineSourceId(),
+      initialSourceId: Pipeline.sourceIdValue(),
       materialization: this.materializeSource({
         pipeline,
         source: initialSource,

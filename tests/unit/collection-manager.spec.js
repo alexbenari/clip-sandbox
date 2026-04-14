@@ -4,7 +4,6 @@ import { Clip } from '../../src/domain/clip.js';
 import { ClipSequence } from '../../src/domain/clip-sequence.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
-import { createCollectionSourceId, createPipelineSourceId } from '../../src/domain/source-id.js';
 
 function makePipeline() {
   return new Pipeline({
@@ -46,8 +45,8 @@ describe('CollectionManager', () => {
 
     const result = await manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_3', 'clip_1'],
-      sourceId: createPipelineSourceId(),
-      destination: { kind: 'existing', sourceId: createCollectionSourceId('subset.txt') },
+      sourceId: Pipeline.sourceIdValue(),
+      destination: { kind: 'existing', sourceId: Collection.sourceIdForFilename('subset.txt') },
       currentClipSequence: makeCurrentClipSequence(),
       pipeline,
       currentFolderSession: { accessMode: 'readwrite' },
@@ -68,7 +67,7 @@ describe('CollectionManager', () => {
 
     const result = await manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_2', 'clip_3'],
-      sourceId: createPipelineSourceId(),
+      sourceId: Pipeline.sourceIdValue(),
       destination: { kind: 'new', name: 'highlights' },
       currentClipSequence: makeCurrentClipSequence(),
       pipeline,
@@ -87,8 +86,8 @@ describe('CollectionManager', () => {
 
     const result = await manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_2'],
-      sourceId: createCollectionSourceId('subset.txt'),
-      destination: { kind: 'existing', sourceId: createCollectionSourceId('subset.txt') },
+      sourceId: Collection.sourceIdForFilename('subset.txt'),
+      destination: { kind: 'existing', sourceId: Collection.sourceIdForFilename('subset.txt') },
       currentClipSequence: makeCurrentClipSequence(),
       pipeline,
       currentFolderSession: { accessMode: 'readwrite' },
@@ -103,8 +102,8 @@ describe('CollectionManager', () => {
 
     const result = await manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_1'],
-      sourceId: createPipelineSourceId(),
-      destination: { kind: 'existing', sourceId: createCollectionSourceId('subset.txt') },
+      sourceId: Pipeline.sourceIdValue(),
+      destination: { kind: 'existing', sourceId: Collection.sourceIdForFilename('subset.txt') },
       currentClipSequence: makeCurrentClipSequence(),
       pipeline: makePipeline(),
       currentFolderSession: { accessMode: 'readwrite' },
@@ -125,7 +124,7 @@ describe('CollectionManager', () => {
 
     await expect(manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_1'],
-      sourceId: createPipelineSourceId(),
+      sourceId: Pipeline.sourceIdValue(),
       destination: { kind: 'new', name: 'bad:name' },
       currentClipSequence: makeCurrentClipSequence(),
       pipeline,
@@ -134,7 +133,7 @@ describe('CollectionManager', () => {
 
     await expect(manager.addSelectedClipsToCollection({
       selectedClipIds: ['clip_1'],
-      sourceId: createPipelineSourceId(),
+      sourceId: Pipeline.sourceIdValue(),
       destination: { kind: 'new', name: 'subset' },
       currentClipSequence: makeCurrentClipSequence(),
       pipeline,
