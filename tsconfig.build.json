@@ -1,15 +1,16 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "outDir": "./build",
+    "rootDir": ".",
+    "noEmit": false
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "tests/**/*.ts"
+    "src/**/*.ts"
   ],
   "exclude": [
     "build",
+    "tests",
     "electron",
     "node_modules"
   ]
