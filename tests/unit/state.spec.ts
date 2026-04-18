@@ -1,18 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from 'vitest';
-import {
-  clearDirtyClipSequenceState,
-  clearPendingSelectionAction,
-  createAppState,
-  nextClipId,
-  pendingSelectionAction,
-  refreshDirtyClipSequenceState,
-  setActiveCollection,
-  setCurrentClipSequence,
-  setCurrentFolderSession,
-  setCurrentPipeline,
-  setPendingSelectionAction,
-} from '../../src/app/app-session-state.js';
+import { createAppState } from '../../src/app/app-session-state.js';
 import { Clip } from '../../src/domain/clip.js';
 import { ClipSequence } from '../../src/domain/clip-sequence.js';
 import { Collection } from '../../src/domain/collection.js';
@@ -36,26 +24,26 @@ describe('app state', () => {
     const sequence = new ClipSequence({ name: 'clips' });
     const source = Collection.fromFilename({ filename: 'subset.txt', orderedClipNames: [] });
 
-    setCurrentFolderSession(state, { accessMode: 'readwrite' });
-    setCurrentClipSequence(state, sequence);
-    setCurrentPipeline(state, pipeline);
-    setActiveCollection(state, source);
-    setPendingSelectionAction(state, { type: 'browse-folder' });
+    state.setCurrentFolderSession({ accessMode: 'readwrite' });
+    state.setCurrentClipSequence(sequence);
+    state.setCurrentPipeline(pipeline);
+    state.setActiveCollection(source);
+    state.setPendingSelectionAction({ type: 'browse-folder' });
 
     expect(state.currentFolderSession).toEqual({ accessMode: 'readwrite' });
     expect(state.currentClipSequence).toBe(sequence);
     expect(state.currentPipeline).toBe(pipeline);
     expect(state.activeCollection).toBe(source);
-    expect(pendingSelectionAction(state)).toEqual({ type: 'browse-folder' });
+    expect(state.getPendingSelectionAction()).toEqual({ type: 'browse-folder' });
 
-    clearPendingSelectionAction(state);
-    expect(pendingSelectionAction(state)).toBeNull();
+    state.clearPendingSelectionAction();
+    expect(state.getPendingSelectionAction()).toBeNull();
   });
 
   test('increments generated clip ids', () => {
     const state = createAppState();
-    expect(nextClipId(state)).toBe('clip_1');
-    expect(nextClipId(state)).toBe('clip_2');
+    expect(state.nextClipId()).toBe('clip_1');
+    expect(state.nextClipId()).toBe('clip_2');
   });
 
   test('tracks dirty clip-sequence state against the active collection baseline', () => {
@@ -72,13 +60,13 @@ describe('app state', () => {
       ],
     });
 
-    setActiveCollection(state, source);
-    setCurrentClipSequence(state, clipSequence);
+    state.setActiveCollection(source);
+    state.setCurrentClipSequence(clipSequence);
 
-    expect(refreshDirtyClipSequenceState(state)).toBe(false);
+    expect(state.refreshDirtyClipSequenceState()).toBe(false);
     clipSequence.remove('clip_2');
-    expect(refreshDirtyClipSequenceState(state)).toBe(true);
-    clearDirtyClipSequenceState(state);
+    expect(state.refreshDirtyClipSequenceState()).toBe(true);
+    state.clearDirtyClipSequenceState();
     expect(state.hasDirtyClipSequenceChanges).toBe(false);
   });
 });

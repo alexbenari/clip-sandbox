@@ -8,6 +8,8 @@
    -  allow viewing in the ui
    -  place in log folder, not in the pipeline folder as now
 -  app/app-controller.js is still huge. Understand why and if and what can be done.
+   -  runAddToCollection
+   -  
 
 ## Workspace window
 - bug: the collection drop down selection overrides the info text on the top bar

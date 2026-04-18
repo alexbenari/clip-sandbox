@@ -1,18 +1,6 @@
 // @ts-nocheck
 import { PipelineFactory } from '../business-logic/PipelineFactory.js';
-import {
-  createAppState,
-  clearPendingSelectionAction,
-  nextClipId,
-  pendingSelectionAction,
-  refreshDirtyClipSequenceState,
-  setActiveCollection,
-  setCurrentClipSequence,
-  setCurrentPipeline,
-  setCurrentFolderSession,
-  setPendingSelectionAction,
-  resetClipSequenceState,
-} from './app-session-state.js';
+import { createAppState } from './app-session-state.js';
 import { FullscreenAdapter } from '../adapters/browser/fullscreen-adapter.js';
 import { ElectronFileSystemService } from '../adapters/electron/electron-file-system-service.js';
 import { ClockAdapter } from '../adapters/browser/clock-adapter.js';
@@ -20,6 +8,7 @@ import { DomRendererAdapter } from '../adapters/browser/dom-renderer-adapter.js'
 import { AudioFeedbackAdapter } from '../adapters/browser/audio-feedback-adapter.js';
 import { createFullscreenSession } from './fullscreen-session.js';
 import { createAppDiagnostics } from './app-diagnostics.js';
+import { createAppKeyDownHandler } from './app-keydown-handler.js';
 import { bindControlEvents, bindGlobalEvents, isEditableTarget } from './event-binding.js';
 import {
   computeBestGrid,
@@ -170,7 +159,7 @@ export function initApp() {
         return;
       }
       if (state.hasDirtyClipSequenceChanges) {
-        setPendingSelectionAction(state, {
+        state.setPendingSelectionAction({
           type: 'switch-selection',
           collectionFilename: selectedCollectionFilename,
         });
@@ -310,7 +299,7 @@ export function initApp() {
     if (pendingDeleteRequest?.awaitingSave) {
       pendingDeleteRequest = null;
     }
-    clearPendingSelectionAction(state);
+    state.clearPendingSelectionAction();
     refreshCollectionSelectorView();
   }
 
@@ -421,7 +410,7 @@ export function initApp() {
   }
 
   function openUnsavedDialog() {
-    const action = pendingSelectionAction(state);
+    const action = state.getPendingSelectionAction();
     unsavedChangesDialogController.open({
       message: action?.type === 'browse-folder'
         ? 'The current view has unsaved changes. Save before browsing to another folder?'
@@ -433,7 +422,7 @@ export function initApp() {
         void continuePendingAction({ saveFirst: false });
       },
       onCancel: () => {
-        clearPendingSelectionAction(state);
+        state.clearPendingSelectionAction();
         refreshCollectionSelectorView();
       },
     });
@@ -590,11 +579,11 @@ export function initApp() {
     hideCollectionConflict();
     clipContextMenuController.close({ restoreFocus: false });
     addToCollectionDialogController.close();
-    setCurrentFolderSession(state, folderSession || null);
-    setCurrentPipeline(state, pipeline || null);
-    setActiveCollection(state, collection || null);
-    setCurrentClipSequence(state, clipSequence || null);
-    refreshDirtyClipSequenceState(state, { clipSequence, activeCollection: collection, currentPipeline: pipeline });
+    state.setCurrentFolderSession(folderSession || null);
+    state.setCurrentPipeline(pipeline || null);
+    state.setActiveCollection(collection || null);
+    state.setCurrentClipSequence(clipSequence || null);
+    state.refreshDirtyClipSequenceState({ clipSequence, activeCollection: collection, currentPipeline: pipeline });
     gridController.renderCollection(clipSequence);
     refreshCollectionSelectorView();
     refreshToolbarView();
@@ -611,8 +600,8 @@ export function initApp() {
     closeUnsavedDialog();
     closeZoom();
     gridController.destroy();
-    resetClipSequenceState(state);
-    setCurrentFolderSession(state, null);
+    state.resetClipSequenceState();
+    state.setCurrentFolderSession(null);
     refreshCollectionSelectorView();
     refreshToolbarView();
   }
@@ -624,7 +613,7 @@ export function initApp() {
   async function reloadSelection({ pipeline = currentPipeline(), collection = activeCollection(), folderSession = state.currentFolderSession } = {}) {
     if (!pipeline) return;
     const loaded = pipeline.materializeSelection(collection, {
-      nextClipId: () => nextClipId(state),
+      nextClipId: () => state.nextClipId(),
     });
     if (!loaded) return;
     const { selection, materialization: result } = loaded;
@@ -672,7 +661,7 @@ export function initApp() {
       });
       const { pipeline } = buildResult;
       const result = pipeline.materializePipeline({
-        nextClipId: () => nextClipId(state),
+        nextClipId: () => state.nextClipId(),
       });
 
       applySelection(result.sequence, {
@@ -710,7 +699,7 @@ export function initApp() {
 
   async function onPickFolder() {
     if (state.hasDirtyClipSequenceChanges) {
-      setPendingSelectionAction(state, { type: 'browse-folder' });
+      state.setPendingSelectionAction({ type: 'browse-folder' });
       refreshCollectionSelectorView();
       openUnsavedDialog();
       return;
@@ -719,7 +708,7 @@ export function initApp() {
   }
 
   async function continuePendingAction({ saveFirst }) {
-    const nextPendingAction = pendingSelectionAction(state);
+    const nextPendingAction = state.getPendingSelectionAction();
     closeUnsavedDialog();
     if (!nextPendingAction) {
       refreshCollectionSelectorView();
@@ -729,7 +718,7 @@ export function initApp() {
       const saveResult = await saveActiveCollection();
       if (saveResult?.deferred) return;
     }
-    clearPendingSelectionAction(state);
+    state.clearPendingSelectionAction();
     if (nextPendingAction.type === 'browse-folder') {
       await triggerFolderPicker();
       return;
@@ -793,8 +782,8 @@ export function initApp() {
     if (!saveResult?.ok) return saveResult;
     const savedCollection = saveResult.collection;
     state.currentClipSequence.rename(savedCollection.collectionName);
-    setActiveCollection(state, savedCollection);
-    refreshDirtyClipSequenceState(state);
+    state.setActiveCollection(savedCollection);
+    state.refreshDirtyClipSequenceState();
     refreshCollectionSelectorView();
     refreshToolbarView();
     showStatus(savedCollectionFileText(savedCollection.filename));
@@ -814,9 +803,9 @@ export function initApp() {
     const saveResult = await saveClipSequenceAsCollection(filename);
     if (!saveResult?.ok) return saveResult;
     const savedCollection = saveResult.collection;
-    setActiveCollection(state, savedCollection);
+    state.setActiveCollection(savedCollection);
     state.currentClipSequence.rename(savedCollection.collectionName);
-    refreshDirtyClipSequenceState(state, {
+    state.refreshDirtyClipSequenceState({
       clipSequence: state.currentClipSequence,
       activeCollection: savedCollection,
       currentPipeline: currentPipeline(),
@@ -830,7 +819,7 @@ export function initApp() {
       openDeleteFromDiskDialog(pendingDeleteRequest);
       return;
     }
-    if (pendingSelectionAction(state)) {
+    if (state.getPendingSelectionAction()) {
       await continuePendingAction({ saveFirst: false });
     }
     return saveResult;
@@ -929,7 +918,7 @@ export function initApp() {
     onOrderChange: (orderedClipIds) => {
       if (!state.currentClipSequence) return;
       state.currentClipSequence.replaceOrder(orderedClipIds);
-      refreshDirtyClipSequenceState(state);
+      state.refreshDirtyClipSequenceState();
       refreshCollectionSelectorView();
       refreshToolbarView();
     },
@@ -942,7 +931,7 @@ export function initApp() {
       }
       const removedClipIds = state.currentClipSequence.removeMany(orderedSelectedClipIds);
       if (removedClipIds.length === 0) return;
-      refreshDirtyClipSequenceState(state);
+      state.refreshDirtyClipSequenceState();
       gridController.renderCollection(state.currentClipSequence);
       refreshCollectionSelectorView();
       refreshToolbarView();
@@ -977,78 +966,26 @@ export function initApp() {
     updateCardLabel,
     formatLabel,
   });
+  const handleAppKeyDown = createAppKeyDownHandler({
+    saveAsNewDialogController,
+    addToCollectionDialogController,
+    deleteFromDiskDialogController,
+    unsavedChangesDialogController,
+    zoomOverlay,
+    gridController,
+    isEditableTarget,
+    isFullscreen,
+    closeZoom,
+    browseZoomByOffset,
+    openZoomForClipId,
+  });
 
   function onGlobalKeyDown(e) {
     fullscreenSession.onGlobalKeyDown(e);
   }
 
   function onKeyDown(e) {
-    if (saveAsNewDialogController.handleGlobalKeyDown(e)) {
-      e.preventDefault();
-      return;
-    }
-    if (addToCollectionDialogController.isOpen() && e.key === 'Escape') {
-      e.preventDefault();
-      addToCollectionDialogController.close();
-      return;
-    }
-    if (deleteFromDiskDialogController.handleGlobalKeyDown(e)) {
-      e.preventDefault();
-      return;
-    }
-    if (unsavedChangesDialogController.handleGlobalKeyDown(e)) {
-      e.preventDefault();
-      return;
-    }
-    if (e.key === 'Escape' && zoomOverlay.isOpen()) {
-      closeZoom();
-      e.preventDefault();
-      return;
-    }
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (zoomOverlay.isOpen()) {
-        e.preventDefault();
-        return;
-      }
-      if (gridController.handleKeyDown(e)) return;
-      return;
-    }
-    if (
-      saveAsNewDialogController.isOpen()
-      || addToCollectionDialogController.isOpen()
-      || deleteFromDiskDialogController.isOpen()
-      || unsavedChangesDialogController.isOpen()
-    ) return;
-    if (isEditableTarget(e.target)) return;
-    if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'f' || e.key === 'F') && zoomOverlay.isOpen()) {
-      closeZoom();
-      return;
-    }
-    if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'a' || e.key === 'A') && zoomOverlay.isOpen()) {
-      zoomOverlay.toggleMuted();
-      e.preventDefault();
-      return;
-    }
-    if (!e.altKey && !e.ctrlKey && !e.metaKey && zoomOverlay.isOpen() && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-      browseZoomByOffset(e.key === 'ArrowRight' ? 1 : -1);
-      e.preventDefault();
-      return;
-    }
-    if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'z' || e.key === 'Z')) {
-      if (zoomOverlay.isOpen()) {
-        e.preventDefault();
-        return;
-      }
-      const selectedClipId = gridController.getSelectedClipId();
-      if (selectedClipId && !isFullscreen()) {
-        openZoomForClipId(selectedClipId);
-        e.preventDefault();
-      }
-      return;
-    }
-    if (zoomOverlay.isOpen()) {
-      return;
-    }
+    handleAppKeyDown(e);
   }
 
   function onToggleTitles() {
