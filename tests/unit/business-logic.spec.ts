@@ -43,7 +43,8 @@ describe('business logic modules', () => {
     expect(result.kind).toBe('has-missing');
     expect(result.missingNames).toEqual(['missing.mp4']);
     expect(result.existingNamesInOrder).toEqual(['bravo.mp4', 'alpha.mp4']);
-    expect(result.partialSequence.orderedClips().map((clip) => clip.id)).toEqual(['clip_1', 'clip_2']);
+    expect(result.partialSequence.clipNamesInOrder()).toEqual(['bravo.mp4', 'alpha.mp4']);
+    expect(result.partialSequence.orderedClips().map((clip) => clip.id)).toEqual(['clip_2', 'clip_1']);
   });
 });
 

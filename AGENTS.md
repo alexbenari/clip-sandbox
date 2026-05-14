@@ -34,3 +34,27 @@ Use the project-local `doc-update` skill when:
 4. the user asks to update or maintain the agent knowledge base.
 
 Treat architecture documentation as part of the change, not as optional follow-up work, when the change affects durable structure or assumptions.
+
+## Code design guidance
+
+When working on code design, refactoring, architecture, or code review tasks, first read the repository's design-guidance document  `coding-quality.md`, if it exists. Treat that document as the repository's source of truth for local design preferences.
+
+The repository design-guidance document takes precedence over conflicting skill guidance on matters of code structure, layering, naming, responsibility boundaries, and review standards.
+
+Apply that guidance as follows:
+- Prefer the repository guidance over general design instincts or conflicting skill preferences.
+- Use skills and general coding knowledge mainly for process, analysis method, tool usage, and implementation technique.
+- If the repository guidance conflicts with framework conventions, correctness, security, explicit user instructions, or hard technical constraints, follow the constraint and explain the deviation briefly.
+- Do not apply the repository guidance mechanically; use judgment where the document leaves room for interpretation.
+
+For substantial code changes, design work, or code reviews, perform a final pass against the repository design-guidance document and call out any important deviations, tradeoffs, or unresolved tensions.
+
+## Goal-based verification
+
+Before claiming a feature or fix is complete, identify the user-visible goal or acceptance behavior in one sentence.
+
+Verification must prove that goal, not just prove that code changed or tests pass.
+
+Use automated verification when unit, integration, or e2e tests can directly prove the goal. If the goal involves perceived UX, real app behavior, performance, media playback, layout, or other behavior not fully covered by tests, perform targeted manual QA in the actual app and report what was verified.
+
+Do not claim completion from implementation-level evidence when the requested goal is user-visible behavior.

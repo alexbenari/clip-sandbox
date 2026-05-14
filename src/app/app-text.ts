@@ -80,6 +80,34 @@ export function addSelectedClipsFailedText(destinationName, err) {
   return `Failed to add selected clips to ${destinationName || 'the destination collection'}: ${detail}`;
 }
 
+export function videoEditStartedText(actionLabel, sourceName) {
+  return `${actionLabel} started for ${sourceName}.`;
+}
+
+export function videoEditSucceededText(outputName) {
+  return `Created ${outputName}.`;
+}
+
+export function videoEditPartialSuccessText(outputName) {
+  return `Created ${outputName}, but the current collection view could not be updated. Reopen the collection.`;
+}
+
+export function videoEditFailedText({ actionLabel = 'Edit', code = 'edit-failed' } = {}) {
+  const failureTextByCode = {
+    'invalid-edit': `${actionLabel} is unavailable in this build.`,
+    'invalid-output': `${actionLabel} could not determine an output filename.`,
+    'invalid-source-name': `${actionLabel} could not derive an output filename from the current clip.`,
+    'missing-binary': `${actionLabel} is unavailable because ffmpeg is not configured.`,
+    'missing-output-folder': `${actionLabel} is unavailable for the current folder.`,
+    'missing-source': `${actionLabel} could not find the source clip on disk.`,
+    'missing-source-path': `${actionLabel} is unavailable because the source clip path is missing.`,
+    'output-missing': `${actionLabel} finished, but the output file was not found.`,
+    'process-failed': `${actionLabel} failed while generating the output clip.`,
+    'unsupported-edit': `${actionLabel} is not supported.`,
+  };
+  return failureTextByCode[code] || `${actionLabel} failed.`;
+}
+
 export function deleteFromDiskPreflightText() {
   return 'The current view has unsaved changes. Save before deleting clips from disk?';
 }

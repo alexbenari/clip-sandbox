@@ -17,9 +17,10 @@ function ensureZoomOverlayStyles(doc) {
 }
 
 export class ZoomOverlayController {
-  constructor({ mountEl, document: doc = document } = {}) {
+  constructor({ mountEl, document: doc = document, onContextMenu = null } = {}) {
     this.mountEl = mountEl;
     this.doc = doc;
+    this.onContextMenu = onContextMenu;
     this.overlayEl = null;
     this.frameEl = null;
     this.videoEl = null;
@@ -88,6 +89,17 @@ export class ZoomOverlayController {
       },
       { once: true }
     );
+    nextVideo.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      this.onContextMenu?.({
+        clipId: this.getCurrentClipId(),
+        name,
+        point: {
+          x: event.clientX,
+          y: event.clientY,
+        },
+      });
+    });
     return nextVideo;
   }
 

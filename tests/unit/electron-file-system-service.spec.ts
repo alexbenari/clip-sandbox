@@ -64,4 +64,33 @@ describe('electron file system service', () => {
     expect(result.results[1].error).toBeInstanceOf(Error);
     expect(result.results[1].error.message).toBe('locked');
   });
+
+  it('delegates video edit requests through the desktop api', async () => {
+    const api = {
+      createVideoEdit: vi.fn(async () => ({
+        ok: true,
+        createdFile: {
+          name: 'alpha-looped.mp4',
+          path: 'C:/clips/alpha-looped.mp4',
+        },
+      })),
+    };
+    const service = new ElectronFileSystemService({ api });
+
+    const result = await service.createVideoEdit({
+      editId: 'loopify',
+      outputFolderPath: 'C:/clips',
+      preferredOutputFilename: 'alpha-looped.mp4',
+      sourcePath: 'C:/clips/alpha.mp4',
+    });
+
+    expect(api.createVideoEdit).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      ok: true,
+      createdFile: {
+        name: 'alpha-looped.mp4',
+        path: 'C:/clips/alpha-looped.mp4',
+      },
+    });
+  });
 });

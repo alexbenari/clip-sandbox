@@ -61,14 +61,111 @@ describe('formatting', () => {
 });
 
 describe('grid computation', () => {
+  function clips(count, videoWidth, videoHeight) {
+    return Array.from({ length: count }, () => ({ videoWidth, videoHeight }));
+  }
+
   it('returns at least one column', () => {
     const res = computeBestGrid({ count: 0, availW: 100, availH: 100, gap: 10 });
     expect(res.cols).toBe(1);
   });
 
-  it('chooses more columns for wider space', () => {
-    const res = computeBestGrid({ count: 4, availW: 800, availH: 400, gap: 10 });
-    expect(res.cols).toBeGreaterThanOrEqual(2);
+  it('chooses a layout with empty final-row slots when that gives larger rendered videos', () => {
+    const res = computeBestGrid({
+      count: 7,
+      availW: 900,
+      availH: 360,
+      gap: 10,
+      clips: clips(7, 16, 9),
+    });
+    expect(res).toMatchObject({ cols: 4, rows: 2 });
+  });
+
+  it('does not over-prefer very wide low-row layouts for large landscape sets', () => {
+    const res = computeBestGrid({
+      count: 34,
+      availW: 1600,
+      availH: 800,
+      gap: 10,
+      clips: clips(34, 720, 390),
+    });
+    expect(res).toMatchObject({ cols: 6, rows: 6 });
+  });
+
+  it('scores mixed aspect ratios by aggregate rendered video area', () => {
+    const res = computeBestGrid({
+      count: 6,
+      availW: 900,
+      availH: 600,
+      gap: 10,
+      clips: [
+        ...clips(2, 16, 9),
+        ...clips(2, 1, 1),
+        ...clips(2, 9, 16),
+      ],
+    });
+    expect(res).toMatchObject({ cols: 3, rows: 2 });
+  });
+
+  it('handles portrait, square, and landscape dimensions', () => {
+    expect(computeBestGrid({
+      count: 4,
+      availW: 800,
+      availH: 600,
+      gap: 10,
+      clips: clips(4, 9, 16),
+    })).toMatchObject({ cols: 4, rows: 1 });
+
+    expect(computeBestGrid({
+      count: 4,
+      availW: 800,
+      availH: 600,
+      gap: 10,
+      clips: clips(4, 1, 1),
+    })).toMatchObject({ cols: 2, rows: 2 });
+
+    expect(computeBestGrid({
+      count: 4,
+      availW: 800,
+      availH: 600,
+      gap: 10,
+      clips: clips(4, 16, 9),
+    })).toMatchObject({ cols: 2, rows: 2 });
+  });
+
+  it('falls back for unavailable or invalid dimensions', () => {
+    const res = computeBestGrid({
+      count: 3,
+      availW: 600,
+      availH: 300,
+      gap: 10,
+      clips: [
+        { videoWidth: 0, videoHeight: 9 },
+        { videoWidth: Number.NaN, videoHeight: 9 },
+        null,
+      ],
+    });
+    expect(res).toMatchObject({ cols: 2, rows: 2 });
+  });
+
+  it('accounts for constrained dimensions and gap size', () => {
+    const withoutGap = computeBestGrid({
+      count: 5,
+      availW: 500,
+      availH: 300,
+      gap: 0,
+      clips: clips(5, 16, 9),
+    });
+    const largeGap = computeBestGrid({
+      count: 5,
+      availW: 500,
+      availH: 300,
+      gap: 80,
+      clips: clips(5, 16, 9),
+    });
+
+    expect(withoutGap).toMatchObject({ cols: 2, rows: 3 });
+    expect(largeGap).toMatchObject({ cols: 3, rows: 2 });
   });
 });
 

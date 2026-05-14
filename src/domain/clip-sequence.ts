@@ -16,7 +16,7 @@ export class ClipSequence {
     this.#orderedClipIds = [];
     this.#clipMap = new Map();
     for (const clip of Array.from(clips || [])) {
-      this.#addClip(clip);
+      this.#appendClip(clip);
     }
   }
 
@@ -115,6 +115,17 @@ export class ClipSequence {
     return removedClipIds;
   }
 
+  /**
+   * @param {string} anchorClipId
+   * @param {import('./clip.js').Clip} clip
+   * @returns {boolean}
+   */
+  insertAfter(anchorClipId, clip) {
+    const anchorIndex = this.#orderedClipIds.indexOf(anchorClipId);
+    if (anchorIndex < 0) return false;
+    return this.#insertClipAt(anchorIndex + 1, clip);
+  }
+
   /** @returns {string[]} */
   clipNamesInOrder() {
     return this.orderedClips().map((clip) => clip.name);
@@ -136,11 +147,20 @@ export class ClipSequence {
    * @param {import('./clip.js').Clip} clip
    * @returns {boolean}
    */
-  #addClip(clip) {
+  #appendClip(clip) {
+    return this.#insertClipAt(this.#orderedClipIds.length, clip);
+  }
+
+  /**
+   * @param {number} index
+   * @param {import('./clip.js').Clip} clip
+   * @returns {boolean}
+   */
+  #insertClipAt(index, clip) {
     if (!clip?.id) throw new Error('Clip id is required.');
     if (this.#clipMap.has(clip.id)) return false;
     this.#clipMap.set(clip.id, clip);
-    this.#orderedClipIds.push(clip.id);
+    this.#orderedClipIds.splice(Math.max(0, index), 0, clip.id);
     return true;
   }
 }

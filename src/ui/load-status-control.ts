@@ -3,7 +3,8 @@ import { collectionLoadedText, loadedVideosText } from '../app/app-text.js';
 
 export class LoadStatusControl {
   constructor({
-    statusBarControl,
+    statusControl,
+    statusBarControl = statusControl,
   } = {}) {
     this.statusBarControl = statusBarControl;
   }

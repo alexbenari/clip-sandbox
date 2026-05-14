@@ -1,17 +1,45 @@
 // @ts-nocheck
 // Layout rules for normal and fullscreen display.
-export function computeBestGrid({ count, availW, availH, gap }) {
+const DEFAULT_ASPECT_RATIO = 16 / 9;
+
+function usableAspectRatio(clip) {
+  const width = Number(clip?.videoWidth);
+  const height = Number(clip?.videoHeight);
+  if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+    return width / height;
+  }
+  return DEFAULT_ASPECT_RATIO;
+}
+
+function renderedVideoArea({ cellW, cellH, aspectRatio }) {
+  const renderedW = Math.min(cellW, cellH * aspectRatio);
+  const renderedH = Math.min(cellH, cellW / aspectRatio);
+  return renderedW * renderedH;
+}
+
+function normalizedLayoutClips({ count, clips }) {
+  const providedClips = Array.from(clips || []);
+  if (providedClips.length >= count) return providedClips.slice(0, count);
+  return providedClips.concat(Array.from({ length: count - providedClips.length }, () => null));
+}
+
+export function computeBestGrid({ count, availW, availH, gap, clips = [] }) {
   if (count <= 0 || availW <= 0 || availH <= 0) {
     return { cols: 1, rows: Math.max(1, count), cellH: Math.max(80, availH || 0) };
   }
-  let best = { cols: 1, rows: count, cellH: Math.max(80, (availH - gap * (count - 1)) / count), area: 0 };
+  const layoutClips = normalizedLayoutClips({ count, clips });
+  let best = { cols: 1, rows: count, cellH: Math.max(80, (availH - gap * (count - 1)) / count), score: 0 };
   for (let cols = 1; cols <= count; cols++) {
     const rows = Math.ceil(count / cols);
     const cellW = (availW - gap * (cols - 1)) / cols;
     const cellH = (availH - gap * (rows - 1)) / rows;
     if (cellW <= 0 || cellH <= 0) continue;
-    const area = cellW * cellH;
-    if (area > best.area) best = { cols, rows, cellH, area };
+    const score = layoutClips.reduce((sum, clip) => sum + renderedVideoArea({
+      cellW,
+      cellH,
+      aspectRatio: usableAspectRatio(clip),
+    }), 0);
+    if (score > best.score) best = { cols, rows, cellH, score };
   }
   return { cols: best.cols, rows: best.rows, cellH: best.cellH };
 }

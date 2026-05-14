@@ -1,53 +1,8 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
-const { pathToFileURL } = require('url');
-
-const VIDEO_EXT_TO_MIME = new Map([
-  ['.mp4', 'video/mp4'],
-  ['.m4v', 'video/mp4'],
-  ['.mov', 'video/quicktime'],
-  ['.webm', 'video/webm'],
-  ['.ogv', 'video/ogg'],
-  ['.avi', 'video/x-msvideo'],
-  ['.mkv', 'video/x-matroska'],
-  ['.mpg', 'video/mpeg'],
-  ['.mpeg', 'video/mpeg'],
-]);
-
-function isTopLevelFile(dirent) {
-  return dirent?.isFile?.() === true;
-}
-
-async function readFolderEntries(folderPath) {
-  const dirents = await fs.readdir(folderPath, { withFileTypes: true });
-  const fileEntries = dirents.filter(isTopLevelFile);
-  const files = [];
-
-  for (const dirent of fileEntries) {
-    const absolutePath = path.join(folderPath, dirent.name);
-    const stat = await fs.stat(absolutePath);
-    const ext = path.extname(dirent.name).toLowerCase();
-    const type = ext === '.txt' ? 'text/plain' : (VIDEO_EXT_TO_MIME.get(ext) || '');
-    const entry = {
-      name: dirent.name,
-      path: absolutePath,
-      relativePath: dirent.name,
-      mediaSource: pathToFileURL(absolutePath).href,
-      type,
-      lastModifiedMs: stat.mtimeMs,
-      size: stat.size,
-    };
-
-    if (ext === '.txt') {
-      entry.text = await fs.readFile(absolutePath, 'utf8');
-    }
-
-    files.push(entry);
-  }
-
-  return files;
-}
+const { readFolderEntries } = require('./folder-entry.cjs');
+const { createVideoEditRuntime } = require('./video-edit-runtime.cjs');
 
 async function pickFolderFromDialog(browserWindow) {
   if (global.__clipSandboxNextFolderPath) {
@@ -84,6 +39,8 @@ function createMainWindow() {
 }
 
 function registerIpc() {
+  const videoEditRuntime = createVideoEditRuntime();
+
   ipcMain.handle('clip-sandbox:pick-folder', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const folderPath = await pickFolderFromDialog(browserWindow);
@@ -137,6 +94,10 @@ function registerIpc() {
       code: results.every((result) => result.ok) ? 'deleted' : 'partial',
       results,
     };
+  });
+
+  ipcMain.handle('clip-sandbox:create-video-edit', async (_event, payload = {}) => {
+    return videoEditRuntime.createVideoEdit(payload);
   });
 
   ipcMain.handle('clip-sandbox:test-set-next-folder-path', async (_event, folderPath) => {

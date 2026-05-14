@@ -16,8 +16,15 @@ const baseDom = `
     <select id="activeCollectionName" disabled>
       <option value="">Local Video Grid Reviewer</option>
     </select>
-    <div class="spacer"></div>
-    <span class="count" id="count"></span>
+    <div class="toolbar-status">
+      <span class="count" id="count"></span>
+      <div id="activityIndicatorRoot">
+        <button id="activityIndicatorBtn" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
+        <section id="activityIndicatorPanel" hidden>
+          <ul id="activityIndicatorList"></ul>
+        </section>
+      </div>
+    </div>
   </header>
   <section id="collectionConflict" hidden>
     <p id="collectionConflictSummary"></p>
@@ -40,7 +47,7 @@ const baseDom = `
   <div id="gridWrap">
     <div id="grid" style="gap:10px"></div>
   </div>
-  <div class="footerbar" id="status" hidden></div>
+  <div id="clipContextMenu" hidden><div id="clipContextMenuPanel"></div></div>
   <div id="zoomLayerRoot"></div>
 `;
 

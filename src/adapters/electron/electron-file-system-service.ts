@@ -1,11 +1,15 @@
 // @ts-nocheck
+import { createElectronVideoEditService } from './electron-video-edit-service.js';
+
 export class ElectronFileSystemService {
   constructor({
     win = window,
     api = win.clipSandboxDesktop,
+    videoEditService = null,
   } = {}) {
     this.win = win;
     this.api = api;
+    this.videoEditService = videoEditService || createElectronVideoEditService({ api });
   }
 
   createFolderSession(folderPath) {
@@ -139,5 +143,9 @@ export class ElectronFileSystemService {
             : new Error(result?.code || 'delete-failed'),
       })),
     };
+  }
+
+  async createVideoEdit(request = {}) {
+    return this.videoEditService.createVideoEdit(request);
   }
 }

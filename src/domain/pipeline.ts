@@ -16,6 +16,7 @@ function sortedFiles(files) {
 export class Pipeline {
   #folderName;
   #videoFilesByName;
+  #clipsByName;
   #collectionsByFilename;
 
   /**
@@ -24,6 +25,7 @@ export class Pipeline {
   constructor({ folderName = '', videoFiles = [], collections = [] } = {}) {
     this.#folderName = String(folderName || '').trim();
     this.#videoFilesByName = new Map();
+    this.#clipsByName = new Map();
     this.#collectionsByFilename = new Map();
     this.setVideoFiles(videoFiles);
     this.setCollections(collections);
@@ -50,11 +52,7 @@ export class Pipeline {
       kind: 'loaded',
       sequence: new ClipSequence({
         name: this.displayLabel(),
-        clips: this.videoFiles().map((file) => new Clip({
-          id: nextClipId(),
-          file,
-          mediaSource: file?.mediaSource || '',
-        })),
+        clips: this.videoFiles().map((file) => this.#clipForFile(file, nextClipId)),
       }),
     };
   }
@@ -67,6 +65,14 @@ export class Pipeline {
     this.#videoFilesByName = new Map(
       sortedFiles(videoFiles).map((file) => [file.name, file])
     );
+    for (const [name, clip] of Array.from(this.#clipsByName.entries())) {
+      const nextFile = this.#videoFilesByName.get(name);
+      if (nextFile) {
+        clip.replaceFile(nextFile);
+        continue;
+      }
+      this.#clipsByName.delete(name);
+    }
   }
 
   /** @returns {import('./clip.js').ClipFile[]} */
@@ -79,9 +85,35 @@ export class Pipeline {
     return new Map(this.#videoFilesByName);
   }
 
+  /** @returns {Map<string, Clip>} */
+  clipMap() {
+    return new Map(this.#clipsByName);
+  }
+
   /** @returns {string[]} */
   videoNames() {
     return Array.from(this.#videoFilesByName.keys());
+  }
+
+  /**
+   * @param {import('./clip.js').ClipFile} videoFile
+   * @returns {boolean}
+   */
+  upsertVideoFile(videoFile) {
+    if (!videoFile?.name) return false;
+    this.#videoFilesByName.set(videoFile.name, videoFile);
+    this.setVideoFiles(this.#videoFilesByName.values());
+    return true;
+  }
+
+  /**
+   * @param {import('./clip.js').ClipFile} videoFile
+   * @param {{ nextClipId?: () => string }} [options]
+   * @returns {Clip | null}
+   */
+  upsertVideoClip(videoFile, { nextClipId } = {}) {
+    if (!this.upsertVideoFile(videoFile)) return null;
+    return this.#clipForFile(videoFile, nextClipId);
   }
 
   /**
@@ -205,9 +237,11 @@ export class Pipeline {
    */
   materializeCollection(collection, { nextClipId } = {}) {
     if (!(collection instanceof Collection) || typeof nextClipId !== 'function') return null;
+    for (const file of this.videoFiles()) {
+      this.#clipForFile(file, nextClipId);
+    }
     return collection.materializeClipSequence({
-      availableVideoFiles: this.videoFiles(),
-      nextClipId,
+      availableClips: this.#clipsByName,
     });
   }
 
@@ -305,6 +339,26 @@ export class Pipeline {
       if (!normalizedActiveFilename) return true;
       return collection.filename !== normalizedActiveFilename;
     });
+  }
+
+  #clipForFile(file, nextClipId) {
+    const name = file?.name || '';
+    if (!name) throw new Error('Clip file name is required.');
+    const existing = this.#clipsByName.get(name);
+    if (existing) {
+      existing.replaceFile(file);
+      return existing;
+    }
+    if (typeof nextClipId !== 'function') {
+      throw new Error('A nextClipId function is required to create a pipeline clip.');
+    }
+    const clip = new Clip({
+      id: nextClipId(),
+      file,
+      mediaSource: file?.mediaSource || '',
+    });
+    this.#clipsByName.set(name, clip);
+    return clip;
   }
 }
 

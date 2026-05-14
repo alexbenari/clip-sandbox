@@ -9,6 +9,7 @@ export class MainToolbarControl {
     addToCollectionBtn,
     deleteFromDiskBtn,
     toggleTitlesBtn,
+    activityButton = null,
   } = {}) {
     this.countEl = countEl;
     this.saveBtn = saveBtn;
@@ -16,6 +17,7 @@ export class MainToolbarControl {
     this.addToCollectionBtn = addToCollectionBtn;
     this.deleteFromDiskBtn = deleteFromDiskBtn;
     this.toggleTitlesBtn = toggleTitlesBtn;
+    this.activityButton = activityButton;
   }
 
   render({
@@ -55,6 +57,7 @@ export class MainToolbarControl {
     if (this.toggleTitlesBtn) {
       this.toggleTitlesBtn.textContent = titlesHidden ? 'Show Titles' : 'Hide Titles';
     }
+
   }
 }
 

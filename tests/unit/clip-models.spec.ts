@@ -7,7 +7,7 @@ import { Pipeline } from '../../src/domain/pipeline.js';
 import { CollectionDescriptionValidator } from '../../src/domain/collection-description-validator.js';
 
 describe('clip and sequence models', () => {
-  test('creates clips with stable identity and mutable duration', () => {
+  test('creates clips with stable identity and mutable metadata', () => {
     const clip = new Clip({
       id: 'clip_1',
       file: new File(['x'], 'alpha.mp4', { type: 'video/mp4' }),
@@ -15,8 +15,21 @@ describe('clip and sequence models', () => {
     expect(clip.id).toBe('clip_1');
     expect(clip.name).toBe('alpha.mp4');
     expect(clip.durationSec).toBeNull();
+    expect(clip.videoWidth).toBeNull();
+    expect(clip.videoHeight).toBeNull();
+    expect(clip.hasUsableDimensions()).toBe(false);
     clip.setDuration(12.5);
     expect(clip.durationSec).toBe(12.5);
+    clip.setVideoMetadata({ durationSec: 13, videoWidth: 720, videoHeight: 390 });
+    expect(clip.durationSec).toBe(13);
+    expect(clip.videoWidth).toBe(720);
+    expect(clip.videoHeight).toBe(390);
+    expect(clip.hasUsableDimensions()).toBe(true);
+    clip.markMetadataFailed();
+    expect(clip.metadataFailed).toBe(true);
+    clip.setVideoMetadata({ durationSec: 14, videoWidth: 0, videoHeight: 390 });
+    expect(clip.metadataFailed).toBe(false);
+    expect(clip.hasUsableDimensions()).toBe(false);
   });
 
   test('maintains ordered clip-sequence contents and supports full-order replacement', () => {
@@ -59,6 +72,25 @@ describe('clip and sequence models', () => {
     expect(batchSequence.clipNamesInOrder()).toEqual(['bravo.webm']);
     expect(batchSequence.clipsForIdsInOrder(['clip_2', 'missing']).map((clip) => clip.id)).toEqual(['clip_2']);
     expect(batchSequence.clipNamesForIdsInOrder(['clip_2', 'missing'])).toEqual(['bravo.webm']);
+  });
+
+  test('inserts a new clip immediately after a known anchor clip', () => {
+    const sequence = new ClipSequence({
+      name: 'full',
+      clips: [
+        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
+        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
+      ],
+    });
+
+    const inserted = sequence.insertAfter('clip_1', new Clip({
+      id: 'clip_3',
+      file: new File(['c'], 'alpha-looped.mp4'),
+    }));
+
+    expect(inserted).toBe(true);
+    expect(sequence.clipNamesInOrder()).toEqual(['alpha.mp4', 'alpha-looped.mp4', 'bravo.webm']);
+    expect(sequence.insertAfter('missing', new Clip({ id: 'clip_4', file: new File(['d'], 'delta.mp4') }))).toBe(false);
   });
 
   test('builds collections from runtime clip sequences', () => {
@@ -153,6 +185,55 @@ describe('clip and sequence models', () => {
     ]);
 
     expect(pipeline.videoNames()).toEqual(['alpha.mp4', 'charlie.mp4']);
+  });
+
+  test('upserts one new video file into the pipeline inventory using filename ordering', () => {
+    const pipeline = new Pipeline({
+      folderName: 'clips',
+      videoFiles: [
+        new File(['b'], 'bravo.webm'),
+        new File(['d'], 'delta.mp4'),
+      ],
+    });
+
+    expect(pipeline.upsertVideoFile(new File(['a'], 'alpha-looped.mp4'))).toBe(true);
+    expect(pipeline.videoNames()).toEqual(['alpha-looped.mp4', 'bravo.webm', 'delta.mp4']);
+  });
+
+  test('reuses canonical clips across pipeline and collection materialization', () => {
+    const pipeline = new Pipeline({
+      folderName: 'clips',
+      videoFiles: [
+        new File(['b'], 'bravo.webm'),
+        new File(['a'], 'alpha.mp4'),
+      ],
+      collections: [
+        Collection.fromFilename({
+          filename: 'subset.txt',
+          orderedClipNames: ['bravo.webm'],
+        }),
+      ],
+    });
+    const nextClipId = (() => {
+      let count = 0;
+      return () => `clip_${++count}`;
+    })();
+
+    const pipelineSequence = pipeline.materializePipeline({ nextClipId }).sequence;
+    const alphaClip = pipelineSequence.getClip('clip_1');
+    const bravoClip = pipelineSequence.getClip('clip_2');
+    bravoClip.setVideoMetadata({ durationSec: 4, videoWidth: 720, videoHeight: 390 });
+
+    const collectionSequence = pipeline.materializeCollection(
+      pipeline.getCollectionByFilename('subset.txt'),
+      { nextClipId }
+    ).sequence;
+    const collectionBravoClip = collectionSequence.orderedClips()[0];
+    const secondPipelineSequence = pipeline.materializePipeline({ nextClipId }).sequence;
+
+    expect(collectionBravoClip).toBe(bravoClip);
+    expect(collectionBravoClip.videoWidth).toBe(720);
+    expect(secondPipelineSequence.orderedClips()).toEqual([alphaClip, bravoClip]);
   });
 
   test('adds clips to a collection through Pipeline and preserves destination order semantics', () => {

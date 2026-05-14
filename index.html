@@ -35,6 +35,12 @@
     }
     .spacer{ flex:1; }
     .count{ color:var(--muted); font-size:14px; }
+    .toolbar-status{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-left:auto;
+    }
     .active-collection-name{
       appearance:none;
       border:1px solid rgba(122,162,247,.35);
@@ -323,8 +329,6 @@
     .fs-active .thumb.selected{ box-shadow:none !important; }
     .fs-active .thumb.drag-over::after{ display:none !important; }
 
-    .footerbar{ position:fixed; right:16px; bottom:16px; z-index:5; background:rgba(2,6,23,.72); border:1px solid rgba(148,163,184,.2); padding:8px 12px; border-radius:10px; color:var(--muted); font-size:12px; }
-
     @media (min-width: 901px) {
       .toolbar{ position:sticky; }
       .active-collection-name{
@@ -361,8 +365,15 @@
     <select class="active-collection-name" id="activeCollectionName" aria-label="Active pipeline view or collection" disabled>
       <option value="">Local Video Grid Reviewer</option>
     </select>
-    <div class="spacer"></div>
-    <span class="count" id="count">0 clips</span>
+    <div class="toolbar-status">
+      <span class="count" id="count">0 clips</span>
+      <div id="activityIndicatorRoot">
+        <button id="activityIndicatorBtn" type="button" aria-label="Activity history" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
+        <section id="activityIndicatorPanel" hidden>
+          <ul id="activityIndicatorList"></ul>
+        </section>
+      </div>
+    </div>
     <span class="hint">drag to reorder • click to select • Ctrl/Cmd-click to multi-select • right-click for direct add-to-collection or use Actions • double-click or Z to zoom • press Delete to remove from a collection or delete from disk in pipeline view • press F for fullscreen</span>
   </header>
 
@@ -441,7 +452,6 @@
     <div id="grid" aria-live="polite"></div>
   </div>
 
-  <div class="footerbar" id="status" hidden></div>
   <div id="clipContextMenu" hidden>
     <div id="clipContextMenuPanel"></div>
   </div>

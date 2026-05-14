@@ -134,6 +134,28 @@ describe('zoom overlay controller', () => {
     expect(controller.getCurrentClipId()).toBeNull();
     expect(document.getElementById('zoomLayerRoot').children.length).toBe(0);
   });
+
+  test('forwards right-clicks on the zoomed video through the context-menu seam', () => {
+    const onContextMenu = vi.fn();
+    const controller = createZoomOverlayController({
+      mountEl: document.getElementById('zoomLayerRoot'),
+      document,
+      onContextMenu,
+    });
+
+    controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
+    document.getElementById('zoomVideo').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      clientX: 44,
+      clientY: 55,
+    }));
+
+    expect(onContextMenu).toHaveBeenCalledWith({
+      clipId: 'clip_1',
+      name: 'alpha.mp4',
+      point: { x: 44, y: 55 },
+    });
+  });
 });
 
 

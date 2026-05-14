@@ -69,5 +69,26 @@ describe('context menu controller', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(root.hidden).toBe(true);
   });
+
+  test('renders icon-capable menu items without losing the visible label', () => {
+    const { panel, controller } = setup();
+
+    controller.open({
+      point: { x: 20, y: 30 },
+      items: [{
+        id: 'loopify',
+        label: 'Loopify',
+        icon: {
+          kind: 'svg',
+          viewBox: '0 0 16 16',
+          paths: ['M1 1h14v14H1z'],
+        },
+        onSelect: vi.fn(),
+      }],
+    });
+
+    expect(panel.querySelector('svg')).not.toBeNull();
+    expect(panel.querySelector('[data-item-id="loopify"]').textContent).toContain('Loopify');
+  });
 });
 

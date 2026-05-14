@@ -4,6 +4,9 @@ const desktopApi = {
   pickFolder() {
     return ipcRenderer.invoke('clip-sandbox:pick-folder');
   },
+  createVideoEdit(payload) {
+    return ipcRenderer.invoke('clip-sandbox:create-video-edit', payload);
+  },
   saveTextFile(payload) {
     return ipcRenderer.invoke('clip-sandbox:save-text-file', payload);
   },

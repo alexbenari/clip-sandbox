@@ -45,6 +45,14 @@ export class AppDiagnostics {
     await this.appendErrorLog(detail, folderSession);
   }
 
+  async logVideoMetadataFailure({ filename = '', error } = {}, folderSession = this.getCurrentFolderSession()) {
+    const problem = filename
+      ? `Failed to load video metadata: ${filename}`
+      : 'Failed to load video metadata';
+    const detail = `Video metadata error\nProblem: ${problem}\nDetails: ${error?.message || error || 'Unknown metadata load failure'}\nFallback: using default layout aspect ratio for this clip.\n\n`;
+    await this.appendErrorLog(detail, folderSession);
+  }
+
   async logDeleteFailures(result, folderSession = this.getCurrentFolderSession()) {
     for (const failedDelete of Array.from(result?.failedDeletes || [])) {
       await this.appendErrorLog(

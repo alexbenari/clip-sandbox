@@ -84,6 +84,14 @@ async function openGridContextMenu(page, locator = page.locator('#gridWrap')) {
   await expect.poll(async () => page.locator('#clipContextMenu [role="menuitem"]').count()).toBeGreaterThan(0);
 }
 
+async function openActivityPanel(page) {
+  const panel = page.locator('#activityIndicatorPanel');
+  if (await panel.isHidden()) {
+    await page.click('#activityIndicatorBtn');
+  }
+  await expect(panel).toBeVisible();
+}
+
 test.describe('Electron runtime migration', () => {
   let electronApp;
   let page;
@@ -146,7 +154,8 @@ test.describe('Electron runtime migration', () => {
     await page.click('#saveAsNewBtn');
     await page.fill('#saveAsNewNameInput', 'pipeline-order');
     await page.click('#confirmSaveAsNewBtn');
-    await expect(page.locator('#status')).toHaveText('Saved pipeline-order.txt to the current pipeline folder.');
+    await openActivityPanel(page);
+    await expect(page.locator('#activityIndicatorList li').first()).toHaveText('Saved pipeline-order.txt to the current pipeline folder.');
 
     const savedText = await fsp.readFile(path.join(folderPath, 'pipeline-order.txt'), 'utf8');
     expect(savedText.trim().split('\n')).toEqual(['three.mp4', 'one.mp4', 'two.webm']);
@@ -164,7 +173,8 @@ test.describe('Electron runtime migration', () => {
     await page.selectOption('#addToCollectionSelect', 'subset.txt');
     await page.click('#confirmAddToCollectionBtn');
 
-    await expect(page.locator('#status')).toContainText('Added');
+    await openActivityPanel(page);
+    await expect(page.locator('#activityIndicatorList li').first()).toContainText('Added');
     const subsetText = await fsp.readFile(path.join(folderPath, 'subset.txt'), 'utf8');
     const lines = subsetText.trim().split('\n');
     expect(lines.includes('three.mp4')).toBe(true);
@@ -189,7 +199,8 @@ test.describe('Electron runtime migration', () => {
     await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
     await page.click('#confirmDeleteFromDiskBtn');
 
-    await expect(page.locator('#status')).toContainText('Deleted 1 clip from disk.');
+    await openActivityPanel(page);
+    await expect(page.locator('#activityIndicatorList li').first()).toContainText('Deleted 1 clip from disk.');
     await expect(page.locator('#grid .thumb')).toHaveCount(1);
     await expect(page.locator('#grid .thumb').first()).toHaveAttribute('data-name', 'duo.webm');
     await expect(fsp.access(path.join(folderPath, 'solo.mp4')).then(() => true).catch(() => false)).resolves.toBe(false);
@@ -214,6 +225,39 @@ test.describe('Electron runtime migration', () => {
     await expect(page.locator('body')).toHaveClass(/fs-active/);
     await page.keyboard.press('F');
     await expect(page.locator('body')).not.toHaveClass(/fs-active/);
+  });
+
+  test('runs Loopify end to end from zoom mode and keeps collection changes unsaved', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('video-edit'));
+
+    await loadFolder(page, folderPath);
+    await page.selectOption('#activeCollectionName', 'focus.txt');
+    await expect.poll(async () => (await allClipNames(page)).join('|')).toBe('source.mp4|alt.mp4');
+
+    await page.locator('#grid .thumb').first().dblclick();
+    await expect(page.locator('#zoomVideo')).toBeVisible();
+    await page.locator('#zoomVideo').dispatchEvent('contextmenu', {
+      bubbles: true,
+      button: 2,
+      clientX: 64,
+      clientY: 72,
+    });
+    await expect(page.locator('#clipContextMenu [data-item-id="zoom-edit-loopify"]')).toBeVisible();
+    await page.click('#clipContextMenu [data-item-id="zoom-edit-loopify"]');
+
+    await expect.poll(async () => (await allClipNames(page)).join('|'), { timeout: 20000 }).toBe('source.mp4|source-looped.mp4|alt.mp4');
+    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', 'source-looped.mp4');
+    await expect(page.locator('#saveBtn')).toBeEnabled();
+    await expect(page.locator('#activityIndicatorBtn')).toHaveAttribute('data-state', 'success');
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#zoomOverlay')).toHaveCount(0);
+    await openActivityPanel(page);
+    await expect(page.locator('#activityIndicatorList li').first()).toHaveText('Created source-looped.mp4.');
+
+    const savedCollectionText = await fsp.readFile(path.join(folderPath, 'focus.txt'), 'utf8');
+    expect(savedCollectionText.trim().split('\n')).toEqual(['source.mp4', 'alt.mp4']);
+    await expect(fsp.access(path.join(folderPath, 'source-looped.mp4')).then(() => true).catch(() => false)).resolves.toBe(true);
   });
 });
 

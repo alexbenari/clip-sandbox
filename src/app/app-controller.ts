@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { PipelineFactory } from '../business-logic/PipelineFactory.js';
+import { createClipEditor } from '../business-logic/clip-editor.js';
 import { createAppState } from './app-session-state.js';
+import { createPipelineSession } from './pipeline-session.js';
 import { FullscreenAdapter } from '../adapters/browser/fullscreen-adapter.js';
 import { ElectronFileSystemService } from '../adapters/electron/electron-file-system-service.js';
 import { ClockAdapter } from '../adapters/browser/clock-adapter.js';
@@ -9,6 +11,7 @@ import { AudioFeedbackAdapter } from '../adapters/browser/audio-feedback-adapter
 import { createFullscreenSession } from './fullscreen-session.js';
 import { createAppDiagnostics } from './app-diagnostics.js';
 import { createAppKeyDownHandler } from './app-keydown-handler.js';
+import { createZoomVideoEditWorkflow } from './zoom-video-edit-workflow.js';
 import { bindControlEvents, bindGlobalEvents, isEditableTarget } from './event-binding.js';
 import {
   computeBestGrid,
@@ -26,21 +29,26 @@ import {
   addSelectedClipsFailedText,
   deleteFromDiskPreflightText,
   deleteFromDiskResultText,
+  videoEditStartedText,
+  videoEditSucceededText,
+  videoEditPartialSuccessText,
+  videoEditFailedText,
   DEFAULT_APP_TITLE,
 } from './app-text.js';
 import { createOrderMenuController } from '../ui/order-menu-controller.js';
 import { AddToCollectionDialogController } from '../ui/add-to-collection-dialog-controller.js';
 import { createCollectionSelectorControl } from '../ui/collection-selector-control.js';
 import { createMainToolbarControl } from '../ui/main-toolbar-control.js';
+import { createActivityIndicatorControl } from '../ui/activity-indicator-control.js';
 import { createContextMenuController } from '../ui/context-menu-controller.js';
 import { createGridContextMenuControl } from '../ui/grid-context-menu-control.js';
+import { createZoomEditMenuControl } from '../ui/zoom-edit-menu-control.js';
 import { createZoomOverlayController } from '../ui/zoom-overlay-controller.js';
 import { createClipCollectionGridController, formatLabel, updateCardLabel } from '../ui/clip-collection-grid-controller.js';
 import { createCollectionConflictController } from '../ui/collection-conflict-controller.js';
 import { createDeleteFromDiskDialogController } from '../ui/delete-from-disk-dialog-controller.js';
 import { createSaveAsNewDialogController, validateSaveAsNewName } from '../ui/save-as-new-dialog-controller.js';
 import { createUnsavedChangesDialogController } from '../ui/unsaved-changes-dialog-controller.js';
-import { createStatusBarControl } from '../ui/status-bar-control.js';
 import { createLoadStatusControl } from '../ui/load-status-control.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { Collection } from '../domain/collection.js';
@@ -68,7 +76,10 @@ export function initApp() {
   const countSpan = document.getElementById('count');
   const activeCollectionNameEl = document.getElementById('activeCollectionName');
   const toolbar = document.getElementById('toolbar');
-  const statusBar = document.getElementById('status');
+  const activityIndicatorRoot = document.getElementById('activityIndicatorRoot');
+  const activityIndicatorBtn = document.getElementById('activityIndicatorBtn');
+  const activityIndicatorPanel = document.getElementById('activityIndicatorPanel');
+  const activityIndicatorList = document.getElementById('activityIndicatorList');
   const zoomLayerRoot = document.getElementById('zoomLayerRoot');
   const toggleTitlesBtn = document.getElementById('toggleTitlesBtn');
   const fsBtn = document.getElementById('fsBtn');
@@ -111,6 +122,7 @@ export function initApp() {
   const body = document.body;
 
   const state = createAppState();
+  const pipelineSession = createPipelineSession();
   const fullscreenState = {
     slots: 12,
     hiddenCards: [],
@@ -121,11 +133,28 @@ export function initApp() {
     savedTitlesHidden: null,
   };
   const validator = new CollectionDescriptionValidator();
-  const zoomOverlay = createZoomOverlayController({ mountEl: zoomLayerRoot, document });
+  const zoomOverlay = createZoomOverlayController({
+    mountEl: zoomLayerRoot,
+    document,
+    onContextMenu: ({ point }) => {
+      if (isFullscreen()) return;
+      openZoomEditMenu(point);
+    },
+  });
   const fileSystem = new ElectronFileSystemService({ win: window });
+  const clipEditor = createClipEditor({
+    runtimeEditingService: fileSystem,
+  });
   const domRenderer = new DomRendererAdapter();
-  const statusBarControl = createStatusBarControl({ statusEl: statusBar, win: window });
-  const loadStatusControl = createLoadStatusControl({ statusBarControl });
+  const activityIndicatorControl = createActivityIndicatorControl({
+    root: activityIndicatorRoot,
+    button: activityIndicatorBtn,
+    panel: activityIndicatorPanel,
+    listEl: activityIndicatorList,
+    document,
+    win: window,
+  });
+  const loadStatusControl = createLoadStatusControl({ statusControl: activityIndicatorControl });
   const audioFeedback = new AudioFeedbackAdapter({ win: window });
   const clock = new ClockAdapter();
   const fullscreenAdapter = new FullscreenAdapter({ doc: document });
@@ -144,6 +173,9 @@ export function initApp() {
   const gridContextMenuControl = createGridContextMenuControl({
     contextMenuController: clipContextMenuController,
   });
+  const zoomEditMenuControl = createZoomEditMenuControl({
+    contextMenuController: clipContextMenuController,
+  });
   const collectionSelectorControl = createCollectionSelectorControl({
     selectEl: activeCollectionNameEl,
     doc: document,
@@ -158,7 +190,7 @@ export function initApp() {
         refreshCollectionSelectorView();
         return;
       }
-      if (state.hasDirtyClipSequenceChanges) {
+      if (pipelineSession.hasDirtyClipSequenceChanges) {
         state.setPendingSelectionAction({
           type: 'switch-selection',
           collectionFilename: selectedCollectionFilename,
@@ -182,6 +214,7 @@ export function initApp() {
     addToCollectionBtn,
     deleteFromDiskBtn,
     toggleTitlesBtn,
+    activityButton: activityIndicatorBtn,
   });
   const addToCollectionDialogController = new AddToCollectionDialogController({
     dialog: addToCollectionDialog,
@@ -240,23 +273,43 @@ export function initApp() {
   let pendingDeleteRequest = null;
 
   function showStatus(msg, timeout = 2500) {
-    statusBarControl.show(msg, timeout);
+    activityIndicatorControl.show(msg, timeout);
+  }
+
+  function showErrorStatus(msg) {
+    activityIndicatorControl.showError(msg);
+  }
+
+  function showProgressStatus(msg) {
+    activityIndicatorControl.showProgress(msg);
   }
 
   function currentPipeline() {
-    return state.currentPipeline;
+    return pipelineSession.pipeline;
   }
 
   function activeCollection() {
-    return state.activeCollection;
+    return pipelineSession.activeCollection;
+  }
+
+  function currentClipSequence() {
+    return pipelineSession.currentClipSequence;
   }
 
   function isPipelineMode() {
-    return !activeCollection();
+    return pipelineSession.isPipelineMode();
   }
 
   function activeCollectionFilename() {
-    return activeCollection()?.filename || '';
+    return pipelineSession.activeCollectionFilename();
+  }
+
+  function gridViewCacheKeyForCollection(collection = activeCollection()) {
+    return collection?.filename ? `collection:${collection.filename}` : 'pipeline';
+  }
+
+  function activeGridViewCacheKey() {
+    return gridViewCacheKeyForCollection(activeCollection());
   }
 
   function isFullscreen() {
@@ -264,22 +317,22 @@ export function initApp() {
   }
 
   function applyGridLayout(cols, cellH) {
-    domRenderer.applyGridLayout(grid, cols, cellH);
+    domRenderer.applyGridLayout(gridController?.getGridElement?.() || grid, cols, cellH);
   }
 
   function refreshCollectionSelectorView() {
     collectionSelectorControl.render({
       pipeline: currentPipeline(),
       activeCollection: activeCollection(),
-      currentClipSequence: state.currentClipSequence,
+      currentClipSequence: currentClipSequence(),
     });
   }
 
   function refreshToolbarView() {
     mainToolbarControl.render({
-      clipCount: grid.children.length,
+      clipCount: gridController?.getCardCount?.() ?? grid.children.length,
       hasPipeline: !!currentPipeline(),
-      hasSequence: !!state.currentClipSequence,
+      hasSequence: !!currentClipSequence(),
       hasSelection: gridController?.getSelectedClipIds?.().length > 0,
       isPipelineMode: isPipelineMode(),
       titlesHidden: gridController?.areTitlesHidden?.() ?? false,
@@ -287,6 +340,7 @@ export function initApp() {
   }
 
   function closeZoom() {
+    clipContextMenuController.close({ restoreFocus: false });
     zoomOverlay.close();
   }
 
@@ -320,8 +374,8 @@ export function initApp() {
   }
 
   async function runAddToCollection(destination, { showDialogValidation = false } = {}) {
-    if (!state.currentClipSequence || !currentPipeline()) return { ok: false, code: 'missing-context' };
-    const selectedClipNames = state.currentClipSequence.clipNamesForIdsInOrder(gridController.getSelectedClipIds());
+    if (!currentClipSequence() || !currentPipeline()) return { ok: false, code: 'missing-context' };
+    const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(gridController.getSelectedClipIds());
     if (selectedClipNames.length === 0) return { ok: false, code: 'no-selection' };
 
     let targetCollectionFilename = '';
@@ -398,10 +452,11 @@ export function initApp() {
         return result;
       }
       if (showDialogValidation) addToCollectionDialogController.close();
-      showStatus(addSelectedClipsFailedText(result.destinationName, result.error || result.code), 4000);
+      showErrorStatus(addSelectedClipsFailedText(result.destinationName, result.error || result.code));
       return result;
     }
 
+    gridController.invalidateView(gridViewCacheKeyForCollection(result.collection));
     addToCollectionDialogController.close();
     refreshCollectionSelectorView();
     refreshToolbarView();
@@ -433,10 +488,10 @@ export function initApp() {
   }
 
   function buildDeleteRequestFromSelection() {
-    if (!state.currentClipSequence || !currentPipeline()) return null;
+    if (!currentClipSequence() || !currentPipeline()) return null;
     const selectedClipIds = gridController.getSelectedClipIds();
     if (selectedClipIds.length === 0) return null;
-    const selectedClipNames = state.currentClipSequence.clipNamesForIdsInOrder(selectedClipIds);
+    const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(selectedClipIds);
     if (selectedClipNames.length === 0) return null;
     return {
       selectedClipIds,
@@ -472,7 +527,7 @@ export function initApp() {
 
   async function confirmDeleteFromDisk() {
     const deleteRequest = pendingDeleteRequest;
-    if (!deleteRequest || !state.currentClipSequence || !currentPipeline()) return;
+    if (!deleteRequest || !currentClipSequence() || !currentPipeline()) return;
     deleteFromDiskDialogController.closeConfirm();
     pendingDeleteRequest = null;
 
@@ -481,12 +536,12 @@ export function initApp() {
       filenames: deleteRequest.selectedClipNames,
     });
     if (deleteResult.code === 'unavailable') {
-      showStatus(deleteFromDiskResultText({
+      showErrorStatus(deleteFromDiskResultText({
         deletedCount: 0,
         failedDeleteCount: deleteRequest.selectedClipNames.length,
         cleanedSavedCollectionCount: 0,
         failedCollectionRewriteCount: 0,
-      }), 4500);
+      }));
       return;
     }
 
@@ -537,6 +592,7 @@ export function initApp() {
     };
 
     if (result.deletedClipIds.length > 0) {
+      gridController.invalidateAllViews();
       await reloadSelection({
         pipeline: currentPipeline(),
         collection: activeCollection(),
@@ -550,19 +606,24 @@ export function initApp() {
       await diagnostics.logDeleteFailures(result);
     }
 
-    showStatus(deleteFromDiskResultText({
+    const deleteStatusText = deleteFromDiskResultText({
       deletedCount: result.deletedClipIds.length,
       failedDeleteCount: result.failedDeletes.length,
       cleanedSavedCollectionCount: result.cleanedSavedCollectionCount,
       failedCollectionRewriteCount: result.failedCollectionRewrites.length,
-    }), 4500);
+    });
+    if (result.failedDeletes.length > 0 || result.failedCollectionRewrites.length > 0 || result.deletedClipIds.length === 0) {
+      showErrorStatus(deleteStatusText);
+      return;
+    }
+    showStatus(deleteStatusText, 4500);
   }
 
   function openDeleteFromDiskFlow() {
     const deleteRequest = buildDeleteRequestFromSelection();
     if (!deleteRequest) return;
     pendingDeleteRequest = deleteRequest;
-    if (state.hasDirtyClipSequenceChanges) {
+    if (pipelineSession.hasDirtyClipSequenceChanges) {
       openDeletePreflightDialog();
       return;
     }
@@ -570,7 +631,6 @@ export function initApp() {
   }
 
   function applySelection(clipSequence, {
-    pipeline = currentPipeline(),
     collection = activeCollection(),
     folderSession = state.currentFolderSession,
     statusText = '',
@@ -580,11 +640,10 @@ export function initApp() {
     clipContextMenuController.close({ restoreFocus: false });
     addToCollectionDialogController.close();
     state.setCurrentFolderSession(folderSession || null);
-    state.setCurrentPipeline(pipeline || null);
-    state.setActiveCollection(collection || null);
-    state.setCurrentClipSequence(clipSequence || null);
-    state.refreshDirtyClipSequenceState({ clipSequence, activeCollection: collection, currentPipeline: pipeline });
-    gridController.renderCollection(clipSequence);
+    pipelineSession.activateSelection({ collection, sequence: clipSequence });
+    gridController.renderCollection(clipSequence, {
+      cacheKey: gridViewCacheKeyForCollection(collection),
+    });
     refreshCollectionSelectorView();
     refreshToolbarView();
     if (statusText) showStatus(statusText, timeout);
@@ -600,7 +659,8 @@ export function initApp() {
     closeUnsavedDialog();
     closeZoom();
     gridController.destroy();
-    state.resetClipSequenceState();
+    pipelineSession.reset();
+    state.clearPendingSelectionAction();
     state.setCurrentFolderSession(null);
     refreshCollectionSelectorView();
     refreshToolbarView();
@@ -612,9 +672,7 @@ export function initApp() {
 
   async function reloadSelection({ pipeline = currentPipeline(), collection = activeCollection(), folderSession = state.currentFolderSession } = {}) {
     if (!pipeline) return;
-    const loaded = pipeline.materializeSelection(collection, {
-      nextClipId: () => state.nextClipId(),
-    });
+    const loaded = pipelineSession.materializeSelection(collection);
     if (!loaded) return;
     const { selection, materialization: result } = loaded;
     if (result.kind === 'has-missing') {
@@ -625,8 +683,8 @@ export function initApp() {
             showStatus(noCollectionMatchesText(result.missingCount), 4500);
             return;
           }
+          gridController.invalidateView(gridViewCacheKeyForCollection(collection));
           applySelection(result.partialSequence, {
-            pipeline,
             collection,
             folderSession,
             statusText: collectionPartiallyLoadedText(result.existingNamesInOrder.length, result.missingCount),
@@ -634,14 +692,13 @@ export function initApp() {
           });
         },
         onCancel: () => {
-            refreshCollectionSelectorView();
+          refreshCollectionSelectorView();
         },
       });
       return;
     }
 
     applySelection(result.sequence, {
-      pipeline,
       collection: selection === pipeline ? null : selection,
       folderSession,
     });
@@ -660,12 +717,11 @@ export function initApp() {
         logInvalidDescription: (result) => diagnostics.logInvalidDescription(result, folderSession),
       });
       const { pipeline } = buildResult;
-      const result = pipeline.materializePipeline({
-        nextClipId: () => state.nextClipId(),
-      });
+      const result = pipelineSession.loadPipeline(pipeline);
 
+      gridController.invalidateAllViews();
+      gridController.retagActiveView(null);
       applySelection(result.sequence, {
-        pipeline,
         collection: null,
         folderSession,
       });
@@ -673,13 +729,9 @@ export function initApp() {
         pipeline,
         clipCount: result.sequence.orderedClips().length,
       });
-      if (result.sequence.orderedClips().length > 0) {
-        await clock.delay(20);
-        recomputeLayout();
-      }
     } catch (err) {
       await diagnostics.logRuntimeError('Failed to load the selected folder.', err, folderSession);
-      showStatus(collectionReadErrorText(err), 4000);
+      showErrorStatus(collectionReadErrorText(err));
     }
   }
 
@@ -693,12 +745,12 @@ export function initApp() {
     } catch (err) {
       if (err?.name === 'AbortError') return;
       await diagnostics.logRuntimeError('Failed to browse for a folder.', err, state.currentFolderSession);
-      showStatus(collectionReadErrorText(err), 4000);
+      showErrorStatus(collectionReadErrorText(err));
     }
   }
 
   async function onPickFolder() {
-    if (state.hasDirtyClipSequenceChanges) {
+    if (pipelineSession.hasDirtyClipSequenceChanges) {
       state.setPendingSelectionAction({ type: 'browse-folder' });
       refreshCollectionSelectorView();
       openUnsavedDialog();
@@ -724,6 +776,10 @@ export function initApp() {
       return;
     }
     if (nextPendingAction.type === 'switch-selection') {
+      if (!saveFirst) {
+        gridController.invalidateView(activeGridViewCacheKey());
+        gridController.retagActiveView(null);
+      }
       await reloadSelection({
         pipeline: currentPipeline(),
         collection: nextPendingAction.collectionFilename
@@ -749,10 +805,10 @@ export function initApp() {
   }
 
   async function saveClipSequenceAsCollection(filename) {
-    if (!state.currentClipSequence || !currentPipeline()) {
+    if (!currentClipSequence() || !currentPipeline()) {
       return { ok: false, code: 'missing-context' };
     }
-    const collection = state.currentClipSequence.toCollection({ filename });
+    const collection = pipelineSession.collectionFromCurrentSequence(filename);
     try {
       const { mode } = await persistCollection(collection);
       currentPipeline().upsertCollection(collection);
@@ -773,7 +829,7 @@ export function initApp() {
   }
 
   async function saveActiveCollection() {
-    if (!state.currentClipSequence || !currentPipeline()) return null;
+    if (!currentClipSequence() || !currentPipeline()) return null;
     if (isPipelineMode()) {
       openSaveAsNewDialog();
       return { deferred: true };
@@ -781,9 +837,7 @@ export function initApp() {
     const saveResult = await saveClipSequenceAsCollection(activeCollectionFilename());
     if (!saveResult?.ok) return saveResult;
     const savedCollection = saveResult.collection;
-    state.currentClipSequence.rename(savedCollection.collectionName);
-    state.setActiveCollection(savedCollection);
-    state.refreshDirtyClipSequenceState();
+    pipelineSession.markCurrentSequenceSavedAs(savedCollection);
     refreshCollectionSelectorView();
     refreshToolbarView();
     showStatus(savedCollectionFileText(savedCollection.filename));
@@ -803,13 +857,10 @@ export function initApp() {
     const saveResult = await saveClipSequenceAsCollection(filename);
     if (!saveResult?.ok) return saveResult;
     const savedCollection = saveResult.collection;
-    state.setActiveCollection(savedCollection);
-    state.currentClipSequence.rename(savedCollection.collectionName);
-    state.refreshDirtyClipSequenceState({
-      clipSequence: state.currentClipSequence,
-      activeCollection: savedCollection,
-      currentPipeline: currentPipeline(),
-    });
+    const previousCacheKey = activeGridViewCacheKey();
+    pipelineSession.markCurrentSequenceSavedAs(savedCollection);
+    gridController.invalidateView(previousCacheKey);
+    gridController.retagActiveView(activeGridViewCacheKey());
     saveAsNewDialogController.close();
     refreshCollectionSelectorView();
     refreshToolbarView();
@@ -826,7 +877,7 @@ export function initApp() {
   }
 
   async function confirmAddToCollection(destination) {
-    if (!state.currentClipSequence || !currentPipeline()) return;
+    if (!currentClipSequence() || !currentPipeline()) return;
     await runAddToCollection(destination, { showDialogValidation: true });
   }
 
@@ -876,6 +927,104 @@ export function initApp() {
     return openZoomForClip(nextClip);
   }
 
+  function resolveZoomedClipFromActiveSequence() {
+    const clipId = zoomOverlay.getCurrentClipId();
+    if (!clipId) return null;
+    return pipelineSession.resolveClip(clipId);
+  }
+
+  function addCreatedClipInPipelineMode(createdFile) {
+    const result = pipelineSession.insertCreatedClipInPipeline(createdFile);
+    if (!result.ok) return null;
+
+    gridController.invalidateView('pipeline');
+    applySelection(result.sequence, {
+      collection: null,
+      folderSession: state.currentFolderSession,
+    });
+    gridController.setSelectedClipId(result.clip.id);
+    return result.clip;
+  }
+
+  function addCreatedClipInCollectionMode(sourceClipId, createdFile) {
+    const result = pipelineSession.insertCreatedClipAfter(sourceClipId, createdFile);
+    if (!result.ok) return null;
+    gridController.invalidateView('pipeline');
+    gridController.invalidateView(activeGridViewCacheKey());
+    gridController.renderCollection(result.sequence, {
+      cacheKey: activeGridViewCacheKey(),
+    });
+    refreshCollectionSelectorView();
+    refreshToolbarView();
+    gridController.setSelectedClipId(result.clip.id);
+    return result.clip;
+  }
+
+  function applyCreatedVideoEditResult({ sourceClip, createdFile }) {
+    return isPipelineMode()
+      ? addCreatedClipInPipelineMode(createdFile)
+      : addCreatedClipInCollectionMode(sourceClip.id, createdFile);
+  }
+
+  const zoomVideoEditWorkflow = createZoomVideoEditWorkflow({
+    clipEditor,
+    onStarted: ({ edit, sourceClip }) => {
+      refreshToolbarView();
+      showProgressStatus(videoEditStartedText(edit.label, sourceClip.name));
+    },
+    onCreated: ({ edit, sourceClip, createdFile }) => {
+      const rendererFile = fileSystem.toRendererFile(createdFile);
+      const nextZoomClip = applyCreatedVideoEditResult({
+        sourceClip,
+        createdFile: rendererFile,
+      });
+
+      refreshToolbarView();
+      if (!nextZoomClip) {
+        if (isPipelineMode()) {
+          showErrorStatus(`${videoEditSucceededText(rendererFile.name)} The pipeline view could not be refreshed.`);
+        } else {
+          showErrorStatus(videoEditPartialSuccessText(rendererFile.name));
+        }
+        return;
+      }
+
+      openZoomForClip(nextZoomClip);
+      showStatus(videoEditSucceededText(rendererFile.name), 4000);
+    },
+    onFailed: ({ edit, result }) => {
+      refreshToolbarView();
+      showErrorStatus(videoEditFailedText({
+        actionLabel: edit.label,
+        code: result?.code,
+      }));
+    },
+    onFinished: () => {
+      refreshToolbarView();
+    },
+  });
+
+  async function requestZoomVideoEdit(edit) {
+    const sourceClip = resolveZoomedClipFromActiveSequence();
+    if (!edit || !sourceClip || !currentPipeline()) return;
+    await zoomVideoEditWorkflow.run({
+      edit,
+      sourceClip,
+      folderSession: state.currentFolderSession,
+    });
+  }
+
+  function openZoomEditMenu(point) {
+    if (!zoomOverlay.isOpen() || !resolveZoomedClipFromActiveSequence()) return;
+    zoomEditMenuControl.open({
+      point,
+      isDisabled: zoomVideoEditWorkflow.isRunning(),
+      onSelectEdit: (edit) => {
+        void requestZoomVideoEdit(edit);
+      },
+    });
+  }
+
   function openGridContextMenu(point) {
     const hasSelection = gridController.getSelectedClipIds().length > 0;
     gridContextMenuControl.open({
@@ -912,27 +1061,31 @@ export function initApp() {
     applyGridLayout,
     isFullscreen,
     updateCount: refreshToolbarView,
+    onMetadataFailure: ({ clip, error }) => {
+      void diagnostics.logVideoMetadataFailure({ filename: clip?.name || '', error });
+    },
     onSelectionChange: () => {
       refreshToolbarView();
     },
     onOrderChange: (orderedClipIds) => {
-      if (!state.currentClipSequence) return;
-      state.currentClipSequence.replaceOrder(orderedClipIds);
-      state.refreshDirtyClipSequenceState();
+      if (!currentClipSequence()) return;
+      pipelineSession.replaceCurrentOrder(orderedClipIds);
       refreshCollectionSelectorView();
       refreshToolbarView();
     },
     onOpenClip: openZoomForClipId,
     onRemoveSelected: (orderedSelectedClipIds) => {
-      if (zoomOverlay.isOpen() || !state.currentClipSequence) return;
+      if (zoomOverlay.isOpen() || !currentClipSequence()) return;
       if (isPipelineMode()) {
         openDeleteFromDiskFlow();
         return;
       }
-      const removedClipIds = state.currentClipSequence.removeMany(orderedSelectedClipIds);
+      const removedClipIds = pipelineSession.removeFromCurrentSequence(orderedSelectedClipIds);
       if (removedClipIds.length === 0) return;
-      state.refreshDirtyClipSequenceState();
-      gridController.renderCollection(state.currentClipSequence);
+      gridController.invalidateView(activeGridViewCacheKey());
+      gridController.renderCollection(currentClipSequence(), {
+        cacheKey: activeGridViewCacheKey(),
+      });
       refreshCollectionSelectorView();
       refreshToolbarView();
       showStatus(removedClipsText(removedClipIds.length));
@@ -948,6 +1101,7 @@ export function initApp() {
   const fullscreenSession = createFullscreenSession({
     fullscreenState,
     grid,
+    getGrid: () => gridController.getGridElement(),
     body,
     fsBtn,
     isTitlesHidden: () => gridController.areTitlesHidden(),
@@ -1000,8 +1154,10 @@ export function initApp() {
   function onFsChange() {
     if (isFullscreen() && zoomOverlay.isOpen()) closeZoom();
     fullscreenSession.onFsChange();
-    if (!isFullscreen() && state.currentClipSequence) {
-      gridController.renderCollection(state.currentClipSequence);
+    if (!isFullscreen() && currentClipSequence()) {
+      gridController.renderCollection(currentClipSequence(), {
+        cacheKey: activeGridViewCacheKey(),
+      });
     }
   }
 

@@ -3,6 +3,7 @@ export class FullscreenSession {
   constructor({
     fullscreenState,
     grid,
+    getGrid,
     body,
     fsBtn,
     isTitlesHidden,
@@ -23,6 +24,7 @@ export class FullscreenSession {
   }) {
     this.fullscreenState = fullscreenState;
     this.grid = grid;
+    this.getGrid = getGrid;
     this.body = body;
     this.fsBtn = fsBtn;
     this.isTitlesHidden = isTitlesHidden;
@@ -40,6 +42,10 @@ export class FullscreenSession {
     this.clearClock = clearClock;
     this.updateCardLabel = updateCardLabel;
     this.formatLabel = formatLabel;
+  }
+
+  activeGrid() {
+    return this.getGrid?.() || this.grid;
   }
 
   async enterFullScreen() {
@@ -108,11 +114,11 @@ export class FullscreenSession {
   }
 
   currentVisibleCards() {
-    return Array.from(this.grid.children).filter((el) => el.style.display !== 'none');
+    return Array.from(this.activeGrid().children).filter((el) => el.style.display !== 'none');
   }
 
   currentHiddenCards() {
-    return Array.from(this.grid.children).filter((el) => el.style.display === 'none');
+    return Array.from(this.activeGrid().children).filter((el) => el.style.display === 'none');
   }
 
   waitForEnd(vid) {

@@ -12,15 +12,23 @@ function toFileMap(availableVideoFiles) {
 }
 
 /**
+ * @param {ReadonlyArray<Clip> | Map<string, Clip>} availableClips
+ * @returns {Map<string, Clip>}
+ */
+function toClipMap(availableClips) {
+  if (availableClips instanceof Map) return new Map(availableClips);
+  return new Map(Array.from(availableClips || []).map((clip) => [clip.name, clip]));
+}
+
+/**
  * @param {Iterable<string>} names
- * @param {Map<string, import('./clip.js').ClipFile>} filesByName
- * @param {() => string} nextClipId
+ * @param {Map<string, Clip>} clipsByName
  * @returns {Clip[]}
  */
-function materializedClips(names, filesByName, nextClipId) {
+function materializedClips(names, clipsByName) {
   return Array.from(names || []).flatMap((name) => {
-    const file = filesByName.get(name);
-    return file ? [new Clip({ id: nextClipId(), file, mediaSource: file.mediaSource || '' })] : [];
+    const clip = clipsByName.get(name);
+    return clip ? [clip] : [];
   });
 }
 
@@ -280,16 +288,22 @@ export class Collection {
    */
   materializeClipSequence({
     availableVideoFiles = [],
+    availableClips = null,
     nextClipId,
   } = {}) {
-    if (typeof nextClipId !== 'function') {
+    if (!availableClips && typeof nextClipId !== 'function') {
       throw new Error('A nextClipId function is required to materialize a collection sequence.');
     }
-    const filesByName = toFileMap(availableVideoFiles);
-    const analysis = requestedNameAnalysis(this, filesByName.keys());
+    const clipsByName = availableClips
+      ? toClipMap(availableClips)
+      : new Map(Array.from(toFileMap(availableVideoFiles).values()).map((file) => [
+        file.name,
+        new Clip({ id: nextClipId(), file, mediaSource: file.mediaSource || '' }),
+      ]));
+    const analysis = requestedNameAnalysis(this, clipsByName.keys());
     const partialSequence = new ClipSequence({
       name: analysis.collectionName,
-      clips: materializedClips(analysis.existingNamesInOrder, filesByName, nextClipId),
+      clips: materializedClips(analysis.existingNamesInOrder, clipsByName),
     });
 
     if (analysis.missingNames.length > 0) {

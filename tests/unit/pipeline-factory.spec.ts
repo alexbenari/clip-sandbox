@@ -80,11 +80,11 @@ describe('pipeline selection loading', () => {
 
     const result = pipeline.materializeCollection(
       pipeline.getCollectionByFilename('subset.txt'),
-      { nextClipId: vi.fn().mockReturnValueOnce('clip_3') }
+      { nextClipId: vi.fn().mockReturnValueOnce('clip_1').mockReturnValueOnce('clip_2') }
     );
 
     expect(result.kind).toBe('has-missing');
     expect(result.missingNames).toEqual(['missing.mp4']);
-    expect(result.partialSequence.orderedClips().map((clip) => clip.id)).toEqual(['clip_3']);
+    expect(result.partialSequence.orderedClips().map((clip) => clip.id)).toEqual(['clip_2']);
   });
 });

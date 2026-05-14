@@ -36,6 +36,20 @@ const DEFAULT_CONTEXT_MENU_CSS = `
   box-shadow:none;
   cursor:pointer;
 }
+.context-menu-item-content{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.context-menu-item-icon{
+  width:16px;
+  height:16px;
+  flex:0 0 16px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  color:currentColor;
+}
 .context-menu-panel button:hover{ filter:brightness(1.05); }
 .context-menu-panel button:disabled{
   opacity:.5;
@@ -53,6 +67,21 @@ function ensureContextMenuStyles(doc) {
 
 function focusableItems(panel) {
   return Array.from(panel.querySelectorAll('[role="menuitem"]')).filter((el) => !el.disabled);
+}
+
+function createIconElement(doc, icon) {
+  if (!icon || icon.kind !== 'svg') return null;
+  const svgEl = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svgEl.setAttribute('viewBox', icon.viewBox || '0 0 16 16');
+  svgEl.setAttribute('aria-hidden', 'true');
+  svgEl.setAttribute('focusable', 'false');
+  for (const pathData of Array.from(icon.paths || [])) {
+    const pathEl = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathEl.setAttribute('d', pathData);
+    pathEl.setAttribute('fill', 'currentColor');
+    svgEl.appendChild(pathEl);
+  }
+  return svgEl;
 }
 
 export class ContextMenuController {
@@ -143,7 +172,19 @@ export class ContextMenuController {
       const button = this.doc.createElement('button');
       button.type = 'button';
       button.setAttribute('role', 'menuitem');
-      button.textContent = item?.label || '';
+      const content = this.doc.createElement('span');
+      content.className = 'context-menu-item-content';
+      const iconWrap = this.doc.createElement('span');
+      iconWrap.className = 'context-menu-item-icon';
+      const iconEl = createIconElement(this.doc, item?.icon);
+      if (iconEl) {
+        iconWrap.appendChild(iconEl);
+        content.appendChild(iconWrap);
+      }
+      const labelEl = this.doc.createElement('span');
+      labelEl.textContent = item?.label || '';
+      content.appendChild(labelEl);
+      button.appendChild(content);
       button.disabled = !!item?.disabled;
       if (item?.id) button.dataset.itemId = item.id;
       button.addEventListener('click', () => {

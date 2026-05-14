@@ -9,7 +9,14 @@
    -  place in log folder, not in the pipeline folder as now
 -  app/app-controller.js is still huge. Understand why and if and what can be done.
    -  runAddToCollection
-   -  
+
+## Bugs
+- Grid display suboptimal: see not-in-collections-yet -> one row instead of several. Why? Optimize
+- Delete from disk when in collection -> gets error message that collection is out of sync. Remove ffrom collection(s) instead
+- Grey text on top bar -> remove
+- bugs under /code-reviews folder
+- report bugs to linear to track there
+
 
 ## Workspace window
 - bug: the collection drop down selection overrides the info text on the top bar
@@ -37,9 +44,6 @@
 
 ### Collections
 - ctrl+s saves the collection
-- Default collection: not-in-collections-yet
-  - if does not exist as file, created by default when a folder is opened
-  - contains all clips minus the ones already in non-default collections
 - Delete collection ->removes the file
 - Open in file explorer -> opens the current context folder in file explorer
 - Allow renaming a collection.
@@ -70,6 +74,10 @@ Some quick manipulations on videos that generate new videos in the same collecti
 - Append to reverse of the video [to generate a perfect loop]
 - trim from start/end to current frame
 - slow by X%
+
+#### Actions UX
+- Progress when generating video
+- After generation show in compare mode
 
 ### App
 - Add a keyboard map icon in the top bar. When clicked, open a small panel showing all key mappings and their descriptions.

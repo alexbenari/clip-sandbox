@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { createGridVideoMetadataTracker } from './grid-video-metadata-tracker.js';
+
 const CLIP_COLLECTION_GRID_STYLE_ID = 'clipCollectionGridStyles';
 const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
 .clip-collection-grid-root{
@@ -24,6 +26,7 @@ const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
   overflow:hidden;
   user-select:none;
   box-shadow: var(--shadow);
+  transition: height 140ms ease;
 }
 .clip-collection-grid .thumb.selected{ box-shadow: 0 0 0 3px rgba(122,162,247,.65), var(--shadow); }
 .clip-collection-grid .thumb.dragging{ opacity:.65; }
@@ -69,6 +72,95 @@ function clearGridCards(grid) {
   grid.innerHTML = '';
 }
 
+function startPreviewPlayback(video) {
+  try {
+    const result = video?.play?.();
+    if (result && typeof result.catch === 'function') result.catch(() => {});
+  } catch {
+    // Preview playback is best-effort; unsupported test/browser media APIs should not break rendering.
+  }
+}
+
+const gridPreviewPlaybackTokens = new WeakMap();
+
+function cancelGridPreviewPlayback(grid) {
+  if (!grid) return;
+  gridPreviewPlaybackTokens.set(grid, (gridPreviewPlaybackTokens.get(grid) || 0) + 1);
+}
+
+function scheduleGridPreviewPlayback(grid) {
+  const view = grid?.ownerDocument?.defaultView || window;
+  const token = (gridPreviewPlaybackTokens.get(grid) || 0) + 1;
+  gridPreviewPlaybackTokens.set(grid, token);
+  const batchSize = 1;
+  const batchDelayMs = 120;
+
+  const schedule = (callback, delay = 0) => {
+    if (delay > 0) {
+      view.setTimeout?.(callback, delay);
+      return;
+    }
+    if (typeof view?.requestAnimationFrame === 'function') {
+      view.requestAnimationFrame(callback);
+      return;
+    }
+    setTimeout(callback, 0);
+  };
+
+  const runBatch = (retryIndex = 0, startIndex = 0) => {
+    if (gridPreviewPlaybackTokens.get(grid) !== token) return;
+    const videos = Array.from(grid?.querySelectorAll?.('video') || []);
+    const readyVideos = videos.filter((video) => video.readyState >= 2 && (video.paused || video.ended));
+    const batch = readyVideos.slice(startIndex, startIndex + batchSize);
+    for (const video of batch) startPreviewPlayback(video);
+
+    const nextIndex = startIndex + batch.length;
+    if (readyVideos.length > nextIndex) {
+      schedule(() => runBatch(retryIndex, nextIndex), batchDelayMs);
+      return;
+    }
+
+    const retryDelays = [800];
+    const delay = retryDelays[retryIndex];
+    if (delay !== undefined) schedule(() => runBatch(retryIndex + 1, 0), delay);
+  };
+
+  schedule(() => schedule(() => runBatch()));
+}
+
+function copyGridSurfaceAttributes(from, to) {
+  to.className = from?.className || 'clip-collection-grid';
+  to.style.cssText = from?.style?.cssText || '';
+}
+
+function showGridSurface(grid) {
+  if (!grid) return;
+  grid.style.display = '';
+  grid.style.position = '';
+  grid.style.visibility = '';
+  grid.style.opacity = '';
+  grid.style.pointerEvents = '';
+  grid.style.inset = '';
+  grid.inert = false;
+  grid.removeAttribute('aria-hidden');
+}
+
+function hideGridSurface(grid) {
+  if (!grid) return;
+  grid.style.display = '';
+  grid.style.position = 'absolute';
+  grid.style.visibility = '';
+  grid.style.opacity = '0';
+  grid.style.pointerEvents = 'none';
+  grid.style.inset = '0';
+  grid.inert = true;
+  grid.setAttribute('aria-hidden', 'true');
+}
+
+function clipSequenceSignature(collection) {
+  return (collection?.orderedClips?.() || []).map((clip) => clip.id).join('\n');
+}
+
 function removeDragOverClasses(grid) {
   for (const el of grid.children) el.classList.remove('drag-over');
 }
@@ -93,6 +185,8 @@ function createThumbCard({
   onDragLeave,
   onDrop,
   onLoadedMetadata,
+  onMetadataError,
+  metadataToken,
 }) {
   const card = doc.createElement('div');
   card.className = 'thumb';
@@ -107,14 +201,13 @@ function createThumbCard({
   const vid = doc.createElement('video');
   vid.src = mediaSource;
   vid.loop = true;
-  vid.autoplay = true;
   vid.muted = true;
   vid.playsInline = true;
   vid.preload = 'metadata';
   vid.addEventListener(
     'canplay',
     () => {
-      vid.play().catch(() => {});
+      startPreviewPlayback(vid);
     },
     { once: true }
   );
@@ -128,7 +221,11 @@ function createThumbCard({
   card.appendChild(vid);
   card.appendChild(name);
 
-  vid.addEventListener('loadedmetadata', () => onLoadedMetadata(card, vid, clip));
+  vid.addEventListener('loadedmetadata', () => {
+    onLoadedMetadata(card, vid, clip, metadataToken);
+    startPreviewPlayback(vid);
+  });
+  vid.addEventListener('error', () => onMetadataError(card, vid, clip, metadataToken));
   card.addEventListener('click', (event) => onSelect(card, event));
   card.addEventListener('dblclick', () => onDoubleClick?.(card));
   card.addEventListener('dragstart', (e) => onDragStart(card, e));
@@ -167,6 +264,7 @@ export class ClipCollectionGridController {
     this.computeFsLayoutFn = options.computeFsLayout ?? null;
     this.applyGridLayoutFn = options.applyGridLayout ?? null;
     this.isFullscreen = options.isFullscreen ?? null;
+    this.onMetadataFailure = options.onMetadataFailure ?? null;
     this.updateCount = options.updateCount;
     this.onSelectionChange = options.onSelectionChange;
     this.onOrderChange = options.onOrderChange;
@@ -178,6 +276,15 @@ export class ClipCollectionGridController {
     this.selectedClipIds = new Set();
     this.dragSourceCardId = null;
     this.hiddenCards = [];
+    this.currentAppliedCols = null;
+    this.pendingMetadataRelayout = false;
+    this.activeCacheKey = null;
+    this.gridViewCache = new Map();
+    this.metadataTracker = options.metadataTracker ?? createGridVideoMetadataTracker({
+      onComplete: () => this.onMetadataComplete(),
+      onFailure: ({ clip, error }) => this.onMetadataFailure?.({ clip, error }),
+      debounceMs: options.metadataRelayoutDebounceMs ?? 0,
+    });
 
     this.renderCollection = this.renderCollection.bind(this);
     this.destroy = this.destroy.bind(this);
@@ -187,10 +294,13 @@ export class ClipCollectionGridController {
     this.setSelectedClipId = this.setSelectedClipId.bind(this);
     this.getCardByClipId = this.getCardByClipId.bind(this);
     this.getClipById = this.getClipById.bind(this);
+    this.getClipIdByName = this.getClipIdByName.bind(this);
     this.getClipMediaSource = this.getClipMediaSource.bind(this);
     this.getNextClip = this.getNextClip.bind(this);
     this.getPrevClip = this.getPrevClip.bind(this);
     this.getOrderedClipIds = this.getOrderedClipIds.bind(this);
+    this.getCardCount = this.getCardCount.bind(this);
+    this.getGridElement = this.getGridElement.bind(this);
     this.areTitlesHidden = this.areTitlesHidden.bind(this);
     this.setTitlesHidden = this.setTitlesHidden.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -199,6 +309,10 @@ export class ClipCollectionGridController {
     this.fsApplySlots = this.fsApplySlots.bind(this);
     this.fsRestore = this.fsRestore.bind(this);
     this.onGridContextMenu = this.onGridContextMenu.bind(this);
+    this.onMetadataComplete = this.onMetadataComplete.bind(this);
+    this.invalidateView = this.invalidateView.bind(this);
+    this.invalidateAllViews = this.invalidateAllViews.bind(this);
+    this.retagActiveView = this.retagActiveView.bind(this);
 
     ensureClipCollectionGridStyles(this.doc);
     this.gridRoot?.classList.add('clip-collection-grid-root');
@@ -215,6 +329,121 @@ export class ClipCollectionGridController {
     else this.hiddenCards = nextHiddenCards;
   }
 
+  normalizedCacheKey(cacheKey) {
+    const key = String(cacheKey || '').trim();
+    return key || null;
+  }
+
+  createCacheEntry() {
+    const container = this.doc.createElement('div');
+    copyGridSurfaceAttributes(this.grid, container);
+    return {
+      container,
+      collection: null,
+      signature: '',
+    };
+  }
+
+  setActiveGridElement(nextGrid) {
+    if (!nextGrid || nextGrid === this.grid) {
+      this.grid?.classList.add('clip-collection-grid');
+      if (this.grid?.id !== 'grid') this.grid.id = 'grid';
+      showGridSurface(this.grid);
+      return;
+    }
+    if (this.grid?.id === 'grid') this.grid.removeAttribute('id');
+    hideGridSurface(this.grid);
+    nextGrid.id = 'grid';
+    showGridSurface(nextGrid);
+    nextGrid.classList.add('clip-collection-grid');
+    this.grid = nextGrid;
+  }
+
+  createActiveGridElement() {
+    const nextGrid = this.doc.createElement('div');
+    copyGridSurfaceAttributes(this.grid, nextGrid);
+    this.gridRoot?.appendChild(nextGrid);
+    this.setActiveGridElement(nextGrid);
+    return nextGrid;
+  }
+
+  stashActiveGrid() {
+    if (!this.activeCacheKey || !this.currentCollection) return;
+    let entry = this.gridViewCache.get(this.activeCacheKey);
+    if (!entry) {
+      entry = {
+        container: this.grid,
+        collection: null,
+        signature: '',
+      };
+      this.gridViewCache.set(this.activeCacheKey, entry);
+    }
+    this.fsRestore();
+    removeDragOverClasses(this.grid);
+    cancelGridPreviewPlayback(this.grid);
+    entry.collection = this.currentCollection;
+    entry.signature = clipSequenceSignature(this.currentCollection);
+    entry.container = this.grid;
+    hideGridSurface(entry.container);
+    if (entry.container.id === 'grid') entry.container.removeAttribute('id');
+  }
+
+  cachedEntryFor(cacheKey, collection) {
+    const key = this.normalizedCacheKey(cacheKey);
+    if (!key) return null;
+    const entry = this.gridViewCache.get(key);
+    if (!entry) return null;
+    if (entry.signature !== clipSequenceSignature(collection)) {
+      this.clearCacheEntry(entry);
+      this.gridViewCache.delete(key);
+      return null;
+    }
+    return entry;
+  }
+
+  clearCacheEntry(entry) {
+    if (!entry) return;
+    clearGridCards(entry.container);
+    if (entry.container !== this.grid) entry.container.remove();
+    entry.collection = null;
+    entry.signature = '';
+  }
+
+  showCachedEntry(cacheKey, collection, entry, previousSelection) {
+    this.currentCollection = collection || null;
+    this.setActiveGridElement(entry.container);
+    this.activeCacheKey = this.normalizedCacheKey(cacheKey);
+    const orderedClips = this.currentCollection?.orderedClips?.() || [];
+    this.metadataTracker.start(orderedClips);
+    this.selectedClipIds = new Set(
+      Array.from(previousSelection).filter((clipId) => this.currentCollection.hasClip(clipId))
+    );
+    this.applySelectionClasses();
+    this.updateCount?.();
+    this.recomputeLayout();
+    this.notifySelectionChange();
+    scheduleGridPreviewPlayback(this.grid);
+  }
+
+  invalidateView(cacheKey) {
+    const key = this.normalizedCacheKey(cacheKey);
+    if (!key) return;
+    const entry = this.gridViewCache.get(key);
+    if (entry) this.clearCacheEntry(entry);
+    this.gridViewCache.delete(key);
+  }
+
+  invalidateAllViews() {
+    for (const entry of this.gridViewCache.values()) {
+      this.clearCacheEntry(entry);
+    }
+    this.gridViewCache.clear();
+  }
+
+  retagActiveView(cacheKey) {
+    this.activeCacheKey = this.normalizedCacheKey(cacheKey);
+  }
+
   readGridMetrics(mode) {
     const view = this.doc.defaultView || window;
     const gap = parseFloat(view.getComputedStyle(this.grid).gap) || 0;
@@ -229,12 +458,55 @@ export class ClipCollectionGridController {
     const count = this.grid.children.length;
     if (count === 0) {
       this.grid.style.gridTemplateColumns = 'repeat(1, 1fr)';
+      this.currentAppliedCols = 1;
       return;
     }
     if (!this.computeBestGridFn || !this.applyGridLayoutFn) return;
     const { gap, availW, availH } = this.readGridMetrics('normal');
-    const { cols, cellH } = this.computeBestGridFn({ count, availW, availH, gap });
+    const { cols, cellH } = this.computeBestGridFn({
+      count,
+      availW,
+      availH,
+      gap,
+      clips: this.currentCollection?.orderedClips?.() || [],
+    });
+    const previousCols = Number.parseInt(this.grid.dataset.layoutCols || '', 10);
+    const previousCellH = Number.parseFloat(this.grid.dataset.layoutCellHeight || '');
+    if (previousCols === cols && Number.isFinite(previousCellH) && Math.abs(previousCellH - cellH) < 0.5) {
+      this.currentAppliedCols = cols;
+      return;
+    }
     this.applyGridLayoutFn(cols, cellH);
+    this.grid.dataset.layoutCols = String(cols);
+    this.grid.dataset.layoutCellHeight = String(cellH);
+    this.currentAppliedCols = cols;
+  }
+
+  recomputeGridIfColumnCountChanged() {
+    const count = this.grid.children.length;
+    if (count === 0 || !this.computeBestGridFn || !this.applyGridLayoutFn) return;
+    const { gap, availW, availH } = this.readGridMetrics('normal');
+    const { cols, cellH } = this.computeBestGridFn({
+      count,
+      availW,
+      availH,
+      gap,
+      clips: this.currentCollection?.orderedClips?.() || [],
+    });
+    if (cols === this.currentAppliedCols) return;
+    this.applyGridLayoutFn(cols, cellH);
+    this.grid.dataset.layoutCols = String(cols);
+    this.grid.dataset.layoutCellHeight = String(cellH);
+    this.currentAppliedCols = cols;
+  }
+
+  onMetadataComplete() {
+    if (this.isFullscreen?.()) return;
+    if (this.dragSourceCardId) {
+      this.pendingMetadataRelayout = true;
+      return;
+    }
+    this.recomputeGridIfColumnCountChanged();
   }
 
   fsComputeAndApplyGrid() {
@@ -318,6 +590,12 @@ export class ClipCollectionGridController {
     return this.currentCollection?.getClip(clipId) || null;
   }
 
+  getClipIdByName(name) {
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName) return null;
+    return this.currentCollection?.orderedClips?.().find((clip) => clip.name === normalizedName)?.id || null;
+  }
+
   getAdjacentClip(clipId, offset) {
     const currentCard = this.getCardByClipId(clipId);
     if (!currentCard) return null;
@@ -340,6 +618,14 @@ export class ClipCollectionGridController {
     return Array.from(this.grid.children)
       .map((card) => card.dataset.clipId)
       .filter(Boolean);
+  }
+
+  getCardCount() {
+    return this.grid?.children?.length || 0;
+  }
+
+  getGridElement() {
+    return this.grid;
   }
 
   areTitlesHidden() {
@@ -441,6 +727,10 @@ export class ClipCollectionGridController {
     card.classList.remove('dragging');
     this.dragSourceCardId = null;
     removeDragOverClasses(this.grid);
+    if (this.pendingMetadataRelayout) {
+      this.pendingMetadataRelayout = false;
+      this.onMetadataComplete();
+    }
   }
 
   onDragOver(card, event) {
@@ -467,23 +757,54 @@ export class ClipCollectionGridController {
     this.recomputeLayout();
   }
 
-  onLoadedMetadata(card, video, clip) {
-    clip.setDuration(video.duration);
+  onLoadedMetadata(card, video, clip, metadataToken = this.metadataTracker.currentToken()) {
+    clip.setVideoMetadata({
+      durationSec: video.duration,
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+    });
     setCardDuration(card, clip.durationSec, this.formatClipLabel);
+    this.metadataTracker.markLoaded(metadataToken, clip);
   }
 
-  renderCollection(collection) {
-    this.currentCollection = collection || null;
+  onMetadataError(_card, video, clip, metadataToken = this.metadataTracker.currentToken()) {
+    this.metadataTracker.markFailed(metadataToken, clip, video?.error || new Error('Video metadata failed to load.'));
+  }
+
+  renderCollection(collection, { cacheKey = null } = {}) {
+    const nextCacheKey = this.normalizedCacheKey(cacheKey);
     const previousSelection = new Set(this.selectedClipIds);
+    const isSwitchingFromCachedView = nextCacheKey && nextCacheKey !== this.activeCacheKey && this.activeCacheKey !== null;
+    if (nextCacheKey && nextCacheKey !== this.activeCacheKey) {
+      this.stashActiveGrid();
+    }
+
+    this.currentCollection = collection || null;
+
+    const cachedEntry = this.cachedEntryFor(nextCacheKey, this.currentCollection);
+    if (cachedEntry) {
+      this.showCachedEntry(nextCacheKey, this.currentCollection, cachedEntry, previousSelection);
+      return;
+    }
+
+    if (isSwitchingFromCachedView) {
+      this.createActiveGridElement();
+    }
+
     clearGridCards(this.grid);
+    this.activeCacheKey = nextCacheKey;
     if (!this.currentCollection) {
+      this.metadataTracker.reset();
       this.selectedClipIds = new Set();
       this.updateCount?.();
       this.recomputeLayout();
       this.notifySelectionChange();
       return;
     }
-    for (const clip of this.currentCollection.orderedClips()) {
+    const orderedClips = this.currentCollection.orderedClips();
+    const metadataToken = this.metadataTracker.start(orderedClips);
+    const fragment = this.doc.createDocumentFragment();
+    for (const clip of orderedClips) {
       const mediaSource = clip.mediaSource || URL.createObjectURL(clip.file);
       const card = createThumbCard({
         doc: this.doc,
@@ -491,7 +812,9 @@ export class ClipCollectionGridController {
         cardId: `card-${clip.id}`,
         mediaSource,
         formatLabel: this.formatClipLabel,
-        onLoadedMetadata: (element, video, nextClip) => this.onLoadedMetadata(element, video, nextClip),
+        onLoadedMetadata: (element, video, nextClip, token) => this.onLoadedMetadata(element, video, nextClip, token),
+        onMetadataError: (element, video, nextClip, token) => this.onMetadataError(element, video, nextClip, token),
+        metadataToken,
         onSelect: (element, event) => this.onSelect(element, event),
         onDoubleClick: (element) => this.onDoubleClick(element),
         onDragStart: (element, event) => this.onDragStart(element, event),
@@ -500,8 +823,9 @@ export class ClipCollectionGridController {
         onDragLeave: (element) => this.onDragLeave(element),
         onDrop: (element, event) => this.onDrop(element, event),
       });
-      this.grid.appendChild(card);
+      fragment.appendChild(card);
     }
+    this.grid.appendChild(fragment);
     this.selectedClipIds = new Set(
       Array.from(previousSelection).filter((clipId) => this.currentCollection.hasClip(clipId))
     );
@@ -517,10 +841,14 @@ export class ClipCollectionGridController {
 
   destroy() {
     this.fsRestore();
+    cancelGridPreviewPlayback(this.grid);
     clearGridCards(this.grid);
+    this.invalidateAllViews();
     this.selectedClipIds = new Set();
     this.dragSourceCardId = null;
+    this.activeCacheKey = null;
     this.setTitlesHidden(false);
+    this.metadataTracker.reset();
   }
 }
 

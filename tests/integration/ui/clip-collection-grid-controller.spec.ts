@@ -8,21 +8,28 @@ describe('clip collection grid controller', () => {
   let originalCreate;
   let originalRevoke;
   let originalPlay;
+  let originalPause;
 
   beforeEach(() => {
     document.body.innerHTML = '<div id="gridWrap"><div id="grid"></div></div>';
     originalCreate = URL.createObjectURL;
     originalRevoke = URL.revokeObjectURL;
     originalPlay = HTMLMediaElement.prototype.play;
+    originalPause = HTMLMediaElement.prototype.pause;
     URL.createObjectURL = vi.fn((file) => `blob:${file.name}`);
     URL.revokeObjectURL = vi.fn();
-    HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve());
+    HTMLMediaElement.prototype.play = vi.fn(function playPreview() {
+      Object.defineProperty(this, 'paused', { value: false, configurable: true });
+      return Promise.resolve();
+    });
+    HTMLMediaElement.prototype.pause = vi.fn();
   });
 
   afterEach(() => {
     URL.createObjectURL = originalCreate;
     URL.revokeObjectURL = originalRevoke;
     HTMLMediaElement.prototype.play = originalPlay;
+    HTMLMediaElement.prototype.pause = originalPause;
   });
 
   function makeCollection() {
@@ -150,6 +157,150 @@ describe('clip collection grid controller', () => {
     expect(card.querySelector('.filename').textContent).toBe('<img src=x>.mp4 (12.5)');
   });
 
+  test('batches initial card insertion and waits for metadata before starting preview playback', () => {
+    const grid = document.getElementById('grid');
+    const appendChildSpy = vi.spyOn(grid, 'appendChild');
+    const controller = createClipCollectionGridController({
+      grid,
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      updateCount: vi.fn(),
+      recomputeLayout: vi.fn(),
+    });
+
+    controller.renderCollection(makeCollection());
+
+    const videos = Array.from(document.querySelectorAll('#grid video'));
+    expect(appendChildSpy).toHaveBeenCalledTimes(1);
+    expect(videos).toHaveLength(2);
+    expect(videos.every((video) => video.autoplay === false)).toBe(true);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+
+    Object.defineProperty(videos[0], 'duration', { value: 1, configurable: true });
+    Object.defineProperty(videos[0], 'videoWidth', { value: 640, configurable: true });
+    Object.defineProperty(videos[0], 'videoHeight', { value: 360, configurable: true });
+    videos[0].dispatchEvent(new Event('loadedmetadata'));
+
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
+  });
+
+  test('reuses cached card videos and resumes playback after switching back to an unchanged view', async () => {
+    const controller = createClipCollectionGridController({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      updateCount: vi.fn(),
+      recomputeLayout: vi.fn(),
+    });
+    const pipeline = makeThreeClipCollection();
+    const collection = new ClipSequence({
+      name: 'subset',
+      clips: [pipeline.orderedClips()[0]],
+    });
+
+    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    const pipelineGrid = document.getElementById('grid');
+    expect(document.querySelectorAll('.clip-collection-grid')).toHaveLength(1);
+    const firstPipelineVideo = document.querySelector('#grid video');
+    for (const video of Array.from(document.querySelectorAll('#grid video'))) {
+      Object.defineProperty(video, 'readyState', { value: 2, configurable: true });
+    }
+    controller.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
+    const collectionGrid = document.getElementById('grid');
+    expect(document.querySelectorAll('.clip-collection-grid')).toHaveLength(2);
+    expect(collectionGrid).not.toBe(pipelineGrid);
+    expect(pipelineGrid.id).toBe('');
+    expect(pipelineGrid.style.opacity).toBe('0');
+    expect(pipelineGrid.style.position).toBe('absolute');
+    expect(pipelineGrid.inert).toBe(true);
+    expect(pipelineGrid.getAttribute('aria-hidden')).toBe('true');
+    expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1);
+    expect(HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
+
+    HTMLMediaElement.prototype.play.mockClear();
+    for (const video of Array.from(pipelineGrid.querySelectorAll('video'))) {
+      Object.defineProperty(video, 'paused', { value: true, configurable: true });
+    }
+    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+
+    expect(document.querySelectorAll('.clip-collection-grid')).toHaveLength(2);
+    expect(document.getElementById('grid')).toBe(pipelineGrid);
+    expect(pipelineGrid.style.opacity).toBe('');
+    expect(pipelineGrid.style.position).toBe('');
+    expect(pipelineGrid.inert).toBe(false);
+    expect(pipelineGrid.hasAttribute('aria-hidden')).toBe(false);
+    expect(collectionGrid.id).toBe('');
+    expect(collectionGrid.style.opacity).toBe('0');
+    expect(document.querySelector('#grid video')).toBe(firstPipelineVideo);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(HTMLMediaElement.prototype.play.mock.calls.length).toBeGreaterThan(0);
+    expect(HTMLMediaElement.prototype.play.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(Array.from(document.querySelectorAll('#grid .thumb')).map((card) => card.dataset.clipId)).toEqual([
+      'clip_1',
+      'clip_2',
+      'clip_3',
+    ]);
+    controller.destroy();
+  });
+
+  test('invalidates cached card videos when a view sequence changes', () => {
+    const controller = createClipCollectionGridController({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      updateCount: vi.fn(),
+      recomputeLayout: vi.fn(),
+    });
+    const pipeline = makeThreeClipCollection();
+    const collection = new ClipSequence({
+      name: 'subset',
+      clips: [pipeline.orderedClips()[0]],
+    });
+
+    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    const firstPipelineVideo = document.querySelector('#grid video');
+    controller.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
+    controller.invalidateView('pipeline');
+    controller.renderCollection(new ClipSequence({
+      name: 'changed',
+      clips: pipeline.orderedClips().slice(0, 2),
+    }), { cacheKey: 'pipeline' });
+
+    expect(document.querySelector('#grid video')).not.toBe(firstPipelineVideo);
+    expect(Array.from(document.querySelectorAll('#grid .thumb')).map((card) => card.dataset.clipId)).toEqual([
+      'clip_1',
+      'clip_2',
+    ]);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:alpha.mp4');
+  });
+
+  test('does not reapply an unchanged cached grid layout when switching back', () => {
+    const applyGridLayout = vi.fn();
+    const controller = createClipCollectionGridController({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      updateCount: vi.fn(),
+      computeBestGrid: ({ count }) => ({ cols: count, cellH: count === 1 ? 240 : 120 }),
+      applyGridLayout,
+    });
+    const pipeline = makeThreeClipCollection();
+    const collection = new ClipSequence({
+      name: 'subset',
+      clips: [pipeline.orderedClips()[0]],
+    });
+
+    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    expect(applyGridLayout).toHaveBeenCalledTimes(1);
+
+    controller.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
+    expect(applyGridLayout).toHaveBeenCalledTimes(2);
+
+    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    expect(applyGridLayout).toHaveBeenCalledTimes(2);
+  });
+
   test('owns title visibility on the grid surface', () => {
     const controller = createClipCollectionGridController({
       grid: document.getElementById('grid'),
@@ -202,6 +353,135 @@ describe('clip collection grid controller', () => {
 
     controller.fsRestore();
     expect(cards.every((card) => card.style.display === '')).toBe(true);
+  });
+
+  test('stores card video metadata on clips and relayouts once when columns change', async () => {
+    const grid = document.getElementById('grid');
+    const gridRoot = document.getElementById('gridWrap');
+    Object.defineProperty(gridRoot, 'clientWidth', { value: 900, configurable: true });
+    const applyGridLayout = vi.fn();
+    const computeBestGrid = vi.fn()
+      .mockReturnValueOnce({ cols: 1, cellH: 100 })
+      .mockReturnValueOnce({ cols: 2, cellH: 180 });
+    const controller = createClipCollectionGridController({
+      grid,
+      gridRoot,
+      formatLabel: (name) => name,
+      computeBestGrid,
+      applyGridLayout,
+      updateCount: vi.fn(),
+    });
+    const collection = makeCollection();
+
+    controller.renderCollection(collection);
+    const videos = Array.from(document.querySelectorAll('#grid video'));
+    for (const video of videos) {
+      Object.defineProperty(video, 'duration', { value: 2.5, configurable: true });
+      Object.defineProperty(video, 'videoWidth', { value: 720, configurable: true });
+      Object.defineProperty(video, 'videoHeight', { value: 390, configurable: true });
+      video.dispatchEvent(new Event('loadedmetadata'));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(collection.orderedClips()[0].videoWidth).toBe(720);
+    expect(collection.orderedClips()[0].videoHeight).toBe(390);
+    expect(collection.orderedClips()[0].durationSec).toBe(2.5);
+    expect(applyGridLayout).toHaveBeenNthCalledWith(1, 1, 100);
+    expect(applyGridLayout).toHaveBeenNthCalledWith(2, 2, 180);
+  });
+
+  test('skips metadata-complete relayout when the column count is unchanged', async () => {
+    const applyGridLayout = vi.fn();
+    const controller = createClipCollectionGridController({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      computeBestGrid: vi.fn()
+        .mockReturnValueOnce({ cols: 2, cellH: 100 })
+        .mockReturnValueOnce({ cols: 2, cellH: 180 }),
+      applyGridLayout,
+      updateCount: vi.fn(),
+    });
+
+    controller.renderCollection(makeCollection());
+    for (const video of Array.from(document.querySelectorAll('#grid video'))) {
+      Object.defineProperty(video, 'duration', { value: 1, configurable: true });
+      Object.defineProperty(video, 'videoWidth', { value: 640, configurable: true });
+      Object.defineProperty(video, 'videoHeight', { value: 360, configurable: true });
+      video.dispatchEvent(new Event('loadedmetadata'));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(applyGridLayout).toHaveBeenCalledTimes(1);
+    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 100);
+  });
+
+  test('defers metadata-complete relayout while dragging', async () => {
+    const applyGridLayout = vi.fn();
+    const controller = createClipCollectionGridController({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      computeBestGrid: vi.fn()
+        .mockReturnValueOnce({ cols: 1, cellH: 100 })
+        .mockReturnValueOnce({ cols: 2, cellH: 180 }),
+      applyGridLayout,
+      updateCount: vi.fn(),
+    });
+
+    controller.renderCollection(makeCollection());
+    const cards = document.querySelectorAll('#grid .thumb');
+    const dragStartEvent = new Event('dragstart', { bubbles: true });
+    Object.defineProperty(dragStartEvent, 'dataTransfer', {
+      value: {
+        effectAllowed: '',
+        setData: vi.fn(),
+      },
+    });
+    cards[0].dispatchEvent(dragStartEvent);
+
+    for (const video of Array.from(document.querySelectorAll('#grid video'))) {
+      Object.defineProperty(video, 'duration', { value: 1, configurable: true });
+      Object.defineProperty(video, 'videoWidth', { value: 640, configurable: true });
+      Object.defineProperty(video, 'videoHeight', { value: 360, configurable: true });
+      video.dispatchEvent(new Event('loadedmetadata'));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(applyGridLayout).toHaveBeenCalledTimes(1);
+
+    cards[0].dispatchEvent(new Event('dragend', { bubbles: true }));
+    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 180);
+  });
+
+  test('reports metadata failure once and still completes relayout', async () => {
+    const applyGridLayout = vi.fn();
+    const metadataFailures = [];
+    const controller = createClipCollectionGridController({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      computeBestGrid: vi.fn()
+        .mockReturnValueOnce({ cols: 1, cellH: 100 })
+        .mockReturnValueOnce({ cols: 2, cellH: 180 }),
+      applyGridLayout,
+      updateCount: vi.fn(),
+      onMetadataFailure: (failure) => metadataFailures.push(failure),
+    });
+
+    controller.renderCollection(makeCollection());
+    const videos = Array.from(document.querySelectorAll('#grid video'));
+    Object.defineProperty(videos[0], 'duration', { value: 1, configurable: true });
+    Object.defineProperty(videos[0], 'videoWidth', { value: 640, configurable: true });
+    Object.defineProperty(videos[0], 'videoHeight', { value: 360, configurable: true });
+    videos[0].dispatchEvent(new Event('loadedmetadata'));
+    videos[1].dispatchEvent(new Event('error'));
+    videos[1].dispatchEvent(new Event('error'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(metadataFailures).toHaveLength(1);
+    expect(metadataFailures[0].clip.name).toBe('bravo.webm');
+    expect(controller.getClipById('clip_2').metadataFailed).toBe(true);
+    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 180);
   });
 
   test('revokes object urls and clears drag-over state when rerendering or destroying', () => {
