@@ -69,6 +69,10 @@ async function allClipNames(page) {
   return page.locator('#grid .thumb').evaluateAll((els) => els.map((el) => el.dataset.name));
 }
 
+function collectionFileLines(text) {
+  return String(text || '').trim().replace(/\r/g, '').split('\n').filter(Boolean);
+}
+
 async function openOrderMenu(page) {
   await page.click('#orderMenuBtn');
   await expect(page.locator('#orderMenu')).toHaveAttribute('data-open', 'true');
@@ -158,7 +162,7 @@ test.describe('Electron runtime migration', () => {
     await expect(page.locator('#activityIndicatorList li').first()).toHaveText('Saved pipeline-order.txt to the current pipeline folder.');
 
     const savedText = await fsp.readFile(path.join(folderPath, 'pipeline-order.txt'), 'utf8');
-    expect(savedText.trim().split('\n')).toEqual(['three.mp4', 'one.mp4', 'two.webm']);
+    expect(collectionFileLines(savedText)).toEqual(['three.mp4', 'one.mp4', 'two.webm']);
   });
 
   test('adds selected clips to another saved collection', async () => {
@@ -176,7 +180,7 @@ test.describe('Electron runtime migration', () => {
     await openActivityPanel(page);
     await expect(page.locator('#activityIndicatorList li').first()).toContainText('Added');
     const subsetText = await fsp.readFile(path.join(folderPath, 'subset.txt'), 'utf8');
-    const lines = subsetText.trim().split('\n');
+    const lines = collectionFileLines(subsetText);
     expect(lines.includes('three.mp4')).toBe(true);
     expect(lines.includes('two.webm')).toBe(true);
   });
@@ -256,7 +260,7 @@ test.describe('Electron runtime migration', () => {
     await expect(page.locator('#activityIndicatorList li').first()).toHaveText('Created source-looped.mp4.');
 
     const savedCollectionText = await fsp.readFile(path.join(folderPath, 'focus.txt'), 'utf8');
-    expect(savedCollectionText.trim().split('\n')).toEqual(['source.mp4', 'alt.mp4']);
+    expect(collectionFileLines(savedCollectionText)).toEqual(['source.mp4', 'alt.mp4']);
     await expect(fsp.access(path.join(folderPath, 'source-looped.mp4')).then(() => true).catch(() => false)).resolves.toBe(true);
   });
 });
