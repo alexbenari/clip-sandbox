@@ -1,18 +1,77 @@
-// @ts-nocheck
 import { createElectronVideoEditService } from './electron-video-edit-service.js';
+import type { ElectronVideoEditApi, ElectronVideoEditService } from './electron-video-edit-service.js';
+import type { CreatedVideoFile, RuntimeVideoEditResult, VideoEditRequest } from '../../business-logic/clip-editor.js';
+import type { ClipFile } from '../../domain/clip.js';
+
+type ElectronFolderEntry = {
+  name?: string;
+  relativePath?: string;
+  path?: string;
+  text?: string;
+  type?: string;
+  mediaSource?: string;
+  lastModifiedMs?: number;
+};
+
+type DesktopFolderResult = {
+  canceled?: boolean;
+  folderPath: string;
+  folderName?: string;
+  files?: ElectronFolderEntry[];
+};
+
+type DesktopDeleteResult = {
+  filename: string;
+  ok?: boolean;
+  code?: string;
+  error?: { message?: string } | string | null;
+};
+
+type ElectronDesktopApi = ElectronVideoEditApi & {
+  pickFolder?: () => Promise<DesktopFolderResult | null | undefined>;
+  saveTextFile?: (request: { folderPath: string; filename: string; text: string }) => Promise<{ mode?: string }>;
+  appendTextFile?: (request: { folderPath: string; filename: string; text: string }) => Promise<{ mode?: string }>;
+  deleteFiles?: (request: { folderPath: string; filenames: Iterable<string> }) => Promise<{
+    ok?: boolean;
+    code?: string;
+    results?: DesktopDeleteResult[];
+  } | null | undefined>;
+};
+
+type ElectronFileSystemWindow = Window & {
+  clipSandboxDesktop?: ElectronDesktopApi;
+};
+
+export type DesktopFolderSession = {
+  kind: 'desktop-directory';
+  accessMode: 'readwrite';
+  folderPath: string;
+};
+
+export type DesktopDeleteFileResult =
+  | { filename: string; ok: true; error: null }
+  | { filename: string; ok: false; code: string; error: Error };
 
 export class ElectronFileSystemService {
+  win: ElectronFileSystemWindow;
+  api?: ElectronDesktopApi | null;
+  videoEditService: ElectronVideoEditService;
+
   constructor({
     win = window,
-    api = win.clipSandboxDesktop,
+    api = (win as ElectronFileSystemWindow).clipSandboxDesktop,
     videoEditService = null,
+  }: {
+    win?: ElectronFileSystemWindow;
+    api?: ElectronDesktopApi | null;
+    videoEditService?: ElectronVideoEditService | null;
   } = {}) {
-    this.win = win;
+    this.win = win as ElectronFileSystemWindow;
     this.api = api;
     this.videoEditService = videoEditService || createElectronVideoEditService({ api });
   }
 
-  createFolderSession(folderPath) {
+  createFolderSession(folderPath: string): DesktopFolderSession {
     return {
       kind: 'desktop-directory',
       accessMode: 'readwrite',
@@ -20,17 +79,18 @@ export class ElectronFileSystemService {
     };
   }
 
-  toRendererFile(entry) {
+  toRendererFile(entry: ElectronFolderEntry | CreatedVideoFile): ClipFile {
+    const lastModifiedMs = 'lastModifiedMs' in entry ? entry.lastModifiedMs : undefined;
     const file = new File(
       [typeof entry?.text === 'string' ? entry.text : ''],
       entry?.name || '',
       {
         type: entry?.type || '',
-        lastModified: Number.isFinite(entry?.lastModifiedMs) ? entry.lastModifiedMs : Date.now(),
+        lastModified: Number.isFinite(lastModifiedMs) ? lastModifiedMs : Date.now(),
       }
     );
 
-    if (entry?.relativePath) {
+    if ('relativePath' in entry && entry.relativePath) {
       Object.defineProperty(file, 'webkitRelativePath', {
         configurable: true,
         value: entry.relativePath,
@@ -49,25 +109,28 @@ export class ElectronFileSystemService {
       });
     }
 
-    return file;
+    return file as ClipFile;
   }
 
-  requireApi() {
+  requireApi(): Required<Pick<ElectronDesktopApi, 'pickFolder' | 'saveTextFile' | 'appendTextFile' | 'deleteFiles'>> & ElectronDesktopApi {
     if (!this.api) {
       throw new Error('Electron desktop API is unavailable.');
     }
-    return this.api;
+    return this.api as Required<Pick<ElectronDesktopApi, 'pickFolder' | 'saveTextFile' | 'appendTextFile' | 'deleteFiles'>> & ElectronDesktopApi;
   }
 
-  canMutateDisk(folderSession) {
+  canMutateDisk(folderSession: unknown): folderSession is DesktopFolderSession {
+    const session = folderSession as Partial<DesktopFolderSession> | null;
     return !!(
-      folderSession?.accessMode === 'readwrite'
-      && typeof folderSession?.folderPath === 'string'
-      && folderSession.folderPath.length > 0
+      typeof folderSession === 'object'
+      && folderSession !== null
+      && session?.accessMode === 'readwrite'
+      && typeof session.folderPath === 'string'
+      && session.folderPath.length > 0
     );
   }
 
-  async pickFolder() {
+  async pickFolder(_options: { onFileReadError?: (info: unknown, folderSession: DesktopFolderSession) => void } = {}): Promise<{ folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string }> {
     const result = await this.requireApi().pickFolder();
     if (!result || result.canceled) {
       throw new DOMException('The user aborted a request.', 'AbortError');
@@ -84,7 +147,7 @@ export class ElectronFileSystemService {
     folderSession = null,
     filename = 'default-collection.txt',
     text = '',
-  } = {}) {
+  }: { folderSession?: unknown; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
     if (!this.canMutateDisk(folderSession)) {
       throw new Error('Disk mutation is unavailable for the current folder session.');
     }
@@ -99,7 +162,7 @@ export class ElectronFileSystemService {
     folderSession = null,
     filename = '',
     text = '',
-  } = {}) {
+  }: { folderSession?: unknown; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
     if (!this.canMutateDisk(folderSession)) {
       return { mode: 'unavailable' };
     }
@@ -113,7 +176,11 @@ export class ElectronFileSystemService {
   async deleteFiles({
     folderSession = null,
     filenames = [],
-  } = {}) {
+  }: { folderSession?: unknown; filenames?: Iterable<string> } = {}): Promise<{
+    ok: boolean;
+    code: string;
+    results: DesktopDeleteFileResult[];
+  }> {
     if (!this.canMutateDisk(folderSession)) {
       return {
         ok: false,
@@ -134,18 +201,24 @@ export class ElectronFileSystemService {
     return {
       ok: !!response?.ok,
       code: response?.code || 'partial',
-      results: Array.from(response?.results || []).map((result) => ({
-        ...result,
-        error: result?.error
-          ? new Error(result.error.message || String(result.error))
-          : result?.ok
-            ? null
-            : new Error(result?.code || 'delete-failed'),
-      })),
+      results: Array.from(response?.results || []).map((result): DesktopDeleteFileResult => {
+        if (result?.ok) {
+          return { filename: result.filename, ok: true, error: null };
+        }
+        const errorMessage = typeof result?.error === 'object' && result.error
+          ? result.error.message || String(result.error)
+          : result?.error || result?.code || 'delete-failed';
+        return {
+          filename: result?.filename || '',
+          ok: false,
+          code: result?.code || 'delete-failed',
+          error: new Error(String(errorMessage)),
+        };
+      }),
     };
   }
 
-  async createVideoEdit(request = {}) {
+  async createVideoEdit(request: VideoEditRequest): Promise<RuntimeVideoEditResult> {
     return this.videoEditService.createVideoEdit(request);
   }
 }

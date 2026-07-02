@@ -1,21 +1,47 @@
-// @ts-nocheck
 import {
   saveAsNewNameRequiredText,
   saveAsNewInvalidNameText,
   collectionAlreadyExistsText,
 } from '../app/app-text.js';
 import { Collection } from '../domain/collection.js';
+import type { Pipeline } from '../domain/pipeline.js';
+
+export type AddToCollectionChoice = {
+  label: string;
+  value: string;
+  collectionFilename: string | null;
+};
+
+export type AddToCollectionDestination =
+  | { kind: 'new'; name: string }
+  | { kind: 'existing'; collectionFilename: string | null };
 
 export class AddToCollectionDialogController {
-  static validationErrorText(code) {
+  dialog: HTMLDialogElement | null;
+  destinationSelect: HTMLSelectElement | null;
+  newCollectionNameLabel: HTMLElement | null;
+  newCollectionNameInput: HTMLInputElement | null;
+  errorMessageEl: HTMLElement | null;
+  confirmBtn: HTMLButtonElement | null;
+  cancelBtn: HTMLButtonElement | null;
+  newChoiceValue: string;
+  validateNewName: (name: string) => string;
+  onConfirm: (destination: AddToCollectionDestination) => void;
+  onCancel: () => void;
+  doc: Document;
+  hasSelection: boolean;
+  externalError: string;
+  choiceByValue: Map<string, AddToCollectionChoice>;
+
+  static validationErrorText(code: string): string {
     if (code === 'required') return saveAsNewNameRequiredText();
     if (code === 'illegal-chars') return saveAsNewInvalidNameText();
     if (code === 'already-exists') return collectionAlreadyExistsText();
     return '';
   }
 
-  static validateName({ name = '', pipeline = null } = {}) {
-    let validationCode = Collection.validateCollectionName(name).code;
+  static validateName({ name = '', pipeline = null }: { name?: string; pipeline?: Pipeline | null } = {}): string {
+    let validationCode: string = Collection.validateCollectionName(name).code;
     if (!validationCode) {
       const candidateFilename = Collection.filenameFromCollectionName(name || '');
       if (pipeline?.getCollectionByFilename(candidateFilename)) validationCode = 'already-exists';
@@ -23,12 +49,12 @@ export class AddToCollectionDialogController {
     return AddToCollectionDialogController.validationErrorText(validationCode);
   }
 
-  static buildChoices({ pipeline = null, activeCollectionFilename = '' } = {}) {
+  static buildChoices({ pipeline = null, activeCollectionFilename = '' }: { pipeline?: Pipeline | null; activeCollectionFilename?: string } = {}): AddToCollectionChoice[] {
     if (!pipeline) return [];
     return pipeline.eligibleDestinationCollections(activeCollectionFilename)
       .map((collection) => ({
         label: collection.collectionName,
-        value: collection.filename,
+        value: collection.filename || '',
         collectionFilename: collection.filename,
       }));
   }
@@ -45,14 +71,26 @@ export class AddToCollectionDialogController {
     validateNewName = () => '',
     onConfirm = () => {},
     onCancel = () => {},
-  } = {}) {
-    this.dialog = dialog;
-    this.destinationSelect = destinationSelect;
-    this.newCollectionNameLabel = newCollectionNameLabel;
-    this.newCollectionNameInput = newCollectionNameInput;
-    this.errorMessageEl = errorMessageEl;
-    this.confirmBtn = confirmBtn;
-    this.cancelBtn = cancelBtn;
+  }: {
+    dialog?: HTMLDialogElement | null;
+    destinationSelect?: HTMLSelectElement | null;
+    newCollectionNameLabel?: HTMLElement | null;
+    newCollectionNameInput?: HTMLInputElement | null;
+    errorMessageEl?: HTMLElement | null;
+    confirmBtn?: HTMLButtonElement | null;
+    cancelBtn?: HTMLButtonElement | null;
+    newChoiceValue: string;
+    validateNewName?: (name: string) => string;
+    onConfirm?: (destination: AddToCollectionDestination) => void;
+    onCancel?: () => void;
+  }) {
+    this.dialog = dialog || null;
+    this.destinationSelect = destinationSelect || null;
+    this.newCollectionNameLabel = newCollectionNameLabel || null;
+    this.newCollectionNameInput = newCollectionNameInput || null;
+    this.errorMessageEl = errorMessageEl || null;
+    this.confirmBtn = confirmBtn || null;
+    this.cancelBtn = cancelBtn || null;
     this.newChoiceValue = newChoiceValue;
     this.validateNewName = validateNewName;
     this.onConfirm = onConfirm;
@@ -90,37 +128,38 @@ export class AddToCollectionDialogController {
     });
   }
 
-  isOpen() {
+  isOpen(): boolean {
     return !!this.dialog?.open;
   }
 
-  isNewDestinationSelected() {
+  isNewDestinationSelected(): boolean {
     return this.destinationSelect?.value === this.newChoiceValue;
   }
 
-  clearExternalError() {
+  clearExternalError(): void {
     this.externalError = '';
   }
 
-  currentDestination() {
-    const selectedChoice = this.choiceByValue.get(this.destinationSelect?.value) || null;
+  currentDestination(): AddToCollectionDestination {
+    const selectedValue = this.destinationSelect?.value || '';
+    const selectedChoice = this.choiceByValue.get(selectedValue) || null;
     return this.isNewDestinationSelected()
       ? { kind: 'new', name: this.newCollectionNameInput?.value || '' }
       : { kind: 'existing', collectionFilename: selectedChoice?.collectionFilename || null };
   }
 
-  currentValidationError() {
+  currentValidationError(): string {
     if (this.externalError) return this.externalError;
     if (!this.isNewDestinationSelected()) return '';
     return this.validateNewName(this.newCollectionNameInput?.value || '');
   }
 
-  focusActiveField() {
+  focusActiveField(): void {
     if (this.isNewDestinationSelected()) this.newCollectionNameInput?.focus();
     else this.destinationSelect?.focus();
   }
 
-  renderState() {
+  renderState(): void {
     if (!this.confirmBtn) return;
     const validationError = this.currentValidationError();
     if (this.isNewDestinationSelected()) this.newCollectionNameLabel?.removeAttribute('hidden');
@@ -129,7 +168,7 @@ export class AddToCollectionDialogController {
     this.confirmBtn.disabled = !this.hasSelection || !!validationError;
   }
 
-  renderChoices(choices = [], { startWithNewCollection = false } = {}) {
+  renderChoices(choices: AddToCollectionChoice[] = [], { startWithNewCollection = false }: { startWithNewCollection?: boolean } = {}): void {
     if (!this.destinationSelect) return;
     this.choiceByValue = new Map();
     this.destinationSelect.innerHTML = '';
@@ -153,7 +192,7 @@ export class AddToCollectionDialogController {
     choices = [],
     hasSelection: nextHasSelection = false,
     startWithNewCollection = false,
-  } = {}) {
+  }: { choices?: AddToCollectionChoice[]; hasSelection?: boolean; startWithNewCollection?: boolean } = {}): void {
     if (!this.dialog || !this.newCollectionNameInput) return;
     this.hasSelection = !!nextHasSelection;
     this.newCollectionNameInput.value = '';
@@ -168,7 +207,7 @@ export class AddToCollectionDialogController {
     this.focusActiveField();
   }
 
-  close() {
+  close(): void {
     if (!this.dialog || !this.newCollectionNameInput) return;
     this.newCollectionNameInput.value = '';
     this.clearExternalError();
@@ -181,7 +220,7 @@ export class AddToCollectionDialogController {
     this.dialog.removeAttribute('open');
   }
 
-  showValidationError(text, { focusNameInput = false } = {}) {
+  showValidationError(text: string, { focusNameInput = false }: { focusNameInput?: boolean } = {}): void {
     this.externalError = text || '';
     this.renderState();
     if (focusNameInput) this.newCollectionNameInput?.focus();

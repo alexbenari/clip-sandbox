@@ -1,7 +1,8 @@
 # Feature Requests
 
 ## Design and code quality
--  Code review flow -> put in place [find a good one or add my own instructions]
+- add `better-result`fir error handling 
+- Code review flow -> put in place [find a good one or add my own instructions]
 -  make error log usable: 
    -  one line message, timestamp, module, error message
    -  save in available folder

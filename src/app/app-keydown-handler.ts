@@ -1,5 +1,36 @@
-// @ts-nocheck
-function isPlainKeyPress(event) {
+type DialogKeyController = {
+  isOpen(): boolean;
+  handleGlobalKeyDown?: (event: KeyboardEvent) => boolean;
+  close?: () => void;
+};
+
+export type AppKeyDownContext = {
+  saveAsNewDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'handleGlobalKeyDown'>>;
+  addToCollectionDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'close'>>;
+  deleteFromDiskDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'handleGlobalKeyDown'>>;
+  unsavedChangesDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'handleGlobalKeyDown'>>;
+  zoomOverlay: {
+    isOpen(): boolean;
+    toggleMuted(): void;
+  };
+  gridController: {
+    handleKeyDown(event: KeyboardEvent): unknown;
+    getSelectedClipId(): string | null;
+  };
+  isEditableTarget(target: EventTarget | null): boolean;
+  isFullscreen(): boolean;
+  closeZoom(): void;
+  browseZoomByOffset(offset: number): void;
+  openZoomForClipId(clipId: string | null): void;
+};
+
+type KeyDownRule = {
+  id: string;
+  matches(event: KeyboardEvent): boolean;
+  run(event: KeyboardEvent): void;
+};
+
+function isPlainKeyPress(event: KeyboardEvent): boolean {
   return !event.altKey && !event.ctrlKey && !event.metaKey;
 }
 
@@ -8,7 +39,7 @@ function anyDialogOpen({
   addToCollectionDialogController,
   deleteFromDiskDialogController,
   unsavedChangesDialogController,
-}) {
+}: AppKeyDownContext): boolean {
   return (
     saveAsNewDialogController.isOpen()
     || addToCollectionDialogController.isOpen()
@@ -17,8 +48,8 @@ function anyDialogOpen({
   );
 }
 
-export function createAppKeyDownHandler(context) {
-  const rules = [
+export function createAppKeyDownHandler(context: AppKeyDownContext): (event: KeyboardEvent) => boolean {
+  const rules: KeyDownRule[] = [
     {
       id: 'save-as-new-dialog',
       matches: (event) => context.saveAsNewDialogController.handleGlobalKeyDown(event),
@@ -124,7 +155,7 @@ export function createAppKeyDownHandler(context) {
     },
   ];
 
-  return function handleAppKeyDown(event) {
+  return function handleAppKeyDown(event: KeyboardEvent): boolean {
     for (const rule of rules) {
       if (!rule.matches(event)) continue;
       rule.run(event);

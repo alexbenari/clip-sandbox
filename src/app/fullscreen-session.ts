@@ -1,5 +1,65 @@
-// @ts-nocheck
+type FullscreenState = {
+  savedTitlesHidden: boolean | null;
+  digitBuffer: string;
+  digitTimer: ReturnType<typeof setTimeout> | null;
+  slots: number;
+  randInterval: ReturnType<typeof setInterval> | null;
+  randPending: boolean;
+};
+
+type FullscreenCard = HTMLElement & {
+  dataset: DOMStringMap & {
+    name?: string;
+    objectUrl?: string;
+    durationSeconds?: string;
+  };
+};
+
+type FullscreenSessionOptions = {
+  fullscreenState: FullscreenState;
+  grid: HTMLElement;
+  getGrid?: () => HTMLElement;
+  body: HTMLElement;
+  fsBtn: HTMLElement;
+  isTitlesHidden: () => boolean;
+  setTitlesHidden: (hidden: boolean) => void;
+  enterFullScreenAdapter: (doc: Document) => Promise<void> | void;
+  exitFullScreenAdapter: (doc: Document) => Promise<void> | void;
+  isFullscreen: () => boolean;
+  fsApplySlots: () => void;
+  fsRestore: () => void;
+  computeGrid: () => void;
+  showStatus: (message: string, durationMs?: number) => void;
+  normalizeFsSlots: (slots: number) => number;
+  fullscreenSlotsText: (slots: number) => string;
+  every: (ms: number, fn: () => void) => ReturnType<typeof setInterval>;
+  clearClock: (id: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout>) => void;
+  updateCardLabel: (card: HTMLElement, formatLabel: (name: string, durationSeconds: number | null) => string) => void;
+  formatLabel: (name: string, durationSeconds: number | null) => string;
+};
+
 export class FullscreenSession {
+  fullscreenState: FullscreenState;
+  grid: HTMLElement;
+  getGrid?: () => HTMLElement;
+  body: HTMLElement;
+  fsBtn: HTMLElement;
+  isTitlesHidden: () => boolean;
+  setTitlesHidden: (hidden: boolean) => void;
+  enterFullScreenAdapter: (doc: Document) => Promise<void> | void;
+  exitFullScreenAdapter: (doc: Document) => Promise<void> | void;
+  isFullscreen: () => boolean;
+  fsApplySlots: () => void;
+  fsRestore: () => void;
+  computeGrid: () => void;
+  showStatus: (message: string, durationMs?: number) => void;
+  normalizeFsSlots: (slots: number) => number;
+  fullscreenSlotsText: (slots: number) => string;
+  every: (ms: number, fn: () => void) => ReturnType<typeof setInterval>;
+  clearClock: (id: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout>) => void;
+  updateCardLabel: (card: HTMLElement, formatLabel: (name: string, durationSeconds: number | null) => string) => void;
+  formatLabel: (name: string, durationSeconds: number | null) => string;
+
   constructor({
     fullscreenState,
     grid,
@@ -21,7 +81,7 @@ export class FullscreenSession {
     clearClock,
     updateCardLabel,
     formatLabel,
-  }) {
+  }: FullscreenSessionOptions) {
     this.fullscreenState = fullscreenState;
     this.grid = grid;
     this.getGrid = getGrid;
@@ -44,11 +104,11 @@ export class FullscreenSession {
     this.formatLabel = formatLabel;
   }
 
-  activeGrid() {
+  activeGrid(): HTMLElement {
     return this.getGrid?.() || this.grid;
   }
 
-  async enterFullScreen() {
+  async enterFullScreen(): Promise<void> {
     try {
       this.fullscreenState.savedTitlesHidden = this.isTitlesHidden();
       this.setTitlesHidden(true);
@@ -60,7 +120,7 @@ export class FullscreenSession {
     }
   }
 
-  async exitFullScreen() {
+  async exitFullScreen(): Promise<void> {
     try {
       await this.exitFullScreenAdapter(document);
     } catch (e) {
@@ -68,12 +128,12 @@ export class FullscreenSession {
     }
   }
 
-  onFsToggle() {
+  onFsToggle(): void {
     if (!this.isFullscreen()) void this.enterFullScreen();
     else void this.exitFullScreen();
   }
 
-  onGlobalKeyDown(e) {
+  onGlobalKeyDown(e: KeyboardEvent): void {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const key = e.key;
     if (key === 'f' || key === 'F') {
@@ -84,7 +144,7 @@ export class FullscreenSession {
     if (!this.isFullscreen()) return;
     if (key >= '0' && key <= '9') {
       this.fullscreenState.digitBuffer += key;
-      clearTimeout(this.fullscreenState.digitTimer);
+      if (this.fullscreenState.digitTimer) clearTimeout(this.fullscreenState.digitTimer);
       this.fullscreenState.digitTimer = setTimeout(() => {
         const v = parseInt(this.fullscreenState.digitBuffer, 10);
         this.fullscreenState.digitBuffer = '';
@@ -98,14 +158,14 @@ export class FullscreenSession {
     }
   }
 
-  startFsRandomizer() {
+  startFsRandomizer(): void {
     if (this.fullscreenState.randInterval) return;
     this.fullscreenState.randInterval = this.every(3000, () => {
       if (this.isFullscreen()) this.randomizeOnce();
     });
   }
 
-  stopFsRandomizer() {
+  stopFsRandomizer(): void {
     if (this.fullscreenState.randInterval) {
       this.clearClock(this.fullscreenState.randInterval);
       this.fullscreenState.randInterval = null;
@@ -113,15 +173,17 @@ export class FullscreenSession {
     this.fullscreenState.randPending = false;
   }
 
-  currentVisibleCards() {
-    return Array.from(this.activeGrid().children).filter((el) => el.style.display !== 'none');
+  currentVisibleCards(): FullscreenCard[] {
+    return Array.from(this.activeGrid().children)
+      .filter((el): el is FullscreenCard => el instanceof HTMLElement && el.style.display !== 'none');
   }
 
-  currentHiddenCards() {
-    return Array.from(this.activeGrid().children).filter((el) => el.style.display === 'none');
+  currentHiddenCards(): FullscreenCard[] {
+    return Array.from(this.activeGrid().children)
+      .filter((el): el is FullscreenCard => el instanceof HTMLElement && el.style.display === 'none');
   }
 
-  waitForEnd(vid) {
+  waitForEnd(vid: HTMLVideoElement): Promise<void> {
     return new Promise((res) => {
       const h = () => {
         vid.removeEventListener('ended', h);
@@ -131,9 +193,10 @@ export class FullscreenSession {
     });
   }
 
-  swapCardContents(a, b) {
+  swapCardContents(a: FullscreenCard, b: FullscreenCard): void {
     const va = a.querySelector('video');
     const vb = b.querySelector('video');
+    if (!va || !vb) return;
     const na = a.dataset.name;
     const nb = b.dataset.name;
     const ua = a.dataset.objectUrl;
@@ -150,8 +213,8 @@ export class FullscreenSession {
     this.updateCardLabel(b, this.formatLabel);
     va.pause();
     vb.pause();
-    va.src = ub;
-    vb.src = ua;
+    va.src = ub || '';
+    vb.src = ua || '';
     va.loop = true;
     vb.loop = true;
     va.muted = true;
@@ -159,7 +222,7 @@ export class FullscreenSession {
     va.play().catch(() => {});
   }
 
-  randomizeOnce() {
+  randomizeOnce(): void {
     if (!this.isFullscreen() || this.fullscreenState.randPending) return;
     const vis = this.currentVisibleCards();
     const hid = this.currentHiddenCards();
@@ -167,6 +230,7 @@ export class FullscreenSession {
     const targetCard = vis[Math.floor(Math.random() * vis.length)];
     const replCard = hid[Math.floor(Math.random() * hid.length)];
     const v = targetCard.querySelector('video');
+    if (!v) return;
     this.fullscreenState.randPending = true;
     v.loop = false;
     this.waitForEnd(v)
@@ -175,6 +239,7 @@ export class FullscreenSession {
         replCard.style.display = 'none';
         targetCard.style.display = '';
         const v2 = targetCard.querySelector('video');
+        if (!v2) return;
         v2.loop = true;
         v2.play().catch(() => {});
       })
@@ -184,7 +249,7 @@ export class FullscreenSession {
       });
   }
 
-  onFsChange() {
+  onFsChange(): void {
     const active = this.isFullscreen();
     this.body.classList.toggle('fs-active', active);
     if (!active) {
@@ -204,6 +269,6 @@ export class FullscreenSession {
   }
 }
 
-export function createFullscreenSession(options) {
+export function createFullscreenSession(options: FullscreenSessionOptions): FullscreenSession {
   return new FullscreenSession(options);
 }

@@ -1,10 +1,40 @@
-// @ts-nocheck
 import { getVideoEditById, preferredVideoEditFilename } from './video-edit-catalog.js';
+import type { VideoEdit } from './video-edit-catalog.js';
+import type { Clip } from '../domain/clip.js';
+
+export type VideoEditRequest = {
+  editId: string;
+  preferredOutputFilename: string;
+  outputFolderPath: string;
+  sourceFileName: string;
+  sourcePath: string;
+};
+
+export type CreatedVideoFile = File & {
+  mediaSource?: string;
+  path?: string;
+};
+
+export type RuntimeVideoEditResult =
+  | { ok: true; createdFile: CreatedVideoFile }
+  | { ok: false; code?: string };
+
+export type RuntimeEditingService = {
+  createVideoEdit?: (request: VideoEditRequest) => Promise<RuntimeVideoEditResult>;
+};
+
+export type ClipEditorResult =
+  | { ok: false; code: 'unsupported-edit' }
+  | { ok: false; code: 'missing-source-path' | 'missing-output-folder' | 'invalid-source-name'; edit: VideoEdit }
+  | { ok: false; code: string; edit: VideoEdit; request: VideoEditRequest }
+  | { ok: true; code: 'created'; edit: VideoEdit; request: VideoEditRequest; createdFile: CreatedVideoFile };
 
 export class ClipEditor {
+  runtimeEditingService?: RuntimeEditingService;
+
   constructor({
     runtimeEditingService,
-  } = {}) {
+  }: { runtimeEditingService?: RuntimeEditingService } = {}) {
     this.runtimeEditingService = runtimeEditingService;
   }
 
@@ -12,7 +42,11 @@ export class ClipEditor {
     clip = null,
     editId = '',
     folderSession = null,
-  } = {}) {
+  }: {
+    clip?: Clip | null;
+    editId?: string;
+    folderSession?: { folderPath?: string } | null;
+  } = {}): Promise<ClipEditorResult> {
     const edit = getVideoEditById(editId);
     if (!edit) {
       return {
@@ -21,7 +55,15 @@ export class ClipEditor {
       };
     }
 
-    const sourcePath = String(clip?.file?.path || '').trim();
+    if (!clip) {
+      return {
+        ok: false,
+        code: 'missing-source-path',
+        edit,
+      };
+    }
+
+    const sourcePath = String(clip.file.path || '').trim();
     if (!sourcePath) {
       return {
         ok: false,
@@ -60,10 +102,19 @@ export class ClipEditor {
     };
 
     const runtimeResult = await this.runtimeEditingService?.createVideoEdit?.(request);
-    if (!runtimeResult?.ok) {
+    if (!runtimeResult) {
       return {
         ok: false,
-        code: runtimeResult?.code || 'edit-failed',
+        code: 'edit-failed',
+        edit,
+        request,
+      };
+    }
+
+    if (runtimeResult.ok === false) {
+      return {
+        ok: false,
+        code: runtimeResult.code || 'edit-failed',
         edit,
         request,
       };
@@ -79,7 +130,7 @@ export class ClipEditor {
   }
 }
 
-export function createClipEditor(options) {
+export function createClipEditor(options?: { runtimeEditingService?: RuntimeEditingService }): ClipEditor {
   return new ClipEditor(options);
 }
 

@@ -1,9 +1,32 @@
-// @ts-nocheck
+import type { ContextMenuController, ContextMenuItem, ContextMenuPoint } from './context-menu-controller.js';
+
+type TargetCollectionChoice = {
+  value: string;
+  label: string;
+  collectionFilename?: string | null;
+};
+
+type GridContextMenuOptions = {
+  contextMenuController?: Pick<ContextMenuController, 'open' | 'close'> | null;
+};
+
+type GridContextMenuRequest = {
+  point?: ContextMenuPoint;
+  hasSelection?: boolean;
+  hasPipeline?: boolean;
+  targetCollections?: TargetCollectionChoice[];
+  onAddToCollection?: (choice: TargetCollectionChoice) => void;
+  onNewCollection?: () => void;
+  onDeleteFromDisk?: () => void;
+};
+
 export class GridContextMenuControl {
+  contextMenuController: Pick<ContextMenuController, 'open' | 'close'> | null;
+
   constructor({
     contextMenuController,
-  } = {}) {
-    this.contextMenuController = contextMenuController;
+  }: GridContextMenuOptions = {}) {
+    this.contextMenuController = contextMenuController || null;
   }
 
   buildItems({
@@ -13,8 +36,8 @@ export class GridContextMenuControl {
     onAddToCollection = () => {},
     onNewCollection = () => {},
     onDeleteFromDisk = () => {},
-  } = {}) {
-    const items = hasSelection
+  }: GridContextMenuRequest = {}): ContextMenuItem[] {
+    const items: ContextMenuItem[] = hasSelection
       ? targetCollections.map((choice) => ({
         id: `add-to-${choice.value}`,
         label: `Add to ${choice.label}`,
@@ -52,7 +75,7 @@ export class GridContextMenuControl {
     onAddToCollection = () => {},
     onNewCollection = () => {},
     onDeleteFromDisk = () => {},
-  } = {}) {
+  }: GridContextMenuRequest = {}): void {
     this.contextMenuController?.open({
       point,
       items: this.buildItems({
@@ -66,11 +89,11 @@ export class GridContextMenuControl {
     });
   }
 
-  close(options) {
+  close(options?: { restoreFocus?: boolean }): void {
     this.contextMenuController?.close(options);
   }
 }
 
-export function createGridContextMenuControl(options) {
+export function createGridContextMenuControl(options?: GridContextMenuOptions): GridContextMenuControl {
   return new GridContextMenuControl(options);
 }

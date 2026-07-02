@@ -1,6 +1,11 @@
-// @ts-nocheck
 import { PipelineFactory } from '../business-logic/PipelineFactory.js';
 import { createClipEditor } from '../business-logic/clip-editor.js';
+import type { AddToCollectionDestination } from '../ui/add-to-collection-dialog-controller.js';
+import type { ContextMenuPoint } from '../ui/context-menu-controller.js';
+import type { Clip, ClipFile } from '../domain/clip.js';
+import type { ClipSequence } from '../domain/clip-sequence.js';
+import type { Pipeline, RemovedCollectionChange } from '../domain/pipeline.js';
+import type { VideoEdit } from '../business-logic/video-edit-catalog.js';
 import { createAppState } from './app-session-state.js';
 import { createPipelineSession } from './pipeline-session.js';
 import { FullscreenAdapter } from '../adapters/browser/fullscreen-adapter.js';
@@ -58,67 +63,127 @@ const ERROR_LOG_FILENAME = 'err.log';
 const NEW_COLLECTION_CHOICE_VALUE = '__new_collection__';
 const PIPELINE_SELECTION_VALUE = '__pipeline__';
 
+type FolderSelection = {
+  folderSession: unknown;
+  files: ClipFile[];
+  folderName: string;
+};
+
+type DeleteRequest = {
+  selectedClipIds: string[];
+  selectedClipNames: string[];
+  affectedSavedCollectionCount: number;
+  awaitingSave?: boolean;
+};
+
+type AddToCollectionResult =
+  | { ok: false; code: string; error?: unknown; destinationName?: string }
+  | {
+    ok: true;
+    code: string;
+    saveMode: string | null | undefined;
+    collection: Collection;
+    destinationName: string;
+    addedCount: number;
+    skippedCount: number;
+    isNoOp?: boolean;
+  };
+
+type SaveCollectionResult =
+  | { deferred: true }
+  | SaveClipSequenceResult;
+
+type SaveClipSequenceResult =
+  | { ok: false; code: string; error?: unknown; collection?: Collection | null }
+  | { ok: true; code: 'saved'; mode: string | undefined; collection: Collection };
+
+type PersistCollectionResult = {
+  ok: true;
+  mode: string | undefined;
+  collection: Collection;
+};
+
+function folderSessionWithPath(folderSession: unknown): { folderPath?: string } | null {
+  if (typeof folderSession !== 'object' || folderSession === null) return null;
+  const folderPath = (folderSession as { folderPath?: unknown }).folderPath;
+  return typeof folderPath === 'string' && folderPath ? { folderPath } : null;
+}
+
+function isDeferredSaveResult(result: SaveCollectionResult | null | undefined): result is { deferred: true } {
+  return !!result && 'deferred' in result && result.deferred === true;
+}
+
+function requiredElement<T extends HTMLElement = HTMLElement>(id: string): T {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`Required element #${id} was not found.`);
+  return element as T;
+}
+
+function optionalElement<T extends HTMLElement = HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
+
 export function initApp() {
   if (initialized) return;
   initialized = true;
   'use strict';
 
-  const pickBtn = document.getElementById('pickBtn');
-  const saveBtn = document.getElementById('saveBtn');
-  const saveAsNewBtn = document.getElementById('saveAsNewBtn');
-  const addToCollectionBtn = document.getElementById('addToCollectionBtn');
-  const deleteFromDiskBtn = document.getElementById('deleteFromDiskBtn');
-  const orderMenu = document.getElementById('orderMenu');
-  const orderMenuBtn = document.getElementById('orderMenuBtn');
-  const orderMenuPanel = document.getElementById('orderMenuPanel');
-  const grid = document.getElementById('grid');
-  const gridWrap = document.getElementById('gridWrap');
-  const countSpan = document.getElementById('count');
-  const activeCollectionNameEl = document.getElementById('activeCollectionName');
-  const toolbar = document.getElementById('toolbar');
-  const activityIndicatorRoot = document.getElementById('activityIndicatorRoot');
-  const activityIndicatorBtn = document.getElementById('activityIndicatorBtn');
-  const activityIndicatorPanel = document.getElementById('activityIndicatorPanel');
-  const activityIndicatorList = document.getElementById('activityIndicatorList');
-  const zoomLayerRoot = document.getElementById('zoomLayerRoot');
-  const toggleTitlesBtn = document.getElementById('toggleTitlesBtn');
-  const fsBtn = document.getElementById('fsBtn');
-  const collectionConflict = document.getElementById('collectionConflict');
-  const collectionConflictSummary = document.getElementById('collectionConflictSummary');
-  const collectionConflictList = document.getElementById('collectionConflictList');
-  const applyCollectionConflictBtn = document.getElementById('applyCollectionConflictBtn');
-  const cancelCollectionConflictBtn = document.getElementById('cancelCollectionConflictBtn');
-  const saveAsNewDialog = document.getElementById('saveAsNewDialog');
-  const saveAsNewDialogTitle = saveAsNewDialog?.querySelector('h2');
-  const saveAsNewDialogText = saveAsNewDialog?.querySelector('p');
-  const saveAsNewNameInput = document.getElementById('saveAsNewNameInput');
-  const saveAsNewError = document.getElementById('saveAsNewError');
-  const confirmSaveAsNewBtn = document.getElementById('confirmSaveAsNewBtn');
-  const cancelSaveAsNewBtn = document.getElementById('cancelSaveAsNewBtn');
-  const addToCollectionDialog = document.getElementById('addToCollectionDialog');
-  const addToCollectionSelect = document.getElementById('addToCollectionSelect');
-  const addToCollectionNameLabel = document.getElementById('addToCollectionNameLabel');
-  const addToCollectionNameInput = document.getElementById('addToCollectionNameInput');
-  const addToCollectionError = document.getElementById('addToCollectionError');
-  const confirmAddToCollectionBtn = document.getElementById('confirmAddToCollectionBtn');
-  const cancelAddToCollectionBtn = document.getElementById('cancelAddToCollectionBtn');
-  const unsavedChangesDialog = document.getElementById('unsavedChangesDialog');
-  const unsavedChangesText = document.getElementById('unsavedChangesText');
-  const confirmUnsavedChangesBtn = document.getElementById('confirmUnsavedChangesBtn');
-  const discardUnsavedChangesBtn = document.getElementById('discardUnsavedChangesBtn');
-  const cancelUnsavedChangesBtn = document.getElementById('cancelUnsavedChangesBtn');
-  const deletePreflightDialog = document.getElementById('deletePreflightDialog');
-  const deletePreflightText = document.getElementById('deletePreflightText');
-  const confirmDeletePreflightBtn = document.getElementById('confirmDeletePreflightBtn');
-  const discardDeletePreflightBtn = document.getElementById('discardDeletePreflightBtn');
-  const cancelDeletePreflightBtn = document.getElementById('cancelDeletePreflightBtn');
-  const deleteFromDiskDialog = document.getElementById('deleteFromDiskDialog');
-  const deleteFromDiskSummary = document.getElementById('deleteFromDiskSummary');
-  const deleteFromDiskPreview = document.getElementById('deleteFromDiskPreview');
-  const confirmDeleteFromDiskBtn = document.getElementById('confirmDeleteFromDiskBtn');
-  const cancelDeleteFromDiskBtn = document.getElementById('cancelDeleteFromDiskBtn');
-  const clipContextMenu = document.getElementById('clipContextMenu');
-  const clipContextMenuPanel = document.getElementById('clipContextMenuPanel');
+  const pickBtn = requiredElement<HTMLButtonElement>('pickBtn');
+  const saveBtn = requiredElement<HTMLButtonElement>('saveBtn');
+  const saveAsNewBtn = requiredElement<HTMLButtonElement>('saveAsNewBtn');
+  const addToCollectionBtn = optionalElement<HTMLButtonElement>('addToCollectionBtn');
+  const deleteFromDiskBtn = optionalElement<HTMLButtonElement>('deleteFromDiskBtn');
+  const orderMenu = requiredElement('orderMenu');
+  const orderMenuBtn = requiredElement<HTMLButtonElement>('orderMenuBtn');
+  const orderMenuPanel = requiredElement('orderMenuPanel');
+  const grid = requiredElement('grid');
+  const gridWrap = requiredElement('gridWrap');
+  const countSpan = requiredElement('count');
+  const activeCollectionNameEl = requiredElement<HTMLSelectElement>('activeCollectionName');
+  const toolbar = requiredElement('toolbar');
+  const activityIndicatorRoot = requiredElement('activityIndicatorRoot');
+  const activityIndicatorBtn = requiredElement<HTMLButtonElement>('activityIndicatorBtn');
+  const activityIndicatorPanel = requiredElement('activityIndicatorPanel');
+  const activityIndicatorList = requiredElement<HTMLUListElement>('activityIndicatorList');
+  const zoomLayerRoot = requiredElement('zoomLayerRoot');
+  const toggleTitlesBtn = requiredElement<HTMLButtonElement>('toggleTitlesBtn');
+  const fsBtn = requiredElement<HTMLButtonElement>('fsBtn');
+  const collectionConflict = requiredElement('collectionConflict');
+  const collectionConflictSummary = requiredElement('collectionConflictSummary');
+  const collectionConflictList = requiredElement('collectionConflictList');
+  const applyCollectionConflictBtn = requiredElement<HTMLButtonElement>('applyCollectionConflictBtn');
+  const cancelCollectionConflictBtn = requiredElement<HTMLButtonElement>('cancelCollectionConflictBtn');
+  const saveAsNewDialog = requiredElement('saveAsNewDialog');
+  const saveAsNewDialogTitle = saveAsNewDialog.querySelector<HTMLElement>('h2');
+  const saveAsNewDialogText = saveAsNewDialog.querySelector<HTMLElement>('p');
+  const saveAsNewNameInput = requiredElement<HTMLInputElement>('saveAsNewNameInput');
+  const saveAsNewError = requiredElement('saveAsNewError');
+  const confirmSaveAsNewBtn = requiredElement<HTMLButtonElement>('confirmSaveAsNewBtn');
+  const cancelSaveAsNewBtn = requiredElement<HTMLButtonElement>('cancelSaveAsNewBtn');
+  const addToCollectionDialog = optionalElement<HTMLDialogElement>('addToCollectionDialog');
+  const addToCollectionSelect = optionalElement<HTMLSelectElement>('addToCollectionSelect');
+  const addToCollectionNameLabel = optionalElement('addToCollectionNameLabel');
+  const addToCollectionNameInput = optionalElement<HTMLInputElement>('addToCollectionNameInput');
+  const addToCollectionError = optionalElement('addToCollectionError');
+  const confirmAddToCollectionBtn = optionalElement<HTMLButtonElement>('confirmAddToCollectionBtn');
+  const cancelAddToCollectionBtn = optionalElement<HTMLButtonElement>('cancelAddToCollectionBtn');
+  const unsavedChangesDialog = requiredElement<HTMLDialogElement>('unsavedChangesDialog');
+  const unsavedChangesText = requiredElement('unsavedChangesText');
+  const confirmUnsavedChangesBtn = requiredElement<HTMLButtonElement>('confirmUnsavedChangesBtn');
+  const discardUnsavedChangesBtn = requiredElement<HTMLButtonElement>('discardUnsavedChangesBtn');
+  const cancelUnsavedChangesBtn = requiredElement<HTMLButtonElement>('cancelUnsavedChangesBtn');
+  const deletePreflightDialog = optionalElement<HTMLDialogElement>('deletePreflightDialog');
+  const deletePreflightText = optionalElement('deletePreflightText');
+  const confirmDeletePreflightBtn = optionalElement<HTMLButtonElement>('confirmDeletePreflightBtn');
+  const discardDeletePreflightBtn = optionalElement<HTMLButtonElement>('discardDeletePreflightBtn');
+  const cancelDeletePreflightBtn = optionalElement<HTMLButtonElement>('cancelDeletePreflightBtn');
+  const deleteFromDiskDialog = optionalElement<HTMLDialogElement>('deleteFromDiskDialog');
+  const deleteFromDiskSummary = optionalElement('deleteFromDiskSummary');
+  const deleteFromDiskPreview = optionalElement('deleteFromDiskPreview');
+  const confirmDeleteFromDiskBtn = optionalElement<HTMLButtonElement>('confirmDeleteFromDiskBtn');
+  const cancelDeleteFromDiskBtn = optionalElement<HTMLButtonElement>('cancelDeleteFromDiskBtn');
+  const clipContextMenu = requiredElement('clipContextMenu');
+  const clipContextMenuPanel = requiredElement('clipContextMenuPanel');
   const body = document.body;
 
   const state = createAppState();
@@ -182,7 +247,8 @@ export function initApp() {
     pipelineSelectionValue: PIPELINE_SELECTION_VALUE,
     defaultTitle: DEFAULT_APP_TITLE,
     onSelectionRequested: (selectedCollectionFilename) => {
-      if (!currentPipeline()) {
+      const pipeline = currentPipeline();
+      if (!pipeline) {
         refreshCollectionSelectorView();
         return;
       }
@@ -200,9 +266,9 @@ export function initApp() {
         return;
       }
       void reloadSelection({
-        pipeline: currentPipeline(),
+        pipeline,
         collection: selectedCollectionFilename
-          ? currentPipeline().getCollectionByFilename(selectedCollectionFilename)
+          ? pipeline.getCollectionByFilename(selectedCollectionFilename)
           : null,
       });
     },
@@ -270,53 +336,53 @@ export function initApp() {
     confirmDeleteBtn: confirmDeleteFromDiskBtn,
     cancelDeleteBtn: cancelDeleteFromDiskBtn,
   });
-  let pendingDeleteRequest = null;
+  let pendingDeleteRequest: DeleteRequest | null = null;
 
-  function showStatus(msg, timeout = 2500) {
+  function showStatus(msg: string, timeout = 2500): void {
     activityIndicatorControl.show(msg, timeout);
   }
 
-  function showErrorStatus(msg) {
+  function showErrorStatus(msg: string): void {
     activityIndicatorControl.showError(msg);
   }
 
-  function showProgressStatus(msg) {
+  function showProgressStatus(msg: string): void {
     activityIndicatorControl.showProgress(msg);
   }
 
-  function currentPipeline() {
+  function currentPipeline(): Pipeline | null {
     return pipelineSession.pipeline;
   }
 
-  function activeCollection() {
+  function activeCollection(): Collection | null {
     return pipelineSession.activeCollection;
   }
 
-  function currentClipSequence() {
+  function currentClipSequence(): ClipSequence | null {
     return pipelineSession.currentClipSequence;
   }
 
-  function isPipelineMode() {
+  function isPipelineMode(): boolean {
     return pipelineSession.isPipelineMode();
   }
 
-  function activeCollectionFilename() {
+  function activeCollectionFilename(): string {
     return pipelineSession.activeCollectionFilename();
   }
 
-  function gridViewCacheKeyForCollection(collection = activeCollection()) {
+  function gridViewCacheKeyForCollection(collection: Collection | null = activeCollection()): string {
     return collection?.filename ? `collection:${collection.filename}` : 'pipeline';
   }
 
-  function activeGridViewCacheKey() {
+  function activeGridViewCacheKey(): string {
     return gridViewCacheKeyForCollection(activeCollection());
   }
 
-  function isFullscreen() {
+  function isFullscreen(): boolean {
     return fullscreenAdapter.isFullScreenActive();
   }
 
-  function applyGridLayout(cols, cellH) {
+  function applyGridLayout(cols: number, cellH: number): void {
     domRenderer.applyGridLayout(gridController?.getGridElement?.() || grid, cols, cellH);
   }
 
@@ -361,7 +427,7 @@ export function initApp() {
     saveAsNewDialogController.open({ isPipelineMode: isPipelineMode() });
   }
 
-  function openAddToCollectionDialog({ startWithNewCollection = false } = {}) {
+  function openAddToCollectionDialog({ startWithNewCollection = false }: { startWithNewCollection?: boolean } = {}): void {
     if (!currentPipeline()) return;
     addToCollectionDialogController.open({
       choices: AddToCollectionDialogController.buildChoices({
@@ -373,8 +439,9 @@ export function initApp() {
     });
   }
 
-  async function runAddToCollection(destination, { showDialogValidation = false } = {}) {
-    if (!currentClipSequence() || !currentPipeline()) return { ok: false, code: 'missing-context' };
+  async function runAddToCollection(destination: AddToCollectionDestination, { showDialogValidation = false }: { showDialogValidation?: boolean } = {}) {
+    const pipeline = currentPipeline();
+    if (!currentClipSequence() || !pipeline) return { ok: false, code: 'missing-context' };
     const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(gridController.getSelectedClipIds());
     if (selectedClipNames.length === 0) return { ok: false, code: 'no-selection' };
 
@@ -390,7 +457,7 @@ export function initApp() {
         }
         return { ok: false, code: validation.code };
       }
-      if (currentPipeline().getCollectionByFilename(validation.filename)) {
+      if (pipeline.getCollectionByFilename(validation.filename)) {
         const validationError = AddToCollectionDialogController.validationErrorText('already-exists');
         if (showDialogValidation && validationError) {
           addToCollectionDialogController.showValidationError(validationError, { focusNameInput: true });
@@ -403,7 +470,6 @@ export function initApp() {
       targetCollectionFilename = validation.filename;
     }
 
-    const pipeline = currentPipeline();
     const mutation = pipeline.addClipsToCollection({
       collectionFilename: targetCollectionFilename,
       clipNames: selectedClipNames,
@@ -422,7 +488,7 @@ export function initApp() {
       return result;
     }
 
-    let result = null;
+    let result: AddToCollectionResult;
     try {
       const { mode: saveMode } = await persistCollection(mutation.collection);
       result = {
@@ -444,7 +510,7 @@ export function initApp() {
     }
 
     if (!result.ok) {
-      const validationError = AddToCollectionDialogController.validationErrorText(result.code);
+      const validationError = AddToCollectionDialogController.validationErrorText(String(result.code));
       if (showDialogValidation && validationError) {
         addToCollectionDialogController.showValidationError(validationError, {
           focusNameInput: destination.kind === 'new',
@@ -452,7 +518,8 @@ export function initApp() {
         return result;
       }
       if (showDialogValidation) addToCollectionDialogController.close();
-      showErrorStatus(addSelectedClipsFailedText(result.destinationName, result.error || result.code));
+      const failureDetail = 'error' in result ? result.error || result.code : result.code;
+      showErrorStatus(addSelectedClipsFailedText(result.destinationName || '', failureDetail));
       return result;
     }
 
@@ -487,8 +554,9 @@ export function initApp() {
     unsavedChangesDialogController.close();
   }
 
-  function buildDeleteRequestFromSelection() {
-    if (!currentClipSequence() || !currentPipeline()) return null;
+  function buildDeleteRequestFromSelection(): DeleteRequest | null {
+    const pipeline = currentPipeline();
+    if (!currentClipSequence() || !pipeline) return null;
     const selectedClipIds = gridController.getSelectedClipIds();
     if (selectedClipIds.length === 0) return null;
     const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(selectedClipIds);
@@ -496,7 +564,7 @@ export function initApp() {
     return {
       selectedClipIds,
       selectedClipNames,
-      affectedSavedCollectionCount: currentPipeline().savedCollectionEntriesContainingClipNames(selectedClipNames).length,
+      affectedSavedCollectionCount: pipeline.savedCollectionEntriesContainingClipNames(selectedClipNames).length,
     };
   }
 
@@ -511,7 +579,7 @@ export function initApp() {
     });
   }
 
-  function openDeleteFromDiskDialog(deleteRequest) {
+  function openDeleteFromDiskDialog(deleteRequest: DeleteRequest): void {
     deleteFromDiskDialogController.openConfirmForDeleteRequest(deleteRequest, {
       onConfirm: () => {
         void confirmDeleteFromDisk();
@@ -525,9 +593,10 @@ export function initApp() {
     deleteFromDiskDialogController.closeAll();
   }
 
-  async function confirmDeleteFromDisk() {
+  async function confirmDeleteFromDisk(): Promise<void> {
     const deleteRequest = pendingDeleteRequest;
-    if (!deleteRequest || !currentClipSequence() || !currentPipeline()) return;
+    const pipeline = currentPipeline();
+    if (!deleteRequest || !currentClipSequence() || !pipeline) return;
     deleteFromDiskDialogController.closeConfirm();
     pendingDeleteRequest = null;
 
@@ -555,19 +624,19 @@ export function initApp() {
       return clipId ? [clipId] : [];
     });
 
-    let changedCollections = [];
+    let changedCollections: RemovedCollectionChange[] = [];
     if (deletedClipNames.length > 0) {
-      changedCollections = currentPipeline().removeVideos(deletedClipNames).changedCollections;
+      changedCollections = pipeline.removeVideos(deletedClipNames).changedCollections;
     }
 
-    const failedCollectionRewrites = [];
+    const failedCollectionRewrites: Array<{ filename: string; collectionName: string; error: unknown }> = [];
     let cleanedSavedCollectionCount = 0;
     for (const entry of changedCollections) {
       try {
         await persistCollection(entry.collection);
         cleanedSavedCollectionCount += 1;
       } catch (error) {
-        currentPipeline().upsertCollection(entry.previousCollection);
+        pipeline.upsertCollection(entry.previousCollection);
         failedCollectionRewrites.push({
           filename: entry.filename,
           collectionName: entry.collectionName,
@@ -630,12 +699,17 @@ export function initApp() {
     openDeleteFromDiskDialog(deleteRequest);
   }
 
-  function applySelection(clipSequence, {
+  function applySelection(clipSequence: ClipSequence, {
     collection = activeCollection(),
     folderSession = state.currentFolderSession,
     statusText = '',
     timeout = 2500,
-  } = {}) {
+  }: {
+    collection?: Collection | null;
+    folderSession?: unknown;
+    statusText?: string;
+    timeout?: number;
+  } = {}): void {
     hideCollectionConflict();
     clipContextMenuController.close({ restoreFocus: false });
     addToCollectionDialogController.close();
@@ -666,11 +740,22 @@ export function initApp() {
     refreshToolbarView();
   }
 
-  function queueMissingConflict(conflict, handlers) {
+  function queueMissingConflict(
+    conflict: Parameters<typeof collectionConflictController.showConflict>[0],
+    handlers: Parameters<typeof collectionConflictController.showConflict>[1]
+  ): void {
     collectionConflictController.showConflict(conflict, handlers);
   }
 
-  async function reloadSelection({ pipeline = currentPipeline(), collection = activeCollection(), folderSession = state.currentFolderSession } = {}) {
+  async function reloadSelection({
+    pipeline = currentPipeline(),
+    collection = activeCollection(),
+    folderSession = state.currentFolderSession,
+  }: {
+    pipeline?: Pipeline | null;
+    collection?: Collection | null;
+    folderSession?: unknown;
+  } = {}): Promise<void> {
     if (!pipeline) return;
     const loaded = pipelineSession.materializeSelection(collection);
     if (!loaded) return;
@@ -699,7 +784,7 @@ export function initApp() {
     }
 
     applySelection(result.sequence, {
-      collection: selection === pipeline ? null : selection,
+      collection: selection instanceof Collection ? selection : null,
       folderSession,
     });
     loadStatusControl.showSelectionLoadStatus({
@@ -708,7 +793,7 @@ export function initApp() {
     });
   }
 
-  async function loadPipeline({ folderSession = null, files = [], folderName = '' } = {}) {
+  async function loadPipeline({ folderSession = null, files = [], folderName = '' }: Partial<FolderSelection> = {}): Promise<void> {
     try {
       const buildResult = await pipelineFactory.buildPipeline({
         folderName,
@@ -718,6 +803,7 @@ export function initApp() {
       });
       const { pipeline } = buildResult;
       const result = pipelineSession.loadPipeline(pipeline);
+      if (!result) return;
 
       gridController.invalidateAllViews();
       gridController.retagActiveView(null);
@@ -735,21 +821,26 @@ export function initApp() {
     }
   }
 
-  async function triggerFolderPicker() {
+  async function triggerFolderPicker(): Promise<void> {
     hideCollectionConflict();
     try {
       const selection = await fileSystem.pickFolder({
-        onFileReadError: (info, folderSession) => diagnostics.logDirectoryReadError(info, folderSession),
+        onFileReadError: (info, folderSession) => {
+          void diagnostics.logDirectoryReadError(
+            info as Parameters<typeof diagnostics.logDirectoryReadError>[0],
+            folderSession
+          );
+        },
       });
       await loadPipeline(selection);
     } catch (err) {
-      if (err?.name === 'AbortError') return;
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       await diagnostics.logRuntimeError('Failed to browse for a folder.', err, state.currentFolderSession);
       showErrorStatus(collectionReadErrorText(err));
     }
   }
 
-  async function onPickFolder() {
+  async function onPickFolder(): Promise<void> {
     if (pipelineSession.hasDirtyClipSequenceChanges) {
       state.setPendingSelectionAction({ type: 'browse-folder' });
       refreshCollectionSelectorView();
@@ -759,7 +850,7 @@ export function initApp() {
     await triggerFolderPicker();
   }
 
-  async function continuePendingAction({ saveFirst }) {
+  async function continuePendingAction({ saveFirst }: { saveFirst: boolean }): Promise<void> {
     const nextPendingAction = state.getPendingSelectionAction();
     closeUnsavedDialog();
     if (!nextPendingAction) {
@@ -768,7 +859,7 @@ export function initApp() {
     }
     if (saveFirst) {
       const saveResult = await saveActiveCollection();
-      if (saveResult?.deferred) return;
+      if (isDeferredSaveResult(saveResult)) return;
     }
     state.clearPendingSelectionAction();
     if (nextPendingAction.type === 'browse-folder') {
@@ -791,7 +882,8 @@ export function initApp() {
     refreshCollectionSelectorView();
   }
 
-  async function persistCollection(collection) {
+  async function persistCollection(collection: Collection): Promise<PersistCollectionResult> {
+    if (!collection.filename) throw new Error('Collection filename is required.');
     const { mode } = await fileSystem.saveTextFile({
       folderSession: state.currentFolderSession,
       filename: collection.filename,
@@ -804,14 +896,16 @@ export function initApp() {
     };
   }
 
-  async function saveClipSequenceAsCollection(filename) {
-    if (!currentClipSequence() || !currentPipeline()) {
+  async function saveClipSequenceAsCollection(filename: string): Promise<SaveClipSequenceResult> {
+    const pipeline = currentPipeline();
+    if (!currentClipSequence() || !pipeline) {
       return { ok: false, code: 'missing-context' };
     }
     const collection = pipelineSession.collectionFromCurrentSequence(filename);
+    if (!collection) return { ok: false, code: 'missing-context' };
     try {
       const { mode } = await persistCollection(collection);
-      currentPipeline().upsertCollection(collection);
+      pipeline.upsertCollection(collection);
       return {
         ok: true,
         code: 'saved',
@@ -828,7 +922,7 @@ export function initApp() {
     }
   }
 
-  async function saveActiveCollection() {
+  async function saveActiveCollection(): Promise<SaveCollectionResult | null> {
     if (!currentClipSequence() || !currentPipeline()) return null;
     if (isPipelineMode()) {
       openSaveAsNewDialog();
@@ -840,11 +934,11 @@ export function initApp() {
     pipelineSession.markCurrentSequenceSavedAs(savedCollection);
     refreshCollectionSelectorView();
     refreshToolbarView();
-    showStatus(savedCollectionFileText(savedCollection.filename));
+    showStatus(savedCollectionFileText(savedCollection.filename || ''));
     return saveResult;
   }
 
-  async function confirmSaveAsNew(rawName) {
+  async function confirmSaveAsNew(rawName: string): Promise<SaveCollectionResult | undefined> {
     const validationError = validateSaveAsNewName({
       name: rawName,
       pipeline: currentPipeline(),
@@ -876,33 +970,33 @@ export function initApp() {
     return saveResult;
   }
 
-  async function confirmAddToCollection(destination) {
+  async function confirmAddToCollection(destination: AddToCollectionDestination): Promise<void> {
     if (!currentClipSequence() || !currentPipeline()) return;
     await runAddToCollection(destination, { showDialogValidation: true });
   }
 
-  async function confirmDeletePreflightSave() {
+  async function confirmDeletePreflightSave(): Promise<void> {
     if (!pendingDeleteRequest) return;
     deleteFromDiskDialogController.closePreflight();
     pendingDeleteRequest.awaitingSave = true;
     const saveResult = await saveActiveCollection();
-    if (saveResult?.deferred) return;
+    if (isDeferredSaveResult(saveResult)) return;
     pendingDeleteRequest.awaitingSave = false;
     openDeleteFromDiskDialog(pendingDeleteRequest);
   }
 
-  function continueDeleteWithoutSaving() {
+  function continueDeleteWithoutSaving(): void {
     if (!pendingDeleteRequest) return;
     deleteFromDiskDialogController.closePreflight();
     openDeleteFromDiskDialog(pendingDeleteRequest);
   }
 
-  function setTitlesHidden(hidden) {
+  function setTitlesHidden(hidden: boolean): void {
     gridController.setTitlesHidden(hidden);
     refreshToolbarView();
   }
 
-  function openZoomForClip(clip) {
+  function openZoomForClip(clip: Clip | null): boolean {
     if (!clip || isFullscreen()) return false;
     const src = gridController.getClipMediaSource(clip.id);
     if (!src) return false;
@@ -910,30 +1004,30 @@ export function initApp() {
     return zoomOverlay.open({ clipId: clip.id, src, name: clip.name || '' });
   }
 
-  function openZoomForClipId(clipId) {
+  function openZoomForClipId(clipId: string | null | undefined): boolean {
     return openZoomForClip(gridController.getClipById(clipId));
   }
 
-  function browseZoomByOffset(offset) {
+  function browseZoomByOffset(offset: number): boolean {
     if (!zoomOverlay.isOpen()) return false;
     const currentClipId = zoomOverlay.getCurrentClipId();
     const nextClip = offset > 0
       ? gridController.getNextClip(currentClipId)
       : gridController.getPrevClip(currentClipId);
     if (!nextClip) {
-    audioFeedback.playBoundaryClank();
+      audioFeedback.playBoundaryClank();
       return false;
     }
     return openZoomForClip(nextClip);
   }
 
-  function resolveZoomedClipFromActiveSequence() {
+  function resolveZoomedClipFromActiveSequence(): Clip | null {
     const clipId = zoomOverlay.getCurrentClipId();
     if (!clipId) return null;
     return pipelineSession.resolveClip(clipId);
   }
 
-  function addCreatedClipInPipelineMode(createdFile) {
+  function addCreatedClipInPipelineMode(createdFile: ClipFile): Clip | null {
     const result = pipelineSession.insertCreatedClipInPipeline(createdFile);
     if (!result.ok) return null;
 
@@ -946,7 +1040,7 @@ export function initApp() {
     return result.clip;
   }
 
-  function addCreatedClipInCollectionMode(sourceClipId, createdFile) {
+  function addCreatedClipInCollectionMode(sourceClipId: string, createdFile: ClipFile): Clip | null {
     const result = pipelineSession.insertCreatedClipAfter(sourceClipId, createdFile);
     if (!result.ok) return null;
     gridController.invalidateView('pipeline');
@@ -960,7 +1054,10 @@ export function initApp() {
     return result.clip;
   }
 
-  function applyCreatedVideoEditResult({ sourceClip, createdFile }) {
+  function applyCreatedVideoEditResult({ sourceClip, createdFile }: {
+    sourceClip: Clip;
+    createdFile: ClipFile;
+  }): Clip | null {
     return isPipelineMode()
       ? addCreatedClipInPipelineMode(createdFile)
       : addCreatedClipInCollectionMode(sourceClip.id, createdFile);
@@ -1004,17 +1101,17 @@ export function initApp() {
     },
   });
 
-  async function requestZoomVideoEdit(edit) {
+  async function requestZoomVideoEdit(edit: VideoEdit | null | undefined): Promise<void> {
     const sourceClip = resolveZoomedClipFromActiveSequence();
     if (!edit || !sourceClip || !currentPipeline()) return;
     await zoomVideoEditWorkflow.run({
       edit,
       sourceClip,
-      folderSession: state.currentFolderSession,
+      folderSession: folderSessionWithPath(state.currentFolderSession),
     });
   }
 
-  function openZoomEditMenu(point) {
+  function openZoomEditMenu(point: ContextMenuPoint): void {
     if (!zoomOverlay.isOpen() || !resolveZoomedClipFromActiveSequence()) return;
     zoomEditMenuControl.open({
       point,
@@ -1025,7 +1122,7 @@ export function initApp() {
     });
   }
 
-  function openGridContextMenu(point) {
+  function openGridContextMenu(point: ContextMenuPoint): void {
     const hasSelection = gridController.getSelectedClipIds().length > 0;
     gridContextMenuControl.open({
       point,
@@ -1038,7 +1135,7 @@ export function initApp() {
       onAddToCollection: (choice) => {
         void runAddToCollection({
           kind: 'existing',
-          collectionFilename: choice.collectionFilename,
+          collectionFilename: choice.collectionFilename ?? null,
         });
       },
       onNewCollection: () => {
@@ -1134,24 +1231,24 @@ export function initApp() {
     openZoomForClipId,
   });
 
-  function onGlobalKeyDown(e) {
+  function onGlobalKeyDown(e: KeyboardEvent): void {
     fullscreenSession.onGlobalKeyDown(e);
   }
 
-  function onKeyDown(e) {
+  function onKeyDown(e: KeyboardEvent): void {
     handleAppKeyDown(e);
   }
 
-  function onToggleTitles() {
+  function onToggleTitles(): void {
     setTitlesHidden(!gridController.areTitlesHidden());
   }
 
-  function onFsToggle() {
+  function onFsToggle(): void {
     if (zoomOverlay.isOpen()) closeZoom();
     fullscreenSession.onFsToggle();
   }
 
-  function onFsChange() {
+  function onFsChange(): void {
     if (isFullscreen() && zoomOverlay.isOpen()) closeZoom();
     fullscreenSession.onFsChange();
     if (!isFullscreen() && currentClipSequence()) {
@@ -1185,7 +1282,7 @@ export function initApp() {
     onPickFolder: () => void onPickFolder(),
     onSaveOrder: () => void saveActiveCollection(),
     onSaveAsNew: openSaveAsNewDialog,
-    onAddToCollection: openAddToCollectionDialog,
+    onAddToCollection: () => openAddToCollectionDialog(),
     onDeleteFromDisk: openDeleteFromDiskFlow,
     onLoadOrderClick: () => {},
     onOrderFileChange: () => {},

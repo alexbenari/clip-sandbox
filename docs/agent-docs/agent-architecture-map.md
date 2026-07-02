@@ -1,6 +1,6 @@
 # Agent Architecture Map
 
-Last verified: 2026-05-14
+Last verified: 2026-07-02
 
 Verified against:
 
@@ -9,6 +9,7 @@ Verified against:
 - `tsconfig.base.json`
 - `tsconfig.json`
 - `tsconfig.build.json`
+- `tsconfig.strict-src.json`
 - `electron/main.cjs`
 - `electron/folder-entry.cjs`
 - `electron/ffmpeg-resolver.cjs`
@@ -79,7 +80,7 @@ Start here for the current ownership map:
 
 1. Electron shell: [`electron/main.cjs`](../../electron/main.cjs), [`electron/preload.cjs`](../../electron/preload.cjs)
 2. Static shell and emitted runtime bootstrap: [`index.html`](../../index.html) loads [`build/src/app/app-controller.js`](../../build/src/app/app-controller.js) after `npm run build`.
-3. TypeScript compiler and runtime setup: [`package.json`](../../package.json), [`tsconfig.base.json`](../../tsconfig.base.json), [`tsconfig.json`](../../tsconfig.json), [`tsconfig.build.json`](../../tsconfig.build.json)
+3. TypeScript compiler and runtime setup: [`package.json`](../../package.json), [`tsconfig.base.json`](../../tsconfig.base.json), [`tsconfig.json`](../../tsconfig.json), [`tsconfig.build.json`](../../tsconfig.build.json), [`tsconfig.strict-src.json`](../../tsconfig.strict-src.json)
 4. App orchestration: [`src/app/app-controller.ts`](../../src/app/app-controller.ts), [`src/app/pipeline-session.ts`](../../src/app/pipeline-session.ts), [`src/app/app-session-state.ts`](../../src/app/app-session-state.ts), [`src/app/fullscreen-session.ts`](../../src/app/fullscreen-session.ts), [`src/app/app-diagnostics.ts`](../../src/app/app-diagnostics.ts), [`src/app/event-binding.ts`](../../src/app/event-binding.ts)
 5. Desktop/runtime boundary: class-backed adapters under [`src/adapters/electron/`](../../src/adapters/electron/) and [`src/adapters/browser/`](../../src/adapters/browser/)
 6. Load and persistence workflows: [`src/business-logic/PipelineFactory.ts`](../../src/business-logic/PipelineFactory.ts) and the explicit materialization plus mutation methods on [`src/domain/pipeline.ts`](../../src/domain/pipeline.ts). The controller currently performs the raw collection-file writes through the filesystem service.
@@ -173,8 +174,8 @@ Flow:
 
 ## Where To Look By Task
 
-1. Change how the TypeScript build or runtime entry works:
-   Start with [`package.json`](../../package.json), [`tsconfig.build.json`](../../tsconfig.build.json), and [`index.html`](../../index.html).
+1. Change how the TypeScript build, strict-check coverage, or runtime entry works:
+   Start with [`package.json`](../../package.json), [`tsconfig.build.json`](../../tsconfig.build.json), [`tsconfig.strict-src.json`](../../tsconfig.strict-src.json), and [`index.html`](../../index.html).
 2. Change how folders, files, save, append, or delete interact with the desktop runtime:
    Start with [`src/adapters/electron/electron-file-system-service.ts`](../../src/adapters/electron/electron-file-system-service.ts), [`electron/preload.cjs`](../../electron/preload.cjs), and [`electron/main.cjs`](../../electron/main.cjs).
 3. Change how videos and collection files are discovered, classified, or turned into a pipeline:
@@ -207,7 +208,7 @@ Flow:
 3. [`electron/preload.cjs`](../../electron/preload.cjs) and [`electron/main.cjs`](../../electron/main.cjs) define the desktop trust boundary. Over-broad IPC or preload exposure is the main architecture risk in this runtime.
 4. [`src/app/fullscreen-session.ts`](../../src/app/fullscreen-session.ts) is stateful and interacts with live DOM/video elements, making regressions more likely than in pure modules.
 5. The current view contract is intentionally split: `Pipeline` and `Collection` are durable models, while `PipelineSession` owns the active mutable `ClipSequence` working copy. Changes here can silently break dirty-state tracking, save enablement, and delete semantics.
-6. The TypeScript migration is currently syntax-first rather than strict-type-first. Many authored `.ts` files still carry `// @ts-nocheck`, so a future tightening pass must treat type errors as real work rather than assumed safety.
+6. The TypeScript migration now has strict authored-source coverage enforced by `npm run typecheck` through [`tsconfig.strict-src.json`](../../tsconfig.strict-src.json). Authored TypeScript under `src/` should not use `// @ts-nocheck`; the remaining unchecked runtime bridge is the CommonJS Electron shell under [`electron/`](../../electron/), which is intentionally outside this strict source config for now.
 
 ## Validation Map
 

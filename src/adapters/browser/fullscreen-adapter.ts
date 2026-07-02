@@ -1,11 +1,21 @@
-// @ts-nocheck
+type FullscreenDocument = Document & {
+  webkitExitFullscreen?: () => void;
+  webkitFullscreenElement?: Element | null;
+};
+
+type FullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => void;
+};
+
 export class FullscreenAdapter {
-  constructor({ doc = document } = {}) {
+  doc: FullscreenDocument;
+
+  constructor({ doc = document }: { doc?: FullscreenDocument } = {}) {
     this.doc = doc;
   }
 
-  async enterFullScreen(doc = this.doc) {
-    const el = doc.documentElement;
+  async enterFullScreen(doc: FullscreenDocument = this.doc): Promise<void> {
+    const el = doc.documentElement as FullscreenElement;
     if (el.requestFullscreen) {
       await el.requestFullscreen();
       return;
@@ -13,7 +23,7 @@ export class FullscreenAdapter {
     if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   }
 
-  async exitFullScreen(doc = this.doc) {
+  async exitFullScreen(doc: FullscreenDocument = this.doc): Promise<void> {
     if (doc.exitFullscreen) {
       await doc.exitFullscreen();
       return;
@@ -21,7 +31,7 @@ export class FullscreenAdapter {
     if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
   }
 
-  isFullScreenActive(doc = this.doc) {
+  isFullScreenActive(doc: FullscreenDocument = this.doc): boolean {
     return !!(doc.fullscreenElement || doc.webkitFullscreenElement);
   }
 }

@@ -1,20 +1,41 @@
-// @ts-nocheck
 import {
   collectionConflictSummaryText,
   collectionConflictListText,
 } from '../app/app-text.js';
 
+type ConflictHandlers = {
+  onApply?: (() => void) | null;
+  onCancel?: (() => void) | null;
+};
+
+type CollectionConflict = {
+  existingNamesInOrder?: string[];
+  missingCount?: number;
+  missingNames?: string[];
+};
+
 export class CollectionConflictController {
+  root: HTMLElement | null;
+  summaryEl: HTMLElement | null;
+  listEl: HTMLElement | null;
+  handlers: ConflictHandlers;
+
   constructor({
     root,
     summaryEl,
     listEl,
     applyBtn,
     cancelBtn,
+  }: {
+    root?: HTMLElement | null;
+    summaryEl?: HTMLElement | null;
+    listEl?: HTMLElement | null;
+    applyBtn?: HTMLElement | null;
+    cancelBtn?: HTMLElement | null;
   } = {}) {
-    this.root = root;
-    this.summaryEl = summaryEl;
-    this.listEl = listEl;
+    this.root = root || null;
+    this.summaryEl = summaryEl || null;
+    this.listEl = listEl || null;
     this.handlers = {};
 
     applyBtn?.addEventListener('click', () => {
@@ -30,11 +51,11 @@ export class CollectionConflictController {
     });
   }
 
-  isVisible() {
+  isVisible(): boolean {
     return !!this.root && !this.root.hidden;
   }
 
-  hide() {
+  hide(): void {
     if (!this.root) return;
     this.root.hidden = true;
     if (this.summaryEl) this.summaryEl.textContent = '';
@@ -42,7 +63,7 @@ export class CollectionConflictController {
     this.handlers = {};
   }
 
-  show({ summary = '', list = '', onApply = null, onCancel = null } = {}) {
+  show({ summary = '', list = '', onApply = null, onCancel = null }: { summary?: string; list?: string } & ConflictHandlers = {}): void {
     if (!this.root) return;
     this.handlers = { onApply, onCancel };
     if (this.summaryEl) this.summaryEl.textContent = summary;
@@ -50,7 +71,7 @@ export class CollectionConflictController {
     this.root.hidden = false;
   }
 
-  showConflict(conflict, handlers = {}) {
+  showConflict(conflict: CollectionConflict | null | undefined, handlers: ConflictHandlers = {}): void {
     this.show({
       summary: collectionConflictSummaryText(
         conflict?.existingNamesInOrder?.length || 0,
@@ -63,6 +84,6 @@ export class CollectionConflictController {
   }
 }
 
-export function createCollectionConflictController(options) {
+export function createCollectionConflictController(options?: ConstructorParameters<typeof CollectionConflictController>[0]): CollectionConflictController {
   return new CollectionConflictController(options);
 }

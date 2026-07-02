@@ -1,7 +1,15 @@
-// @ts-nocheck
 import { activeCollectionText, activeCollectionTabText } from '../app/app-text.js';
+import type { ClipSequence } from '../domain/clip-sequence.js';
+import type { Collection } from '../domain/collection.js';
+import type { Pipeline } from '../domain/pipeline.js';
 
-function selectorOptions(pipeline, pipelineSelectionValue) {
+type SelectorChoice = {
+  label: string;
+  value: string | null;
+  collectionFilename?: string | null;
+};
+
+function selectorOptions(pipeline: Pipeline | null, pipelineSelectionValue: string): SelectorChoice[] {
   if (!pipeline) return [];
   return [
     {
@@ -16,7 +24,11 @@ function selectorOptions(pipeline, pipelineSelectionValue) {
   ];
 }
 
-function currentSequenceName({ currentClipSequence = null, activeCollection = null, pipeline = null } = {}) {
+function currentSequenceName({ currentClipSequence = null, activeCollection = null, pipeline = null }: {
+  currentClipSequence?: ClipSequence | null;
+  activeCollection?: Collection | null;
+  pipeline?: Pipeline | null;
+} = {}): string {
   return currentClipSequence?.name
     || activeCollection?.collectionName
     || pipeline?.folderName
@@ -24,14 +36,27 @@ function currentSequenceName({ currentClipSequence = null, activeCollection = nu
 }
 
 export class CollectionSelectorControl {
+  selectEl: HTMLSelectElement | null;
+  doc: Document;
+  pipelineSelectionValue: string;
+  defaultTitle: string;
+  onSelectionRequested: (collectionFilename: string | null) => void;
+  onChange: (event: Event) => void;
+
   constructor({
     selectEl,
     doc = document,
     pipelineSelectionValue = '__pipeline__',
     defaultTitle = '',
     onSelectionRequested = () => {},
+  }: {
+    selectEl?: HTMLSelectElement | null;
+    doc?: Document;
+    pipelineSelectionValue?: string;
+    defaultTitle?: string;
+    onSelectionRequested?: (collectionFilename: string | null) => void;
   } = {}) {
-    this.selectEl = selectEl;
+    this.selectEl = selectEl || null;
     this.doc = doc;
     this.pipelineSelectionValue = pipelineSelectionValue;
     this.defaultTitle = defaultTitle;
@@ -51,7 +76,11 @@ export class CollectionSelectorControl {
     pipeline = null,
     activeCollection = null,
     currentClipSequence = null,
-  } = {}) {
+  }: {
+    pipeline?: Pipeline | null;
+    activeCollection?: Collection | null;
+    currentClipSequence?: ClipSequence | null;
+  } = {}): void {
     if (!(this.selectEl instanceof HTMLSelectElement)) return;
 
     const sequenceName = currentSequenceName({ currentClipSequence, activeCollection, pipeline });
@@ -87,11 +116,11 @@ export class CollectionSelectorControl {
     this.selectEl.title = label || this.defaultTitle;
   }
 
-  destroy() {
+  destroy(): void {
     this.selectEl?.removeEventListener('change', this.onChange);
   }
 }
 
-export function createCollectionSelectorControl(options) {
+export function createCollectionSelectorControl(options?: ConstructorParameters<typeof CollectionSelectorControl>[0]): CollectionSelectorControl {
   return new CollectionSelectorControl(options);
 }

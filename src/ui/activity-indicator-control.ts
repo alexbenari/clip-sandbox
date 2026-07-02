@@ -1,4 +1,3 @@
-// @ts-nocheck
 const ACTIVITY_INDICATOR_STYLE_ID = 'activityIndicatorStyles';
 const DEFAULT_ACTIVITY_INDICATOR_CSS = `
 .activity-indicator-host{
@@ -74,7 +73,11 @@ const DEFAULT_ACTIVITY_INDICATOR_CSS = `
 }
 `;
 
-function ensureActivityIndicatorStyles(doc) {
+type ActivityState = 'idle' | 'progress' | 'success' | 'error';
+type ActivityEntry = { message: string; state: Exclude<ActivityState, 'idle'> };
+type ActivityWindow = Window & typeof globalThis;
+
+function ensureActivityIndicatorStyles(doc: Document): void {
   if (doc.getElementById(ACTIVITY_INDICATOR_STYLE_ID)) return;
   const styleEl = doc.createElement('style');
   styleEl.id = ACTIVITY_INDICATOR_STYLE_ID;
@@ -82,11 +85,23 @@ function ensureActivityIndicatorStyles(doc) {
   (doc.head || doc.documentElement).appendChild(styleEl);
 }
 
-function nextStateTimeout(timeout) {
+function nextStateTimeout(timeout: number): number {
   return Number.isFinite(timeout) && timeout >= 0 ? timeout : 2500;
 }
 
 export class ActivityIndicatorControl {
+  root: HTMLElement | null;
+  button: HTMLButtonElement | null;
+  panel: HTMLElement | null;
+  listEl: HTMLElement | null;
+  doc: Document;
+  win: ActivityWindow;
+  maxEntries: number;
+  entries: ActivityEntry[];
+  state: ActivityState;
+  resetTimer: number | null;
+  handleToggle: () => void;
+
   constructor({
     root,
     button,
@@ -95,11 +110,19 @@ export class ActivityIndicatorControl {
     document: doc = root?.ownerDocument || document,
     win = doc.defaultView || window,
     maxEntries = 5,
+  }: {
+    root?: HTMLElement | null;
+    button?: HTMLButtonElement | null;
+    panel?: HTMLElement | null;
+    listEl?: HTMLElement | null;
+    document?: Document;
+    win?: ActivityWindow;
+    maxEntries?: number;
   } = {}) {
-    this.root = root;
-    this.button = button;
-    this.panel = panel;
-    this.listEl = listEl;
+    this.root = root || null;
+    this.button = button || null;
+    this.panel = panel || null;
+    this.listEl = listEl || null;
     this.doc = doc;
     this.win = win;
     this.maxEntries = Math.max(1, Number(maxEntries) || 5);
@@ -107,7 +130,7 @@ export class ActivityIndicatorControl {
     this.state = 'idle';
     this.resetTimer = null;
     this.handleToggle = () => {
-      this.setPanelOpen(this.panel?.hidden);
+      this.setPanelOpen(!!this.panel?.hidden);
     };
 
     if (!root || !button || !panel || !listEl) return;
@@ -122,24 +145,24 @@ export class ActivityIndicatorControl {
     this.renderHistory();
   }
 
-  clearResetTimer() {
-    this.win.clearTimeout(this.resetTimer);
+  clearResetTimer(): void {
+    if (this.resetTimer) this.win.clearTimeout(this.resetTimer);
     this.resetTimer = null;
   }
 
-  setState(state = 'idle') {
+  setState(state: ActivityState = 'idle'): void {
     this.state = state;
     if (this.button) this.button.dataset.state = state;
   }
 
-  setPanelOpen(isOpen) {
+  setPanelOpen(isOpen: boolean): void {
     if (!this.panel || !this.button) return;
     const open = !!isOpen;
     this.panel.hidden = !open;
     this.button.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
-  addEntry(message, state) {
+  addEntry(message: string, state: ActivityEntry['state']): void {
     this.entries.unshift({
       message: String(message || ''),
       state,
@@ -148,7 +171,7 @@ export class ActivityIndicatorControl {
     this.renderHistory();
   }
 
-  renderHistory() {
+  renderHistory(): void {
     if (!this.listEl) return;
     this.listEl.replaceChildren();
     for (const entry of this.entries) {
@@ -160,17 +183,17 @@ export class ActivityIndicatorControl {
     }
   }
 
-  show(message, timeout = 2500) {
+  show(message: string, timeout = 2500): void {
     this.showSuccess(message, timeout);
   }
 
-  showProgress(message) {
+  showProgress(message: string): void {
     this.clearResetTimer();
     this.setState('progress');
     this.addEntry(message, 'progress');
   }
 
-  showSuccess(message, timeout = 2500) {
+  showSuccess(message: string, timeout = 2500): void {
     this.clearResetTimer();
     this.setState('success');
     this.addEntry(message, 'success');
@@ -180,7 +203,7 @@ export class ActivityIndicatorControl {
     }, nextStateTimeout(timeout));
   }
 
-  showError(message) {
+  showError(message: string): void {
     this.clearResetTimer();
     this.setState('error');
     this.addEntry(message, 'error');
@@ -188,7 +211,7 @@ export class ActivityIndicatorControl {
   }
 }
 
-export function createActivityIndicatorControl(options) {
+export function createActivityIndicatorControl(options?: ConstructorParameters<typeof ActivityIndicatorControl>[0]): ActivityIndicatorControl {
   return new ActivityIndicatorControl(options);
 }
 

@@ -1,7 +1,14 @@
-// @ts-nocheck
 import { countText, niceNum } from '../app/app-text.js';
 
 export class MainToolbarControl {
+  countEl: HTMLElement | null;
+  saveBtn: HTMLButtonElement | null;
+  saveAsNewBtn: HTMLButtonElement | null;
+  addToCollectionBtn: HTMLButtonElement | null;
+  deleteFromDiskBtn: HTMLButtonElement | null;
+  toggleTitlesBtn: HTMLButtonElement | null;
+  activityButton: HTMLButtonElement | null;
+
   constructor({
     countEl,
     saveBtn,
@@ -10,14 +17,22 @@ export class MainToolbarControl {
     deleteFromDiskBtn,
     toggleTitlesBtn,
     activityButton = null,
+  }: {
+    countEl?: HTMLElement | null;
+    saveBtn?: HTMLButtonElement | null;
+    saveAsNewBtn?: HTMLButtonElement | null;
+    addToCollectionBtn?: HTMLButtonElement | null;
+    deleteFromDiskBtn?: HTMLButtonElement | null;
+    toggleTitlesBtn?: HTMLButtonElement | null;
+    activityButton?: HTMLButtonElement | null;
   } = {}) {
-    this.countEl = countEl;
-    this.saveBtn = saveBtn;
-    this.saveAsNewBtn = saveAsNewBtn;
-    this.addToCollectionBtn = addToCollectionBtn;
-    this.deleteFromDiskBtn = deleteFromDiskBtn;
-    this.toggleTitlesBtn = toggleTitlesBtn;
-    this.activityButton = activityButton;
+    this.countEl = countEl || null;
+    this.saveBtn = saveBtn || null;
+    this.saveAsNewBtn = saveAsNewBtn || null;
+    this.addToCollectionBtn = addToCollectionBtn || null;
+    this.deleteFromDiskBtn = deleteFromDiskBtn || null;
+    this.toggleTitlesBtn = toggleTitlesBtn || null;
+    this.activityButton = activityButton || null;
   }
 
   render({
@@ -27,7 +42,14 @@ export class MainToolbarControl {
     hasSelection = false,
     isPipelineMode = true,
     titlesHidden = false,
-  } = {}) {
+  }: {
+    clipCount?: number;
+    hasPipeline?: boolean;
+    hasSequence?: boolean;
+    hasSelection?: boolean;
+    isPipelineMode?: boolean;
+    titlesHidden?: boolean;
+  } = {}): void {
     const normalizedClipCount = Number.isFinite(clipCount) ? Math.max(0, clipCount) : 0;
 
     if (this.countEl) {
@@ -61,6 +83,6 @@ export class MainToolbarControl {
   }
 }
 
-export function createMainToolbarControl(options) {
+export function createMainToolbarControl(options?: ConstructorParameters<typeof MainToolbarControl>[0]): MainToolbarControl {
   return new MainToolbarControl(options);
 }

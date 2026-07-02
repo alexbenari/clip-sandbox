@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true
+  },
+  "include": [
+    "src/domain/**/*.ts",
+    "src/business-logic/**/*.ts",
+    "src/adapters/browser/**/*.ts",
+    "src/adapters/electron/**/*.ts",
+    "src/app/**/*.ts",
+    "src/ui/**/*.ts"
+  ],
+  "exclude": [
+    "build",
+    "electron",
+    "node_modules"
+  ]
+}

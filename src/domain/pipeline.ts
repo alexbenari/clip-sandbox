@@ -1,28 +1,59 @@
-// @ts-nocheck
 import { Clip } from './clip.js';
 import { ClipSequence } from './clip-sequence.js';
 import { Collection } from './collection.js';
+import type { ClipFile } from './clip.js';
+import type { CollectionMaterialization } from './collection.js';
 
-/**
- * @param {Iterable<import('./clip.js').ClipFile>} files
- * @returns {import('./clip.js').ClipFile[]}
- */
-function sortedFiles(files) {
+export type PipelineMaterialization = { kind: 'loaded'; sequence: ClipSequence };
+
+export type AddClipsToCollectionResult =
+  | { ok: false; code: 'invalid-destination' }
+  | {
+    ok: true;
+    code: 'no-op' | 'added';
+    collection: Collection;
+    previousCollection: Collection | null;
+    destinationName: string;
+    filename: string | null;
+    addedClipNames: string[];
+    skippedClipNames: string[];
+    addedCount: number;
+    skippedCount: number;
+    isNoOp: boolean;
+    created: boolean;
+  };
+
+export type RemovedCollectionChange = {
+  filename: string;
+  collectionName: string;
+  previousCollection: Collection;
+  collection: Collection;
+  removedClipNames: string[];
+  removedCount: number;
+};
+
+export type RemoveVideosResult = {
+  removedVideoNames: string[];
+  changedCollections: RemovedCollectionChange[];
+};
+
+function sortedFiles(files: Iterable<ClipFile>): ClipFile[] {
   return Array.from(files || []).sort((a, b) =>
     (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' })
   );
 }
 
 export class Pipeline {
-  #folderName;
-  #videoFilesByName;
-  #clipsByName;
-  #collectionsByFilename;
+  #folderName: string;
+  #videoFilesByName: Map<string, ClipFile>;
+  #clipsByName: Map<string, Clip>;
+  #collectionsByFilename: Map<string, Collection>;
 
-  /**
-   * @param {{ folderName?: string, videoFiles?: Iterable<import('./clip.js').ClipFile>, collections?: Iterable<Collection> }} [params]
-   */
-  constructor({ folderName = '', videoFiles = [], collections = [] } = {}) {
+  constructor({ folderName = '', videoFiles = [], collections = [] }: {
+    folderName?: string;
+    videoFiles?: Iterable<ClipFile>;
+    collections?: Iterable<Collection>;
+  } = {}) {
     this.#folderName = String(folderName || '').trim();
     this.#videoFilesByName = new Map();
     this.#clipsByName = new Map();
@@ -35,16 +66,11 @@ export class Pipeline {
     return this.#folderName;
   }
 
-  /** @returns {string} */
-  displayLabel() {
+  displayLabel(): string {
     return this.#folderName || 'Pipeline';
   }
 
-  /**
-   * @param {{ nextClipId?: () => string }} [options]
-   * @returns {{ kind: 'loaded', sequence: ClipSequence }}
-   */
-  materializePipeline({ nextClipId } = {}) {
+  materializePipeline({ nextClipId }: { nextClipId?: () => string } = {}): PipelineMaterialization {
     if (typeof nextClipId !== 'function') {
       throw new Error('A nextClipId function is required to materialize a pipeline sequence.');
     }
@@ -57,11 +83,7 @@ export class Pipeline {
     };
   }
 
-  /**
-   * @param {Iterable<import('./clip.js').ClipFile>} videoFiles
-   * @returns {void}
-   */
-  setVideoFiles(videoFiles) {
+  setVideoFiles(videoFiles: Iterable<ClipFile>): void {
     this.#videoFilesByName = new Map(
       sortedFiles(videoFiles).map((file) => [file.name, file])
     );
@@ -75,114 +97,68 @@ export class Pipeline {
     }
   }
 
-  /** @returns {import('./clip.js').ClipFile[]} */
-  videoFiles() {
+  videoFiles(): ClipFile[] {
     return Array.from(this.#videoFilesByName.values());
   }
 
-  /** @returns {Map<string, import('./clip.js').ClipFile>} */
-  videoFileMap() {
+  videoFileMap(): Map<string, ClipFile> {
     return new Map(this.#videoFilesByName);
   }
 
-  /** @returns {Map<string, Clip>} */
-  clipMap() {
+  clipMap(): Map<string, Clip> {
     return new Map(this.#clipsByName);
   }
 
-  /** @returns {string[]} */
-  videoNames() {
+  videoNames(): string[] {
     return Array.from(this.#videoFilesByName.keys());
   }
 
-  /**
-   * @param {import('./clip.js').ClipFile} videoFile
-   * @returns {boolean}
-   */
-  upsertVideoFile(videoFile) {
+  upsertVideoFile(videoFile: ClipFile): boolean {
     if (!videoFile?.name) return false;
     this.#videoFilesByName.set(videoFile.name, videoFile);
     this.setVideoFiles(this.#videoFilesByName.values());
     return true;
   }
 
-  /**
-   * @param {import('./clip.js').ClipFile} videoFile
-   * @param {{ nextClipId?: () => string }} [options]
-   * @returns {Clip | null}
-   */
-  upsertVideoClip(videoFile, { nextClipId } = {}) {
+  upsertVideoClip(videoFile: ClipFile, { nextClipId }: { nextClipId?: () => string } = {}): Clip | null {
     if (!this.upsertVideoFile(videoFile)) return null;
     return this.#clipForFile(videoFile, nextClipId);
   }
 
-  /**
-   * @param {Iterable<Collection>} collections
-   * @returns {void}
-   */
-  setCollections(collections) {
+  setCollections(collections: Iterable<Collection>): void {
     this.#collectionsByFilename = new Map();
     for (const collection of Array.from(collections || [])) {
-      if (!(collection instanceof Collection) || !collection.hasBackingFile) continue;
-      this.#collectionsByFilename.set(collection.filename, collection);
+      const filename = collection instanceof Collection ? collection.filename : null;
+      if (!filename) continue;
+      this.#collectionsByFilename.set(filename, collection);
     }
   }
 
-  /**
-   * @param {Collection} collection
-   * @returns {void}
-   */
-  upsertCollection(collection) {
-    if (!(collection instanceof Collection) || !collection.hasBackingFile) return;
+  upsertCollection(collection: Collection): void {
+    if (!(collection instanceof Collection) || !collection.filename) return;
     this.#collectionsByFilename.set(collection.filename, collection);
   }
 
-  /**
-   * @param {string} filename
-   * @returns {void}
-   */
-  removeCollection(filename) {
+  removeCollection(filename: string): void {
     const normalizedFilename = String(filename || '').trim();
     if (!normalizedFilename) return;
     this.#collectionsByFilename.delete(normalizedFilename);
   }
 
-  /** @returns {Collection[]} */
-  collections() {
+  collections(): Collection[] {
     return Array.from(this.#collectionsByFilename.values())
       .sort((a, b) => a.collectionName.localeCompare(b.collectionName, undefined, { sensitivity: 'base', numeric: true }));
   }
 
-  /**
-   * @param {string} filename
-   * @returns {Collection | null}
-   */
-  getCollectionByFilename(filename) {
+  getCollectionByFilename(filename: string): Collection | null {
     const normalizedFilename = String(filename || '').trim();
     return this.#collectionsByFilename.get(normalizedFilename) || null;
   }
 
-  /**
-   * @param {{ collectionFilename?: string, clipNames?: Iterable<string> }} [params]
-   * @returns {{
-   *   ok: boolean,
-   *   code: 'invalid-destination' | 'no-op' | 'added',
-   *   collection?: Collection,
-   *   previousCollection?: Collection | null,
-   *   destinationName?: string,
-   *   filename?: string,
-   *   addedClipNames?: string[],
-   *   skippedClipNames?: string[],
-   *   addedCount?: number,
-   *   skippedCount?: number,
-   *   isNoOp?: boolean,
-   *   created?: boolean,
-   * }}
-   */
   addClipsToCollection({
     collectionFilename = '',
     clipNames = [],
-  } = {}) {
+  }: { collectionFilename?: string; clipNames?: Iterable<string> } = {}): AddClipsToCollectionResult {
     const normalizedFilename = String(collectionFilename || '').trim();
     if (!normalizedFilename) {
       return { ok: false, code: 'invalid-destination' };
@@ -230,12 +206,7 @@ export class Pipeline {
     };
   }
 
-  /**
-   * @param {Collection | null | undefined} collection
-   * @param {{ nextClipId?: () => string }} [options]
-   * @returns {ReturnType<Collection['materializeClipSequence']> | null}
-   */
-  materializeCollection(collection, { nextClipId } = {}) {
+  materializeCollection(collection: Collection | null | undefined, { nextClipId }: { nextClipId?: () => string } = {}): CollectionMaterialization | null {
     if (!(collection instanceof Collection) || typeof nextClipId !== 'function') return null;
     for (const file of this.videoFiles()) {
       this.#clipForFile(file, nextClipId);
@@ -245,38 +216,26 @@ export class Pipeline {
     });
   }
 
-  /**
-   * @param {Collection | null | undefined} collection
-   * @param {{ nextClipId?: () => string }} [options]
-   * @returns {{ selection: Pipeline | Collection, materialization: { kind: 'loaded', sequence: ClipSequence } | ReturnType<Collection['materializeClipSequence']> } | null}
-   */
-  materializeSelection(collection, { nextClipId } = {}) {
-    const selection = collection instanceof Collection ? collection : this;
-    const materialization = selection === this
-      ? this.materializePipeline({ nextClipId })
-      : this.materializeCollection(selection, { nextClipId });
+  materializeSelection(collection: Collection | null | undefined, { nextClipId }: { nextClipId?: () => string } = {}): {
+    selection: Pipeline | Collection;
+    materialization: PipelineMaterialization | CollectionMaterialization;
+  } | null {
+    if (!(collection instanceof Collection)) {
+      return {
+        selection: this,
+        materialization: this.materializePipeline({ nextClipId }),
+      };
+    }
+
+    const materialization = this.materializeCollection(collection, { nextClipId });
     if (!materialization) return null;
     return {
-      selection,
+      selection: collection,
       materialization,
     };
   }
 
-  /**
-   * @param {Iterable<string>} videoNames
-   * @returns {{
-   *   removedVideoNames: string[],
-   *   changedCollections: {
-   *     filename: string,
-   *     collectionName: string,
-   *     previousCollection: Collection,
-   *     collection: Collection,
-   *     removedClipNames: string[],
-   *     removedCount: number,
-   *   }[],
-   * }}
-   */
-  removeVideos(videoNames) {
+  removeVideos(videoNames: Iterable<string>): RemoveVideosResult {
     const namesToRemove = new Set(Array.from(videoNames || []).filter(Boolean));
     const removedVideoNames = this.videoNames().filter((name) => namesToRemove.has(name));
 
@@ -287,13 +246,14 @@ export class Pipeline {
       };
     }
 
-    const changedCollections = [];
+    const changedCollections: RemovedCollectionChange[] = [];
     for (const collection of this.collections()) {
       const pruned = collection.removeVideos(removedVideoNames);
       if (pruned.isNoOp) continue;
 
       const nextCollection = pruned.collection.withFilename(collection.filename);
       this.upsertCollection(nextCollection);
+      if (!collection.filename) continue;
       changedCollections.push({
         filename: collection.filename,
         collectionName: collection.collectionName,
@@ -314,26 +274,18 @@ export class Pipeline {
     };
   }
 
-  /**
-   * @param {Iterable<string>} clipNames
-   * @returns {{ collection: Collection, filename: string }[]}
-   */
-  savedCollectionEntriesContainingClipNames(clipNames) {
+  savedCollectionEntriesContainingClipNames(clipNames: Iterable<string>): { collection: Collection; filename: string }[] {
     const names = new Set(Array.from(clipNames || []).filter(Boolean));
     if (names.size === 0) return [];
     return this.collections().filter((collection) =>
       collection.orderedClipNames.some((clipName) => names.has(clipName))
     ).map((collection) => ({
       collection,
-      filename: /** @type {string} */ (collection.filename),
+      filename: collection.filename || '',
     }));
   }
 
-  /**
-   * @param {string | null | undefined} activeCollectionFilename
-   * @returns {Collection[]}
-   */
-  eligibleDestinationCollections(activeCollectionFilename = null) {
+  eligibleDestinationCollections(activeCollectionFilename: string | null | undefined = null): Collection[] {
     const normalizedActiveFilename = String(activeCollectionFilename || '').trim();
     return this.collections().filter((collection) => {
       if (!normalizedActiveFilename) return true;
@@ -341,7 +293,7 @@ export class Pipeline {
     });
   }
 
-  #clipForFile(file, nextClipId) {
+  #clipForFile(file: ClipFile, nextClipId?: () => string): Clip {
     const name = file?.name || '';
     if (!name) throw new Error('Clip file name is required.');
     const existing = this.#clipsByName.get(name);

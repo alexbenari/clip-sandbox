@@ -1,21 +1,32 @@
-// @ts-nocheck
-/**
- * @typedef {File & { mediaSource?: string }} ClipFile
- */
+export type ClipFile = File & {
+  mediaSource?: string;
+  path?: string;
+  relativePath?: string;
+  webkitRelativePath?: string;
+};
+
+export type ClipMetadata = {
+  durationSec?: number | null;
+  videoWidth?: number | null;
+  videoHeight?: number | null;
+};
+
+type ClipParams = ClipMetadata & {
+  id: string;
+  file: ClipFile;
+  mediaSource?: string;
+};
 
 export class Clip {
-  #id;
-  #file;
-  #durationSec;
-  #videoWidth;
-  #videoHeight;
-  #metadataFailed;
-  #mediaSource;
+  #id: string;
+  #file: ClipFile;
+  #durationSec: number | null;
+  #videoWidth: number | null;
+  #videoHeight: number | null;
+  #metadataFailed: boolean;
+  #mediaSource: string;
 
-  /**
-   * @param {{ id?: string, file?: ClipFile, durationSec?: number | null, videoWidth?: number | null, videoHeight?: number | null, mediaSource?: string }} [params]
-   */
-  constructor({ id, file, durationSec = null, videoWidth = null, videoHeight = null, mediaSource = '' } = {}) {
+  constructor({ id, file, durationSec = null, videoWidth = null, videoHeight = null, mediaSource = '' }: ClipParams) {
     if (!id) throw new Error('Clip id is required.');
     if (!file) throw new Error('Clip file is required.');
     this.#id = id;
@@ -60,47 +71,34 @@ export class Clip {
   }
 
   hasUsableDimensions() {
-    return Number.isFinite(this.#videoWidth) && this.#videoWidth > 0
-      && Number.isFinite(this.#videoHeight) && this.#videoHeight > 0;
+    const videoWidth = this.#videoWidth;
+    const videoHeight = this.#videoHeight;
+    return typeof videoWidth === 'number' && Number.isFinite(videoWidth) && videoWidth > 0
+      && typeof videoHeight === 'number' && Number.isFinite(videoHeight) && videoHeight > 0;
   }
 
-  /**
-   * @param {number | null | undefined} durationSec
-   * @returns {void}
-   */
-  setDuration(durationSec) {
+  setDuration(durationSec: number | null | undefined): void {
     this.#durationSec = typeof durationSec === 'number' && Number.isFinite(durationSec) ? durationSec : null;
   }
 
-  /**
-   * @param {{ durationSec?: number | null, videoWidth?: number | null, videoHeight?: number | null }} [metadata]
-   * @returns {void}
-   */
-  setVideoMetadata({ durationSec = this.#durationSec, videoWidth = this.#videoWidth, videoHeight = this.#videoHeight } = {}) {
+  setVideoMetadata({ durationSec = this.#durationSec, videoWidth = this.#videoWidth, videoHeight = this.#videoHeight }: ClipMetadata = {}): void {
     this.setDuration(durationSec);
     this.#videoWidth = Clip.#usableDimension(videoWidth);
     this.#videoHeight = Clip.#usableDimension(videoHeight);
     this.#metadataFailed = false;
   }
 
-  /**
-   * @returns {void}
-   */
-  markMetadataFailed() {
+  markMetadataFailed(): void {
     this.#metadataFailed = true;
   }
 
-  /**
-   * @param {ClipFile} file
-   * @returns {void}
-   */
-  replaceFile(file) {
+  replaceFile(file: ClipFile): void {
     if (!file) throw new Error('Clip file is required.');
     this.#file = file;
     this.#mediaSource = String(file?.mediaSource || '');
   }
 
-  static #usableDimension(value) {
+  static #usableDimension(value: number | null | undefined): number | null {
     const dimension = Number(value);
     return Number.isFinite(dimension) && dimension > 0 ? dimension : null;
   }

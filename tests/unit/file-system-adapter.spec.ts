@@ -83,6 +83,31 @@ describe('readFilesFromDirectory', () => {
   });
 });
 
+describe('appendTextToDirectoryFile', () => {
+  it('does not overwrite an existing file when previous content cannot be read', async () => {
+    const adapter = createAdapter();
+    const readError = new Error('Permission revoked.');
+    const createWritable = vi.fn(async () => ({
+      write: vi.fn(),
+      close: vi.fn(),
+    }));
+    const directoryHandle = {
+      async getFileHandle() {
+        return {
+          async getFile() {
+            throw readError;
+          },
+          createWritable,
+        };
+      },
+    };
+
+    await expect(adapter.appendTextToDirectoryFile(directoryHandle, 'err.log', 'new entry\n'))
+      .rejects.toThrow('Permission revoked.');
+    expect(createWritable).not.toHaveBeenCalled();
+  });
+});
+
 describe('folderNameFromFiles', () => {
   it('extracts the folder name from webkitRelativePath', () => {
     const adapter = createAdapter();

@@ -1,4 +1,3 @@
-// @ts-nocheck
 const ZOOM_OVERLAY_STYLE_ID = 'zoomOverlayStyles';
 const DEFAULT_ZOOM_OVERLAY_CSS = `
 #zoomLayerRoot{ position:relative; z-index:40; }
@@ -8,7 +7,19 @@ const DEFAULT_ZOOM_OVERLAY_CSS = `
 .zoom-video{ width:100%; height:100%; object-fit:contain; display:block; background:#000; }
 `;
 
-function ensureZoomOverlayStyles(doc) {
+type ZoomContextMenuEvent = {
+  clipId: string | null;
+  name: string;
+  point: { x: number; y: number };
+};
+
+type ZoomItem = {
+  clipId: string | null;
+  src: string;
+  name: string;
+};
+
+function ensureZoomOverlayStyles(doc: Document): void {
   if (doc.getElementById(ZOOM_OVERLAY_STYLE_ID)) return;
   const styleEl = doc.createElement('style');
   styleEl.id = ZOOM_OVERLAY_STYLE_ID;
@@ -17,8 +28,21 @@ function ensureZoomOverlayStyles(doc) {
 }
 
 export class ZoomOverlayController {
-  constructor({ mountEl, document: doc = document, onContextMenu = null } = {}) {
-    this.mountEl = mountEl;
+  mountEl: HTMLElement | null;
+  doc: Document;
+  onContextMenu: ((event: ZoomContextMenuEvent) => void) | null;
+  overlayEl: HTMLElement | null;
+  frameEl: HTMLElement | null;
+  videoEl: HTMLVideoElement | null;
+  currentItem: ZoomItem | null;
+  handleOverlayClick: (event: MouseEvent) => void;
+
+  constructor({ mountEl, document: doc = document, onContextMenu = null }: {
+    mountEl?: HTMLElement | null;
+    document?: Document;
+    onContextMenu?: ((event: ZoomContextMenuEvent) => void) | null;
+  } = {}) {
+    this.mountEl = mountEl || null;
     this.doc = doc;
     this.onContextMenu = onContextMenu;
     this.overlayEl = null;
@@ -30,13 +54,13 @@ export class ZoomOverlayController {
     };
   }
 
-  ensureMount() {
+  ensureMount(): asserts this is this & { mountEl: HTMLElement } {
     if (!this.mountEl) {
       throw new Error('Zoom overlay mount element is required.');
     }
   }
 
-  buildOverlay() {
+  buildOverlay(): void {
     this.ensureMount();
     ensureZoomOverlayStyles(this.doc);
     if (this.overlayEl) return;
@@ -59,7 +83,7 @@ export class ZoomOverlayController {
     this.mountEl.replaceChildren(this.overlayEl);
   }
 
-  createVideo({ src, name = '' }) {
+  createVideo({ src, name = '' }: { src: string; name?: string }): HTMLVideoElement {
     const nextVideo = this.doc.createElement('video');
     nextVideo.id = 'zoomVideo';
     nextVideo.className = 'zoom-video';
@@ -103,7 +127,7 @@ export class ZoomOverlayController {
     return nextVideo;
   }
 
-  clearVideo() {
+  clearVideo(): void {
     if (!this.videoEl) return;
     this.videoEl.pause();
     this.videoEl.removeAttribute('src');
@@ -112,20 +136,21 @@ export class ZoomOverlayController {
     this.videoEl = null;
   }
 
-  open({ clipId = null, src, name = '' } = {}) {
+  open({ clipId = null, src, name = '' }: { clipId?: string | null; src?: string; name?: string } = {}): boolean {
     if (!src) return false;
     this.buildOverlay();
     this.clearVideo();
     this.videoEl = this.createVideo({ src, name });
     this.currentItem = { clipId, src, name };
-    this.frameEl.replaceChildren(this.videoEl);
-    this.frameEl.focus({ preventScroll: true });
+    this.frameEl?.replaceChildren(this.videoEl);
+    this.frameEl?.focus({ preventScroll: true });
     this.videoEl.play().catch(() => {});
     return true;
   }
 
-  close() {
+  close(): boolean {
     if (!this.overlayEl) return false;
+    if (!this.mountEl) return false;
     this.clearVideo();
     this.overlayEl.removeEventListener('click', this.handleOverlayClick);
     this.mountEl.replaceChildren();
@@ -135,29 +160,29 @@ export class ZoomOverlayController {
     return true;
   }
 
-  destroy() {
+  destroy(): void {
     this.close();
   }
 
-  isOpen() {
+  isOpen(): boolean {
     return !!this.overlayEl;
   }
 
-  getVideoElement() {
+  getVideoElement(): HTMLVideoElement | null {
     return this.videoEl;
   }
 
-  toggleMuted() {
+  toggleMuted(): boolean | null {
     if (!this.videoEl) return null;
     this.videoEl.muted = !this.videoEl.muted;
     return this.videoEl.muted;
   }
 
-  getCurrentClipId() {
+  getCurrentClipId(): string | null {
     return this.currentItem?.clipId || null;
   }
 }
 
-export function createZoomOverlayController(options) {
+export function createZoomOverlayController(options?: ConstructorParameters<typeof ZoomOverlayController>[0]): ZoomOverlayController {
   return new ZoomOverlayController(options);
 }

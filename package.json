@@ -11,7 +11,8 @@
     "e2e": "npm run build && playwright test",
     "e2e:headed": "playwright test --headed",
     "unit": "vitest --run",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && npm run typecheck:strict-src",
+    "typecheck:strict-src": "tsc -p tsconfig.strict-src.json",
     "test:all": "npm run unit && npm run e2e",
     "prepare": "husky"
   },

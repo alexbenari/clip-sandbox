@@ -1,6 +1,33 @@
-// @ts-nocheck
+import type { Clip } from '../domain/clip.js';
+import type { ClipEditor, ClipEditorResult, CreatedVideoFile } from '../business-logic/clip-editor.js';
+import type { VideoEdit } from '../business-logic/video-edit-catalog.js';
+
+type WorkflowBaseEvent = {
+  edit: VideoEdit;
+  sourceClip: Clip;
+};
+
+type WorkflowCreatedEvent = WorkflowBaseEvent & { result: Extract<ClipEditorResult, { ok: true }>; createdFile: CreatedVideoFile };
+type WorkflowFailedEvent = WorkflowBaseEvent & { result: ClipEditorResult | ProcessFailedResult };
+
+type ZoomVideoEditWorkflowOptions = {
+  clipEditor: Pick<ClipEditor, 'createVideoEdit'>;
+  onStarted?: (event: WorkflowBaseEvent) => void;
+  onCreated?: (event: WorkflowCreatedEvent) => void;
+  onFailed?: (event: WorkflowFailedEvent) => void;
+  onFinished?: (event: WorkflowFailedEvent | WorkflowCreatedEvent) => void;
+};
+
+type NotRunnableResult = { ok: false; code: 'not-runnable' };
+type ProcessFailedResult = { ok: false; code: 'process-failed' };
+
 export class ZoomVideoEditWorkflow {
-  #isRunning;
+  #isRunning: boolean;
+  clipEditor: Pick<ClipEditor, 'createVideoEdit'>;
+  onStarted: (event: WorkflowBaseEvent) => void;
+  onCreated: (event: WorkflowCreatedEvent) => void;
+  onFailed: (event: WorkflowFailedEvent) => void;
+  onFinished: (event: WorkflowFailedEvent | WorkflowCreatedEvent) => void;
 
   constructor({
     clipEditor,
@@ -8,7 +35,7 @@ export class ZoomVideoEditWorkflow {
     onCreated = () => {},
     onFailed = () => {},
     onFinished = () => {},
-  } = {}) {
+  }: ZoomVideoEditWorkflowOptions) {
     this.clipEditor = clipEditor;
     this.onStarted = onStarted;
     this.onCreated = onCreated;
@@ -17,7 +44,7 @@ export class ZoomVideoEditWorkflow {
     this.#isRunning = false;
   }
 
-  isRunning() {
+  isRunning(): boolean {
     return this.#isRunning;
   }
 
@@ -25,7 +52,11 @@ export class ZoomVideoEditWorkflow {
     edit = null,
     sourceClip = null,
     folderSession = null,
-  } = {}) {
+  }: {
+    edit?: VideoEdit | null;
+    sourceClip?: Clip | null;
+    folderSession?: { folderPath?: string } | null;
+  } = {}): Promise<ClipEditorResult | ProcessFailedResult | NotRunnableResult> {
     if (this.#isRunning || !edit || !sourceClip || !folderSession) {
       return { ok: false, code: 'not-runnable' };
     }
@@ -33,7 +64,7 @@ export class ZoomVideoEditWorkflow {
     this.#isRunning = true;
     this.onStarted({ edit, sourceClip });
 
-    let result = null;
+    let result: ClipEditorResult | ProcessFailedResult;
     try {
       result = await this.clipEditor.createVideoEdit({
         clip: sourceClip,
@@ -56,6 +87,6 @@ export class ZoomVideoEditWorkflow {
   }
 }
 
-export function createZoomVideoEditWorkflow(options) {
+export function createZoomVideoEditWorkflow(options: ZoomVideoEditWorkflowOptions): ZoomVideoEditWorkflow {
   return new ZoomVideoEditWorkflow(options);
 }

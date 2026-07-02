@@ -1,13 +1,32 @@
-// @ts-nocheck
-function menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn) {
-  return [loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn].filter((el) => el instanceof HTMLElement);
+function menuItems(...items: Array<HTMLElement | null | undefined>): HTMLButtonElement[] {
+  return items.filter((el): el is HTMLButtonElement => el instanceof HTMLButtonElement);
 }
 
-function focusableItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn) {
-  return menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn).filter((el) => !el.disabled);
+function focusableItems(...items: Array<HTMLElement | null | undefined>): HTMLButtonElement[] {
+  return menuItems(...items).filter((el) => !el.disabled);
 }
+
+type OrderMenuControllerOptions = {
+  orderMenu?: HTMLElement | null;
+  orderMenuBtn?: HTMLButtonElement | null;
+  orderMenuPanel?: HTMLElement | null;
+  loadOrderBtn?: HTMLButtonElement | null;
+  saveBtn?: HTMLButtonElement | null;
+  saveAsNewBtn?: HTMLButtonElement | null;
+  addToCollectionBtn?: HTMLButtonElement | null;
+  deleteFromDiskBtn?: HTMLButtonElement | null;
+};
 
 export class OrderMenuController {
+  orderMenu: HTMLElement | null;
+  orderMenuBtn: HTMLButtonElement | null;
+  orderMenuPanel: HTMLElement | null;
+  loadOrderBtn: HTMLButtonElement | null;
+  saveBtn: HTMLButtonElement | null;
+  saveAsNewBtn: HTMLButtonElement | null;
+  addToCollectionBtn: HTMLButtonElement | null;
+  deleteFromDiskBtn: HTMLButtonElement | null;
+
   constructor({
     orderMenu,
     orderMenuBtn,
@@ -17,15 +36,15 @@ export class OrderMenuController {
     saveAsNewBtn,
     addToCollectionBtn,
     deleteFromDiskBtn,
-  }) {
-    this.orderMenu = orderMenu;
-    this.orderMenuBtn = orderMenuBtn;
-    this.orderMenuPanel = orderMenuPanel;
-    this.loadOrderBtn = loadOrderBtn;
-    this.saveBtn = saveBtn;
-    this.saveAsNewBtn = saveAsNewBtn;
-    this.addToCollectionBtn = addToCollectionBtn;
-    this.deleteFromDiskBtn = deleteFromDiskBtn;
+  }: OrderMenuControllerOptions) {
+    this.orderMenu = orderMenu || null;
+    this.orderMenuBtn = orderMenuBtn || null;
+    this.orderMenuPanel = orderMenuPanel || null;
+    this.loadOrderBtn = loadOrderBtn || null;
+    this.saveBtn = saveBtn || null;
+    this.saveAsNewBtn = saveAsNewBtn || null;
+    this.addToCollectionBtn = addToCollectionBtn || null;
+    this.deleteFromDiskBtn = deleteFromDiskBtn || null;
 
     if (!orderMenu || !orderMenuBtn || !orderMenuPanel) return;
 
@@ -54,29 +73,29 @@ export class OrderMenuController {
     this.close();
   }
 
-  isOpen() {
+  isOpen(): boolean {
     return this.orderMenu?.dataset.open === 'true';
   }
 
-  setOpen(open) {
+  setOpen(open: boolean): void {
     if (!this.orderMenu || !this.orderMenuBtn) return;
     this.orderMenu.dataset.open = open ? 'true' : 'false';
     this.orderMenuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
-  open() {
+  open(): void {
     this.setOpen(true);
   }
 
-  close() {
+  close(): void {
     this.setOpen(false);
   }
 
-  toggle() {
+  toggle(): void {
     this.setOpen(!this.isOpen());
   }
 
-  focusFirstItem() {
+  focusFirstItem(): void {
     const first = focusableItems(
       this.loadOrderBtn,
       this.saveBtn,
@@ -87,7 +106,7 @@ export class OrderMenuController {
     if (first) first.focus();
   }
 
-  moveItemFocus(step) {
+  moveItemFocus(step: number): void {
     const items = focusableItems(
       this.loadOrderBtn,
       this.saveBtn,
@@ -101,7 +120,7 @@ export class OrderMenuController {
     items[nextIndex].focus();
   }
 
-  handleButtonKeyDown(e) {
+  handleButtonKeyDown(e: KeyboardEvent): void {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       if (!this.isOpen()) {
@@ -124,11 +143,11 @@ export class OrderMenuController {
     }
   }
 
-  handlePanelKeyDown(e) {
+  handlePanelKeyDown(e: KeyboardEvent): void {
     if (e.key === 'Escape') {
       e.preventDefault();
       this.close();
-      this.orderMenuBtn.focus();
+      this.orderMenuBtn?.focus();
       return;
     }
     if (e.key === 'ArrowDown') {
@@ -160,6 +179,6 @@ export class OrderMenuController {
   }
 }
 
-export function createOrderMenuController(options) {
+export function createOrderMenuController(options: OrderMenuControllerOptions): OrderMenuController {
   return new OrderMenuController(options);
 }

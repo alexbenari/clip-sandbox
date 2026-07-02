@@ -1,16 +1,41 @@
-// @ts-nocheck
 import { FileSystemAdapter } from './file-system-adapter.js';
+import type { FileReadErrorInfo, FileSystemDirectoryHandleLike, FolderEntryFile } from './file-system-adapter.js';
+
+export type BrowserReadwriteSession = {
+  kind: 'browser-directory';
+  accessMode: 'readwrite';
+  directoryHandle: FileSystemDirectoryHandleLike;
+};
+
+export type BrowserReadonlySession = {
+  kind: 'browser-file-list';
+  accessMode: 'read-only';
+};
+
+export type BrowserFolderSession = BrowserReadwriteSession | BrowserReadonlySession | null;
+
+export type BrowserDeleteFileResult =
+  | { filename: string; ok: true }
+  | { filename: string; ok: false; code: 'unavailable' | 'delete-failed'; error: unknown };
+
+type BrowserFileSystemServiceOptions = {
+  win?: Window;
+  fileSystemAdapter?: FileSystemAdapter;
+};
 
 export class BrowserFileSystemService {
+  win: Window;
+  fileSystemAdapter: FileSystemAdapter;
+
   constructor({
     win = window,
     fileSystemAdapter = new FileSystemAdapter({ win, doc: win?.document || document }),
-  } = {}) {
+  }: BrowserFileSystemServiceOptions = {}) {
     this.win = win;
     this.fileSystemAdapter = fileSystemAdapter;
   }
 
-  createReadwriteSession(directoryHandle) {
+  createReadwriteSession(directoryHandle: FileSystemDirectoryHandleLike): BrowserReadwriteSession {
     return {
       kind: 'browser-directory',
       accessMode: 'readwrite',
@@ -18,18 +43,18 @@ export class BrowserFileSystemService {
     };
   }
 
-  createReadonlySession() {
+  createReadonlySession(): BrowserReadonlySession {
     return {
       kind: 'browser-file-list',
       accessMode: 'read-only',
     };
   }
 
-  canUseDirectoryPicker() {
+  canUseDirectoryPicker(): boolean {
     return this.fileSystemAdapter.canUseDirectoryPicker();
   }
 
-  canMutateDisk(folderSession) {
+  canMutateDisk(folderSession: BrowserFolderSession): folderSession is BrowserReadwriteSession {
     return !!(
       folderSession?.accessMode === 'readwrite'
       && folderSession?.directoryHandle?.kind === 'directory'
@@ -37,7 +62,9 @@ export class BrowserFileSystemService {
     );
   }
 
-  async pickFolder({ onFileReadError } = {}) {
+  async pickFolder({ onFileReadError }: {
+    onFileReadError?: (info: FileReadErrorInfo, folderSession: BrowserReadwriteSession) => void | Promise<void>;
+  } = {}): Promise<{ folderSession: BrowserReadwriteSession; files: FolderEntryFile[]; folderName: string }> {
     const directoryHandle = await this.fileSystemAdapter.pickDirectory();
     const folderSession = this.createReadwriteSession(directoryHandle);
     const files = await this.fileSystemAdapter.readFilesFromDirectory(directoryHandle, {
@@ -50,7 +77,7 @@ export class BrowserFileSystemService {
     };
   }
 
-  selectionFromFileList(fileList) {
+  selectionFromFileList(fileList: Iterable<FolderEntryFile>): { folderSession: BrowserReadonlySession; files: FolderEntryFile[]; folderName: string } {
     const files = Array.from(fileList || []);
     return {
       folderSession: this.createReadonlySession(),
@@ -63,7 +90,7 @@ export class BrowserFileSystemService {
     folderSession = null,
     filename = 'default-collection.txt',
     text = '',
-  } = {}) {
+  }: { folderSession?: BrowserFolderSession; filename?: string; text?: string } = {}): Promise<{ mode: 'saved' | 'downloaded' }> {
     if (this.canMutateDisk(folderSession)) {
       try {
         await this.fileSystemAdapter.saveTextToDirectory(folderSession.directoryHandle, filename, text);
@@ -80,7 +107,7 @@ export class BrowserFileSystemService {
     folderSession = null,
     filename = '',
     text = '',
-  } = {}) {
+  }: { folderSession?: BrowserFolderSession; filename?: string; text?: string } = {}): Promise<{ mode: 'saved' | 'unavailable' }> {
     if (!this.canMutateDisk(folderSession)) {
       return { mode: 'unavailable' };
     }
@@ -91,7 +118,11 @@ export class BrowserFileSystemService {
   async deleteFiles({
     folderSession = null,
     filenames = [],
-  } = {}) {
+  }: { folderSession?: BrowserFolderSession; filenames?: Iterable<string> } = {}): Promise<{
+    ok: boolean;
+    code: 'deleted' | 'partial' | 'unavailable';
+    results: BrowserDeleteFileResult[];
+  }> {
     if (!this.canMutateDisk(folderSession)) {
       return {
         ok: false,
@@ -105,7 +136,7 @@ export class BrowserFileSystemService {
       };
     }
 
-    const results = [];
+    const results: BrowserDeleteFileResult[] = [];
     for (const filename of Array.from(filenames || [])) {
       try {
         await this.fileSystemAdapter.deleteTopLevelEntry(folderSession.directoryHandle, filename);

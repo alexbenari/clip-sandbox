@@ -1,4 +1,20 @@
-// @ts-nocheck
+export type VideoEditAvailability = 'zoom';
+
+export type VideoEditIcon = Readonly<{
+  kind: 'svg';
+  viewBox: string;
+  paths: readonly string[];
+}>;
+
+export type VideoEdit = Readonly<{
+  id: 'loopify';
+  label: string;
+  filenameSuffix: string;
+  availability: VideoEditAvailability;
+  description: string;
+  icon: VideoEditIcon;
+}>;
+
 const CHISEL_ICON = Object.freeze({
   kind: 'svg',
   viewBox: '0 0 16 16',
@@ -8,7 +24,7 @@ const CHISEL_ICON = Object.freeze({
   ],
 });
 
-const VIDEO_EDIT_CATALOG = Object.freeze([
+const VIDEO_EDIT_CATALOG: readonly VideoEdit[] = Object.freeze([
   Object.freeze({
     id: 'loopify',
     label: 'Loopify',
@@ -19,7 +35,7 @@ const VIDEO_EDIT_CATALOG = Object.freeze([
   }),
 ]);
 
-function normalizedSourceBaseName(sourceName = '') {
+function normalizedSourceBaseName(sourceName = ''): string {
   const trimmedName = String(sourceName || '').trim();
   if (!trimmedName) return '';
   const extensionIndex = trimmedName.lastIndexOf('.');
@@ -27,15 +43,15 @@ function normalizedSourceBaseName(sourceName = '') {
   return trimmedName.slice(0, extensionIndex);
 }
 
-export function listVideoEdits() {
+export function listVideoEdits(): VideoEdit[] {
   return VIDEO_EDIT_CATALOG.slice();
 }
 
-export function listZoomVideoEdits() {
+export function listZoomVideoEdits(): VideoEdit[] {
   return VIDEO_EDIT_CATALOG.filter((edit) => edit.availability === 'zoom');
 }
 
-export function getVideoEditById(editId) {
+export function getVideoEditById(editId: string): VideoEdit | null {
   const normalizedEditId = String(editId || '').trim().toLowerCase();
   return VIDEO_EDIT_CATALOG.find((edit) => edit.id === normalizedEditId) || null;
 }
@@ -43,7 +59,7 @@ export function getVideoEditById(editId) {
 export function preferredVideoEditFilename({
   sourceName = '',
   editId = '',
-} = {}) {
+}: { sourceName?: string; editId?: string } = {}): string {
   const edit = getVideoEditById(editId);
   if (!edit) return '';
   const baseName = normalizedSourceBaseName(sourceName);

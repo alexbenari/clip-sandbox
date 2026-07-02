@@ -1,18 +1,33 @@
-// @ts-nocheck
-function isDialogOpen(dialog) {
+type DialogHandlers = {
+  onSave?: (() => void) | null;
+  onDiscard?: (() => void) | null;
+  onCancel?: (() => void) | null;
+};
+
+function isDialogOpen(dialog: HTMLDialogElement | null): boolean {
   return !!(dialog?.open || dialog?.hasAttribute?.('open'));
 }
 
 export class UnsavedChangesDialogController {
+  dialog: HTMLDialogElement | null;
+  messageEl: HTMLElement | null;
+  handlers: DialogHandlers;
+
   constructor({
     dialog,
     messageEl,
     confirmBtn,
     discardBtn,
     cancelBtn,
+  }: {
+    dialog?: HTMLDialogElement | null;
+    messageEl?: HTMLElement | null;
+    confirmBtn?: HTMLElement | null;
+    discardBtn?: HTMLElement | null;
+    cancelBtn?: HTMLElement | null;
   } = {}) {
-    this.dialog = dialog;
-    this.messageEl = messageEl;
+    this.dialog = dialog || null;
+    this.messageEl = messageEl || null;
     this.handlers = {};
 
     confirmBtn?.addEventListener('click', () => {
@@ -32,15 +47,15 @@ export class UnsavedChangesDialogController {
     });
   }
 
-  isOpen() {
+  isOpen(): boolean {
     return isDialogOpen(this.dialog);
   }
 
-  resetHandlers() {
+  resetHandlers(): void {
     this.handlers = {};
   }
 
-  open({ message = '', onSave = null, onDiscard = null, onCancel = null } = {}) {
+  open({ message = '', onSave = null, onDiscard = null, onCancel = null }: { message?: string } & DialogHandlers = {}): void {
     if (!this.dialog) return;
     this.handlers = { onSave, onDiscard, onCancel };
     if (this.messageEl) this.messageEl.textContent = message;
@@ -51,7 +66,7 @@ export class UnsavedChangesDialogController {
     this.dialog.setAttribute('open', '');
   }
 
-  close() {
+  close(): void {
     if (!this.dialog) return;
     if (typeof this.dialog.close === 'function' && this.dialog.open) {
       this.dialog.close();
@@ -61,19 +76,19 @@ export class UnsavedChangesDialogController {
     this.resetHandlers();
   }
 
-  cancelFlow() {
+  cancelFlow(): void {
     const { onCancel } = this.handlers;
     this.close();
     onCancel?.();
   }
 
-  handleGlobalKeyDown(event) {
+  handleGlobalKeyDown(event: KeyboardEvent): boolean {
     if (!this.isOpen() || event?.key !== 'Escape') return false;
     this.cancelFlow();
     return true;
   }
 }
 
-export function createUnsavedChangesDialogController(options) {
+export function createUnsavedChangesDialogController(options?: ConstructorParameters<typeof UnsavedChangesDialogController>[0]): UnsavedChangesDialogController {
   return new UnsavedChangesDialogController(options);
 }

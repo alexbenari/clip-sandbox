@@ -1,4 +1,3 @@
-// @ts-nocheck
 const CONTEXT_MENU_STYLE_ID = 'contextMenuControllerStyles';
 const DEFAULT_CONTEXT_MENU_CSS = `
 .context-menu-root{
@@ -57,7 +56,32 @@ const DEFAULT_CONTEXT_MENU_CSS = `
 }
 `;
 
-function ensureContextMenuStyles(doc) {
+export type ContextMenuIcon = {
+  kind: 'svg';
+  viewBox?: string;
+  paths?: Iterable<string>;
+};
+
+export type ContextMenuItem = {
+  id?: string;
+  label?: string;
+  disabled?: boolean;
+  icon?: ContextMenuIcon | null;
+  onSelect?: () => void;
+};
+
+export type ContextMenuPoint = {
+  x?: number;
+  y?: number;
+};
+
+type ContextMenuControllerOptions = {
+  root?: HTMLElement | null;
+  panel?: HTMLElement | null;
+  document?: Document;
+};
+
+function ensureContextMenuStyles(doc: Document): void {
   if (doc.getElementById(CONTEXT_MENU_STYLE_ID)) return;
   const styleEl = doc.createElement('style');
   styleEl.id = CONTEXT_MENU_STYLE_ID;
@@ -65,11 +89,12 @@ function ensureContextMenuStyles(doc) {
   (doc.head || doc.documentElement).appendChild(styleEl);
 }
 
-function focusableItems(panel) {
-  return Array.from(panel.querySelectorAll('[role="menuitem"]')).filter((el) => !el.disabled);
+function focusableItems(panel: HTMLElement | null): HTMLElement[] {
+  if (!panel) return [];
+  return Array.from(panel.querySelectorAll<HTMLElement>('[role="menuitem"]')).filter((el) => !('disabled' in el) || !el.disabled);
 }
 
-function createIconElement(doc, icon) {
+function createIconElement(doc: Document, icon: ContextMenuIcon | null | undefined): SVGSVGElement | null {
   if (!icon || icon.kind !== 'svg') return null;
   const svgEl = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svgEl.setAttribute('viewBox', icon.viewBox || '0 0 16 16');
@@ -85,20 +110,28 @@ function createIconElement(doc, icon) {
 }
 
 export class ContextMenuController {
+  root: HTMLElement | null;
+  panel: HTMLElement | null;
+  doc: Document;
+  openState: boolean;
+  restoreFocusEl: Element | null;
+  onDocumentPointerDown: (event: MouseEvent) => void;
+  onDocumentKeyDown: (event: KeyboardEvent) => void;
+
   constructor({
     root,
     panel,
     document: doc = root?.ownerDocument || document,
-  } = {}) {
-    this.root = root;
-    this.panel = panel;
+  }: ContextMenuControllerOptions = {}) {
+    this.root = root || null;
+    this.panel = panel || null;
     this.doc = doc;
     this.openState = false;
     this.restoreFocusEl = null;
     this.onDocumentPointerDown = (event) => {
       if (!this.isOpen()) return;
       if (!(event.target instanceof Node)) return;
-      if (this.root.contains(event.target)) return;
+      if (this.root?.contains(event.target)) return;
       this.close({ restoreFocus: false });
     };
     this.onDocumentKeyDown = (event) => {
@@ -141,18 +174,18 @@ export class ContextMenuController {
     this.setOpen(false);
   }
 
-  isOpen() {
+  isOpen(): boolean {
     return this.openState;
   }
 
-  setOpen(nextOpen) {
+  setOpen(nextOpen: boolean): void {
     if (!this.root) return;
     this.openState = !!nextOpen;
     this.root.hidden = !this.openState;
     this.root.dataset.open = this.openState ? 'true' : 'false';
   }
 
-  positionPanel(point = {}) {
+  positionPanel(point: ContextMenuPoint = {}): void {
     if (!this.panel) return;
     const margin = 12;
     const viewportWidth = this.doc.defaultView?.innerWidth || 1280;
@@ -165,7 +198,7 @@ export class ContextMenuController {
     this.panel.style.top = `${top}px`;
   }
 
-  renderItems(items = []) {
+  renderItems(items: Iterable<ContextMenuItem> = []): void {
     if (!this.panel) return;
     this.panel.innerHTML = '';
     for (const item of Array.from(items)) {
@@ -196,12 +229,12 @@ export class ContextMenuController {
     }
   }
 
-  focusFirstItem() {
+  focusFirstItem(): void {
     const first = focusableItems(this.panel)[0];
     if (first) first.focus();
   }
 
-  moveItemFocus(step) {
+  moveItemFocus(step: number): void {
     const items = focusableItems(this.panel);
     if (items.length === 0) return;
     const currentIndex = items.findIndex((el) => el === this.doc.activeElement);
@@ -209,7 +242,12 @@ export class ContextMenuController {
     items[nextIndex].focus();
   }
 
-  open({ point = {}, items = [], focusFirst = false, restoreFocusTo = null } = {}) {
+  open({ point = {}, items = [], focusFirst = false, restoreFocusTo = null }: {
+    point?: ContextMenuPoint;
+    items?: Iterable<ContextMenuItem>;
+    focusFirst?: boolean;
+    restoreFocusTo?: Element | null;
+  } = {}): void {
     if (!this.root || !this.panel) return;
     this.restoreFocusEl = restoreFocusTo || this.doc.activeElement;
     this.renderItems(items);
@@ -218,7 +256,7 @@ export class ContextMenuController {
     if (focusFirst) this.focusFirstItem();
   }
 
-  close({ restoreFocus = true } = {}) {
+  close({ restoreFocus = true }: { restoreFocus?: boolean } = {}): void {
     if (!this.isOpen() || !this.panel) return;
     this.setOpen(false);
     this.panel.innerHTML = '';
@@ -227,7 +265,7 @@ export class ContextMenuController {
     }
   }
 
-  destroy() {
+  destroy(): void {
     if (!this.root || !this.panel) return;
     this.doc.removeEventListener('mousedown', this.onDocumentPointerDown);
     this.doc.removeEventListener('keydown', this.onDocumentKeyDown);
@@ -236,6 +274,6 @@ export class ContextMenuController {
   }
 }
 
-export function createContextMenuController(options) {
+export function createContextMenuController(options?: ContextMenuControllerOptions): ContextMenuController {
   return new ContextMenuController(options);
 }

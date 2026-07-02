@@ -1,18 +1,25 @@
-// @ts-nocheck
+type AudioFeedbackWindow = Window & {
+  AudioContext?: typeof AudioContext;
+  webkitAudioContext?: typeof AudioContext;
+};
+
 export class AudioFeedbackAdapter {
-  constructor({ win = window } = {}) {
+  win: AudioFeedbackWindow;
+  audioContext: AudioContext | null;
+
+  constructor({ win = window }: { win?: AudioFeedbackWindow } = {}) {
     this.win = win;
     this.audioContext = null;
   }
 
-  getAudioContext() {
+  getAudioContext(): AudioContext | null {
     const AudioContextCtor = this.win.AudioContext || this.win.webkitAudioContext;
     if (!AudioContextCtor) return null;
     if (!this.audioContext) this.audioContext = new AudioContextCtor();
     return this.audioContext;
   }
 
-  playBoundaryClank() {
+  playBoundaryClank(): boolean {
     const audioContext = this.getAudioContext();
     if (!audioContext) return false;
 

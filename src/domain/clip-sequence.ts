@@ -1,17 +1,17 @@
-// @ts-nocheck
+import type { Clip } from './clip.js';
 import { Collection } from './collection.js';
 
-export class ClipSequence {
-  #name;
-  /** @type {string[]} */
-  #orderedClipIds;
-  /** @type {Map<string, import('./clip.js').Clip>} */
-  #clipMap;
+type ClipSequenceParams = {
+  name?: string;
+  clips?: Iterable<Clip>;
+};
 
-  /**
-   * @param {{ name?: string, clips?: Iterable<import('./clip.js').Clip> }} [params]
-   */
-  constructor({ name = '', clips = [] } = {}) {
+export class ClipSequence {
+  #name: string;
+  #orderedClipIds: string[];
+  #clipMap: Map<string, Clip>;
+
+  constructor({ name = '', clips = [] }: ClipSequenceParams = {}) {
     this.#name = (name || '').trim();
     this.#orderedClipIds = [];
     this.#clipMap = new Map();
@@ -24,63 +24,38 @@ export class ClipSequence {
     return this.#name;
   }
 
-  /**
-   * @param {string} name
-   * @returns {void}
-   */
-  rename(name) {
+  rename(name: string): void {
     this.#name = (name || '').trim();
   }
 
-  /**
-   * @param {string} clipId
-   * @returns {boolean}
-   */
-  hasClip(clipId) {
+  hasClip(clipId: string): boolean {
     return this.#clipMap.has(clipId);
   }
 
-  /**
-   * @param {string} clipId
-   * @returns {import('./clip.js').Clip | null}
-   */
-  getClip(clipId) {
+  getClip(clipId: string): Clip | null {
     return this.#clipMap.get(clipId) || null;
   }
 
-  /** @returns {import('./clip.js').Clip[]} */
-  orderedClips() {
+  orderedClips(): Clip[] {
     return this.#orderedClipIds.flatMap((clipId) => {
       const clip = this.#clipMap.get(clipId);
       return clip ? [clip] : [];
     });
   }
 
-  /**
-   * @param {Iterable<string>} orderedClipIds
-   * @returns {import('./clip.js').Clip[]}
-   */
-  clipsForIdsInOrder(orderedClipIds) {
+  clipsForIdsInOrder(orderedClipIds: Iterable<string>): Clip[] {
     return Array.from(orderedClipIds || []).flatMap((clipId) => {
       const clip = this.#clipMap.get(clipId);
       return clip ? [clip] : [];
     });
   }
 
-  /**
-   * @param {Iterable<string>} orderedClipIds
-   * @returns {string[]}
-   */
-  clipNamesForIdsInOrder(orderedClipIds) {
+  clipNamesForIdsInOrder(orderedClipIds: Iterable<string>): string[] {
     return this.clipsForIdsInOrder(orderedClipIds).map((clip) => clip.name);
   }
 
-  /**
-   * @param {Iterable<string>} orderedClipIds
-   * @returns {string[]}
-   */
-  replaceOrder(orderedClipIds) {
-    const seen = new Set();
+  replaceOrder(orderedClipIds: Iterable<string>): string[] {
+    const seen = new Set<string>();
     const nextOrder = Array.from(orderedClipIds || []).filter((clipId) => {
       if (!this.#clipMap.has(clipId) || seen.has(clipId)) return false;
       seen.add(clipId);
@@ -91,23 +66,15 @@ export class ClipSequence {
     return this.#orderedClipIds.slice();
   }
 
-  /**
-   * @param {string} clipId
-   * @returns {boolean}
-   */
-  remove(clipId) {
+  remove(clipId: string): boolean {
     if (!this.#clipMap.has(clipId)) return false;
     this.#clipMap.delete(clipId);
     this.#orderedClipIds = this.#orderedClipIds.filter((id) => id !== clipId);
     return true;
   }
 
-  /**
-   * @param {Iterable<string>} orderedClipIds
-   * @returns {string[]}
-   */
-  removeMany(orderedClipIds) {
-    const removedClipIds = [];
+  removeMany(orderedClipIds: Iterable<string>): string[] {
+    const removedClipIds: string[] = [];
     for (const clipId of Array.from(orderedClipIds || [])) {
       if (!this.remove(clipId)) continue;
       removedClipIds.push(clipId);
@@ -115,27 +82,17 @@ export class ClipSequence {
     return removedClipIds;
   }
 
-  /**
-   * @param {string} anchorClipId
-   * @param {import('./clip.js').Clip} clip
-   * @returns {boolean}
-   */
-  insertAfter(anchorClipId, clip) {
+  insertAfter(anchorClipId: string, clip: Clip): boolean {
     const anchorIndex = this.#orderedClipIds.indexOf(anchorClipId);
     if (anchorIndex < 0) return false;
     return this.#insertClipAt(anchorIndex + 1, clip);
   }
 
-  /** @returns {string[]} */
-  clipNamesInOrder() {
+  clipNamesInOrder(): string[] {
     return this.orderedClips().map((clip) => clip.name);
   }
 
-  /**
-   * @param {{ filename?: string | null, collectionName?: string }} [options]
-   * @returns {Collection}
-   */
-  toCollection({ filename = null, collectionName = '' } = {}) {
+  toCollection({ filename = null, collectionName = '' }: { filename?: string | null; collectionName?: string } = {}): Collection {
     return new Collection({
       collectionName,
       filename,
@@ -143,20 +100,11 @@ export class ClipSequence {
     });
   }
 
-  /**
-   * @param {import('./clip.js').Clip} clip
-   * @returns {boolean}
-   */
-  #appendClip(clip) {
+  #appendClip(clip: Clip): boolean {
     return this.#insertClipAt(this.#orderedClipIds.length, clip);
   }
 
-  /**
-   * @param {number} index
-   * @param {import('./clip.js').Clip} clip
-   * @returns {boolean}
-   */
-  #insertClipAt(index, clip) {
+  #insertClipAt(index: number, clip: Clip): boolean {
     if (!clip?.id) throw new Error('Clip id is required.');
     if (this.#clipMap.has(clip.id)) return false;
     this.#clipMap.set(clip.id, clip);

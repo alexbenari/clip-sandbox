@@ -1,18 +1,17 @@
-// @ts-nocheck
 export class ClockAdapter {
-  delay(ms) {
+  delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  after(ms, fn) {
+  after(ms: number, fn: () => void): ReturnType<typeof setTimeout> {
     return setTimeout(fn, ms);
   }
 
-  every(ms, fn) {
+  every(ms: number, fn: () => void): ReturnType<typeof setInterval> {
     return setInterval(fn, ms);
   }
 
-  clear(id) {
+  clear(id: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval>): void {
     clearTimeout(id);
     clearInterval(id);
   }

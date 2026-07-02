@@ -1,8 +1,16 @@
-// @ts-nocheck
+import type { ClipFile, Clip } from '../domain/clip.js';
+import type { ClipSequence } from '../domain/clip-sequence.js';
+import type { Collection } from '../domain/collection.js';
+import type { Pipeline, PipelineMaterialization, RemoveVideosResult } from '../domain/pipeline.js';
+
+type CreatedClipInsertResult =
+  | { ok: false; code: 'missing-pipeline' | 'invalid-file' | 'missing-context' | 'missing-source-clip' }
+  | { ok: true; clip: Clip; sequence: ClipSequence };
+
 export class PipelineSession {
-  #pipeline = null;
-  #activeCollection = null;
-  #currentClipSequence = null;
+  #pipeline: Pipeline | null = null;
+  #activeCollection: Collection | null = null;
+  #currentClipSequence: ClipSequence | null = null;
   #hasDirtyClipSequenceChanges = false;
   #idCounter = 0;
 
@@ -22,19 +30,19 @@ export class PipelineSession {
     return this.#hasDirtyClipSequenceChanges;
   }
 
-  nextClipId() {
+  nextClipId(): string {
     this.#idCounter += 1;
     return `clip_${this.#idCounter}`;
   }
 
-  reset() {
+  reset(): void {
     this.#pipeline = null;
     this.#activeCollection = null;
     this.#currentClipSequence = null;
     this.#hasDirtyClipSequenceChanges = false;
   }
 
-  loadPipeline(pipeline) {
+  loadPipeline(pipeline: Pipeline | null | undefined): PipelineMaterialization | null {
     this.#pipeline = pipeline || null;
     this.#activeCollection = null;
     this.#currentClipSequence = null;
@@ -50,45 +58,45 @@ export class PipelineSession {
     return result;
   }
 
-  materializeSelection(collection = this.#activeCollection) {
+  materializeSelection(collection: Collection | null | undefined = this.#activeCollection) {
     if (!this.#pipeline) return null;
     return this.#pipeline.materializeSelection(collection, {
       nextClipId: () => this.nextClipId(),
     });
   }
 
-  activateSelection({ collection = null, sequence = null } = {}) {
+  activateSelection({ collection = null, sequence = null }: { collection?: Collection | null; sequence?: ClipSequence | null } = {}): ClipSequence | null {
     this.#activeCollection = collection || null;
     this.#currentClipSequence = sequence || null;
     this.refreshDirtyClipSequenceState();
     return this.#currentClipSequence;
   }
 
-  isPipelineMode() {
+  isPipelineMode(): boolean {
     return !this.#activeCollection;
   }
 
-  activeCollectionFilename() {
+  activeCollectionFilename(): string {
     return this.#activeCollection?.filename || '';
   }
 
-  resolveClip(clipId) {
+  resolveClip(clipId: string | null | undefined): Clip | null {
     if (!clipId) return null;
     return this.#currentClipSequence?.getClip(clipId) || null;
   }
 
-  clipNamesForIdsInOrder(clipIds) {
+  clipNamesForIdsInOrder(clipIds: Iterable<string>): string[] {
     return this.#currentClipSequence?.clipNamesForIdsInOrder?.(clipIds) || [];
   }
 
-  replaceCurrentOrder(orderedClipIds) {
+  replaceCurrentOrder(orderedClipIds: Iterable<string>): string[] {
     if (!this.#currentClipSequence) return [];
     const result = this.#currentClipSequence.replaceOrder(orderedClipIds);
     this.refreshDirtyClipSequenceState();
     return result;
   }
 
-  removeFromCurrentSequence(orderedClipIds) {
+  removeFromCurrentSequence(orderedClipIds: Iterable<string>): string[] {
     if (!this.#currentClipSequence) return [];
     const removedClipIds = this.#currentClipSequence.removeMany(orderedClipIds);
     if (removedClipIds.length > 0) {
@@ -97,11 +105,11 @@ export class PipelineSession {
     return removedClipIds;
   }
 
-  collectionFromCurrentSequence(filename) {
+  collectionFromCurrentSequence(filename: string | null): Collection | null {
     return this.#currentClipSequence?.toCollection?.({ filename }) || null;
   }
 
-  markCurrentSequenceSavedAs(collection) {
+  markCurrentSequenceSavedAs(collection: Collection | null | undefined): Collection | null {
     if (!collection || !this.#currentClipSequence) return null;
     this.#pipeline?.upsertCollection(collection);
     this.#currentClipSequence.rename(collection.collectionName);
@@ -110,7 +118,7 @@ export class PipelineSession {
     return collection;
   }
 
-  refreshDirtyClipSequenceState() {
+  refreshDirtyClipSequenceState(): boolean {
     const baseline = this.#activeCollection
       ? this.#activeCollection.orderedClipNames
       : (this.#pipeline?.videoNames?.() || []);
@@ -120,7 +128,7 @@ export class PipelineSession {
     return this.#hasDirtyClipSequenceChanges;
   }
 
-  insertCreatedClipInPipeline(createdFile) {
+  insertCreatedClipInPipeline(createdFile: ClipFile): CreatedClipInsertResult {
     if (!this.#pipeline) return { ok: false, code: 'missing-pipeline' };
     const clip = this.#pipeline.upsertVideoClip(createdFile, {
       nextClipId: () => this.nextClipId(),
@@ -140,7 +148,7 @@ export class PipelineSession {
     };
   }
 
-  insertCreatedClipAfter(sourceClipId, createdFile) {
+  insertCreatedClipAfter(sourceClipId: string, createdFile: ClipFile): CreatedClipInsertResult {
     if (!this.#pipeline || !this.#currentClipSequence) {
       return { ok: false, code: 'missing-context' };
     }
@@ -160,7 +168,7 @@ export class PipelineSession {
     };
   }
 
-  removeVideos(videoNames) {
+  removeVideos(videoNames: Iterable<string>): RemoveVideosResult {
     return this.#pipeline?.removeVideos(videoNames) || {
       removedVideoNames: [],
       changedCollections: [],
@@ -168,6 +176,6 @@ export class PipelineSession {
   }
 }
 
-export function createPipelineSession() {
+export function createPipelineSession(): PipelineSession {
   return new PipelineSession();
 }
