@@ -65,6 +65,63 @@ describe('electron file system service', () => {
     expect(result.results[1].error.message).toBe('locked');
   });
 
+  it('rejects traversal and invalid top-level filenames before save-like calls reach the desktop api', async () => {
+    const api = {
+      saveTextFile: vi.fn(async () => ({ mode: 'saved' })),
+      appendTextFile: vi.fn(async () => ({ mode: 'saved' })),
+    };
+    const service = new ElectronFileSystemService({ api });
+    const folderSession = { accessMode: 'readwrite', folderPath: 'C:/clips' };
+
+    await expect(service.saveTextFile({
+      folderSession,
+      filename: '../outside.txt',
+      text: 'alpha.mp4\n',
+    })).rejects.toThrow('Invalid top-level filename');
+
+    await expect(service.appendTextFile({
+      folderSession,
+      filename: 'CON',
+      text: 'problem',
+    })).rejects.toThrow('Invalid top-level filename');
+
+    expect(api.saveTextFile).not.toHaveBeenCalled();
+    expect(api.appendTextFile).not.toHaveBeenCalled();
+  });
+
+  it('returns structured delete failures for invalid filenames without calling the desktop api', async () => {
+    const api = {
+      deleteFiles: vi.fn(async () => ({
+        ok: true,
+        code: 'deleted',
+        results: [],
+      })),
+    };
+    const service = new ElectronFileSystemService({ api });
+
+    const result = await service.deleteFiles({
+      folderSession: { accessMode: 'readwrite', folderPath: 'C:/clips' },
+      filenames: ['alpha.mp4', '..\\secret.mp4'],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('partial');
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0]).toMatchObject({
+      filename: 'alpha.mp4',
+      ok: false,
+      code: 'delete-failed',
+    });
+    expect(result.results[1]).toMatchObject({
+      filename: '..\\secret.mp4',
+      ok: false,
+      code: 'delete-failed',
+    });
+    expect(result.results[0].error).toBeInstanceOf(Error);
+    expect(result.results[1].error).toBeInstanceOf(Error);
+    expect(api.deleteFiles).not.toHaveBeenCalled();
+  });
+
   it('delegates video edit requests through the desktop api', async () => {
     const api = {
       createVideoEdit: vi.fn(async () => ({

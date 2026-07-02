@@ -89,6 +89,7 @@ function requestedNameAnalysis(collection: Collection, availableNames: Iterable<
 
 export class Collection {
   static ILLEGAL_COLLECTION_NAME_CHARS = /[<>:"/\\|?*]/;
+  static WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
   #collectionName: string;
   #filename: string | null;
   #orderedClipNames: string[];
@@ -117,6 +118,11 @@ export class Collection {
     return trimmed.toLowerCase().endsWith('.txt') ? trimmed : `${trimmed}.txt`;
   }
 
+  static identityKeyFromFilename(filename: string | null | undefined): string {
+    const normalizedFilename = Collection.#normalizedFilename(filename);
+    return normalizedFilename ? normalizedFilename.toLowerCase() : '';
+  }
+
   static validateCollectionName(name: string): CollectionNameValidationResult {
     const trimmed = Collection.#normalizedText(name);
     if (!trimmed) {
@@ -127,7 +133,10 @@ export class Collection {
         filename: '',
       };
     }
-    if (Collection.ILLEGAL_COLLECTION_NAME_CHARS.test(trimmed)) {
+    if (
+      Collection.ILLEGAL_COLLECTION_NAME_CHARS.test(trimmed)
+      || Collection.#hasWindowsInvalidFilenameShape(trimmed)
+    ) {
       return {
         ok: false,
         code: 'illegal-chars',
@@ -302,6 +311,13 @@ export class Collection {
     return Array.from(names || [])
       .map((name) => Collection.#normalizedText(name))
       .filter(Boolean);
+  }
+
+  static #hasWindowsInvalidFilenameShape(name: string): boolean {
+    if (!name || name === '.' || name === '..') return true;
+    if (/[. ]$/.test(name)) return true;
+    const basenamePrefix = name.split('.')[0] || '';
+    return /[. ]$/.test(basenamePrefix) || Collection.WINDOWS_RESERVED_BASENAME.test(basenamePrefix);
   }
 }
 

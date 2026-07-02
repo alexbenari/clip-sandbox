@@ -42,6 +42,9 @@ type ElectronFileSystemWindow = Window & {
   clipSandboxDesktop?: ElectronDesktopApi;
 };
 
+const WINDOWS_INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000]/;
+const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
 export type DesktopFolderSession = {
   kind: 'desktop-directory';
   accessMode: 'readwrite';
@@ -130,6 +133,23 @@ export class ElectronFileSystemService {
     );
   }
 
+  validateTopLevelFilename(filename: string): string {
+    const normalizedFilename = String(filename || '').trim();
+    const basenamePrefix = normalizedFilename.split('.')[0] || '';
+    if (
+      !normalizedFilename
+      || normalizedFilename === '.'
+      || normalizedFilename === '..'
+      || WINDOWS_INVALID_FILENAME_CHARS.test(normalizedFilename)
+      || /[. ]$/.test(normalizedFilename)
+      || /[. ]$/.test(basenamePrefix)
+      || WINDOWS_RESERVED_BASENAME.test(basenamePrefix)
+    ) {
+      throw new Error(`Invalid top-level filename: ${filename}`);
+    }
+    return normalizedFilename;
+  }
+
   async pickFolder(_options: { onFileReadError?: (info: unknown, folderSession: DesktopFolderSession) => void } = {}): Promise<{ folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string }> {
     const result = await this.requireApi().pickFolder();
     if (!result || result.canceled) {
@@ -151,9 +171,10 @@ export class ElectronFileSystemService {
     if (!this.canMutateDisk(folderSession)) {
       throw new Error('Disk mutation is unavailable for the current folder session.');
     }
+    const normalizedFilename = this.validateTopLevelFilename(filename);
     return this.requireApi().saveTextFile({
       folderPath: folderSession.folderPath,
-      filename,
+      filename: normalizedFilename,
       text,
     });
   }
@@ -166,9 +187,10 @@ export class ElectronFileSystemService {
     if (!this.canMutateDisk(folderSession)) {
       return { mode: 'unavailable' };
     }
+    const normalizedFilename = this.validateTopLevelFilename(filename);
     return this.requireApi().appendTextFile({
       folderPath: folderSession.folderPath,
-      filename,
+      filename: normalizedFilename,
       text,
     });
   }
@@ -181,11 +203,12 @@ export class ElectronFileSystemService {
     code: string;
     results: DesktopDeleteFileResult[];
   }> {
+    const rawFilenames = Array.from(filenames || []).map((filename) => String(filename || '').trim());
     if (!this.canMutateDisk(folderSession)) {
       return {
         ok: false,
         code: 'unavailable',
-        results: Array.from(filenames || []).map((filename) => ({
+        results: rawFilenames.map((filename) => ({
           filename,
           ok: false,
           code: 'unavailable',
@@ -194,9 +217,24 @@ export class ElectronFileSystemService {
       };
     }
 
+    try {
+      rawFilenames.forEach((filename) => this.validateTopLevelFilename(filename));
+    } catch (error) {
+      return {
+        ok: false,
+        code: 'partial',
+        results: rawFilenames.map((filename) => ({
+          filename,
+          ok: false,
+          code: 'delete-failed',
+          error: error instanceof Error ? error : new Error(String(error || 'Invalid top-level filename')),
+        })),
+      };
+    }
+
     const response = await this.requireApi().deleteFiles({
       folderPath: folderSession.folderPath,
-      filenames,
+      filenames: rawFilenames,
     });
     return {
       ok: !!response?.ok,

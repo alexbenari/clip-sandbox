@@ -124,6 +124,18 @@ describe('clip and sequence models', () => {
       ok: false,
       code: 'illegal-chars',
     });
+    expect(Collection.validateCollectionName('CON')).toMatchObject({
+      ok: false,
+      code: 'illegal-chars',
+    });
+    expect(Collection.validateCollectionName('trailing.')).toMatchObject({
+      ok: false,
+      code: 'illegal-chars',
+    });
+    expect(Collection.validateCollectionName('name .txt')).toMatchObject({
+      ok: false,
+      code: 'illegal-chars',
+    });
 
     const collection = Collection.fromFilename({
       filename: 'subset.txt',
@@ -281,6 +293,41 @@ describe('clip and sequence models', () => {
       created: true,
     });
     expect(pipeline.getCollectionByFilename('highlights.txt')?.orderedClipNames).toEqual(['bravo.webm', 'charlie.mp4']);
+  });
+
+  test('treats collection filename identity as case-insensitive while preserving stored casing', () => {
+    const pipeline = new Pipeline({
+      folderName: 'clips',
+      videoFiles: [
+        new File(['a'], 'alpha.mp4'),
+        new File(['b'], 'bravo.webm'),
+      ],
+      collections: [
+        Collection.fromFilename({
+          filename: 'Highlights.txt',
+          orderedClipNames: ['alpha.mp4'],
+        }),
+      ],
+    });
+
+    expect(pipeline.getCollectionByFilename('highlights.txt')?.filename).toBe('Highlights.txt');
+    expect(pipeline.getCollectionByFilename('HIGHLIGHTS.TXT')?.filename).toBe('Highlights.txt');
+    expect(pipeline.eligibleDestinationCollections('highlights.txt')).toEqual([]);
+
+    const result = pipeline.addClipsToCollection({
+      collectionFilename: 'highlights.txt',
+      clipNames: ['bravo.webm'],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      code: 'added',
+      created: false,
+      filename: 'Highlights.txt',
+    });
+    expect(result.collection.filename).toBe('Highlights.txt');
+    expect(pipeline.collections()).toHaveLength(1);
+    expect(pipeline.getCollectionByFilename('Highlights.txt')?.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm']);
   });
 
   test('removeVideos prunes pipeline files and delegates collection cleanup per collection', () => {

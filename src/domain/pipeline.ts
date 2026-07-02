@@ -130,19 +130,19 @@ export class Pipeline {
     for (const collection of Array.from(collections || [])) {
       const filename = collection instanceof Collection ? collection.filename : null;
       if (!filename) continue;
-      this.#collectionsByFilename.set(filename, collection);
+      this.#collectionsByFilename.set(Pipeline.#collectionIdentityKey(filename), collection);
     }
   }
 
   upsertCollection(collection: Collection): void {
     if (!(collection instanceof Collection) || !collection.filename) return;
-    this.#collectionsByFilename.set(collection.filename, collection);
+    this.#collectionsByFilename.set(Pipeline.#collectionIdentityKey(collection.filename), collection);
   }
 
   removeCollection(filename: string): void {
-    const normalizedFilename = String(filename || '').trim();
-    if (!normalizedFilename) return;
-    this.#collectionsByFilename.delete(normalizedFilename);
+    const identityKey = Pipeline.#collectionIdentityKey(filename);
+    if (!identityKey) return;
+    this.#collectionsByFilename.delete(identityKey);
   }
 
   collections(): Collection[] {
@@ -151,8 +151,9 @@ export class Pipeline {
   }
 
   getCollectionByFilename(filename: string): Collection | null {
-    const normalizedFilename = String(filename || '').trim();
-    return this.#collectionsByFilename.get(normalizedFilename) || null;
+    const identityKey = Pipeline.#collectionIdentityKey(filename);
+    if (!identityKey) return null;
+    return this.#collectionsByFilename.get(identityKey) || null;
   }
 
   addClipsToCollection({
@@ -188,7 +189,7 @@ export class Pipeline {
       };
     }
 
-    const nextCollection = merged.collection.withFilename(normalizedFilename);
+    const nextCollection = merged.collection.withFilename(previousCollection?.filename || normalizedFilename);
     this.upsertCollection(nextCollection);
     return {
       ok: true,
@@ -286,11 +287,15 @@ export class Pipeline {
   }
 
   eligibleDestinationCollections(activeCollectionFilename: string | null | undefined = null): Collection[] {
-    const normalizedActiveFilename = String(activeCollectionFilename || '').trim();
+    const activeIdentityKey = Pipeline.#collectionIdentityKey(activeCollectionFilename);
     return this.collections().filter((collection) => {
-      if (!normalizedActiveFilename) return true;
-      return collection.filename !== normalizedActiveFilename;
+      if (!activeIdentityKey) return true;
+      return Pipeline.#collectionIdentityKey(collection.filename) !== activeIdentityKey;
     });
+  }
+
+  static #collectionIdentityKey(filename: string | null | undefined): string {
+    return Collection.identityKeyFromFilename(filename);
   }
 
   #clipForFile(file: ClipFile, nextClipId?: () => string): Clip {

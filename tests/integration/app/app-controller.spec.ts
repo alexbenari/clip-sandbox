@@ -97,6 +97,25 @@ async function openActivityPanel() {
   });
 }
 
+function desktopFile({
+  name,
+  path = `C:/clips/${name}`,
+  relativePath = name,
+  mediaSource = `file:///C:/clips/${name}`,
+  type = name.endsWith('.txt') ? 'text/plain' : 'video/mp4',
+  text,
+}) {
+  return {
+    name,
+    path,
+    relativePath,
+    mediaSource: name.endsWith('.txt') ? undefined : mediaSource,
+    type,
+    text,
+    lastModifiedMs: Date.now(),
+  };
+}
+
 describe('app controller context menu wiring', () => {
   let originalCreateObjectURL;
   let originalRevokeObjectURL;
@@ -433,6 +452,188 @@ describe('app controller context menu wiring', () => {
 
     await waitFor(() => {
       expect(document.getElementById('activityIndicatorBtn').dataset.state).toBe('success');
+    });
+  });
+
+  test('save failure does not continue a pending collection switch', async () => {
+    window.clipSandboxDesktop.pickFolder = vi.fn(async () => ({
+      canceled: false,
+      folderPath: 'C:/clips',
+      folderName: 'clips',
+      files: [
+        desktopFile({ name: 'alpha.mp4' }),
+        desktopFile({ name: 'bravo.mp4' }),
+        desktopFile({ name: 'charlie.mp4' }),
+      ],
+    }));
+
+    const saveFailure = new Error('disk full');
+    let subsetSaveAttempts = 0;
+    window.clipSandboxDesktop.saveTextFile = vi.fn(async ({ filename }) => {
+      if (filename === 'subset.txt') {
+        subsetSaveAttempts += 1;
+        if (subsetSaveAttempts > 1) throw saveFailure;
+      }
+      return { mode: 'saved' };
+    });
+
+    const { initApp } = await import('../../../src/app/app-controller.js');
+    initApp();
+    document.getElementById('pickBtn').click();
+
+    await waitFor(() => {
+      expect(Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name)).toEqual([
+        'alpha.mp4',
+        'bravo.mp4',
+        'charlie.mp4',
+      ]);
+    });
+
+    document.getElementById('saveAsNewBtn').click();
+    document.getElementById('saveAsNewNameInput').value = 'subset';
+    document.getElementById('saveAsNewNameInput').dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('confirmSaveAsNewBtn').click();
+
+    await waitFor(() => {
+      expect(document.getElementById('activeCollectionName').value).toBe('subset.txt');
+    });
+
+    document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+
+    await waitFor(() => {
+      expect(Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name)).toEqual([
+        'bravo.mp4',
+        'charlie.mp4',
+      ]);
+      expect(document.getElementById('saveBtn').disabled).toBe(false);
+    });
+
+    document.getElementById('saveAsNewBtn').click();
+    document.getElementById('saveAsNewNameInput').value = 'picks';
+    document.getElementById('saveAsNewNameInput').dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('confirmSaveAsNewBtn').click();
+
+    await waitFor(() => {
+      expect(document.getElementById('activeCollectionName').value).toBe('picks.txt');
+    });
+
+    document.getElementById('activeCollectionName').value = 'subset.txt';
+    document.getElementById('activeCollectionName').dispatchEvent(new Event('change', { bubbles: true }));
+
+    await waitFor(() => {
+      expect(document.getElementById('activeCollectionName').value).toBe('subset.txt');
+      expect(Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name)).toEqual([
+        'alpha.mp4',
+        'bravo.mp4',
+        'charlie.mp4',
+      ]);
+    });
+
+    document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+
+    await waitFor(() => {
+      expect(Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name)).toEqual([
+        'bravo.mp4',
+        'charlie.mp4',
+      ]);
+      expect(document.getElementById('saveBtn').disabled).toBe(false);
+    });
+
+    document.getElementById('activeCollectionName').value = 'picks.txt';
+    document.getElementById('activeCollectionName').dispatchEvent(new Event('change', { bubbles: true }));
+
+    await waitFor(() => {
+      expect(document.getElementById('unsavedChangesDialog').open).toBe(true);
+    });
+
+    document.getElementById('confirmUnsavedChangesBtn').click();
+
+    await waitFor(() => {
+      expect(window.clipSandboxDesktop.saveTextFile).toHaveBeenCalledWith(expect.objectContaining({ filename: 'subset.txt' }));
+      expect(document.getElementById('activeCollectionName').value).toBe('subset.txt');
+      expect(Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name)).toEqual([
+        'bravo.mp4',
+        'charlie.mp4',
+      ]);
+      expect(document.getElementById('unsavedChangesDialog').open).toBe(true);
+      expect(document.title).toBe('subset');
+    });
+  });
+
+  test('save failure does not continue from delete preflight into delete confirmation', async () => {
+    window.clipSandboxDesktop.pickFolder = vi.fn(async () => ({
+      canceled: false,
+      folderPath: 'C:/clips',
+      folderName: 'clips',
+      files: [
+        desktopFile({ name: 'alpha.mp4' }),
+        desktopFile({ name: 'bravo.mp4' }),
+        desktopFile({ name: 'charlie.mp4' }),
+      ],
+    }));
+
+    const saveFailure = new Error('disk full');
+    let subsetSaveAttempts = 0;
+    window.clipSandboxDesktop.saveTextFile = vi.fn(async ({ filename }) => {
+      if (filename === 'subset.txt') {
+        subsetSaveAttempts += 1;
+        if (subsetSaveAttempts > 1) throw saveFailure;
+      }
+      return { mode: 'saved' };
+    });
+
+    const { initApp } = await import('../../../src/app/app-controller.js');
+    initApp();
+    document.getElementById('pickBtn').click();
+
+    await waitFor(() => {
+      expect(Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name)).toEqual([
+        'alpha.mp4',
+        'bravo.mp4',
+        'charlie.mp4',
+      ]);
+    });
+
+    document.getElementById('saveAsNewBtn').click();
+    document.getElementById('saveAsNewNameInput').value = 'subset';
+    document.getElementById('saveAsNewNameInput').dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('confirmSaveAsNewBtn').click();
+
+    await waitFor(() => {
+      expect(document.getElementById('activeCollectionName').value).toBe('subset.txt');
+    });
+
+    document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+
+    await waitFor(() => {
+      expect(Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name)).toEqual([
+        'bravo.mp4',
+        'charlie.mp4',
+      ]);
+    });
+
+    document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('deleteFromDiskBtn').click();
+
+    await waitFor(() => {
+      expect(document.getElementById('deletePreflightDialog').open).toBe(true);
+      expect(document.getElementById('deleteFromDiskDialog').open).toBe(false);
+    });
+
+    document.getElementById('confirmDeletePreflightBtn').click();
+
+    await waitFor(() => {
+      expect(window.clipSandboxDesktop.saveTextFile).toHaveBeenCalledWith(expect.objectContaining({ filename: 'subset.txt' }));
+      expect(document.getElementById('deletePreflightDialog').open).toBe(true);
+      expect(document.getElementById('deleteFromDiskDialog').open).toBe(false);
+      expect(window.clipSandboxDesktop.deleteFiles).not.toHaveBeenCalled();
+      expect(Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name)).toEqual([
+        'bravo.mp4',
+        'charlie.mp4',
+      ]);
     });
   });
 });

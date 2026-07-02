@@ -113,6 +113,10 @@ function isDeferredSaveResult(result: SaveCollectionResult | null | undefined): 
   return !!result && 'deferred' in result && result.deferred === true;
 }
 
+function isSuccessfulSaveResult(result: SaveCollectionResult | null | undefined): result is Extract<SaveClipSequenceResult, { ok: true }> {
+  return !!result && 'ok' in result && result.ok === true;
+}
+
 function requiredElement<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`Required element #${id} was not found.`);
@@ -852,15 +856,20 @@ export function initApp() {
 
   async function continuePendingAction({ saveFirst }: { saveFirst: boolean }): Promise<void> {
     const nextPendingAction = state.getPendingSelectionAction();
-    closeUnsavedDialog();
     if (!nextPendingAction) {
+      closeUnsavedDialog();
       refreshCollectionSelectorView();
       return;
     }
     if (saveFirst) {
       const saveResult = await saveActiveCollection();
       if (isDeferredSaveResult(saveResult)) return;
+      if (!isSuccessfulSaveResult(saveResult)) {
+        openUnsavedDialog();
+        return;
+      }
     }
+    closeUnsavedDialog();
     state.clearPendingSelectionAction();
     if (nextPendingAction.type === 'browse-folder') {
       await triggerFolderPicker();
@@ -982,6 +991,10 @@ export function initApp() {
     const saveResult = await saveActiveCollection();
     if (isDeferredSaveResult(saveResult)) return;
     pendingDeleteRequest.awaitingSave = false;
+    if (!isSuccessfulSaveResult(saveResult)) {
+      openDeletePreflightDialog();
+      return;
+    }
     openDeleteFromDiskDialog(pendingDeleteRequest);
   }
 

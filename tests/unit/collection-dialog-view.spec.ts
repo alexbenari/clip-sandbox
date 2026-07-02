@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { describe, expect, test } from 'vitest';
 import { AddToCollectionDialogController } from '../../src/ui/add-to-collection-dialog-controller.js';
+import { Collection } from '../../src/domain/collection.js';
+import { Pipeline } from '../../src/domain/pipeline.js';
 import { validateSaveAsNewName } from '../../src/ui/save-as-new-dialog-controller.js';
 
 describe('collection dialog view helpers', () => {
@@ -24,6 +26,20 @@ describe('collection dialog view helpers', () => {
     expect(AddToCollectionDialogController.validateName({ name: 'existing', pipeline })).toContain('already exists');
     expect(validateSaveAsNewName({ name: 'existing', pipeline })).toContain('already exists');
     expect(validateSaveAsNewName({ name: 'fresh', pipeline })).toBe('');
+  });
+
+  test('treats case-only collection names as already existing', () => {
+    const pipeline = new Pipeline({
+      collections: [
+        Collection.fromFilename({
+          filename: 'Highlights.txt',
+          orderedClipNames: ['alpha.mp4'],
+        }),
+      ],
+    });
+
+    expect(AddToCollectionDialogController.validateName({ name: 'highlights', pipeline })).toContain('already exists');
+    expect(validateSaveAsNewName({ name: 'highlights', pipeline })).toContain('already exists');
   });
 
   test('builds add-to-collection destination choices from the pipeline', () => {

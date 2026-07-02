@@ -4,6 +4,9 @@ const path = require('path');
 const { readFolderEntries } = require('./folder-entry.cjs');
 const { createVideoEditRuntime } = require('./video-edit-runtime.cjs');
 
+const WINDOWS_INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000]/;
+const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
 async function pickFolderFromDialog(browserWindow) {
   if (global.__clipSandboxNextFolderPath) {
     const folderPath = global.__clipSandboxNextFolderPath;
@@ -38,6 +41,23 @@ function createMainWindow() {
   return win;
 }
 
+function validateTopLevelFilename(filename) {
+  const normalizedFilename = String(filename || '').trim();
+  const basenamePrefix = normalizedFilename.split('.')[0] || '';
+  if (
+    !normalizedFilename
+    || normalizedFilename === '.'
+    || normalizedFilename === '..'
+    || WINDOWS_INVALID_FILENAME_CHARS.test(normalizedFilename)
+    || /[. ]$/.test(normalizedFilename)
+    || /[. ]$/.test(basenamePrefix)
+    || WINDOWS_RESERVED_BASENAME.test(basenamePrefix)
+  ) {
+    throw new Error(`Invalid top-level filename: ${filename}`);
+  }
+  return normalizedFilename;
+}
+
 function registerIpc() {
   const videoEditRuntime = createVideoEditRuntime();
 
@@ -56,21 +76,38 @@ function registerIpc() {
 
   ipcMain.handle('clip-sandbox:save-text-file', async (_event, payload = {}) => {
     const folderPath = String(payload.folderPath || '').trim();
-    const filename = String(payload.filename || '').trim();
+    const filename = validateTopLevelFilename(payload.filename);
     await fs.writeFile(path.join(folderPath, filename), String(payload.text || ''), 'utf8');
     return { mode: 'saved' };
   });
 
   ipcMain.handle('clip-sandbox:append-text-file', async (_event, payload = {}) => {
     const folderPath = String(payload.folderPath || '').trim();
-    const filename = String(payload.filename || '').trim();
+    const filename = validateTopLevelFilename(payload.filename);
     await fs.appendFile(path.join(folderPath, filename), String(payload.text || ''), 'utf8');
     return { mode: 'saved' };
   });
 
   ipcMain.handle('clip-sandbox:delete-files', async (_event, payload = {}) => {
     const folderPath = String(payload.folderPath || '').trim();
-    const filenames = Array.from(payload.filenames || []).map((filename) => String(filename || '').trim()).filter(Boolean);
+    const rawFilenames = Array.from(payload.filenames || []).map((filename) => String(filename || '').trim()).filter(Boolean);
+    try {
+      rawFilenames.forEach((filename) => validateTopLevelFilename(filename));
+    } catch (error) {
+      return {
+        ok: false,
+        code: 'partial',
+        results: rawFilenames.map((filename) => ({
+          filename,
+          ok: false,
+          code: 'delete-failed',
+          error: {
+            message: error?.message || String(error),
+          },
+        })),
+      };
+    }
+    const filenames = rawFilenames;
     const results = [];
 
     for (const filename of filenames) {
