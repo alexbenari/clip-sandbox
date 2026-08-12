@@ -1,0 +1,26 @@
+[
+  {
+    "name": "webcodecs-examples",
+    "repositoryUrl": "https://github.com/sb2702/webcodecs-examples.git",
+    "ref": "9b1aeb28d15a13b2d591be85c645b06805956679",
+    "license": "MIT",
+    "targetFolder": "webcodecs-examples",
+    "reason": "Candidate A source and wrapper reference."
+  },
+  {
+    "name": "mediabunny",
+    "repositoryUrl": "https://github.com/Vanilagy/mediabunny.git",
+    "ref": "b99b86db0b01395c3cc88504690c9bdc2230d63b",
+    "license": "MPL-2.0",
+    "targetFolder": "mediabunny",
+    "reason": "Candidate B source and API reference."
+  },
+  {
+    "name": "webcodecs-scroll-sync",
+    "repositoryUrl": "https://github.com/diffusionstudio/webcodecs-scroll-sync.git",
+    "ref": "a05d2a25c465bb208d8771844ba09c8ba2f1c016",
+    "license": "MIT",
+    "targetFolder": "webcodecs-scroll-sync",
+    "reason": "Reference implementation for scrub-heavy frame navigation."
+  }
+]

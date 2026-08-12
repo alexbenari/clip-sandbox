@@ -11,22 +11,7 @@ This review was performed as an isolated pass using the `solid` skill as process
 
 ## Findings
 
-### High: Failed saves are treated as success in follow-on flows
 
-Files:
-- [app-controller.ts](/C:/dev/clip-sandbox/src/app/app-controller.ts:710)
-- [app-controller.ts](/C:/dev/clip-sandbox/src/app/app-controller.ts:775)
-- [app-controller.ts](/C:/dev/clip-sandbox/src/app/app-controller.ts:833)
-
-Why this matters:
-- `continuePendingAction()` and `confirmDeletePreflightSave()` only special-case the `{ deferred: true }` result from `saveActiveCollection()`.
-- A real save failure still falls through as if the save succeeded.
-- That means the app can clear a pending switch/browse action or continue into delete-from-disk after a filesystem error, which risks dropping unsaved edits.
-
-Recommendation:
-- Treat only `{ ok: true }` as a successful save.
-- Keep the pending action or pending delete flow open on save failure.
-- Add failure-path tests around save-before-switch and save-before-delete flows.
 
 ### High: Delete-from-disk reloads a stale collection object
 

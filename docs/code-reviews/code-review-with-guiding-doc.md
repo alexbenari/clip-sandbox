@@ -29,46 +29,6 @@ Recommendation:
 - Reject anything except a single top-level filename for collection writes and clip deletes.
 - Add negative tests that attempt traversal payloads such as `..\..\foo.txt`.
 
-### P1: Collection identity is case-sensitive in memory, but the desktop runtime is using a case-insensitive filesystem
-
-Files:
-- `src/domain/collection.ts:96-129`
-- `src/domain/pipeline.ts:91-130`
-- `src/ui/save-as-new-dialog-controller.ts:129-136`
-- `src/ui/add-to-collection-dialog-controller.ts:17-23`
-- `src/app/app-controller.ts:331-349`
-- `src/app/app-controller.ts:793-803`
-
-Why this matters:
-- `Collection.filenameFromCollectionName(...)` preserves user casing.
-- `Pipeline` stores collections by the raw filename string and looks them up with exact string equality.
-- Duplicate-prevention in both save flows also uses exact-case lookups.
-- On Windows, `Highlights.txt` and `highlights.txt` are the same file on disk. The current logic can therefore miss an existing collection, allow a “new” save, and overwrite or alias the existing file while the in-memory model treats them as distinct identities.
-
-Recommendation:
-- Canonicalize collection filenames at the boundary used for identity, preferably with a filesystem-aware normalized key.
-- Use that canonical key consistently in `Pipeline`, validation helpers, and controller comparisons.
-- Add unit and Electron tests for case-only name collisions.
-
-### P2: The TypeScript safety net is effectively disabled across the authored source tree
-
-Files:
-- `tsconfig.base.json:2-10`
-- `tsconfig.json:6-15`
-- Representative authored files: `src/app/app-controller.ts:1`, `src/domain/pipeline.ts:1`, `src/ui/clip-collection-grid-controller.ts:1`
-
-Why this matters:
-- `strict` is disabled.
-- `electron/` is excluded from type checking entirely.
-- Every authored TypeScript file under `src/` currently starts with `// @ts-nocheck`.
-- The result is that `npm run typecheck` mostly proves that the project parses, not that layer contracts are sound.
-
-Under the repo guidance, boundaries should make misuse difficult. Right now the biggest controller/domain/UI boundaries are enforced only by convention and tests, not by the language tooling that the codebase has already adopted.
-
-Recommendation:
-- Remove `@ts-nocheck` incrementally, starting with `src/domain/`, `src/business-logic/`, and adapter boundary types.
-- Turn on stricter compiler checks for those folders before attempting the large UI/controller files.
-- Bring `electron/` under type-checked coverage once the IPC contracts are explicitly typed.
 
 ### P2: `app-controller.ts` is carrying orchestration, persistence, and domain-mutation responsibilities at once
 
@@ -91,11 +51,7 @@ Recommendation:
   - delete-from-disk mutation + collection rewrite recovery.
 - Let the controller delegate to those collaborators and stay primarily responsible for wiring and high-level event routing.
 
-## Test gaps to close next
 
-- `tests/unit/electron-file-system-service.spec.ts:5-67` covers happy-path mapping only; it does not exercise traversal rejection or invalid filename handling.
-- `tests/e2e/scenarios.spec.ts:87-218` covers only positive Electron flows; there is no case-only collision scenario and no malicious/invalid collection-name scenario.
-- `Collection.validateCollectionName(...)` in `src/domain/collection.ts:106-129` only rejects a small illegal-character set. For a Windows desktop app, reserved device names and trailing-dot/space cases are still worth validating explicitly.
 
 ## Recommended order of work
 

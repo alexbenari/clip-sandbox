@@ -1,0 +1,26 @@
+{
+  "name": "frame-first-video-playback-spike",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest --run",
+    "fetch:candidate-sources": "node ./scripts/fetch-candidate-sources.mjs"
+  },
+  "dependencies": {
+    "mediabunny": "^1.50.6",
+    "webcodecs-examples": "^0.1.15"
+  },
+  "devDependencies": {
+    "@types/dom-webcodecs": "^0.1.13",
+    "@types/node": "^24.8.1",
+    "electron": "^37.2.0",
+    "typescript": "^6.0.2",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.4"
+  }
+}
