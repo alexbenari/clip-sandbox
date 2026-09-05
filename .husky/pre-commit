@@ -1,1 +1,14 @@
+if git diff --cached --quiet -- . \
+  ':(exclude)docs/**' \
+  ':(exclude,icase)*.md' \
+  ':(exclude)spikes/**' \
+  ':(exclude).agents/**' \
+  ':(exclude).husky/**' \
+  ':(exclude).gitattributes' \
+  ':(exclude).gitignore'
+then
+  echo "Skipping tests: staged changes only affect documentation, spikes, or repository metadata."
+  exit 0
+fi
+
 npm run test:all
