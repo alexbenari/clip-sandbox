@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -e
+
+NATIVE_BIN2C='@NATIVE_BIN2C@'
+NATIVE_SOURCE_PATH='@NATIVE_SOURCE_PATH@'
+ARGS=()
+for ARG in "$@"; do
+    case "$ARG" in
+        src/*)
+            ARG="${NATIVE_SOURCE_PATH}/${ARG#src/}"
+            ;;
+    esac
+
+    case "$ARG" in
+        */cygdrive/*)
+            PREFIX="${ARG%%/cygdrive/*}"
+            REST="${ARG#*/cygdrive/}"
+            DRIVE="${REST%%/*}"
+            TAIL="${REST#*/}"
+            ARGS+=("${PREFIX}${DRIVE^^}:/${TAIL}")
+            ;;
+        *)
+            ARGS+=("$ARG")
+            ;;
+    esac
+done
+
+exec "$NATIVE_BIN2C" "${ARGS[@]}"

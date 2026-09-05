@@ -1,0 +1,701 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-08-30T08:16:11.074Z",
+  "dependencyManifestSha256": "43a7d1ce4f25d57a479e41c91bddeaeb1f2f59e2e019a184d7086b5a20ac0cf4",
+  "artifacts": {
+    "media-inventory.json": "c55886ecc7ddaac8c9b765cbfad72d65f74e2ed281b2f7e5653ac9d1bfd4993d",
+    "libvlc-gate-raw.json": "5f1eda3f6ac844a5b6cecaed85174d0744d3e53c3a6fca66f31e3ddc2d14ac58",
+    "bestsource-gate-raw.json": "9a4defeaeaa3d1731df63122d7dc9ed78dc2ca187ec023a7b7288225755947a4",
+    "bestsource-preparation-raw.json": "6d7585fcb785ae9a39d5f8772a8e65b7b144153f4469b5e34be950029fbc48fe",
+    "review-proxy-profile-raw.json": "b12b3357cdb08f53c6c117aca6b74afc7e07f5e5d144c5f5d0901e4348ec4d96",
+    "preparation-acceleration-60s-media-035-raw.json": "8dd601316b076ee72cea04df4477406d13f7b3bf3aa7f7ca4010bcdfea56fa05",
+    "control-soak-media-035.json": "fdc15bffe96ade4677f627b6090100ad705bd6f98b3656d43c30be03c156f6b4",
+    "ms7-ffmpeg-path-evidence.json": "dff880972f1cd357d1414f6bc5ee02c29c0a29585f112a0217298916f3842350",
+    "cleanup-summary.json": "c2a35cb3ec1054d68eb40ad4036d553de54d1bcb6e41fa30c35b1413c8bb259c"
+  },
+  "inventoryGeneratedAtUtc": "2026-08-13T11:22:50.257Z",
+  "representativeCount": 45,
+  "coverage": [
+    {
+      "id": "media-001",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|Baseline|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "The Wire - Cast Members.mp4",
+      "stable": true,
+      "numFrames": 18432,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 13.904,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-002",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|Constrained Baseline|yuv420p|8|cfr|unknown|hd|0|1",
+      "sourceName": "Crows are white - עורבים לבנים [1_fh4limw3].mp4",
+      "stable": true,
+      "numFrames": 143224,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 224.686,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-003",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|Constrained Baseline|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "TSyWCInFThC1965.mp4",
+      "stable": true,
+      "numFrames": 403397,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 81.055,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-004",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|High|yuv420p|8|cfr|unknown|2k|0|1",
+      "sourceName": "HoneyLand - ארץ הדבש [1_9cmz9exg].mp4",
+      "stable": true,
+      "numFrames": 128751,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 363.369,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-005",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|High|yuv420p|8|cfr|unknown|hd|0|1",
+      "sourceName": "tuntematon_sotilas-finnish.mp4",
+      "stable": true,
+      "numFrames": 254181,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 235.059,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-006",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|High|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "The.Tenant.1976.WEB-DL.x264-RARBG.mp4",
+      "stable": true,
+      "numFrames": 180472,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 77.344,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-007",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|High|yuv420p|8|rate-mismatch|unknown|hd|0|1",
+      "sourceName": "Le Cercle Rouge (1970) 1080p-H264-AC 3 (DTS 5.1) Remastered & nickarad.mp4",
+      "stable": true,
+      "numFrames": 202932,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 232.844,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-008",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|Main|yuv420p|8|cfr|unknown|hd|0|1",
+      "sourceName": "The White Ribbon 1080p H.264 GER-ENG (moviesbyrizzo).mp4",
+      "stable": true,
+      "numFrames": 207047,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 310.757,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-009",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|Main|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "Ginger & Fred .mp4",
+      "stable": true,
+      "numFrames": 182949,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 76.231,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-010",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|Main|yuv420p|8|rate-mismatch|unknown|hd|0|1",
+      "sourceName": "Forbidden.Planet.1956.1080P.6Ch.2Ch.Subs.X265-1.mp4",
+      "stable": true,
+      "numFrames": 141707,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 342.859,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-011",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|h264|Main|yuv420p|8|rate-mismatch|unknown|sd|0|1",
+      "sourceName": "TSyWCInFThC1965.m4v",
+      "stable": true,
+      "numFrames": 161357,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 55.171,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-012",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|hevc|Main 10|yuv420p10le|10|cfr|progressive|hd|0|1",
+      "sourceName": "The.Taste.Of.Things.2023.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4",
+      "stable": true,
+      "numFrames": 194493,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 215.196,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-013",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|hevc|Main 10|yuv420p10le|10|cfr|unknown|hd|0|1",
+      "sourceName": "Spies.1928.1080p.BluRay.x265-RBG.mp4",
+      "stable": true,
+      "numFrames": 216457,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 312.135,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-014",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|hevc|Main|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "A Touch of Zen [1969].x264.DVDrip(KungFu.Classics).mp4",
+      "stable": true,
+      "numFrames": 256153,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 152.708,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-015",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|mpeg4|Simple Profile|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "1928 - Champagne.mp4",
+      "stable": true,
+      "numFrames": 152727,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 40.6,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-016",
+      "signature": "3g2,3gp,m4a,mj2,mov,mp4|vp9|Profile 0|yuv420p|8|cfr|unknown|hd|0|1",
+      "sourceName": "Louis.C.K. The.Lost.Hour.2021.WEBRip.x264.mp4",
+      "stable": true,
+      "numFrames": 81002,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 48.622,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-017",
+      "signature": "avi|h264|Main|yuv420p|8|cfr|progressive|sd|0|1",
+      "sourceName": "Dizengoff.99.1979.DVDRip-IL.XviD-DownRev.avi",
+      "stable": true,
+      "numFrames": 163003,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 82.417,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-018",
+      "signature": "avi|mpeg4|Advanced Simple Profile|yuv420p|8|cfr|unknown|hd|0|1",
+      "sourceName": "Les Choses qu'on dit.avi",
+      "stable": true,
+      "numFrames": 176241,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": false,
+      "p95AccessMs": 8943.696,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-019",
+      "signature": "avi|mpeg4|Advanced Simple Profile|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "American.Honey.2016.HDRip.XviD.AC3-EVO.avi",
+      "stable": true,
+      "numFrames": 234720,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": false,
+      "p95AccessMs": 44984.461,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-020",
+      "signature": "avi|mpeg4|Advanced Simple Profile|yuv420p|8|rate-mismatch|unknown|sd|0|1",
+      "sourceName": "Peter Brook - Meetings with remarkable men.avi",
+      "stable": true,
+      "numFrames": 154075,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": false,
+      "p95AccessMs": 3382.533,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-021",
+      "signature": "avi|mpeg4|Simple Profile|yuv420p|8|cfr|unknown|hd|0|1",
+      "sourceName": "The.Slut.2012.WS.PDTV.XviD-MOTi.avi",
+      "stable": true,
+      "numFrames": 119156,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 97.604,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-022",
+      "signature": "avi|mpeg4|Simple Profile|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "Profondo Rosso - Deep Red (1975).avi",
+      "stable": true,
+      "numFrames": 182084,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 243.79,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-023",
+      "signature": "avi|mpeg4|unknown|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "New York Stories.avi",
+      "stable": true,
+      "numFrames": 179031,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": false,
+      "p95AccessMs": 32721.956,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-024",
+      "signature": "avi|msmpeg4v3|unknown|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "1940 - Foreign Correspondent.avi",
+      "stable": true,
+      "numFrames": 215569,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 91.489,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-025",
+      "signature": "flv|h264|Main|yuv420p|8|cfr|progressive|sd|0|1",
+      "sourceName": "Rocky Balboa Deleted Scene.FLV",
+      "stable": true,
+      "numFrames": 8405,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 79.172,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-026",
+      "signature": "matroska,webm|av1|Main|yuv420p10le|10|cfr|unknown|4k+|0|1",
+      "sourceName": "The Three Musketeers Part I DArtagnan (2023) [2160p] FRENCH WEB DV HDR10 DDP5.1.Atmos.mkv",
+      "stable": true,
+      "numFrames": 174435,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 649.332,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-027",
+      "signature": "matroska,webm|h264|Constrained Baseline|yuv420p|8|cfr|progressive|hd|0|1",
+      "sourceName": "Shane.1953.(Western.Multisubs).1080p.BRRip.x264-Classics.mkv",
+      "stable": true,
+      "numFrames": 169848,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 75.997,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-028",
+      "signature": "matroska,webm|h264|High|yuv420p|8|cfr|progressive|hd|0|1",
+      "sourceName": "Seven.Samurai.1954.REMASTERED.1080p.BluRay.x264-SADPANDA.mkv",
+      "stable": true,
+      "numFrames": 297890,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 349.096,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-029",
+      "signature": "matroska,webm|h264|High|yuv420p|8|cfr|progressive|sd|0|1",
+      "sourceName": "L'Emploi.du.temps.2001.DVDRip.by.gjiAm.tRuAVC.mkv",
+      "stable": true,
+      "numFrames": 192321,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 44.521,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-030",
+      "signature": "matroska,webm|h264|High|yuv420p|8|cfr|tt|hd|0|1",
+      "sourceName": "[apreder]L'insoumis(1964)HDTV.1080i.mkv",
+      "stable": true,
+      "numFrames": 145882,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 170.521,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-031",
+      "signature": "matroska,webm|h264|High|yuvj420p|8|cfr|progressive|sd|0|1",
+      "sourceName": "24 S08E24 - Day 8  3p.m.-4p.m..avi",
+      "stable": true,
+      "numFrames": 61867,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 29.587,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-032",
+      "signature": "matroska,webm|h264|Main|yuv420p|8|cfr|progressive|hd|0|1",
+      "sourceName": "Hemda.2024.1080p.WEB-DL.x264-SweatyHands.mkv",
+      "stable": true,
+      "numFrames": 179994,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 110.768,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-033",
+      "signature": "matroska,webm|h264|Main|yuv420p|8|cfr|progressive|sd|0|1",
+      "sourceName": "Nights.of.Cabiria.1957.NTSC.DVD.x264-Tree.mkv",
+      "stable": true,
+      "numFrames": 169775,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 109.159,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-034",
+      "signature": "matroska,webm|hevc|Main 10|yuv420p10le|10|cfr|progressive|hd|0|1",
+      "sourceName": "Hacks.2021.S04E09.1080p.x265-ELiTE.mkv",
+      "stable": true,
+      "numFrames": 53739,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 171.11,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-035",
+      "signature": "matroska,webm|hevc|Main 10|yuv420p10le|10|cfr|unknown|4k+|0|1",
+      "sourceName": "Point.Break.1991.2160p.UHD.BluRay.DTS-HD.MA.5.1.DoVi.HDR.x265-PTer.mkv",
+      "stable": true,
+      "numFrames": 175400,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": false,
+      "p95AccessMs": 1191.754,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-036",
+      "signature": "matroska,webm|hevc|Main 10|yuv420p10le|10|cfr|unknown|hd|0|1",
+      "sourceName": "I.Knew.Her.Well.1965.Criterion.1080p.BluRay.x265.HEVC.FLAC-SARTRE.mkv",
+      "stable": true,
+      "numFrames": 166320,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": false,
+      "p95AccessMs": 1370.338,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-037",
+      "signature": "matroska,webm|hevc|Main 10|yuv420p10le|10|cfr|unknown|sd|0|1",
+      "sourceName": "Sam Peckinpah's West - Legacy of a Hollywood Renegade.mkv",
+      "stable": true,
+      "numFrames": 148670,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 52.866,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-038",
+      "signature": "matroska,webm|hevc|Main|yuv420p|8|cfr|unknown|hd|0|1",
+      "sourceName": "The.Piano.Teacher.2001.Criterion.1080p.BluRay.HEVC.EAC3-SARTRE.mkv",
+      "stable": true,
+      "numFrames": 188530,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 212.486,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-039",
+      "signature": "matroska,webm|mpeg2video|Main|yuv420p|8|cfr|progressive|sd|0|1",
+      "sourceName": "Farewell.mkv",
+      "stable": true,
+      "numFrames": 181983,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 45.089,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-040",
+      "signature": "matroska,webm|mpeg4|Advanced Simple Profile|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "Les Amis 1971.mkv",
+      "stable": true,
+      "numFrames": 131783,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": false,
+      "p95AccessMs": 18761.571,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-041",
+      "signature": "matroska,webm|mpeg4|Simple Profile|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "Anatomy of Hell - 2004 ITA-FRA Sub ENG.mkv",
+      "stable": true,
+      "numFrames": 110390,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 18.46,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-042",
+      "signature": "matroska,webm|vp9|Profile 0|yuv420p|8|cfr|unknown|hd|0|1",
+      "sourceName": "Двенадцать стульев (FullHD, комедия, реж. Леонид Гайдай, 1971 г.) [P8t2dbJ7YXY].webm",
+      "stable": true,
+      "numFrames": 228845,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 116.002,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-043",
+      "signature": "matroska,webm|vp9|Profile 0|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "Hell Drivers - 1957 - Black & White - PG [7Qb8K1qClyA].webm",
+      "stable": true,
+      "numFrames": 155264,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 31.89,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-044",
+      "signature": "mpeg|mpeg2video|Main|yuv420p|8|cfr|tt|sd|0|1",
+      "sourceName": "VTS_01_1.VOB",
+      "stable": true,
+      "numFrames": 28792,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 22.413,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    },
+    {
+      "id": "media-045",
+      "signature": "ogg|theora|unknown|yuv420p|8|cfr|unknown|sd|0|1",
+      "sourceName": "TSyWCInFThC1965.ogv",
+      "stable": true,
+      "numFrames": 139938,
+      "runStartedAt": "2026-08-13T13:22:20.662Z",
+      "originalWarmLatencyGatePassed": true,
+      "p95AccessMs": 223.644,
+      "scope": "Native original-source access and reopen; not full Electron/proxy coverage."
+    }
+  ],
+  "preparationCount": 16,
+  "preparationLegacyInitialProbeFlags": [
+    "media-018",
+    "media-019",
+    "media-020",
+    "media-023",
+    "media-026",
+    "media-035",
+    "media-036",
+    "media-005"
+  ],
+  "profileCount": 27,
+  "fixtureRegression": {
+    "completedAtUtc": "2026-08-30T08:10:14.370Z",
+    "fixtureCount": 6,
+    "identityPass": true,
+    "failurePathsPass": true
+  },
+  "soak": {
+    "pass": true,
+    "errors": [],
+    "durationSeconds": 600.1946000000238,
+    "cycles": 199,
+    "heldFrames": 796,
+    "playbackFrames": 6850,
+    "queuePeak": 2,
+    "exactRequestPeak": 1,
+    "resourceSamples": 266,
+    "memory": [
+      {
+        "process": "electron.exe:16188",
+        "samples": 266,
+        "peakWorkingSetMiB": 174.64453125,
+        "peakPrivateMiB": 144.15234375,
+        "warmDeltaMiB": -2.91796875,
+        "tailGrowthMiB": 17.71875,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 69.828125
+      },
+      {
+        "process": "electron.exe:39184",
+        "samples": 266,
+        "peakWorkingSetMiB": 127.421875,
+        "peakPrivateMiB": 80.8671875,
+        "warmDeltaMiB": 7.44921875,
+        "tailGrowthMiB": 4.09765625,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 49.46875
+      },
+      {
+        "process": "electron.exe:43336",
+        "samples": 266,
+        "peakWorkingSetMiB": 47.62109375,
+        "peakPrivateMiB": 13.28515625,
+        "warmDeltaMiB": -0.140625,
+        "tailGrowthMiB": -0.078125,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 0.015625
+      },
+      {
+        "process": "electron.exe:5796",
+        "samples": 266,
+        "peakWorkingSetMiB": 180.12890625,
+        "peakPrivateMiB": 121.24609375,
+        "warmDeltaMiB": -17.05078125,
+        "tailGrowthMiB": -18.73046875,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 101.390625
+      },
+      {
+        "process": "conhost.exe:41580",
+        "samples": 266,
+        "peakWorkingSetMiB": 7.734375,
+        "peakPrivateMiB": 1.23828125,
+        "warmDeltaMiB": 0.0390625,
+        "tailGrowthMiB": 0.02734375,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 0
+      },
+      {
+        "process": "libvlc_media_service.exe:29016",
+        "samples": 266,
+        "peakWorkingSetMiB": 100.3046875,
+        "peakPrivateMiB": 84.08203125,
+        "warmDeltaMiB": 3.80078125,
+        "tailGrowthMiB": -0.51953125,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 51.328125
+      },
+      {
+        "process": "conhost.exe:43092",
+        "samples": 266,
+        "peakWorkingSetMiB": 7.55078125,
+        "peakPrivateMiB": 1.2265625,
+        "warmDeltaMiB": 0.03125,
+        "tailGrowthMiB": 0.02734375,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 0
+      },
+      {
+        "process": "bestsource_media_service.exe:43468",
+        "samples": 266,
+        "peakWorkingSetMiB": 706.37890625,
+        "peakPrivateMiB": 706.82421875,
+        "warmDeltaMiB": 16.00390625,
+        "tailGrowthMiB": 0.45703125,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 149.734375
+      },
+      {
+        "process": "conhost.exe:14160",
+        "samples": 266,
+        "peakWorkingSetMiB": 7.5390625,
+        "peakPrivateMiB": 1.203125,
+        "warmDeltaMiB": 0.03125,
+        "tailGrowthMiB": 0.02734375,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 0
+      },
+      {
+        "process": "pwsh.exe:45220",
+        "samples": 1,
+        "peakWorkingSetMiB": 78.84765625,
+        "peakPrivateMiB": 26.328125,
+        "warmDeltaMiB": 0,
+        "tailGrowthMiB": 0,
+        "suspiciousGrowth": false,
+        "cpuSeconds": 0
+      }
+    ],
+    "timings": {
+      "exact-landing": {
+        "count": 5,
+        "p50Ms": 79.10000002384186,
+        "p95Ms": 208.89999997615814,
+        "maxMs": 208.89999997615814
+      },
+      "random-landing": {
+        "count": 199,
+        "p50Ms": 82.10000002384186,
+        "p95Ms": 91.30000001192093,
+        "maxMs": 108.5
+      },
+      "forward-step": {
+        "count": 199,
+        "p50Ms": 25.80000001192093,
+        "p95Ms": 26.80000001192093,
+        "maxMs": 51.59999996423721
+      },
+      "reverse-step": {
+        "count": 199,
+        "p50Ms": 25.80000001192093,
+        "p95Ms": 26.900000035762787,
+        "maxMs": 52.59999996423721
+      },
+      "held-step": {
+        "count": 199,
+        "p50Ms": 916.8000000119209,
+        "p95Ms": 928.6000000238419,
+        "maxMs": 931.6000000238419
+      },
+      "scrub-burst": {
+        "count": 199,
+        "p50Ms": 502,
+        "p95Ms": 518.8000000119209,
+        "maxMs": 566.5
+      },
+      "release-to-play": {
+        "count": 199,
+        "p50Ms": 26.200000047683716,
+        "p95Ms": 30.80000001192093,
+        "maxMs": 543.5
+      },
+      "pause-to-exact": {
+        "count": 199,
+        "p50Ms": 26.100000023841858,
+        "p95Ms": 52.299999952316284,
+        "maxMs": 60.69999998807907
+      }
+    },
+    "reopen": {
+      "identical": true,
+      "pointCount": 5,
+      "rangeCount": 2
+    }
+  }
+}

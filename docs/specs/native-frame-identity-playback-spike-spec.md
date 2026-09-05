@@ -33,6 +33,8 @@ Browser-native decoding does not cover enough of the user's media. At the same t
 8. Determine whether callback-based rendering is viable before considering a separate native review window.
 9. Preserve a platform-neutral playback contract so product workflow code does not depend on LibVLC, BestSource, FFmpeg, or operating-system APIs.
 10. Produce a written recommendation based on measured correctness, coverage, latency, memory use, implementation complexity, and cross-platform packaging implications.
+11. Permit ordinary playback during visible background preparation while keeping exact-frame
+    operations unavailable until one complete canonical index is ready.
 
 ### 3.2 Non-Goals
 
@@ -187,7 +189,9 @@ Provisionally choose this path when LibVLC cannot provide absolute identity or w
 2. BestSource provides persistent frame indexing and exact `getFrame(N)` access over FFmpeg.
 3. Pausing, stepping, or exact scrubbing switches the viewport to an application-rendered exact frame.
 4. Resuming playback seeks the normal player to the selected source frame's presentation timestamp and switches the viewport back.
-5. A proxy is generated only when the selected normal player cannot play the source directly.
+5. A proxy may also be generated for the application-rendered exact-frame path when direct source
+   decoding cannot provide a smooth full-player drag experience. This does not replace direct source
+   playback or make proxy timestamps canonical.
 
 Direct Chromium playback never supplies exact frame scrubbing in this path. It supplies normal playback only; BestSource supplies exact paused navigation.
 
@@ -219,7 +223,61 @@ measurement; the execution plan will record concrete interaction targets before 
 
 If BestSource fails this gate, stop before building the fuller Electron implementation and report
 that neither candidate has established a viable exact-frame backend. Do not silently relax absolute
-identity or proceed on the assumption that bridge work will repair an engine-level failure.
+identity or proceed on the assumption that bridge work will repair an engine-level failure. The
+completed Phase 2B did fail its original immediate-readiness performance gate, so Phase 3 remains
+blocked unless the following approved remediation gate passes.
+
+#### Phase 2C: Prepared BestSource Remediation Gate
+
+This amendment accepts visible background preparation. Ordinary playback and timestamp seeking may
+start immediately, but exact stepping, exact scrubbing, `q`/`w` capture, and `a` locking remain
+unavailable until preparation reaches an exact-ready state.
+
+Use these terms consistently:
+
+1. **Source movie:** the user-selected original file. It remains the final clip-extraction input.
+2. **Review asset:** the file BestSource indexes and uses for exact review. It is normally the source
+   movie itself.
+3. **Timestamp-normalized review copy:** an optional generated file whose compressed video and audio
+   are stream-copied while missing container timestamps are generated. This is the derivative
+   referred to in experiment reports. It is an implementation artifact, not a second user-visible
+   movie.
+4. **Canonical index:** the one complete persistent BestSource index for the selected review asset.
+
+For a healthy source, the review asset is the source movie and only its index is cached. When packet
+preflight finds missing keyframe PTS, the timestamp-normalized review copy becomes the review asset;
+the cache then contains that file, its one BestSource index, and a small preparation manifest. The
+product path must not build both a source index and a review-copy index. Test-only comparison indexes
+may be used to prove the recipe, but they are not part of the proposed product architecture.
+
+Phase 2C must prove:
+
+1. packet preflight selects the source or timestamp-normalized review copy deterministically;
+2. normalization preserves compressed picture order and a one-to-one source-frame-index mapping;
+3. unconditional MPEG-4 Part 2 packed-B-frame unpacking is not used;
+4. preparation reports phase, progress, elapsed time, and a progressively refined ETA, supports
+   cancellation, and never publishes partial cache artifacts as ready;
+5. a valid cache hit reopens the same canonical frame map without normalization or full indexing;
+6. changed source content, selected track, recipe, or dependency versions invalidate the cache;
+7. random exact access remains identity-correct even when a known slow source exceeds the original
+   latency target;
+8. held `+1` uses the persistent decoder as adjacent sequential work rather than repeated random
+   seeks, while held `-1` uses a bounded delivered-frame history and an explicit cache-miss path;
+9. every displayed adjacent frame advances by exactly one canonical source-frame identity and held
+   input cannot create an unbounded request queue.
+
+Future cache reopening uses a deterministic sampled packet signature rather than rereading every
+compressed packet. The selected profile covers three minutes from the start, three minutes from the
+end, and three pseudo-random one-minute interior segments. It also binds source size, duration,
+selected-stream metadata, exact sample locations, preparation contract, dependency versions, and
+indexing options. This is probabilistic change detection: modifications confined to unsampled
+content can evade it, and that residual risk is explicitly accepted for this local interactive
+cache. First-time preparation and source-to-review identity proof remain complete scans.
+
+The first Phase 2C implementation deferred all-intra proxy generation, PTS-assisted BestSource hash
+disambiguation, and special acceleration for 4K decode-forward. The later approved full-player scrub
+amendment activates the all-intra option only after canonical preparation has passed this gate.
+Phase 2C itself stopped for evidence review before the Electron bridge began.
 
 ### 6.3 Phase 3: Electron Bridge and Renderer
 
@@ -243,17 +301,112 @@ Start with the simplest correct transport. If copying full frames is too expensi
 
 The Electron control must exercise:
 
-1. play, pause, and stop,
+1. one play/pause toggle,
 2. required playback rates,
 3. single-frame forward and backward stepping,
 4. continuous stepping while left/right is held,
-5. `+1` and `+10` frame step modes,
+5. single-frame stepping, with the adapter accepting a bounded configurable count if another step
+   button is added in the future,
 6. timeline scrubbing,
 7. switching smoothly between playback and exact-frame mode when Path C2 is selected,
 8. source-frame index and exact timestamp display,
 9. `q`, `w`, and `a` range capture using canonical source-frame identities.
 
-### 6.4 Phase 4: Native Window Decision Gate
+Opening a movie must show its first frame while remaining paused; loading must have a visible
+processing state. Timeline dragging owns the thumb locally so status polling cannot snap it back.
+Releasing the thumb performs one seek and starts playback from the selected position, with the same
+processing state visible until the handoff completes.
+
+The approved full-player scrub amendment rejects a small seeker thumbnail as insufficient. Its
+initial implementation adds a cached maximum-960-pixel all-intra display proxy and one proxy
+BestSource index alongside the canonical source index. The proxy must retain one picture per
+canonical ordinal, and the complete canonical/output/proxy frame counts must match before exact
+controls are enabled. During dragging, the main viewport shows progressive proxy pictures. On
+release, the initial implementation resolves the exact canonical frame identity and resumes the
+original source through its canonical PTS. Automated evidence must cover both CFR and VFR coded
+fixtures; hands-on evidence must judge enlarged proxy quality and perceived continuous-drag
+smoothness.
+
+### 6.4 Phase 3B: Unified Review-Proxy Contract and Profile Gate
+
+The next approved POC step determines whether the display proxy should become a timing-preserving
+review proxy used for both ordinary LibVLC playback and BestSource exact-frame review once
+preparation completes. This aims to retain the accepted full-player dragging experience while
+removing original-resolution decode and CPU-RGBA callback pressure from warm playback, improving
+preview-audio stability, and reducing cold preparation cost.
+
+The original movie remains the extraction source and the canonical source index remains the
+authority for frame ranges. The review proxy is a replaceable cache artifact, never the durable
+identity authority.
+
+This phase uses the current pinned software FFmpeg path. Preparation acceleration is deliberately
+excluded so codec profile, timing, audio, handoff, and frame-identity results are not confounded by
+hardware- or wrapper-specific behavior.
+
+The gate must:
+
+1. retain exactly one review-proxy picture for every canonical source-frame ordinal and reject a
+   proxy whose complete output or indexed frame count differs;
+2. preserve source presentation timing and frame durations, including VFR behavior, without
+   treating proxy timestamps as canonical frame identities;
+3. record an explicit proxy-clock-to-canonical-frame map when damaged or repeated source timestamps
+   require normalization instead of assuming that the proxy clock equals the source clock;
+4. retain the proved maximum-960-pixel display bound for the first comparison;
+5. compare all-intra, GOP 6, and GOP 12 video profiles, all without B-frames;
+6. retain only one semantically selected preview-audio program, downmix it to stereo, encode it as
+   AAC at 160-192 kbps, and omit all other source audio streams from the review proxy;
+7. use LibVLC to play the review proxy for ordinary warm playback and use BestSource to decode the
+   same proxy for exact stepping and dragging;
+8. allow provisional original-source playback before the review proxy is ready, then transfer
+   position, playing or paused state, and playback rate when switching to the proxy;
+9. reject any profile that loses, duplicates, or reorders decoded pictures, drifts from source
+   presentation timing, or cannot map every displayed proxy picture back to one canonical source
+   frame;
+10. select one profile and record its complete cache identity so subsequent acceleration candidates
+    must generate the same review artifact contract.
+
+Measure and report:
+
+1. proxy encode, proxy index, and total cold preparation time;
+2. proxy size and visual quality at the real player size;
+3. ordinary-playback startup, sustained delivery rate, CPU/GPU use, and preview-audio stability;
+4. random exact landing, released seek, continuous dragging, and adjacent stepping behavior;
+5. source-to-proxy frame-count, ordinal, presentation-time, and sampled-pixel correspondence;
+6. the visible handoff from provisional source playback to ready proxy playback;
+7. profile-specific behavior on CFR, VFR, timestamp-repaired, common 1080p, and difficult 4K
+   representatives.
+
+The phase passes when it selects one evidence-backed review profile, preserves exact canonical
+range identities, keeps the accepted continuous-drag experience, and provides clean synchronized
+warm preview audio on the difficult 4K representative. A shorter GOP that does not improve the
+measured result is rejected without invalidating the existing all-intra baseline. Perceived visual
+quality, scrub smoothness, and audio cleanliness require hands-on review in addition to automated
+timing and identity evidence.
+
+### 6.5 Phase 3C: Preparation-Acceleration Gate
+
+After Phase 3B fixes the review-proxy contract, a separate phase may reduce cold preparation time
+without changing that contract. It compares:
+
+1. the current software FFmpeg CLI implementation as the correctness and timing baseline;
+2. `node-av` as the first cross-platform FFmpeg API and hardware-selection candidate;
+3. `ffmpeg-kit` as a packaged cross-platform FFmpeg execution candidate;
+4. direct FFmpeg hardware decode, GPU scaling, and hardware encode as a diagnostic upper-bound path;
+5. BestSource software canonical indexing against BestSource configured directly with its own
+   supported FFmpeg hardware device.
+
+Proxy-generation candidates must produce the same selected picture order, presentation timeline,
+audio contract, and canonical-frame map as Phase 3B. Each hardware job must detect unsupported
+codec, pixel-format, filter, or device combinations and retry through the known-correct software
+path. BestSource acceleration is measured independently: a `node-av` or `ffmpeg-kit` device cannot
+be passed into BestSource's separate native process and FFmpeg build.
+
+Measure cold wall time, startup cost, CPU/GPU use, output equivalence, packaging implications,
+failure diagnosis, and fallback cost. Phase 3C may select different implementations per platform,
+but all remain behind one platform-neutral preparation adapter. Failure to find a worthwhile
+accelerated path does not invalidate the correct Phase 3B software recipe.
+
+### 6.6 Phase 4: Native Window Decision Gate
 
 Do not build a full native review window merely because native decoding is used.
 
@@ -285,7 +438,10 @@ If proxy generation is required, separately record:
 1. BestSource indexing time,
 2. FFmpeg proxy-generation time,
 3. whether running both independently causes material duplicate decode work,
-4. whether a future combined custom libav service would save enough time to justify its additional ownership cost.
+4. whether a future combined custom libav service would save enough time to justify its additional ownership cost,
+5. the selected review-proxy GOP and audio profile,
+6. whether hardware decode and scaling were used, why that path was selected, and whether fallback
+   was exercised.
 
 ## 8. UX Performance Questions
 
@@ -345,7 +501,11 @@ The spike must produce:
 8. bridge and renderer measurements,
 9. an updated architecture-options document that supersedes the old WebCodecs recommendation,
 10. a final spike-results document with a production recommendation and remaining risks,
-11. pinned source manifests or retrieval instructions for native candidate components whose source is available.
+11. pinned source manifests or retrieval instructions for native candidate components whose source is available,
+12. a unified review-proxy report comparing timing, GOP, audio, identity, handoff, and perceived-UX
+    evidence,
+13. a separate preparation-acceleration report comparing wrappers, hardware paths, packaging, and
+    software fallback when Phase 3C is executed.
 
 ## 12. Acceptance Criteria
 
@@ -356,7 +516,9 @@ The spike is complete when:
 3. LibVLC 4 forward and backward stepping has been verified against known frame contents,
 4. LibVLC 4 random seek and timestamp behavior has been verified independently rather than assumed,
 5. the report states whether LibVLC provides absolute frame identity as defined in this spec,
-6. if Path C2 is considered, BestSource passes the same absolute-identity and representative-media criteria before Electron integration begins,
+6. if Path C2 is considered, BestSource passes the same absolute-identity and representative-media
+   criteria through the direct Phase 2B gate or the prepared-review Phase 2C gate before Electron
+   integration begins,
 7. the selected Candidate C path follows directly from the applicable engine-gate evidence,
 8. the Electron host presents one selected solution rather than the old side-by-side candidate comparison,
 9. the Electron host supports exact frame stepping, held-key stepping, and exact-frame scrubbing on representative sources,
@@ -367,7 +529,13 @@ The spike is complete when:
 14. memory remains bounded by an explicit cache or ring-buffer policy,
 15. unsupported or unverifiable media produces a clear error rather than an approximate-success state,
 16. the final report recommends one production direction or explicitly concludes that neither tested path is ready,
-17. no native-window implementation is started unless the Phase 4 gate is reached and separately approved.
+17. no native-window implementation is started unless the Phase 4 gate is reached and separately approved,
+18. the unified review-proxy gate verifies one-to-one proxy-to-canonical frame correspondence before
+    allowing exact range capture,
+19. ready-proxy LibVLC playback provides clean synchronized preview audio on the difficult 4K
+    representative while exact review continues to use canonical source identities,
+20. any hardware-assisted preparation selected in Phase 3C has a tested per-source software
+    fallback and produces an artifact equivalent to the selected Phase 3B contract.
 
 ## 13. Open Questions
 
@@ -383,6 +551,14 @@ These questions are intentionally left for measured spike results:
 8. When a proxy is required, can review begin progressively before the complete proxy exists?
 9. What representative media failures remain even with the selected native stack?
 10. What is the real cross-platform packaging cost for Windows, macOS, and Linux?
+11. Can one timing-preserving review proxy serve LibVLC playback and BestSource exact review for both
+    CFR and VFR sources without introducing dropped or duplicated pictures?
+12. Which of all-intra, GOP 6, or GOP 12 gives the best preparation-time and exact-access tradeoff?
+13. Does normalized stereo proxy audio eliminate the observed warm 4K playback jitter?
+14. Can an existing FFmpeg hardware abstraction satisfy runtime detection, per-source compatibility,
+    GPU scaling, Electron packaging, and job-level software fallback without excessive ownership cost?
+15. Can BestSource hardware decoding accelerate canonical indexing without changing frame identity
+    or making failure handling less reliable?
 
 ## 14. Decisions Fixed by This Spec
 
@@ -397,3 +573,19 @@ These questions are intentionally left for measured spike results:
 9. The Electron host presents one selected solution; the old side-by-side comparison UI is retired.
 10. A native review window is a gated fallback, not the default spike deliverable.
 11. FFmpeg remains the eventual extraction engine independently of the playback architecture.
+12. The prepared-review path uses exactly one canonical full BestSource index for the selected
+    review source; an optional timestamp-normalized review copy is a media file, not another
+    canonical index. A display or review proxy may have its own physical-access BestSource index,
+    but that index never becomes the canonical identity authority.
+13. Held adjacent stepping and random exact access are different operations with different queue and
+    decoder-reuse behavior.
+14. The next POC phase evaluates a unified timing-preserving review proxy before entering the native
+    window decision gate.
+15. Proxy timestamps support playback synchronization and navigation but never replace canonical
+    source-frame identity.
+16. Review-proxy correctness and profile selection are proven on the current software path before
+    preparation acceleration is evaluated.
+17. Existing cross-platform hardware-selection implementations must be evaluated before a custom
+    OS-specific selector is designed.
+18. `node-av`, `ffmpeg-kit`, direct FFmpeg hardware processing, and BestSource hardware indexing are
+    separate Phase 3C candidates; none is assumed to configure or accelerate another component.

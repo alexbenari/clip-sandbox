@@ -1,0 +1,15 @@
+.deps/
+artifacts/*.json
+artifacts/**/*.json
+artifacts/**/*.log
+build/
+dist/
+node_modules/
+__pycache__/
+fixtures/generated/
+*.bsindex
+*.dmp
+*.etl
+*.trace
+*.raw
+*.rgba

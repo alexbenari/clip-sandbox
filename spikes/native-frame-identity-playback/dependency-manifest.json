@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "dependencies": {
+    "libvlc": {
+      "kind": "binaryArchive",
+      "version": "4.0.0-dev-baad2c52",
+      "commit": "baad2c52",
+      "url": "https://artifacts.videolan.org/vlc/nightly-win64/20260812-0429/vlc-4.0.0-dev-win64-baad2c52.zip",
+      "sha512": "d600546eaa8f6b79efdf5d98a262945a2e751c738ae468b55a58e391da77ec22084b91aac64cc5eb123262725ca5c0a9fdf1657e072c1ba39614a8c6c47db340",
+      "sourceUrl": "https://code.videolan.org/videolan/vlc/-/tree/baad2c52",
+      "license": "LGPL-2.1-or-later"
+    },
+    "libvlcSource": {
+      "kind": "gitSource",
+      "version": "baad2c523c1934470bb351105efc352e0678dd55",
+      "commit": "baad2c523c1934470bb351105efc352e0678dd55",
+      "url": "https://code.videolan.org/videolan/vlc.git",
+      "sourceUrl": "https://code.videolan.org/videolan/vlc/-/tree/baad2c523c1934470bb351105efc352e0678dd55",
+      "license": "LGPL-2.1-or-later"
+    },
+    "bestsource": {
+      "kind": "gitSource",
+      "version": "825af4e691524a3c98383d0cfe7d85b4142005cc",
+      "commit": "825af4e691524a3c98383d0cfe7d85b4142005cc",
+      "url": "https://github.com/vapoursynth/bestsource.git",
+      "sourceUrl": "https://github.com/vapoursynth/bestsource/tree/825af4e691524a3c98383d0cfe7d85b4142005cc",
+      "license": "MIT",
+      "conditionalMilestone": 3
+    },
+    "vcpkg": {
+      "kind": "gitSource",
+      "version": "aae277acf4e7de287ddb5e208b5316614de6aad7",
+      "commit": "aae277acf4e7de287ddb5e208b5316614de6aad7",
+      "url": "https://github.com/microsoft/vcpkg.git",
+      "sourceUrl": "https://github.com/microsoft/vcpkg/tree/aae277acf4e7de287ddb5e208b5316614de6aad7",
+      "license": "MIT",
+      "conditionalMilestone": 3
+    },
+    "ffmpeg": {
+      "kind": "gitSource",
+      "version": "9.0",
+      "sourceArchiveSha512": "4327d259b2ed9cc35a6139606643bf9c9db5fb0372a9eb259fed61af50505a2b59f0c3d94c51fec89d2e0cd552a413c5f50514683931c94c429824198d56ec56",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/ffmpeg",
+      "url": "https://github.com/FFmpeg/FFmpeg.git",
+      "sourceUrl": "https://github.com/FFmpeg/FFmpeg/tree/n9.0",
+      "license": "LGPL-2.1-or-later",
+      "features": ["core", "avcodec", "avfilter", "avformat", "dav1d", "ffmpeg", "ffprobe", "swresample", "swscale"],
+      "conditionalMilestone": 3
+    },
+    "dav1d": {
+      "kind": "gitSource",
+      "version": "1.5.4",
+      "sourceArchiveSha512": "7ee5906640495919462b2242c44a8c3cc577fdda52fc25257792f6df919429d54e4a48c315a7a11759385f044f68d3d6573fd720853f447e2d8520a13693827f",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/dav1d",
+      "url": "https://code.videolan.org/videolan/dav1d.git",
+      "sourceUrl": "https://code.videolan.org/videolan/dav1d/-/tree/1.5.4",
+      "license": "BSD-2-Clause AND ISC",
+      "conditionalMilestone": 3
+    },
+    "xxhash": {
+      "kind": "gitSource",
+      "version": "0.8.3",
+      "sourceArchiveSha512": "8b5c8b9aad4e869f28310b12cc314037feda81d92f26c23eaecdb35dc65042ca2e65f2e9606033e62a31bcc737a9a950500ffcbdb8677d6ab20e820ea14f2b79",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/xxhash",
+      "url": "https://github.com/Cyan4973/xxHash.git",
+      "sourceUrl": "https://github.com/Cyan4973/xxHash/tree/v0.8.3",
+      "license": "BSD-2-Clause",
+      "conditionalMilestone": 3
+    },
+    "libp2p": {
+      "kind": "gitSource",
+      "version": "869fa993041f9f3af7d9ac8b10158920c6ddce66",
+      "commit": "869fa993041f9f3af7d9ac8b10158920c6ddce66",
+      "url": "https://github.com/sekrit-twc/libp2p.git",
+      "sourceUrl": "https://github.com/sekrit-twc/libp2p/tree/869fa993041f9f3af7d9ac8b10158920c6ddce66",
+      "license": "WTFPL",
+      "conditionalMilestone": 3
+    },
+    "meson": {
+      "kind": "pythonTool",
+      "version": "1.9.0",
+      "package": "meson",
+      "sourceUrl": "https://github.com/mesonbuild/meson/tree/1.9.0",
+      "license": "Apache-2.0",
+      "conditionalMilestone": 3
+    },
+    "nlohmannJson": {
+      "kind": "vcpkgPackage",
+      "version": "3.12.0#2",
+      "sourceArchiveSha512": "6cc1e86261f8fac21cc17a33da3b6b3c3cd5c116755651642af3c9e99bb3538fd42c1bd50397a77c8fb6821bc62d90e6b91bcdde77a78f58f2416c62fc53b97d",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/nlohmann-json",
+      "package": "nlohmann-json:x64-mingw-release",
+      "sourceUrl": "https://github.com/nlohmann/json/tree/v3.12.0",
+      "license": "MIT",
+      "conditionalMilestone": 4
+    },
+    "libvpl": {
+      "kind": "vcpkgPackage",
+      "version": "2.17.0#1",
+      "package": "libvpl:x64-mingw-release",
+      "sourceArchiveSha512": "4bf891a575541412b1f07d3ac85550e66026bc513996ad76685cb222eb312c496de8bd2a4715739f377dcd2650e91a998b66ef0383f74741a7d7422ffd7b56fa",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/libvpl",
+      "sourceUrl": "https://github.com/intel/libvpl/tree/v2.17.0",
+      "license": "MIT",
+      "optional": "Phase 3C QSV proxy decode and scaling; not required for the software fallback"
+    },
+    "electron": {
+      "kind": "npmPackage",
+      "version": "37.10.3",
+      "package": "electron",
+      "integritySource": "package-lock.json:node_modules/electron; downloaded runtime: node_modules/electron/checksums.json",
+      "sourceUrl": "https://github.com/electron/electron/tree/v37.10.3",
+      "license": "MIT",
+      "conditionalMilestone": 4
+    }
+  },
+  "toolchain": {
+    "libvlcGateVisualStudioMinimumMajorVersion": 15,
+    "bestSourceCompiler": "x86_64-w64-mingw32-g++ 11.4.0",
+    "bestSourceTriplet": "x64-mingw-release",
+    "bestSourceFfmpegX86Assembly": true,
+    "bestSourceFfmpegPrograms": ["ffmpeg", "ffprobe"],
+    "requiredComponent": "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+    "cmakeMinimum": "3.25",
+    "nodeMinimum": "22.0.0",
+    "fixtureFfmpeg": "A separate FFmpeg CLI on PATH with libx264, ffv1 and mpeg2video encoders; FFprobe from the same installation. Not linked into native helpers. Bootstrap records paths and versions."
+  }
+}

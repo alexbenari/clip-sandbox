@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'">
+  <title>Exact Frame Review</title>
+  <link rel="stylesheet" href="./control.css">
+</head>
+<body>
+  <header class="app-bar">
+    <button id="open-movie" class="command-button">Open movie</button>
+    <div class="source-heading">
+      <strong id="source-name">No movie open</strong>
+      <span id="readiness">Playback and exact-frame review</span>
+    </div>
+    <div class="preparation-status" id="preparation-status" hidden>
+      <div class="progress-copy"><span id="preparation-phase">Preparing exact review</span><span id="preparation-eta"></span></div>
+      <progress id="preparation-progress" max="100" value="0"></progress>
+    </div>
+    <button id="legend-toggle" class="icon-button" title="Keyboard shortcuts" aria-label="Keyboard shortcuts">?</button>
+  </header>
+
+  <main class="workspace">
+    <section class="current-range" aria-labelledby="current-range-title">
+      <div class="section-heading">
+        <h2 id="current-range-title">Current clip</h2>
+        <span id="draft-state" class="state-label">Draft</span>
+      </div>
+      <dl class="range-values">
+        <div><dt>Start <kbd>Q</kbd></dt><dd id="draft-start">Not marked</dd></div>
+        <div><dt>End <kbd>W</kbd></dt><dd id="draft-end">Not marked</dd></div>
+      </dl>
+      <button id="lock-range" class="command-button full-width" disabled>Lock clip <kbd>A</kbd></button>
+      <p id="range-error" class="error-message" role="alert"></p>
+    </section>
+
+    <section class="player-area" aria-label="Movie review player">
+      <div class="viewport" id="viewport">
+        <canvas id="video-canvas"></canvas>
+        <div id="empty-state" class="empty-state">Open a movie to begin</div>
+        <div id="busy-state" class="busy-state" hidden role="status" aria-live="polite">
+          <span class="busy-spinner" aria-hidden="true"></span>
+          <span id="busy-label">Processing</span>
+        </div>
+        <div id="scrub-state" class="scrub-state" hidden role="status" aria-label="Loading scrub frame">
+          <span class="scrub-spinner" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="timeline-row">
+        <span id="current-time">00:00:00.000</span>
+        <div class="timeline-track">
+          <input id="timeline" type="range" min="0" max="100000" value="0" disabled aria-label="Movie position">
+        </div>
+        <span id="duration">00:00:00.000</span>
+      </div>
+      <div class="transport" aria-label="Playback controls">
+        <button id="step-back" class="icon-button exact-control" title="Step backward" disabled aria-label="Step backward">&#9664;&#10072;</button>
+        <button id="play-pause" class="primary-transport" title="Play" disabled aria-label="Play">&#9654;</button>
+        <button id="step-forward" class="icon-button exact-control" title="Step forward" disabled aria-label="Step forward">&#10072;&#9654;</button>
+        <label class="rate-control">Speed
+          <select id="playback-rate" disabled>
+            <option value="0.25">0.25x</option>
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1x</option>
+            <option value="2">2x</option>
+          </select>
+        </label>
+        <output id="frame-identity">Frame unavailable</output>
+      </div>
+      <div id="player-error" class="player-error" role="alert"></div>
+    </section>
+
+    <aside class="captured-ranges" aria-labelledby="captured-title">
+      <div class="section-heading">
+        <h2 id="captured-title">Clips</h2>
+        <span id="range-count" class="count-label">0</span>
+      </div>
+      <ol id="ranges-list" class="ranges-list"></ol>
+      <p id="ranges-empty" class="muted-copy">Locked clips appear here when you begin the next one.</p>
+    </aside>
+  </main>
+
+  <aside id="keyboard-legend" class="keyboard-legend" hidden>
+    <div><kbd>Space</kbd><span>Play / pause</span></div>
+    <div><kbd>&larr;</kbd><kbd>&rarr;</kbd><span>Step frames</span></div>
+    <div><kbd>Q</kbd><span>Mark start</span></div>
+    <div><kbd>W</kbd><span>Mark end</span></div>
+    <div><kbd>A</kbd><span>Lock / unlock</span></div>
+  </aside>
+
+  <script type="module" src="../build/bridge-js/src/ui/control-app.js"></script>
+</body>
+</html>

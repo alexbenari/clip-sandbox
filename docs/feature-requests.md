@@ -1,7 +1,16 @@
 # Feature Requests
 
-## Design and code quality
-- add `better-result`fir error handling 
+## Next up
+- UI structure
+  - gif extractor, gif pipeline, gif browser (future), gif composer (future): which UI best faciliates this?
+  - pipelines side panel: find component - tree view, collapsanle side panel
+  - gif extractor -> extracted clips side panel (a generic clip display side panel?)
+  - implement gif extractor: control handoff (D:\tmp\dev\clip-sandbox\spikes\native-frame-identity-playback\docs\frame-scrub-supporting-player-control-integration-handoof.md)
+
+## Features
+
+### Design and code quality
+- add `better-result` for error 
 - Code review flow -> put in place [find a good one or add my own instructions]
 -  make error log usable: 
    -  one line message, timestamp, module, error message
@@ -9,32 +18,44 @@
    -  allow viewing in the ui
    -  place in log folder, not in the pipeline folder as now
 -  app/app-controller.js is still huge. Understand why and if and what can be done.
-   -  runAddToCollection
+   - runAddToCollection
 
-## Bugs
-- Grid display suboptimal: see not-in-collections-yet -> one row instead of several. Why? Optimize
-- Delete from disk when in collection -> gets error message that collection is out of sync. Remove ffrom collection(s) instead
-- Grey text on top bar -> remove
-- bugs under /code-reviews folder
+### Bugs
 - In the workspace window, the collection drop down selection overrides the info text on the top bar. Find a place for the info text (perhaps collapsable panel)
+- Delete from disk when in collection -> gets error message that collection is out of sync. Remove ffrom collection(s) instead
+- bugs under /code-reviews folder
+
+### App
+- Add a keyboard map icon in the top bar. When clicked, open a small panel showing all key mappings and their descriptions.
+- Add a `?` icon that opens a panel with a brief textual explanation of the main app features, one per row.
+- Share collection: allow sending a link to a gallery of clips.
+- Add general settings panel: 
+  - default audio = on/off
+  - movie cache folder location + cleanup
+  - default pipelines location: the default location where a new pipeline is opened. 
 
 ### Quick Actions
 Some quick manipulations on videos that generate new videos in the same collection named: [orig-name]-[action]-[serial]
 - trim from start/end to current frame
 - slow by X%
+- remove background / extract just a specific object/character from the video
 - Actions UX
   - Progress when generating video
   - After generation show in compare mode
   
 ## Pipelines
-Physically a pipeline is a folder. Conceptually it is the context shared by the set of videos in that folder. Initially this is often the movie from which the clips were extracted. There can also be thematic pipelines, e.g. hands or other such as "ready-to-exhibit".
-- Panels are viewable via a side-panel tree view 
+### Pipeline management sidebar
+- Pipelines are viewable via a side-panel tree view 
 - Copy clip/s to pipeline -> drag to that pipeline in the sidebar (supports multi-select)
 - Create a new pipeline -> creates a physical folder names the same as the pipeline
+### New pipeline from movie
+- Select a movie file => A new pipeline is created under the main pipelines folder. Its default name is a cleanup version of the movie name (remove all codex info and such).
+- The movie is opened in the player control in clip creation mode
 
-### Movie Edit mode
-Allows generating clips from a longer movie
-- viewer (libvlc) with support for as-you-watch actions
+## Movie Edit mode
+Allows generating clips from a longer movie.
+- editor control: D:\tmp\dev\clip-sandbox\spikes\native-frame-identity-playback\docs\frame-scrub-supporting-player-control-integration-handoof.md
+- viewer with support for as-you-watch actions
   - q,w,a: start-stop-capture
     - As the movie plays, when a is pressed a clip is created from the timestaps between q and a
       - new clip is added to the current pipeline with a default name: [start-stop]
@@ -42,6 +63,12 @@ Allows generating clips from a longer movie
     - graphic indication of current start and stop ts + thumbnail. Clicking a resets start and stop
     - a -> if clip boundaries are illegal: either start.stop missing or stop is before start -> nothing happens
 - Movie edit mode is initiated from within a pipeline
+- Allow captuuring frames and enhancing them
+
+### Gif composition mode
+A workspace for creating compositions of gifs
+- select gifs (across pipelines, optionally by metadata search like all close ups of a woman etc)
+- move each gif to its location + resize + shift by #degrees + opacity
 
 ## Collection Mode (a.k.a Grid Mode)
 
@@ -55,6 +82,8 @@ Allows generating clips from a longer movie
     - Add a count showing total items and current screen position (`x/y`).
 
 #### Zoom mode
+- Respct `display titles` setting
+- Allow making it full screen and back
 - Compare mode:
   - Compare two clips by opening them in side-by-side zoom and synchronizing their start.
   - The `s` key or a resync button starts them again together from zero.
@@ -64,10 +93,10 @@ Allows generating clips from a longer movie
 
 ### Collections
 - ctrl+s saves the collection
-- Delete collection -> removes the file
-- Open in file explorer -> opens the current context folder in file explorer
+- Delete collection -> removes the collection file and any references to it
+- Open in file explorer -> opens the current pipeline folder in file explorer
 - Rename collection
-- Add a startup window for the no-collection state: a centered set of buttons
+- Startup window for the no-collection state: a centered set of buttons
 
 ## Video
 ### Metadata
@@ -93,13 +122,6 @@ A video can have various types of metadata
 - shot type: longshot, closeup, static/moving camera
 - camera motion: ltr, rtl, up, dpwn, zoom, pan etc, camera speed
 - objects: person, hands, etc
-
-### App
-- Add a keyboard map icon in the top bar. When clicked, open a small panel showing all key mappings and their descriptions.
-- Add a `?` icon that opens a panel with a brief textual explanation of the main app features, one per row.## Share
-- Allow sending a link to a gallery of clips.
-- Add general settings panel: 
-  - default audio = on/off
 
 ## Other
 - Support GIF files -> postpone, more complex since app is wired for video files, especially full screen mode

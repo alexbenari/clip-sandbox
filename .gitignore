@@ -3,3 +3,4 @@ build/
 playwright-report/
 test-results/
 .worktrees/
+.firecrawl/
