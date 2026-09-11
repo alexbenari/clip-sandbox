@@ -87,7 +87,7 @@ Recommendation: when changing edit/storage boundaries, consider typed source/des
 ## Boundaries that looked sound in the reviewed paths
 
 - CollectionScreen coordinates focus via child capabilities. Settings and Keyboard query markup they own. Panel sizing and Close-button behavior remain owner-local after the recent correction.
-- AppScreen roots/commands and utility panels/triggers are deliberately exported outer surfaces. Mounting/hiding them via the shell/coordinator is part of their contract; it does not justify descendant inspection.
+- IAppScreen roots/commands and utility panels/triggers are deliberately exported outer surfaces. Mounting/hiding them via the shell/coordinator is part of their contract; it does not justify descendant inspection.
 - GridContextMenuControl and ZoomEditMenuControl pass semantic item descriptions through narrow open/close capabilities. The context menu owns rendering and keyboard navigation.
 - Collection ordered names and ClipSequence ordered IDs are copied; private maps are not directly exposed. Collection changes return new Collection values. Canonical mutable Clip sharing has a legitimate purpose, but its file aliasing needs F5.
 - Settings production parsing freezes its flat value object. Electron transport remains behind adapters/preload; no direct renderer imports of main-process helpers were found.

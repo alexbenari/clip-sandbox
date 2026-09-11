@@ -319,10 +319,10 @@ Do not add shortcuts for opening help, Settings, or panels in this remediation. 
 
 #### Preferred contract adjustment
 
-The current `ShortcutDescriptor.keys` array represents a chord, so it cannot correctly model alternative complete key sequences without pretending they are simultaneous keys. Prefer a small explicit descriptor contract, for example:
+The current `IShortcutDescriptor.keys` array represents a chord, so it cannot correctly model alternative complete key sequences without pretending they are simultaneous keys. Prefer a small explicit descriptor contract, for example:
 
 ```ts
-export interface ShortcutDescriptor {
+export interface IShortcutDescriptor {
   readonly description: string;
   readonly group?: string;
   readonly sequences: readonly (readonly string[])[];

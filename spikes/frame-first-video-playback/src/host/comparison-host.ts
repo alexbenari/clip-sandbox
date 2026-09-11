@@ -1,12 +1,12 @@
-import type { FramePlaybackControl } from '../contracts/frame-playback-control';
-import type { CandidateId, CandidateSnapshot, SharedMovieSource } from '../contracts/types';
+import type { IFramePlaybackControl } from '../contracts/frame-playback-control';
+import type { CandidateId, ICandidateSnapshot, ISharedMovieSource } from '../contracts/types';
 import { shouldIgnoreKeyboardShortcut } from './keyboard-shortcuts';
 import { KeyboardStepController } from './keyboard-step-controller';
 import { RangeCaptureModel } from './range-capture-model';
 import { RangeCapturePanel } from './range-capture-panel';
 import { SharedMovieSourceModel } from './shared-movie-source';
 
-export type CandidateControls = Record<CandidateId, FramePlaybackControl>;
+export type CandidateControls = Record<CandidateId, IFramePlaybackControl>;
 
 export class ComparisonHost {
   private readonly rangeCaptureModel = new RangeCaptureModel();
@@ -154,7 +154,7 @@ export class ComparisonHost {
   }
 
   private async loadSharedSource(file: File): Promise<void> {
-    let source: SharedMovieSource;
+    let source: ISharedMovieSource;
     try {
       source = await this.sharedMovieSource.setSource(file);
     } catch (error) {
@@ -170,8 +170,8 @@ export class ComparisonHost {
   }
 
   private async loadCandidate(
-    candidate: FramePlaybackControl,
-    source: SharedMovieSource,
+    candidate: IFramePlaybackControl,
+    source: ISharedMovieSource,
   ): Promise<void> {
     try {
       await candidate.loadMovie(source);
@@ -269,11 +269,11 @@ export class ComparisonHost {
     }
   }
 
-  private getActiveCandidate(): FramePlaybackControl {
+  private getActiveCandidate(): IFramePlaybackControl {
     return this.candidates[this.activeCandidateId];
   }
 
-  private onCandidateSnapshotChanged(snapshot: CandidateSnapshot): void {
+  private onCandidateSnapshotChanged(snapshot: ICandidateSnapshot): void {
     if (!snapshot.active) {
       return;
     }

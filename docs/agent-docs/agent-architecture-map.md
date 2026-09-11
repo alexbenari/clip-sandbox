@@ -1,8 +1,8 @@
 # Agent Architecture Map
 
-Last verified: 2026-09-11
+Last verified: 2026-09-12
 
-Shell ownership, utilities, coordinated panels, grid layout, durable settings, and production TypeScript object ownership updated: 2026-09-11.
+Shell ownership, utilities, coordinated panels, grid layout, durable settings, production TypeScript object ownership, and interface naming updated: 2026-09-12.
 
 Verified against:
 
@@ -77,6 +77,7 @@ These are normative defaults for future work. Do not violate them without a conc
 9. Treat `docs/agent-docs/` as the canonical agent-facing architecture knowledge base. Historical specs and plans are not canonical onboarding material.
 10. A UI control owns binding and unbinding events originating from its own elements. [`ApplicationEventController`](../../src/app/application-event-controller.ts) is limited to application-wide document/window events.
 11. Inject shared service-like objects such as [`AppText`](../../src/app/app-text.ts) rather than importing static namespaces or free formatting functions.
+12. Prefix authored TypeScript interface names with `I`; classes and type aliases retain responsibility-based names without a type-kind prefix.
 
 ## System Shape
 
@@ -102,11 +103,11 @@ Start here for the current ownership map:
 
 ### Application Shell and Screen Ownership
 
-`index.html` defines the global app bar, central command host and main screen host. [`ApplicationShellController`](../../src/ui/application-shell-controller.ts) owns a nonempty set of [`AppScreen`](../../src/ui/app-screen.ts) registrations, the screen selector, active content/commands and delegated initial focus. Screen roots stay mounted but inactive roots are hidden/inert; inactive commands are detached. Activation is synchronous, so there are no queued stale completion callbacks. The selector is hidden for a single registration. The shell has no screen-id branches or Electron/filesystem dependencies.
+`index.html` defines the global app bar, central command host and main screen host. [`ApplicationShellController`](../../src/ui/application-shell-controller.ts) owns a nonempty set of [`IAppScreen`](../../src/ui/app-screen.ts) registrations, the screen selector, active content/commands and delegated initial focus. Screen roots stay mounted but inactive roots are hidden/inert; inactive commands are detached. Activation is synchronous, so there are no queued stale completion callbacks. The selector is hidden for a single registration. The shell has no screen-id branches or Electron/filesystem dependencies.
 
 Production registers [`CollectionScreen`](../../src/ui/collection-screen.ts) and [`SettingsScreen`](../../src/ui/settings-screen.ts). Collection adapts the existing Collection DOM, owns initial focus and supplies the grid's allocated content height. `MainToolbarControl` remains the Collection command-state renderer; its name and stable element ids are retained. Existing Activity lives in the global bar, while zoom/context overlays remain outside the screen root. Settings has no command bar. Screen navigation closes Collection Zoom and Collection keyboard handlers run only while Collection is active. Both side-panel hosts are available on Collection and Settings; their contents remain empty states.
 
-[`AppSettingsService`](../../src/app/app-settings-service.ts) owns the committed immutable [`AppSettings`](../../src/app/app-settings.ts) value: an optional Pipelines root and the default audio preference for new single-clip playback (off initially). Settings owns edit/busy/feedback UI; the [`Electron adapter`](../../src/adapters/electron/electron-app-settings-service.ts) validates unknown IPC responses. [`AppSettingsStore`](../../electron/app-settings-store.cjs) reads version-1 `app-settings.json` beneath Electron userData and serializes atomic temp-file/rename saves. Invalid/unreadable settings fall back to defaults with an Activity diagnostic; failed writes preserve the committed value. Native folder cancellation saves nothing. The configured root does not reload or mutate `PipelineSession` and does not yet drive discovery. Startup settings load completes before a pipeline becomes available. Zoom samples the audio preference for each new video; its local toggle stays local and the grid remains muted. See [`settings.spec.ts`](../../tests/e2e/settings.spec.ts) for isolated-profile restart, working-session, audio and failure/recovery coverage.
+[`AppSettingsService`](../../src/app/app-settings-service.ts) owns the committed immutable [`IAppSettings`](../../src/app/app-settings.ts) value: an optional Pipelines root and the default audio preference for new single-clip playback (off initially). Settings owns edit/busy/feedback UI; the [`Electron adapter`](../../src/adapters/electron/electron-app-settings-service.ts) validates unknown IPC responses. [`AppSettingsStore`](../../electron/app-settings-store.cjs) reads version-1 `app-settings.json` beneath Electron userData and serializes atomic temp-file/rename saves. Invalid/unreadable settings fall back to defaults with an Activity diagnostic; failed writes preserve the committed value. Native folder cancellation saves nothing. The configured root does not reload or mutate `PipelineSession` and does not yet drive discovery. Startup settings load completes before a pipeline becomes available. Zoom samples the audio preference for each new video; its local toggle stays local and the grid remains muted. See [`settings.spec.ts`](../../tests/e2e/settings.spec.ts) for isolated-profile restart, working-session, audio and failure/recovery coverage.
 
 
 [`FoldablePanelController`](../../src/ui/foldable-panel-controller.ts) owns each panel's folded state, ARIA/inert state, focus transfer and transition completion. Its generation token rejects stale completions after reversal. CSS owns 240px/36px panel widths and 240/280ms closing/opening timing; reduced motion completes immediately. The shell measures destination central width and wrapped command height once, prepares the active screen's layout, and emits one settled callback after all moving panels finish. Panel state is session-local; there is no pipeline discovery or clip-lock implementation here.
@@ -274,7 +275,7 @@ When deciding whether to update this map, use the rules in [`.agents/skills/doc-
 
 ### Shell remediation verification (2026-09-09)
 
-[`ShortcutDescriptor`](../../src/ui/app-screen.ts) represents optional explicit groups and alternative complete key sequences; each sequence is a chord. [`KeyboardMapControl`](../../src/ui/keyboard-map-control.ts) renders these as static keycaps, while KeyboardMapControl owns its Close button and requests dismissal through [`GlobalUtilityCoordinator`](../../src/ui/global-utility-coordinator.ts). Activity owns visible status text, accessible name and unresolved counts; errors override ongoing status, and an operation failure ends its progress state. The shell uses local inline icons and existing CSS/controller ownership without a new dependency. See the [remediation verification](../research/application-shell-ux-remediation-verification.md) for current visual evidence and manual-QA boundaries.
+[`IShortcutDescriptor`](../../src/ui/app-screen.ts) represents optional explicit groups and alternative complete key sequences; each sequence is a chord. [`KeyboardMapControl`](../../src/ui/keyboard-map-control.ts) renders these as static keycaps, while KeyboardMapControl owns its Close button and requests dismissal through [`GlobalUtilityCoordinator`](../../src/ui/global-utility-coordinator.ts). Activity owns visible status text, accessible name and unresolved counts; errors override ongoing status, and an operation failure ends its progress state. The shell uses local inline icons and existing CSS/controller ownership without a new dependency. See the [remediation verification](../research/application-shell-ux-remediation-verification.md) for current visual evidence and manual-QA boundaries.
 
 ### Shell component boundaries (ownership correction)
 

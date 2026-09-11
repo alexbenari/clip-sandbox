@@ -1,29 +1,29 @@
 import { BackendError } from '../model/backend-error.js';
-import type { MediaStatus } from '../model/media-status.js';
+import type { IMediaStatus } from '../model/media-status.js';
 import { decimalBigInt, safeInteger } from '../model/source-frame-identity.js';
 import {
   previewBoundsFields,
-  type PlaybackDisplayFrame,
-  type PreviewBounds,
+  type IPlaybackDisplayFrame,
+  type IPreviewBounds,
 } from './frame-playback-adapter.js';
-import { NativeProcessClient, type TimedProtocolMessage } from './native-process-client.js';
+import { NativeProcessClient, type ITimedProtocolMessage } from './native-process-client.js';
 
 export class LibVlcPlaybackAdapter {
   #sourceGeneration = 0;
-  #listener: ((frame: PlaybackDisplayFrame) => void) | undefined;
+  #listener: ((frame: IPlaybackDisplayFrame) => void) | undefined;
 
   constructor(private readonly client: NativeProcessClient) {
     this.client.setEventHandler((message) => this.#onEvent(message));
   }
 
-  setFrameListener(listener: ((frame: PlaybackDisplayFrame) => void) | undefined): void {
+  setFrameListener(listener: ((frame: IPlaybackDisplayFrame) => void) | undefined): void {
     this.#listener = listener;
   }
 
   async open(sourcePath: string, options: {
     readonly muted?: boolean;
-    readonly previewBounds?: PreviewBounds;
-  } = {}): Promise<MediaStatus> {
+    readonly previewBounds?: IPreviewBounds;
+  } = {}): Promise<IMediaStatus> {
     const sourceGeneration = ++this.#sourceGeneration;
     return playbackStatus(await this.client.request('open', {
       sourcePath,
@@ -61,13 +61,13 @@ export class LibVlcPlaybackAdapter {
     });
   }
 
-  async status(): Promise<MediaStatus> {
+  async status(): Promise<IMediaStatus> {
     return playbackStatus(await this.client.request('status'), this.#sourceGeneration);
   }
 
   shutdown(): Promise<void> { return this.client.shutdown(); }
 
-  #onEvent(message: TimedProtocolMessage): void {
+  #onEvent(message: ITimedProtocolMessage): void {
     if (message.metadata.type !== 'playback-frame') return;
     const sourceGeneration = safeInteger(message.metadata.sourceGeneration, 'sourceGeneration');
     if (sourceGeneration !== this.#sourceGeneration) return;
@@ -90,12 +90,12 @@ export class LibVlcPlaybackAdapter {
   }
 }
 
-function playbackStatus(message: TimedProtocolMessage, expectedGeneration: number): MediaStatus {
+function playbackStatus(message: ITimedProtocolMessage, expectedGeneration: number): IMediaStatus {
   const sourceGeneration = safeInteger(message.metadata.sourceGeneration, 'sourceGeneration');
   if (sourceGeneration !== expectedGeneration) {
     throw new BackendError('stale-response', 'Playback status belongs to an obsolete source.', true);
   }
-  const state = String(message.metadata.state) as MediaStatus['state'];
+  const state = String(message.metadata.state) as IMediaStatus['state'];
   if (!['closed', 'opening', 'playback-ready', 'playing', 'paused', 'stopping', 'stopped', 'failed'].includes(state)) {
     throw new BackendError('protocol-error', 'LibVLC status has an invalid state.', false);
   }

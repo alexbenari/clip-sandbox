@@ -1,11 +1,11 @@
-import type { SourceFrameIdentity } from './source-frame-identity.js';
+import type { ISourceFrameIdentity } from './source-frame-identity.js';
 
-export interface CapturedFrameRange {
-  readonly start: SourceFrameIdentity;
-  readonly end: SourceFrameIdentity;
+export interface ICapturedFrameRange {
+  readonly start: ISourceFrameIdentity;
+  readonly end: ISourceFrameIdentity;
 }
 
-export function capturedFrameRange(start: SourceFrameIdentity, end: SourceFrameIdentity): CapturedFrameRange {
+export function capturedFrameRange(start: ISourceFrameIdentity, end: ISourceFrameIdentity): ICapturedFrameRange {
   if (end.frameIndex < start.frameIndex) throw new Error('Captured frame range end precedes its start.');
   return Object.freeze({ start, end });
 }

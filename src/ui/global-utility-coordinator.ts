@@ -1,6 +1,6 @@
-import type { ShortcutDescriptor } from './app-screen.js';
+import type { IShortcutDescriptor } from './app-screen.js';
 
-export const GLOBAL_UTILITY_SHORTCUTS: readonly ShortcutDescriptor[] = [
+export const GLOBAL_UTILITY_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Close the open app-bar utility', sequences: [['Escape']] },
 ];
 

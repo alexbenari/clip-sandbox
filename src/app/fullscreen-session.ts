@@ -1,8 +1,8 @@
-import type { ShortcutDescriptor } from '../ui/app-screen.js';
+import type { IShortcutDescriptor } from '../ui/app-screen.js';
 import type { AppText } from './app-text.js';
 import type { DisplayLayoutRules } from '../ui/display-layout-rules.js';
 
-export const FULLSCREEN_SHORTCUTS: readonly ShortcutDescriptor[] = [
+export const FULLSCREEN_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Toggle fullscreen review', group: 'Fullscreen', sequences: [['F']] },
   { description: 'Set visible clip count', group: 'Fullscreen', sequences: [['0-9']] },
 ];

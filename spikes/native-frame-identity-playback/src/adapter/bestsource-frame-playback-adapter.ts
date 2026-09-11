@@ -1,5 +1,5 @@
 import { BackendError } from '../model/backend-error.js';
-import type { MediaStatus } from '../model/media-status.js';
+import type { IMediaStatus } from '../model/media-status.js';
 import {
   decimalBigInt,
   objectRecord,
@@ -8,28 +8,28 @@ import {
 } from '../model/source-frame-identity.js';
 import {
   previewBoundsFields,
-  type DisplayFrame,
-  type FramePlaybackAdapter,
-  type PreparedSource,
+  type IDisplayFrame,
+  type IFramePlaybackAdapter,
+  type IPreparedSource,
 } from './frame-playback-adapter.js';
 import { LatestFrameMailbox } from './latest-frame-mailbox.js';
-import { NativeProcessClient, type TimedProtocolMessage } from './native-process-client.js';
+import { NativeProcessClient, type ITimedProtocolMessage } from './native-process-client.js';
 import { ProgressiveFrameMailbox } from './progressive-frame-mailbox.js';
 import { ScrubRequestScheduler } from './scrub-request-scheduler.js';
 
-export interface BestSourceAdapterOptions {
+export interface IBestSourceAdapterOptions {
   readonly scrubDebounceMs?: number;
   readonly scrubDelivery?: 'settled' | 'progressive';
 }
 
-export class BestSourceFramePlaybackAdapter implements FramePlaybackAdapter {
+export class BestSourceFramePlaybackAdapter implements IFramePlaybackAdapter {
   #sourceGeneration = 0;
-  readonly #scrubMailbox: LatestFrameMailbox<number, DisplayFrame>;
-  readonly #scrubScheduler: ScrubRequestScheduler<DisplayFrame>;
-  readonly #progressiveScrubMailbox: ProgressiveFrameMailbox<number, DisplayFrame>;
+  readonly #scrubMailbox: LatestFrameMailbox<number, IDisplayFrame>;
+  readonly #scrubScheduler: ScrubRequestScheduler<IDisplayFrame>;
+  readonly #progressiveScrubMailbox: ProgressiveFrameMailbox<number, IDisplayFrame>;
   readonly #scrubDelivery: 'settled' | 'progressive';
 
-  constructor(private readonly client: NativeProcessClient, options: BestSourceAdapterOptions = {}) {
+  constructor(private readonly client: NativeProcessClient, options: IBestSourceAdapterOptions = {}) {
     this.#scrubMailbox = new LatestFrameMailbox((frameIndex) => this.#requestFrame('scrub', { frameIndex }));
     this.#scrubScheduler = new ScrubRequestScheduler(
       (frameIndex) => this.#scrubMailbox.submit(frameIndex), options.scrubDebounceMs ?? 100);
@@ -38,7 +38,7 @@ export class BestSourceFramePlaybackAdapter implements FramePlaybackAdapter {
     this.#scrubDelivery = options.scrubDelivery ?? 'settled';
   }
 
-  async open(source: PreparedSource): Promise<MediaStatus> {
+  async open(source: IPreparedSource): Promise<IMediaStatus> {
     this.#scrubScheduler.invalidate();
     this.#scrubMailbox.invalidate();
     this.#progressiveScrubMailbox.invalidate();
@@ -69,7 +69,7 @@ export class BestSourceFramePlaybackAdapter implements FramePlaybackAdapter {
   async stop(): Promise<void> { throw unsupported(); }
   async setRate(_rate: number): Promise<void> { throw unsupported(); }
 
-  getExactFrame(frameIndex: number): Promise<DisplayFrame> {
+  getExactFrame(frameIndex: number): Promise<IDisplayFrame> {
     return this.#requestFrame('exact', { frameIndex });
   }
 
@@ -77,24 +77,24 @@ export class BestSourceFramePlaybackAdapter implements FramePlaybackAdapter {
     return this.#progressiveScrubMailbox.queuedCount;
   }
 
-  scrubToFrame(frameIndex: number): Promise<DisplayFrame> {
+  scrubToFrame(frameIndex: number): Promise<IDisplayFrame> {
     return this.#scrubDelivery === 'progressive'
       ? this.#progressiveScrubMailbox.submit(frameIndex)
       : this.#scrubScheduler.submit(frameIndex);
   }
 
-  getFrameAtTime(timeUs: bigint): Promise<DisplayFrame> {
+  getFrameAtTime(timeUs: bigint): Promise<IDisplayFrame> {
     if (timeUs < 0n) {
       return Promise.reject(new BackendError('invalid-request', 'Frame lookup time must not be negative.', true));
     }
     return this.#requestFrame('time', { timeUs: timeUs.toString() });
   }
 
-  stepAdjacent(direction: -1 | 1): Promise<DisplayFrame> {
+  stepAdjacent(direction: -1 | 1): Promise<IDisplayFrame> {
     return this.#requestFrame('step', { direction });
   }
 
-  async status(): Promise<MediaStatus> {
+  async status(): Promise<IMediaStatus> {
     return statusFrom(await this.client.request('status'), this.#sourceGeneration);
   }
 
@@ -105,7 +105,7 @@ export class BestSourceFramePlaybackAdapter implements FramePlaybackAdapter {
     return this.client.shutdown();
   }
 
-  async #requestFrame(command: 'exact' | 'scrub' | 'step' | 'time', fields: Readonly<Record<string, unknown>>): Promise<DisplayFrame> {
+  async #requestFrame(command: 'exact' | 'scrub' | 'step' | 'time', fields: Readonly<Record<string, unknown>>): Promise<IDisplayFrame> {
     const requestedGeneration = this.#sourceGeneration;
     const response = await this.client.request(command, fields);
     const metadata = response.metadata;
@@ -146,7 +146,7 @@ export class BestSourceFramePlaybackAdapter implements FramePlaybackAdapter {
   }
 }
 
-function statusFrom(response: TimedProtocolMessage, expectedGeneration: number): MediaStatus {
+function statusFrom(response: ITimedProtocolMessage, expectedGeneration: number): IMediaStatus {
   const sourceGeneration = safeInteger(response.metadata.sourceGeneration, 'sourceGeneration');
   if (sourceGeneration !== expectedGeneration) {
     throw new BackendError('stale-response', 'Status belongs to an obsolete source generation.', true);
@@ -158,7 +158,7 @@ function statusFrom(response: TimedProtocolMessage, expectedGeneration: number):
   }
   const numFrames = response.metadata.numFrames;
   return Object.freeze({
-    state: value as MediaStatus['state'],
+    state: value as IMediaStatus['state'],
     sourceGeneration,
     frameGeneration: safeInteger(response.metadata.frameGeneration ?? 0, 'frameGeneration'),
     ...(numFrames === undefined ? {} : { numFrames: safeInteger(numFrames, 'numFrames') }),

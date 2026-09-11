@@ -1,7 +1,7 @@
 export type MediaState = 'closed' | 'opening' | 'playback-ready' | 'exact-ready' |
   'playing' | 'paused' | 'stopping' | 'stopped' | 'failed';
 
-export interface MediaStatus {
+export interface IMediaStatus {
   readonly state: MediaState;
   readonly sourceGeneration: number;
   readonly frameGeneration: number;

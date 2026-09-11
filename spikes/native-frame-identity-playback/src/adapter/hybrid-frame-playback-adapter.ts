@@ -1,10 +1,10 @@
-import type { MediaStatus } from '../model/media-status.js';
+import type { IMediaStatus } from '../model/media-status.js';
 import { BestSourceFramePlaybackAdapter } from './bestsource-frame-playback-adapter.js';
 import type {
-  DisplayFrame,
-  FramePlaybackAdapter,
-  PlaybackDisplayFrame,
-  PreparedSource,
+  IDisplayFrame,
+  IFramePlaybackAdapter,
+  IPlaybackDisplayFrame,
+  IPreparedSource,
 } from './frame-playback-adapter.js';
 import { LibVlcPlaybackAdapter } from './libvlc-playback-adapter.js';
 import { BackendError } from '../model/backend-error.js';
@@ -16,11 +16,11 @@ type ExactFrameEngine = Pick<BestSourceFramePlaybackAdapter,
   'open' | 'close' | 'getExactFrame' | 'getFrameAtTime' | 'scrubToFrame' | 'stepAdjacent' |
   'status' | 'shutdown'>;
 
-export class HybridFramePlaybackAdapter implements FramePlaybackAdapter {
+export class HybridFramePlaybackAdapter implements IFramePlaybackAdapter {
   #playbackActive = false;
   #pauseInFlight: Promise<void> | null = null;
   #exactReady = false;
-  #currentExactFrame: DisplayFrame | null = null;
+  #currentExactFrame: IDisplayFrame | null = null;
   #numFrames: number | null = null;
 
   constructor(
@@ -28,11 +28,11 @@ export class HybridFramePlaybackAdapter implements FramePlaybackAdapter {
     private readonly exact: ExactFrameEngine,
   ) {}
 
-  setPlaybackFrameListener(listener: ((frame: PlaybackDisplayFrame) => void) | undefined): void {
+  setPlaybackFrameListener(listener: ((frame: IPlaybackDisplayFrame) => void) | undefined): void {
     this.playback.setFrameListener(listener);
   }
 
-  async open(source: PreparedSource): Promise<MediaStatus> {
+  async open(source: IPreparedSource): Promise<IMediaStatus> {
     this.#playbackActive = false;
     this.#pauseInFlight = null;
     const playbackSource = source.playbackSourcePath ?? source.reviewAssetPath;
@@ -46,7 +46,7 @@ export class HybridFramePlaybackAdapter implements FramePlaybackAdapter {
     return exactStatus;
   }
 
-  async openPlaybackSource(sourcePath: string, previewBounds?: PreparedSource['previewBounds']): Promise<MediaStatus> {
+  async openPlaybackSource(sourcePath: string, previewBounds?: IPreparedSource['previewBounds']): Promise<IMediaStatus> {
     this.#playbackActive = false;
     this.#pauseInFlight = null;
     this.#exactReady = false;
@@ -55,14 +55,14 @@ export class HybridFramePlaybackAdapter implements FramePlaybackAdapter {
     return this.playback.open(sourcePath, { muted: false, previewBounds });
   }
 
-  async enableExactReview(source: PreparedSource): Promise<MediaStatus> {
+  async enableExactReview(source: IPreparedSource): Promise<IMediaStatus> {
     const status = await this.exact.open(source);
     this.#exactReady = true;
     this.#numFrames = status.numFrames ?? null;
     return status;
   }
 
-  async activatePreparedReview(source: PreparedSource): Promise<MediaStatus> {
+  async activatePreparedReview(source: IPreparedSource): Promise<IMediaStatus> {
     const playbackSourcePath = source.playbackSourcePath ?? source.reviewAssetPath;
     const initial = await this.playback.status();
     const wasPlaying = this.#playbackActive || initial.state === 'playing';
@@ -137,17 +137,17 @@ export class HybridFramePlaybackAdapter implements FramePlaybackAdapter {
 
   setRate(rate: number): Promise<void> { return this.playback.setRate(rate); }
 
-  async getExactFrame(frameIndex: number): Promise<DisplayFrame> {
+  async getExactFrame(frameIndex: number): Promise<IDisplayFrame> {
     await this.#ensurePaused();
     return this.#remember(await this.exact.getExactFrame(frameIndex));
   }
 
-  async scrubToFrame(frameIndex: number): Promise<DisplayFrame> {
+  async scrubToFrame(frameIndex: number): Promise<IDisplayFrame> {
     await this.#ensurePaused();
     return this.#remember(await this.exact.scrubToFrame(frameIndex));
   }
 
-  async stepAdjacent(direction: -1 | 1): Promise<DisplayFrame> {
+  async stepAdjacent(direction: -1 | 1): Promise<IDisplayFrame> {
     await this.#ensurePaused();
     try {
       return this.#remember(await this.exact.stepAdjacent(direction));
@@ -159,21 +159,21 @@ export class HybridFramePlaybackAdapter implements FramePlaybackAdapter {
     }
   }
 
-  async enterExactAtCurrentPlaybackTime(): Promise<DisplayFrame> {
+  async enterExactAtCurrentPlaybackTime(): Promise<IDisplayFrame> {
     if (!this.#exactReady) throw new Error('Exact review preparation has not completed.');
     await this.#ensurePaused();
     const status = await this.playback.status();
     return this.#remember(await this.exact.getFrameAtTime(status.timeUs ?? 0n));
   }
 
-  async captureCurrentFrame(): Promise<DisplayFrame> {
+  async captureCurrentFrame(): Promise<IDisplayFrame> {
     if (!this.#exactReady) throw new Error('Exact review preparation has not completed.');
     if (!this.#playbackActive && this.#currentExactFrame) return this.#currentExactFrame;
     const status = await this.playback.status();
     return this.exact.getFrameAtTime(status.timeUs ?? 0n);
   }
 
-  async stepFrames(direction: -1 | 1, count: number): Promise<DisplayFrame> {
+  async stepFrames(direction: -1 | 1, count: number): Promise<IDisplayFrame> {
     if (!this.#exactReady) throw new Error('Exact review preparation has not completed.');
     if (!Number.isSafeInteger(count) || count < 1 || count > 1_000) {
       throw new BackendError('invalid-request', 'Frame step count must be an integer between 1 and 1000.', true);
@@ -185,17 +185,17 @@ export class HybridFramePlaybackAdapter implements FramePlaybackAdapter {
     return this.getExactFrame(Math.min(upper, Math.max(0, current + direction * count)));
   }
 
-  playbackStatus(): Promise<MediaStatus> { return this.playback.status(); }
+  playbackStatus(): Promise<IMediaStatus> { return this.playback.status(); }
 
   seekPlaybackTimeUs(timeUs: bigint): Promise<void> { return this.playback.seekTimeUs(timeUs); }
 
-  status(): Promise<MediaStatus> { return this.exact.status(); }
+  status(): Promise<IMediaStatus> { return this.exact.status(); }
 
   async shutdown(): Promise<void> {
     await Promise.all([this.playback.shutdown(), this.exact.shutdown()]);
   }
 
-  #remember(frame: DisplayFrame): DisplayFrame {
+  #remember(frame: IDisplayFrame): IDisplayFrame {
     this.#currentExactFrame = frame;
     return frame;
   }
@@ -211,7 +211,7 @@ export class HybridFramePlaybackAdapter implements FramePlaybackAdapter {
   }
 
   async #restoreProvisionalPlayback(
-    source: PreparedSource,
+    source: IPreparedSource,
     timeUs: bigint,
     rate: number,
     wasPlaying: boolean,

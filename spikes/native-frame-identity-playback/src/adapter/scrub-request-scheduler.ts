@@ -1,6 +1,6 @@
 import { BackendError } from '../model/backend-error.js';
 
-interface ScheduledRequest<TFrame> {
+interface IScheduledRequest<TFrame> {
   readonly frameIndex: number;
   readonly revision: number;
   readonly resolve: (frame: TFrame) => void;
@@ -9,7 +9,7 @@ interface ScheduledRequest<TFrame> {
 
 export class ScrubRequestScheduler<TFrame> {
   #inFlight = false;
-  #pending: ScheduledRequest<TFrame> | null = null;
+  #pending: IScheduledRequest<TFrame> | null = null;
   #revision = 0;
   #timer: ReturnType<typeof setTimeout> | null = null;
 

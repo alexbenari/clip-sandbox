@@ -1,6 +1,6 @@
-import type { ShortcutDescriptor } from '../ui/app-screen.js';
+import type { IShortcutDescriptor } from '../ui/app-screen.js';
 
-export const COLLECTION_SHORTCUTS: readonly ShortcutDescriptor[] = [
+export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Open selected clip in Zoom', group: 'Grid', sequences: [['Z']] },
   { description: 'Remove selection', group: 'Grid', sequences: [['Delete'], ['Backspace']] },
   { description: 'Toggle audio', group: 'Zoom', sequences: [['A']] },

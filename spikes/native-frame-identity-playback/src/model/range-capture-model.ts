@@ -1,32 +1,32 @@
-import { capturedFrameRange, type CapturedFrameRange } from './captured-frame-range.js';
-import type { SourceFrameIdentity } from './source-frame-identity.js';
+import { capturedFrameRange, type ICapturedFrameRange } from './captured-frame-range.js';
+import type { ISourceFrameIdentity } from './source-frame-identity.js';
 
-export interface RangeDraft {
-  readonly start: SourceFrameIdentity | null;
-  readonly end: SourceFrameIdentity | null;
+export interface IRangeDraft {
+  readonly start: ISourceFrameIdentity | null;
+  readonly end: ISourceFrameIdentity | null;
   readonly locked: boolean;
   readonly error: string | null;
 }
 
-export interface RangeCaptureSnapshot {
-  readonly draft: RangeDraft;
-  readonly ranges: readonly CapturedFrameRange[];
+export interface IRangeCaptureSnapshot {
+  readonly draft: IRangeDraft;
+  readonly ranges: readonly ICapturedFrameRange[];
 }
 
 export class RangeCaptureModel {
-  #start: SourceFrameIdentity | null = null;
-  #end: SourceFrameIdentity | null = null;
+  #start: ISourceFrameIdentity | null = null;
+  #end: ISourceFrameIdentity | null = null;
   #locked = false;
   #error: string | null = null;
-  readonly #ranges: CapturedFrameRange[] = [];
+  readonly #ranges: ICapturedFrameRange[] = [];
 
-  markStart(frame: SourceFrameIdentity): void {
+  markStart(frame: ISourceFrameIdentity): void {
     this.#beginNextDraftIfLocked();
     this.#start = frame;
     this.#error = null;
   }
 
-  markEnd(frame: SourceFrameIdentity): void {
+  markEnd(frame: ISourceFrameIdentity): void {
     this.#beginNextDraftIfLocked();
     this.#end = frame;
     this.#error = null;
@@ -55,13 +55,13 @@ export class RangeCaptureModel {
     this.#ranges.splice(0);
   }
 
-  exportableRanges(): readonly CapturedFrameRange[] {
+  exportableRanges(): readonly ICapturedFrameRange[] {
     const ranges = [...this.#ranges];
     if (this.#locked && this.#start && this.#end) ranges.push(capturedFrameRange(this.#start, this.#end));
     return Object.freeze(ranges);
   }
 
-  get snapshot(): RangeCaptureSnapshot {
+  get snapshot(): IRangeCaptureSnapshot {
     return Object.freeze({
       draft: Object.freeze({ start: this.#start, end: this.#end, locked: this.#locked, error: this.#error }),
       ranges: Object.freeze([...this.#ranges]),

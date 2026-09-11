@@ -7,7 +7,7 @@ export const WIRE_HEADER_BYTES = 16;
 export const MAXIMUM_METADATA_BYTES = 1024 * 1024;
 export const MAXIMUM_PAYLOAD_BYTES = 256 * 1024 * 1024;
 
-export interface BinaryProtocolMessage {
+export interface IBinaryProtocolMessage {
   readonly metadata: Readonly<Record<string, unknown>>;
   readonly payload: Buffer;
 }
@@ -34,13 +34,13 @@ export class BinaryProtocolParser {
   #headOffset = 0;
   #bufferedBytes = 0;
 
-  push(chunk: Buffer | Uint8Array): BinaryProtocolMessage[] {
+  push(chunk: Buffer | Uint8Array): IBinaryProtocolMessage[] {
     const next = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     if (next.length > 0) {
       this.#chunks.push(next);
       this.#bufferedBytes += next.length;
     }
-    const messages: BinaryProtocolMessage[] = [];
+    const messages: IBinaryProtocolMessage[] = [];
     while (this.#bufferedBytes >= WIRE_HEADER_BYTES) {
       const header = this.#peek(WIRE_HEADER_BYTES);
       this.#validateHeader(header);

@@ -1,4 +1,4 @@
-export interface KeyboardCommandTarget {
+export interface IKeyboardCommandTarget {
   togglePlayback(): void;
   markStart(): void;
   markEnd(): void;
@@ -8,7 +8,7 @@ export interface KeyboardCommandTarget {
 }
 
 export class KeyboardController {
-  constructor(private readonly target: KeyboardCommandTarget) {}
+  constructor(private readonly target: IKeyboardCommandTarget) {}
 
   handleKeyDown(event: KeyboardEvent): void {
     if (isEditable(event.target)) return;

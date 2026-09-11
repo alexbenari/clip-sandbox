@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { COLLECTION_SHORTCUTS } from '../../src/app/app-keydown-handler.js';
 import { FULLSCREEN_SHORTCUTS } from '../../src/app/fullscreen-session.js';
-import type { ShortcutDescriptor } from '../../src/ui/app-screen.js';
+import type { IShortcutDescriptor } from '../../src/ui/app-screen.js';
 import { KeyboardMapControl } from '../../src/ui/keyboard-map-control.js';
 
 afterEach(() => document.body.replaceChildren());
 
 function createControl(
-  globalShortcuts: readonly ShortcutDescriptor[] = [
+  globalShortcuts: readonly IShortcutDescriptor[] = [
     { description: 'Close the open app-bar utility', sequences: [['Escape']] },
   ],
 ) {

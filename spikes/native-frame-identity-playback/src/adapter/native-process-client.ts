@@ -5,43 +5,43 @@ import { BackendError, type BackendErrorCategory } from '../model/backend-error.
 import {
   BinaryProtocolParser,
   encodeProtocolMessage,
-  type BinaryProtocolMessage,
+  type IBinaryProtocolMessage,
 } from './binary-frame-protocol.js';
 
-export interface NativeProcessClientOptions {
+export interface INativeProcessClientOptions {
   readonly executable: string;
   readonly args?: readonly string[];
   readonly cwd?: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly operationTimeoutMs?: number;
   readonly shutdownTimeoutMs?: number;
-  readonly onEvent?: (message: TimedProtocolMessage) => void;
+  readonly onEvent?: (message: ITimedProtocolMessage) => void;
 }
 
-interface PendingRequest {
+interface IPendingRequest {
   readonly started: number;
-  readonly resolve: (message: TimedProtocolMessage) => void;
+  readonly resolve: (message: ITimedProtocolMessage) => void;
   readonly reject: (error: Error) => void;
   readonly timer: NodeJS.Timeout;
 }
 
-export interface TimedProtocolMessage extends BinaryProtocolMessage {
+export interface ITimedProtocolMessage extends IBinaryProtocolMessage {
   readonly roundTripMs: number;
   readonly hostReceivedAtMs: number;
 }
 
 export class NativeProcessClient {
-  readonly #options: Required<Pick<NativeProcessClientOptions, 'operationTimeoutMs' | 'shutdownTimeoutMs'>> &
-    Omit<NativeProcessClientOptions, 'operationTimeoutMs' | 'shutdownTimeoutMs'>;
+  readonly #options: Required<Pick<INativeProcessClientOptions, 'operationTimeoutMs' | 'shutdownTimeoutMs'>> &
+    Omit<INativeProcessClientOptions, 'operationTimeoutMs' | 'shutdownTimeoutMs'>;
   readonly #parser = new BinaryProtocolParser();
-  readonly #pending = new Map<string, PendingRequest>();
+  readonly #pending = new Map<string, IPendingRequest>();
   #child: ChildProcessWithoutNullStreams | null = null;
   #nextRequest = 1n;
   #stderr = '';
   #terminated: BackendError | null = null;
-  #eventHandler: ((message: TimedProtocolMessage) => void) | undefined;
+  #eventHandler: ((message: ITimedProtocolMessage) => void) | undefined;
 
-  constructor(options: NativeProcessClientOptions) {
+  constructor(options: INativeProcessClientOptions) {
     if (!path.isAbsolute(options.executable)) {
       throw new Error('Native media-service executable must be an absolute path.');
     }
@@ -53,7 +53,7 @@ export class NativeProcessClient {
     this.#eventHandler = options.onEvent;
   }
 
-  setEventHandler(handler: ((message: TimedProtocolMessage) => void) | undefined): void {
+  setEventHandler(handler: ((message: ITimedProtocolMessage) => void) | undefined): void {
     this.#eventHandler = handler;
   }
 
@@ -92,12 +92,12 @@ export class NativeProcessClient {
     });
   }
 
-  async request(command: string, fields: Readonly<Record<string, unknown>> = {}, timeoutMs?: number): Promise<TimedProtocolMessage> {
+  async request(command: string, fields: Readonly<Record<string, unknown>> = {}, timeoutMs?: number): Promise<ITimedProtocolMessage> {
     if (this.#terminated) throw this.#terminated;
     if (!this.#child) this.start();
     const requestId = (this.#nextRequest++).toString();
     const started = performance.now();
-    return new Promise<TimedProtocolMessage>((resolve, reject) => {
+    return new Promise<ITimedProtocolMessage>((resolve, reject) => {
       const timer = setTimeout(() => {
         const error = new BackendError('timeout', `Native command ${command} timed out.`, false);
         this.#pending.delete(requestId);
@@ -139,7 +139,7 @@ export class NativeProcessClient {
     }
   }
 
-  #deliver(message: BinaryProtocolMessage): void {
+  #deliver(message: IBinaryProtocolMessage): void {
     const requestId = message.metadata.requestId;
     if (requestId === undefined) {
       const hostReceivedAtMs = performance.now();

@@ -1,7 +1,7 @@
-import type { CandidateSnapshot, FramePosition, PlaybackRate } from '../../contracts/types';
+import type { ICandidateSnapshot, IFramePosition, PlaybackRate } from '../../contracts/types';
 import { formatTimestampMs } from '../../host/range-capture-model';
 
-export interface WebCodecsExamplesPanelCallbacks {
+export interface IWebCodecsExamplesPanelCallbacks {
   onPlayPause(): void;
   onStop(): void;
   onStep(delta: number): void;
@@ -13,7 +13,7 @@ export interface WebCodecsExamplesPanelCallbacks {
 
 const PLAYBACK_RATES: readonly PlaybackRate[] = [0.25, 0.5, 1, 2];
 
-function describePosition(position: FramePosition | null): string {
+function describePosition(position: IFramePosition | null): string {
   if (!position) {
     return 'No frame';
   }
@@ -24,7 +24,7 @@ function describePosition(position: FramePosition | null): string {
 export class WebCodecsExamplesPanel {
   private root: HTMLElement | null = null;
 
-  constructor(private readonly callbacks: WebCodecsExamplesPanelCallbacks) {}
+  constructor(private readonly callbacks: IWebCodecsExamplesPanelCallbacks) {}
 
   mount(host: HTMLElement): void {
     this.root = host;
@@ -108,7 +108,7 @@ export class WebCodecsExamplesPanel {
     return canvas;
   }
 
-  update(snapshot: CandidateSnapshot): void {
+  update(snapshot: ICandidateSnapshot): void {
     if (!this.root) {
       return;
     }

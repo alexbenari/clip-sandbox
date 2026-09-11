@@ -85,7 +85,7 @@ Therefore:
 The spike should evaluate a platform-neutral value shaped conceptually as:
 
 ```ts
-interface SourceFrameIdentity {
+interface ISourceFrameIdentity {
   readonly frameIndex: number;
   readonly presentationTimestamp: bigint;
   readonly timebaseNumerator: number;

@@ -47,7 +47,7 @@ Planning-time gates:
 - `working-with-users-and-team`: governed the requirements refinement and the explicit boundary between this shell plus Settings and the later startup, pipeline-content, clips-content, and extraction specifications.
 - `api-and-interface-design`: governed the narrow app-screen registration, settings, utility, and error interfaces; caller sketches and consumer-level tests are required before signatures are finalized.
 - `build-deploy-and-tooling`: governs broad candidate discovery, whole-library health comparison, dependency cost/license/upgrade review, and any single- or mixed-library adoption decision.
-- `domain-modeling`: governs the canonical `AppSettings` value and the explicit choice to persist it as one small versioned document rather than a database or scattered preferences.
+- `domain-modeling`: governs the canonical `IAppSettings` value and the explicit choice to persist it as one small versioned document rather than a database or scattered preferences.
 - `typescript-coding`: governs the planned TypeScript screen/settings boundaries, immutable values, typed expected failures, strict parsing, and direct module imports.
 - `before-you-refactor`: governed the staged migration of the existing toolbar, activity control, DOM fixture, and app-controller wiring; a passing baseline and small reversible steps are mandatory.
 - `testing-discipline`: governed the behavioral test split among focused controllers, app integration, Electron E2E, and manual perceived-motion QA.
@@ -117,7 +117,7 @@ Unavailable skills or fallbacks:
 - Decision (2026-09-08 / Codex): integrate the approved Windows overlay using native caption buttons and CSS safe-area/drag regions. After building, `npx electron . --native-frame` restores the default frame independently. Other platforms retain their default frame. The user accepted the final review after the explicit physical-drag check request.
 - Decision (2026-09-08 / Codex): retain synchronous production screen activation and the existing cancelable utility entrance. Do not add delays or a screen fade merely to reach illustrative timing targets; the acceptance behavior is immediate, nonblank content and correct final focus.
 
-- MS4 implementation (2026-09-07): user explicitly chose continued work on master. Three caller sketches (Collection with commands, Settings without, future Extraction with commands) became contract tests before implementation. `AppScreen` declares identity, label, mounted content, nullable commands, immutable shortcut descriptors and synchronous initial focus. The shell accepts a nonempty registration tuple; no dynamic lifecycle/API was added without a current caller. Activation is synchronous and leaves no stale queued requests. Production registers Collection only. Its grid supplies allocated content height via a narrow optional callback; fullscreen and other callers keep prior metric behavior. Commands retain ids/name while the unused Activity reference was removed from MainToolbarControl. No production component dependency added.
+- MS4 implementation (2026-09-07): user explicitly chose continued work on master. Three caller sketches (Collection with commands, Settings without, future Extraction with commands) became contract tests before implementation. `IAppScreen` declares identity, label, mounted content, nullable commands, immutable shortcut descriptors and synchronous initial focus. The shell accepts a nonempty registration tuple; no dynamic lifecycle/API was added without a current caller. Activation is synchronous and leaves no stale queued requests. Production registers Collection only. Its grid supplies allocated content height via a narrow optional callback; fullscreen and other callers keep prior metric behavior. Commands retain ids/name while the unused Activity reference was removed from MainToolbarControl. No production component dependency added.
 - MS4 verification/guidance (2026-09-07): baseline from MS3 retained; new contract initially failed for missing implementation, then seven new contract/focus/height checks passed. Full unit/integration and Electron suites passed; production Electron captures at 1440/800px and Activity/fullscreen were inspected. Architecture map updated via doc-update. API/interface, refactor, TypeScript, clean-code, testing, tooling, correctness/security and review guidance applied. One Luna delegation migrated two existing test fixtures; root inspected it and reran the full suite. Outcome: success, small verification cost, no production rework from delegation. Native frame, panel animation, Settings persistence and utility migration remain later milestones; no claim they shipped in MS4.
 
 - Approval (2026-09-07): user accepted the integrated MS3 prototype with "Looks good!". The prototype review gate is cleared. Proceed next with MS4 shell structure and screen registration; preserve the current Collection behavior. Native overlay remains a sandbox option until its planned production integration in MS9, with final Windows QA retained.
@@ -461,7 +461,7 @@ Keep the old element ids while moving ownership so the migration can be reverted
 
 ### Scope
 
-Add one canonical persisted `AppSettings` value and a real Settings app screen. The screen edits the Pipelines top folder and whether newly opened single-clip playback starts with audio. It has no screen command bar.
+Add one canonical persisted `IAppSettings` value and a real Settings app screen. The screen edits the Pipelines top folder and whether newly opened single-clip playback starts with audio. It has no screen command bar.
 
 ### Changes
 
@@ -691,7 +691,7 @@ Finalize the Windows-first shell, preserve fullscreen and existing workflows, ad
   Edit: preserve existing scenarios and add shell coverage for Collection/Settings switching, Settings persistence, Collection command placement, no empty Settings command row, both panel states and width reclamation, utility exclusivity, focus restoration, keyboard history navigation, fullscreen chrome removal/restoration, rapid toggles, and reduced-motion final state. Use test-only fake app screens only in the sandbox/controller tests, not as production destinations.
 
 - File: `docs/agent-docs/agent-architecture-map.md`
-  Edit: document shell ownership, app-screen registration, global-utility coordination, foldable hosts, AppSettings persistence, Activity and Errors ownership, current Collection/Settings registrations, and where future screens/panels attach.
+  Edit: document shell ownership, app-screen registration, global-utility coordination, foldable hosts, IAppSettings persistence, Activity and Errors ownership, current Collection/Settings registrations, and where future screens/panels attach.
 
 - File: `docs/documentation/object-oriented-exception-register.md`
   Edit: update only if the final implementation introduces or removes a stateful non-class module that must be recorded under repository guidance.

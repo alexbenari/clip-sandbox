@@ -1,12 +1,12 @@
-export interface AppSettings {
+export interface IAppSettings {
   readonly pipelinesRootPath: string | null;
   readonly singleClipAudioDefault: boolean;
 }
 
-export const DEFAULT_APP_SETTINGS: AppSettings = Object.freeze({ pipelinesRootPath: null, singleClipAudioDefault: false });
+export const DEFAULT_APP_SETTINGS: IAppSettings = Object.freeze({ pipelinesRootPath: null, singleClipAudioDefault: false });
 
 export class AppSettingsParser {
-  parse(value: unknown): AppSettings | null {
+  parse(value: unknown): IAppSettings | null {
     if (!value || typeof value !== 'object') return null;
     const candidate = value as Record<string, unknown>;
     const root = candidate.pipelinesRootPath;

@@ -24,7 +24,7 @@ Planning-time gates:
 - `working-with-users-and-team`: used to translate the user's feature intent into spike acceptance behavior, distinguish prototype deliverables from the production movie-to-pipeline feature, and keep the side-by-side comparison focused on user-visible review feel.
 - `build-deploy-and-tooling`: applies because the spike evaluates new dependencies and creates an isolated runnable package/host.
 - `api-and-interface-design`: applies because each candidate control needs a small embedding contract and the shared host must not depend on candidate internals.
-- `domain-modeling`: applies because the plan names new concepts such as `FramePosition`, `CapturedFrameRange`, active candidate, and frame index.
+- `domain-modeling`: applies because the plan names new concepts such as `IFramePosition`, `ICapturedFrameRange`, active candidate, and frame index.
 - `testing-discipline`: applies because the spike needs both automated smoke checks and manual Electron QA for media playback behavior.
 - Repository guidance in `coding-quality.md`: applies to boundary placement, state ownership, and avoiding production coupling.
 - `PLANS.md`: used as the source of truth for this execution plan format.
@@ -302,7 +302,7 @@ Wrap a player-like WebCodecs implementation as one isolated candidate control. T
   Edit: add Candidate A dependencies after verifying package availability and license. Record package versions in `docs/spike-results.md`.
 
 - File: `spikes/frame-first-video-playback/src/candidates/webcodecs-examples/webcodecs-examples-control.ts`
-  Edit: implement the `FramePlaybackControl` contract by wrapping the existing player or adapted code. Candidate A must expose frame-addressable navigation through its wrapper. If the existing player only exposes time-based seek and cannot be adapted to seek and step by frame identity without invasive or brittle changes, mark Candidate A failed and replace it with another frame-first candidate.
+  Edit: implement the `IFramePlaybackControl` contract by wrapping the existing player or adapted code. Candidate A must expose frame-addressable navigation through its wrapper. If the existing player only exposes time-based seek and cannot be adapted to seek and step by frame identity without invasive or brittle changes, mark Candidate A failed and replace it with another frame-first candidate.
 
 - File: `spikes/frame-first-video-playback/src/candidates/webcodecs-examples/webcodecs-examples-panel.ts`
   Edit: render Candidate A panel-local controls and status:
@@ -339,7 +339,7 @@ Wrap a player-like WebCodecs implementation as one isolated candidate control. T
 
 ### Rollback/Containment
 
-If `webcodecs-examples` cannot be installed or run in Electron after a focused attempt, remove the dependency and wrapper, record the failure in `Surprises & Discoveries`, and replace Candidate A with `webcodecs-scroll-sync` or an adapted W3C sample. Keep the `FramePlaybackControl` contract stable so the host does not need to know the replacement internals.
+If `webcodecs-examples` cannot be installed or run in Electron after a focused attempt, remove the dependency and wrapper, record the failure in `Surprises & Discoveries`, and replace Candidate A with `webcodecs-scroll-sync` or an adapted W3C sample. Keep the `IFramePlaybackControl` contract stable so the host does not need to know the replacement internals.
 
 The same replacement rule applies if Candidate A can play video but cannot provide real frame-based seek and stepping. A time-seek-only player is not a valid passing candidate for this spike.
 
@@ -367,7 +367,7 @@ Build a custom frame-first candidate around Mediabunny and WebCodecs. This candi
   Edit: render `VideoFrame` to Canvas 2D or `bitmaprenderer`. Start simple; do not add WebGL/WebGPU unless Canvas cannot prove the spike behavior.
 
 - File: `spikes/frame-first-video-playback/src/candidates/mediabunny/mediabunny-control.ts`
-  Edit: implement the `FramePlaybackControl` contract for load, play, pause, stop, speed, step, jump, scrub, current position, and dispose.
+  Edit: implement the `IFramePlaybackControl` contract for load, play, pause, stop, speed, step, jump, scrub, current position, and dispose.
 
 - File: `spikes/frame-first-video-playback/src/candidates/mediabunny/mediabunny-panel.ts`
   Edit: render Candidate B panel-local controls and status matching Candidate A's product behaviors.

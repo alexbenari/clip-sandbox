@@ -1,18 +1,18 @@
 import type {
   CandidateId,
-  CapturedFrameRange,
-  FramePosition,
-  RangeDraft,
+  ICapturedFrameRange,
+  IFramePosition,
+  IRangeDraft,
 } from '../contracts/types';
 
-export interface RangeCaptureSnapshot {
-  readonly draft: RangeDraft;
-  readonly ranges: readonly CapturedFrameRange[];
+export interface IRangeCaptureSnapshot {
+  readonly draft: IRangeDraft;
+  readonly ranges: readonly ICapturedFrameRange[];
 }
 
-type RangeListener = (snapshot: RangeCaptureSnapshot) => void;
+type RangeListener = (snapshot: IRangeCaptureSnapshot) => void;
 
-function clonePosition(position: FramePosition): FramePosition {
+function clonePosition(position: IFramePosition): IFramePosition {
   return {
     frameIndex: position.frameIndex,
     timestampMs: position.timestampMs,
@@ -22,20 +22,20 @@ function clonePosition(position: FramePosition): FramePosition {
 }
 
 export class RangeCaptureModel {
-  private draft: RangeDraft = {
+  private draft: IRangeDraft = {
     start: null,
     end: null,
     error: null,
     lastLockedRangeId: null,
   };
 
-  private readonly ranges: CapturedFrameRange[] = [];
+  private readonly ranges: ICapturedFrameRange[] = [];
 
   private nextId = 1;
 
   private readonly listeners = new Set<RangeListener>();
 
-  getSnapshot(): RangeCaptureSnapshot {
+  getSnapshot(): IRangeCaptureSnapshot {
     return {
       draft: this.draft,
       ranges: this.ranges.slice(),
@@ -50,7 +50,7 @@ export class RangeCaptureModel {
     };
   }
 
-  markStart(position: FramePosition): void {
+  markStart(position: IFramePosition): void {
     this.draft = {
       start: clonePosition(position),
       end: this.draft.end,
@@ -60,7 +60,7 @@ export class RangeCaptureModel {
     this.emit();
   }
 
-  markEnd(position: FramePosition): void {
+  markEnd(position: IFramePosition): void {
     this.draft = {
       start: this.draft.start,
       end: clonePosition(position),
@@ -70,7 +70,7 @@ export class RangeCaptureModel {
     this.emit();
   }
 
-  lockRange(candidateId: CandidateId): CapturedFrameRange | null {
+  lockRange(candidateId: CandidateId): ICapturedFrameRange | null {
     const validationError = this.validateDraft();
     if (validationError) {
       this.draft = {
@@ -84,7 +84,7 @@ export class RangeCaptureModel {
     const start = clonePosition(this.draft.start!);
     const end = clonePosition(this.draft.end!);
     const label = `${formatTimestampMs(start.timestampMs)}-${formatTimestampMs(end.timestampMs)}`;
-    const range: CapturedFrameRange = {
+    const range: ICapturedFrameRange = {
       id: `range-${this.nextId++}`,
       candidateId,
       start,

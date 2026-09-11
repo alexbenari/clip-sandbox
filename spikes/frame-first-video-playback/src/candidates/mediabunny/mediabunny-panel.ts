@@ -1,7 +1,7 @@
-import type { CandidateSnapshot, FramePosition, PlaybackRate } from '../../contracts/types';
+import type { ICandidateSnapshot, IFramePosition, PlaybackRate } from '../../contracts/types';
 import { formatTimestampMs } from '../../host/range-capture-model';
 
-export interface MediabunnyPanelCallbacks {
+export interface IMediabunnyPanelCallbacks {
   onPlayPause(): void;
   onStop(): void;
   onStep(delta: number): void;
@@ -13,7 +13,7 @@ export interface MediabunnyPanelCallbacks {
 
 const PLAYBACK_RATES: readonly PlaybackRate[] = [0.25, 0.5, 1, 2];
 
-function describePosition(position: FramePosition | null): string {
+function describePosition(position: IFramePosition | null): string {
   if (!position) {
     return 'No frame';
   }
@@ -24,7 +24,7 @@ function describePosition(position: FramePosition | null): string {
 export class MediabunnyPanel {
   private root: HTMLElement | null = null;
 
-  constructor(private readonly callbacks: MediabunnyPanelCallbacks) {}
+  constructor(private readonly callbacks: IMediabunnyPanelCallbacks) {}
 
   mount(host: HTMLElement): void {
     this.root = host;
@@ -107,7 +107,7 @@ export class MediabunnyPanel {
     return canvas;
   }
 
-  update(snapshot: CandidateSnapshot): void {
+  update(snapshot: ICandidateSnapshot): void {
     if (!this.root) {
       return;
     }

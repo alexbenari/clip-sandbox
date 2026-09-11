@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { BestSourceFramePlaybackAdapter } from '../../src/adapter/bestsource-frame-playback-adapter.js';
-import type { PlaybackDisplayFrame } from '../../src/adapter/frame-playback-adapter.js';
+import type { IPlaybackDisplayFrame } from '../../src/adapter/frame-playback-adapter.js';
 import { HybridFramePlaybackAdapter } from '../../src/adapter/hybrid-frame-playback-adapter.js';
 import { LibVlcPlaybackAdapter } from '../../src/adapter/libvlc-playback-adapter.js';
 import { NativeProcessClient } from '../../src/adapter/native-process-client.js';
@@ -121,7 +121,7 @@ describe.skipIf(!nativeAvailable)('hybrid control handoff', () => {
     }, 60_000);
 });
 
-function nextFrame(playback: LibVlcPlaybackAdapter): Promise<PlaybackDisplayFrame> {
+function nextFrame(playback: LibVlcPlaybackAdapter): Promise<IPlaybackDisplayFrame> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Timed out waiting for resumed playback frame.')), 10_000);
     playback.setFrameListener((frame) => {

@@ -1,8 +1,8 @@
-import type { MediaStatus } from '../model/media-status.js';
-import type { SourceFrameIdentity } from '../model/source-frame-identity.js';
+import type { IMediaStatus } from '../model/media-status.js';
+import type { ISourceFrameIdentity } from '../model/source-frame-identity.js';
 
-export interface DisplayFrame {
-  readonly identity: SourceFrameIdentity;
+export interface IDisplayFrame {
+  readonly identity: ISourceFrameIdentity;
   readonly reviewTimeUs: bigint;
   readonly sourceGeneration: number;
   readonly frameGeneration: number;
@@ -16,12 +16,12 @@ export interface DisplayFrame {
   readonly timings: Readonly<Record<string, number>>;
 }
 
-export interface PreviewBounds {
+export interface IPreviewBounds {
   readonly maxWidth: number;
   readonly maxHeight: number;
 }
 
-export interface PreparedSource {
+export interface IPreparedSource {
   readonly playbackSourcePath?: string;
   readonly fallbackPlaybackSourcePath?: string;
   readonly reviewAssetPath: string;
@@ -30,10 +30,10 @@ export interface PreparedSource {
     readonly reviewAssetPath: string;
     readonly indexPath: string;
   };
-  readonly previewBounds?: PreviewBounds;
+  readonly previewBounds?: IPreviewBounds;
 }
 
-export interface PlaybackDisplayFrame {
+export interface IPlaybackDisplayFrame {
   readonly sourceGeneration: number;
   readonly frameGeneration: number;
   readonly playbackTimestampUs: bigint;
@@ -48,21 +48,21 @@ export interface PlaybackDisplayFrame {
   readonly hostReceivedAtMs: number;
 }
 
-export interface FramePlaybackAdapter {
-  open(source: PreparedSource): Promise<MediaStatus>;
+export interface IFramePlaybackAdapter {
+  open(source: IPreparedSource): Promise<IMediaStatus>;
   close(): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
   stop(): Promise<void>;
   setRate(rate: number): Promise<void>;
-  getExactFrame(frameIndex: number): Promise<DisplayFrame>;
-  scrubToFrame(frameIndex: number): Promise<DisplayFrame>;
-  stepAdjacent(direction: -1 | 1): Promise<DisplayFrame>;
-  status(): Promise<MediaStatus>;
+  getExactFrame(frameIndex: number): Promise<IDisplayFrame>;
+  scrubToFrame(frameIndex: number): Promise<IDisplayFrame>;
+  stepAdjacent(direction: -1 | 1): Promise<IDisplayFrame>;
+  status(): Promise<IMediaStatus>;
   shutdown(): Promise<void>;
 }
 
-export function previewBoundsFields(bounds: PreviewBounds | undefined): Readonly<Record<string, number>> {
+export function previewBoundsFields(bounds: IPreviewBounds | undefined): Readonly<Record<string, number>> {
   if (!bounds) return Object.freeze({});
   for (const [label, value] of [['maxWidth', bounds.maxWidth], ['maxHeight', bounds.maxHeight]] as const) {
     if (!Number.isSafeInteger(value) || value < 1 || value > 16_384) {

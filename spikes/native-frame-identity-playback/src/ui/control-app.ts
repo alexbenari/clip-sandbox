@@ -1,23 +1,26 @@
 import { AdjacentStepScheduler } from '../adapter/adjacent-step-scheduler.js';
 import { RangeCaptureModel } from '../model/range-capture-model.js';
-import { sourceFrameIdentityFromWire, sourceFrameTimeUs, type SourceFrameIdentity } from '../model/source-frame-identity.js';
-import type { PlaybackWireFrame, WireFrame } from './control-api.js';
+import { sourceFrameIdentityFromWire, sourceFrameTimeUs, type ISourceFrameIdentity } from '../model/source-frame-identity.js';
+import type { IFrameIdentityControlWindow, IPlaybackWireFrame, IWireFrame } from './control-api.js';
 import { KeyboardController } from './keyboard-controller.js';
 
 class ExactFrameReviewControl {
-  readonly api = window.frameIdentityControl;
+  readonly api = required(
+    (window as IFrameIdentityControlWindow).frameIdentityControl ?? null,
+    'Frame identity control API is unavailable.',
+  );
   readonly ranges = new RangeCaptureModel();
   readonly canvas = element<HTMLCanvasElement>('video-canvas');
   readonly context = required(this.canvas.getContext('2d', { alpha: false, desynchronized: true }), 'Canvas is unavailable.');
   readonly keyboard: KeyboardController;
-  readonly heldSteps: AdjacentStepScheduler<WireFrame>;
+  readonly heldSteps: AdjacentStepScheduler<IWireFrame>;
   #generation = 0;
   #loaded = false;
   #playing = false;
   #exactReady = false;
   #numFrames = 0;
   #stepAmount = 1;
-  #currentIdentity: SourceFrameIdentity | null = null;
+  #currentIdentity: ISourceFrameIdentity | null = null;
   #currentTimeUs = 0n;
   #lengthUs = 0n;
   #scrubRevision = 0;
@@ -221,7 +224,7 @@ class ExactFrameReviewControl {
     }
   }
 
-  async showPlaybackFrame(frame: PlaybackWireFrame): Promise<void> {
+  async showPlaybackFrame(frame: IPlaybackWireFrame): Promise<void> {
     try {
       if (!this.#playing && !this.#previewLoading) return;
       const updateTimeline = !this.#timelineDragging && !this.#busy;
@@ -237,7 +240,7 @@ class ExactFrameReviewControl {
     }
   }
 
-  async showExactFrame(frame: WireFrame, updateTimeline = true): Promise<void> {
+  async showExactFrame(frame: IWireFrame, updateTimeline = true): Promise<void> {
     this.#playing = false;
     this.#currentIdentity = sourceFrameIdentityFromWire(frame.identity);
     this.#currentTimeUs = sourceFrameTimeUs(this.#currentIdentity);
@@ -246,14 +249,14 @@ class ExactFrameReviewControl {
     else this.renderTransport();
   }
 
-  async draw(frame: WireFrame | PlaybackWireFrame): Promise<void> {
+  async draw(frame: IWireFrame | IPlaybackWireFrame): Promise<void> {
     await this.drawOnCanvas(frame, this.canvas, this.context);
     this.canvas.classList.add('visible');
     element('empty-state').setAttribute('hidden', '');
   }
 
   async drawOnCanvas(
-    frame: WireFrame | PlaybackWireFrame,
+    frame: IWireFrame | IPlaybackWireFrame,
     canvas: HTMLCanvasElement,
     context: CanvasRenderingContext2D,
   ): Promise<void> {
@@ -443,7 +446,7 @@ function nullableNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function frameLabel(identity: SourceFrameIdentity | null): string {
+function frameLabel(identity: ISourceFrameIdentity | null): string {
   return identity ? `Frame ${identity.frameIndex.toLocaleString()}\n${formatTime(sourceFrameTimeUs(identity))}` : 'Not marked';
 }
 

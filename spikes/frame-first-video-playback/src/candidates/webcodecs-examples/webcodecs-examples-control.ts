@@ -1,11 +1,11 @@
 import { WebCodecsPlayer } from 'webcodecs-examples';
 
-import type { FramePlaybackControl } from '../../contracts/frame-playback-control';
+import type { IFramePlaybackControl } from '../../contracts/frame-playback-control';
 import type {
-  CandidateSnapshot,
-  FramePosition,
+  ICandidateSnapshot,
+  IFramePosition,
   PlaybackRate,
-  SharedMovieSource,
+  ISharedMovieSource,
 } from '../../contracts/types';
 import {
   findFrameIndexForRatio,
@@ -14,9 +14,9 @@ import {
 } from '../shared/frame-navigation';
 import { WebCodecsExamplesPanel } from './webcodecs-examples-panel';
 
-type SnapshotListener = (snapshot: CandidateSnapshot) => void;
+type SnapshotListener = (snapshot: ICandidateSnapshot) => void;
 
-export class WebCodecsExamplesControl implements FramePlaybackControl {
+export class WebCodecsExamplesControl implements IFramePlaybackControl {
   readonly id = 'candidate-a' as const;
 
   readonly label = 'Candidate A';
@@ -54,7 +54,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     },
   });
 
-  private snapshot: CandidateSnapshot = {
+  private snapshot: ICandidateSnapshot = {
     candidateId: 'candidate-a',
     status: 'idle',
     playbackRate: 1,
@@ -66,7 +66,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     active: false,
   };
 
-  private source: SharedMovieSource | null = null;
+  private source: ISharedMovieSource | null = null;
 
   private player: WebCodecsPlayer | null = null;
 
@@ -80,8 +80,8 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
   }
 
   async loadMovie(
-    source: SharedMovieSource,
-    options?: { initialPosition?: FramePosition | null },
+    source: ISharedMovieSource,
+    options?: { initialPosition?: IFramePosition | null },
   ): Promise<void> {
     if (!source.file.name.toLowerCase().endsWith('.mp4')) {
       throw new Error('Candidate A supports MP4 input only.');
@@ -136,7 +136,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     });
   }
 
-  async activate(options?: { handoffPosition?: FramePosition | null }): Promise<void> {
+  async activate(options?: { handoffPosition?: IFramePosition | null }): Promise<void> {
     this.updateSnapshot({
       active: true,
     });
@@ -177,7 +177,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     });
   }
 
-  async stop(): Promise<FramePosition | null> {
+  async stop(): Promise<IFramePosition | null> {
     if (!this.player || !this.source) {
       return this.snapshot.currentPosition;
     }
@@ -200,7 +200,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     });
   }
 
-  async stepFrames(delta: number): Promise<FramePosition | null> {
+  async stepFrames(delta: number): Promise<IFramePosition | null> {
     if (!this.source || !this.player) {
       return this.snapshot.currentPosition;
     }
@@ -218,7 +218,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     return targetPosition;
   }
 
-  async seekToFrame(frameIndex: number): Promise<FramePosition | null> {
+  async seekToFrame(frameIndex: number): Promise<IFramePosition | null> {
     if (!this.source || !this.player) {
       return this.snapshot.currentPosition;
     }
@@ -232,7 +232,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     return targetPosition;
   }
 
-  async scrubToRatio(ratio: number): Promise<FramePosition | null> {
+  async scrubToRatio(ratio: number): Promise<IFramePosition | null> {
     if (!this.source) {
       return this.snapshot.currentPosition;
     }
@@ -240,7 +240,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     return this.seekToFrame(findFrameIndexForRatio(ratio, this.source.frameIndex));
   }
 
-  getCurrentPosition(): FramePosition | null {
+  getCurrentPosition(): IFramePosition | null {
     return this.snapshot.currentPosition;
   }
 
@@ -248,7 +248,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     return this.snapshot.selectedStepSize;
   }
 
-  getSnapshot(): CandidateSnapshot {
+  getSnapshot(): ICandidateSnapshot {
     return this.snapshot;
   }
 
@@ -284,7 +284,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     await this.play();
   }
 
-  private async seekAndRenderPosition(position: FramePosition): Promise<void> {
+  private async seekAndRenderPosition(position: IFramePosition): Promise<void> {
     if (!this.player) {
       return;
     }
@@ -310,7 +310,7 @@ export class WebCodecsExamplesControl implements FramePlaybackControl {
     });
   }
 
-  private updateSnapshot(patch: Partial<CandidateSnapshot>): void {
+  private updateSnapshot(patch: Partial<ICandidateSnapshot>): void {
     this.snapshot = {
       ...this.snapshot,
       ...patch,

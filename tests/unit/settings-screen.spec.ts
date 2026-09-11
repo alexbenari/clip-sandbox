@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SettingsScreen } from '../../src/ui/settings-screen.js';
 import { AppSettingsService, type SettingsResult } from '../../src/app/app-settings-service.js';
-import type { AppSettings } from '../../src/app/app-settings.js';
+import type { IAppSettings } from '../../src/app/app-settings.js';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
 describe('Settings screen', () => {
   function setup() {
     const settings = { pipelinesRootPath: 'D:\\יצירה\\<clips>', singleClipAudioDefault: false };
-    const port = { load: vi.fn(async () => ({ ok: true as const, settings })), save: vi.fn<[AppSettings], Promise<SettingsResult>>(async (value) => ({ ok: true, settings: value })), chooseRoot: vi.fn(async () => ({ kind: 'canceled' as const })) };
+    const port = { load: vi.fn(async () => ({ ok: true as const, settings })), save: vi.fn<[IAppSettings], Promise<SettingsResult>>(async (value) => ({ ok: true, settings: value })), chooseRoot: vi.fn(async () => ({ kind: 'canceled' as const })) };
     const feedback = { progress: vi.fn(), success: vi.fn(), error: vi.fn() };
     const service = new AppSettingsService(port);
     const screen = new SettingsScreen(service, feedback);

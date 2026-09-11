@@ -331,20 +331,20 @@ WebGL or WebGPU may be evaluated only if needed to prove performance, overlays, 
 The spike should explore an API shaped around frame navigation:
 
 ```ts
-interface FramePlaybackControl {
+interface IFramePlaybackControl {
   loadMovie(source: MovieSource): Promise<void>;
   play(): void;
   pause(): void;
-  stop(): Promise<FramePosition>;
+  stop(): Promise<IFramePosition>;
   setPlaybackRate(rate: PlaybackRate): void;
-  seekToFrame(frameIndex: FrameIndex): Promise<FramePosition>;
-  stepFrames(delta: FrameDelta): Promise<FramePosition>;
+  seekToFrame(frameIndex: FrameIndex): Promise<IFramePosition>;
+  stepFrames(delta: FrameDelta): Promise<IFramePosition>;
   beginScrub(): void;
-  scrubToRatio(ratio: number): Promise<FramePosition>;
-  endScrub(): Promise<FramePosition>;
+  scrubToRatio(ratio: number): Promise<IFramePosition>;
+  endScrub(): Promise<IFramePosition>;
   markStart(): void;
   markEnd(): void;
-  lockRange(): CapturedFrameRange | null;
+  lockRange(): ICapturedFrameRange | null;
 }
 ```
 

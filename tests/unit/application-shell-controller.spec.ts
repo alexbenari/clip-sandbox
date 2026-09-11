@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationShellController } from '../../src/ui/application-shell-controller.js';
-import type { AppScreen } from '../../src/ui/app-screen.js';
+import type { IAppScreen } from '../../src/ui/app-screen.js';
 
 afterEach(() => { document.body.replaceChildren(); });
 
@@ -9,7 +9,7 @@ function fixture() {
   const commandHost = document.createElement('div');
   const selector = document.createElement('select');
   document.body.append(selector, commandHost, screenHost);
-  const screen = (id: string, commands: boolean): AppScreen => {
+  const screen = (id: string, commands: boolean): IAppScreen => {
     const root = document.createElement('section');
     const input = document.createElement('input');
     root.append(input);

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { KeyboardController, type KeyboardCommandTarget } from '../../src/ui/keyboard-controller.js';
+import { KeyboardController, type IKeyboardCommandTarget } from '../../src/ui/keyboard-controller.js';
 
 describe('keyboard controller', () => {
   it('maps transport and range shortcuts while preventing browser defaults', () => {
@@ -49,7 +49,7 @@ describe('keyboard controller', () => {
   });
 });
 
-function commands(): KeyboardCommandTarget & Record<string, ReturnType<typeof vi.fn>> {
+function commands(): IKeyboardCommandTarget & Record<string, ReturnType<typeof vi.fn>> {
   return {
     togglePlayback: vi.fn(),
     markStart: vi.fn(),

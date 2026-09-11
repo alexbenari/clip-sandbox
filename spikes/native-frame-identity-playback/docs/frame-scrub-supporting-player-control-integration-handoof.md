@@ -112,9 +112,9 @@ the live q/w correctness gap below remains work to prove, not an accepted produc
 2. **Two indexes:** healthy sources use the original input for canonical indexing. Selected broken
    timestamp cases use a stream-copy normalized asset. The proxy always has its own BestSource
    index. Require canonical count = encoded count = proxy indexed count before activation.
-3. **Identity vs clock:** `SourceFrameIdentity` carries ordinals, integer PTS/duration, rational
+3. **Identity vs clock:** `ISourceFrameIdentity` carries ordinals, integer PTS/duration, rational
    timebase, and canonical hash. Big integers cross JSON as decimal strings. Canonical PTS on a
-   normalized asset is not necessarily original-container PTS. `DisplayFrame.reviewTimeUs` belongs
+   normalized asset is not necessarily original-container PTS. `IDisplayFrame.reviewTimeUs` belongs
    to the proxy; use it when resuming LibVLC. Never derive canonical ordinals from nominal FPS.
 4. **Range ownership:** q/w replace draft endpoints; a validates/locks, then toggles unlock until
    the next q/w archives the locked range and starts another draft. A range may have equal start

@@ -1,4 +1,4 @@
-import type { FramePosition, MovieFrameIndex } from '../../contracts/types';
+import type { IFramePosition, IMovieFrameIndex } from '../../contracts/types';
 
 export function clampFrameIndex(frameIndex: number, frameCount: number): number {
   if (frameCount <= 0) {
@@ -10,18 +10,18 @@ export function clampFrameIndex(frameIndex: number, frameCount: number): number 
 
 export function positionForFrame(
   frameIndex: number,
-  index: MovieFrameIndex,
-): FramePosition {
+  index: IMovieFrameIndex,
+): IFramePosition {
   return index.frames[clampFrameIndex(frameIndex, index.frameCount)];
 }
 
-export function findFrameIndexForRatio(ratio: number, index: MovieFrameIndex): number {
+export function findFrameIndexForRatio(ratio: number, index: IMovieFrameIndex): number {
   return clampFrameIndex(ratio * (index.frameCount - 1), index.frameCount);
 }
 
 export function findFrameIndexForTimeMs(
   timestampMs: number,
-  index: MovieFrameIndex,
+  index: IMovieFrameIndex,
 ): number {
   let low = 0;
   let high = index.frameCount - 1;

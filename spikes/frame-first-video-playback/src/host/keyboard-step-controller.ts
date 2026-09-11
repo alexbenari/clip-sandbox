@@ -1,6 +1,6 @@
 export type StepDirection = -1 | 1;
 
-export interface KeyboardStepTarget {
+export interface IKeyboardStepTarget {
   getSelectedStepSize(): 1 | 10;
   stepFrames(delta: number): Promise<unknown>;
 }
@@ -13,7 +13,7 @@ export class KeyboardStepController {
   private repeatTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
-    private readonly getTarget: () => KeyboardStepTarget,
+    private readonly getTarget: () => IKeyboardStepTarget,
     private readonly repeatDelayMs = 75,
   ) {}
 

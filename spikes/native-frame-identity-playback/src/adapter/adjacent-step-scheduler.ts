@@ -1,10 +1,10 @@
 export type AdjacentDirection = -1 | 1;
 
-export interface AdjacentStepTarget<TFrame> {
+export interface IAdjacentStepTarget<TFrame> {
   stepAdjacent(direction: AdjacentDirection): Promise<TFrame>;
 }
 
-export interface AdjacentStepSchedulerOptions {
+export interface IAdjacentStepSchedulerOptions {
   readonly holdRepeatDelayMs?: number;
   readonly repeatIntervalMs?: number;
 }
@@ -19,10 +19,10 @@ export class AdjacentStepScheduler<TFrame> {
   private idleWaiters: Array<() => void> = [];
 
   constructor(
-    private readonly target: AdjacentStepTarget<TFrame>,
+    private readonly target: IAdjacentStepTarget<TFrame>,
     private readonly onFrame: (frame: TFrame) => void,
     private readonly onError: (error: unknown) => void = () => undefined,
-    private readonly options: AdjacentStepSchedulerOptions = {},
+    private readonly options: IAdjacentStepSchedulerOptions = {},
   ) {
     validateDelay(options.holdRepeatDelayMs, 'holdRepeatDelayMs');
     validateDelay(options.repeatIntervalMs, 'repeatIntervalMs');

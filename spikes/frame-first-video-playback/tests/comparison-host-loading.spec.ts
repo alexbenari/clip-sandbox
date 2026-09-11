@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FramePlaybackControl } from '../src/contracts/frame-playback-control';
+import type { IFramePlaybackControl } from '../src/contracts/frame-playback-control';
 import type {
   CandidateId,
-  CandidateSnapshot,
-  FramePosition,
+  ICandidateSnapshot,
+  IFramePosition,
   PlaybackRate,
-  SharedMovieSource,
+  ISharedMovieSource,
 } from '../src/contracts/types';
 import { ComparisonHost, type CandidateControls } from '../src/host/comparison-host';
 import { SharedMovieSourceModel } from '../src/host/shared-movie-source';
 
-class FakeCandidate implements FramePlaybackControl {
+class FakeCandidate implements IFramePlaybackControl {
   readonly label: string;
 
   loadCalls = 0;
@@ -51,21 +51,21 @@ class FakeCandidate implements FramePlaybackControl {
 
   async pause(): Promise<void> {}
 
-  async stop(): Promise<FramePosition | null> {
+  async stop(): Promise<IFramePosition | null> {
     return null;
   }
 
   async setPlaybackRate(_rate: PlaybackRate): Promise<void> {}
 
-  async stepFrames(_delta: number): Promise<FramePosition | null> {
+  async stepFrames(_delta: number): Promise<IFramePosition | null> {
     return null;
   }
 
-  async seekToFrame(_frameIndex: number): Promise<FramePosition | null> {
+  async seekToFrame(_frameIndex: number): Promise<IFramePosition | null> {
     return null;
   }
 
-  async scrubToRatio(_ratio: number): Promise<FramePosition | null> {
+  async scrubToRatio(_ratio: number): Promise<IFramePosition | null> {
     return null;
   }
 
@@ -73,11 +73,11 @@ class FakeCandidate implements FramePlaybackControl {
     return 1;
   }
 
-  getCurrentPosition(): FramePosition | null {
+  getCurrentPosition(): IFramePosition | null {
     return null;
   }
 
-  getSnapshot(): CandidateSnapshot {
+  getSnapshot(): ICandidateSnapshot {
     return {
       candidateId: this.id,
       status: 'idle',
@@ -102,13 +102,13 @@ class FakeCandidate implements FramePlaybackControl {
   async dispose(): Promise<void> {}
 }
 
-interface ComparisonHostInternals {
-  candidates: Record<CandidateId, FramePlaybackControl>;
+interface IComparisonHostInternals {
+  candidates: Record<CandidateId, IFramePlaybackControl>;
   sharedMovieSource: {
-    setSource(file: File): Promise<SharedMovieSource>;
-    setHandoffPosition(position: FramePosition | null): void;
-    getHandoffPosition(): FramePosition | null;
-    getSource(): SharedMovieSource | null;
+    setSource(file: File): Promise<ISharedMovieSource>;
+    setHandoffPosition(position: IFramePosition | null): void;
+    getHandoffPosition(): IFramePosition | null;
+    getSource(): ISharedMovieSource | null;
   };
   activeCandidateId: CandidateId;
   loadSharedSource(file: File): Promise<void>;
@@ -117,13 +117,13 @@ interface ComparisonHostInternals {
 
 class FakeSharedMovieSourceModel extends SharedMovieSourceModel {
   constructor(
-    private readonly source: SharedMovieSource,
+    private readonly source: ISharedMovieSource,
     private readonly sourceError: unknown = null,
   ) {
     super();
   }
 
-  override async setSource(_file: File): Promise<SharedMovieSource> {
+  override async setSource(_file: File): Promise<ISharedMovieSource> {
     if (this.sourceError) {
       throw this.sourceError;
     }
@@ -132,7 +132,7 @@ class FakeSharedMovieSourceModel extends SharedMovieSourceModel {
   }
 }
 
-function createSharedMovieSource(): SharedMovieSource {
+function createSharedMovieSource(): ISharedMovieSource {
   return {
     file: {} as File,
     label: 'sample.mp4',
@@ -156,12 +156,12 @@ function prepareHost(
   candidateA: FakeCandidate,
   candidateB: FakeCandidate,
   sharedMovieSource: SharedMovieSourceModel = new FakeSharedMovieSourceModel(createSharedMovieSource()),
-): ComparisonHostInternals {
+): IComparisonHostInternals {
   const candidates: CandidateControls = {
     'candidate-a': candidateA,
     'candidate-b': candidateB,
   };
-  return new ComparisonHost(candidates, sharedMovieSource) as unknown as ComparisonHostInternals;
+  return new ComparisonHost(candidates, sharedMovieSource) as unknown as IComparisonHostInternals;
 }
 
 describe('ComparisonHost movie loading', () => {

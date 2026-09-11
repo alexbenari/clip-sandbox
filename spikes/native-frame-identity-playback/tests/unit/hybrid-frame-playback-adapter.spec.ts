@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { DisplayFrame } from '../../src/adapter/frame-playback-adapter.js';
+import type { IDisplayFrame } from '../../src/adapter/frame-playback-adapter.js';
 import { HybridFramePlaybackAdapter } from '../../src/adapter/hybrid-frame-playback-adapter.js';
 import { BackendError } from '../../src/model/backend-error.js';
-import type { MediaStatus } from '../../src/model/media-status.js';
+import type { IMediaStatus } from '../../src/model/media-status.js';
 
 const frame = Object.freeze({
   identity: Object.freeze({
@@ -17,7 +17,7 @@ const frame = Object.freeze({
     frameInfoHash: 'frame-25',
   }),
   reviewTimeUs: 501_000n,
-}) as DisplayFrame;
+}) as IDisplayFrame;
 
 describe('hybrid frame playback adapter', () => {
   it('does not send pause commands while playback is already inactive', async () => {
@@ -247,7 +247,7 @@ function playbackEngineBase() {
     stop: vi.fn(async () => {}),
     setRate: vi.fn(async () => {}),
     seekTimeUs: vi.fn(async () => {}),
-    status: vi.fn(async (): Promise<MediaStatus> => ({
+    status: vi.fn(async (): Promise<IMediaStatus> => ({
       state: 'paused' as const, sourceGeneration: 1, frameGeneration: 0,
       timeUs: 0n, lengthUs: 10_000_000n,
     })),

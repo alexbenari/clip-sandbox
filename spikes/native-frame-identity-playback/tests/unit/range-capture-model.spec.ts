@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { RangeCaptureModel } from '../../src/model/range-capture-model.js';
-import type { SourceFrameIdentity } from '../../src/model/source-frame-identity.js';
+import type { ISourceFrameIdentity } from '../../src/model/source-frame-identity.js';
 
 describe('range capture model', () => {
   it('rejects locking a missing or reversed range without losing the draft', () => {
@@ -51,7 +51,7 @@ describe('range capture model', () => {
   });
 });
 
-function frame(frameIndex: number): SourceFrameIdentity {
+function frame(frameIndex: number): ISourceFrameIdentity {
   return Object.freeze({
     frameIndex,
     originalFrameIndex: frameIndex,

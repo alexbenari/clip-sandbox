@@ -1,13 +1,13 @@
-import { AppSettingsParser, type AppSettings } from '../../app/app-settings.js';
-import type { AppSettingsPersistence, SettingsResult, RootChoice } from '../../app/app-settings-service.js';
+import { AppSettingsParser, type IAppSettings } from '../../app/app-settings.js';
+import type { IAppSettingsPersistence, SettingsResult, RootChoice } from '../../app/app-settings-service.js';
 
 type SettingsApi = {
   loadAppSettings(): Promise<unknown>;
-  saveAppSettings(settings: AppSettings): Promise<unknown>;
+  saveAppSettings(settings: IAppSettings): Promise<unknown>;
   choosePipelinesRoot(): Promise<unknown>;
 };
 
-export class ElectronAppSettingsService implements AppSettingsPersistence {
+export class ElectronAppSettingsService implements IAppSettingsPersistence {
   constructor(private readonly api: SettingsApi, private readonly parser: AppSettingsParser) {}
   static fromWindow(win: Window, parser: AppSettingsParser): ElectronAppSettingsService {
     // The preload exposes these methods; payloads still enter as unknown.
@@ -27,7 +27,7 @@ export class ElectronAppSettingsService implements AppSettingsPersistence {
     } catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Settings are unavailable.' }; }
   }
   load(): Promise<SettingsResult> { return this.readResult(() => this.api.loadAppSettings()); }
-  save(settings: AppSettings): Promise<SettingsResult> { return this.readResult(() => this.api.saveAppSettings(settings)); }
+  save(settings: IAppSettings): Promise<SettingsResult> { return this.readResult(() => this.api.saveAppSettings(settings)); }
   async chooseRoot(): Promise<RootChoice> {
     try {
       const raw = await this.api.choosePipelinesRoot();

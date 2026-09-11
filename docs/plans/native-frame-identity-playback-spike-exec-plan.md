@@ -194,7 +194,7 @@ Planning-time gates:
 - `using-97`: establishes the repository's engineering-principle trigger map.
 - `working-with-users-and-team`: governs the conversion of the signed product requirements into
   testable scope and explicit stop/go decisions.
-- `api-and-interface-design`: applies to `SourceFrameIdentity`, the native process protocol, and the
+- `api-and-interface-design`: applies to `ISourceFrameIdentity`, the native process protocol, and the
   renderer-facing playback adapter.
 - `domain-modeling`: applies because canonical source-frame identity and captured ranges need clear
   state ownership even though this remains a spike.
@@ -1077,10 +1077,10 @@ copies before adding polished interactions.
   generation, dimensions, stride, pixel format, canonical identity, timing stages, and structured
   error. Cap payload and header lengths before allocation.
 - Files under `src/model/`
-  Edit: define immutable `SourceFrameIdentity`, media status, backend error categories, and captured
+  Edit: define immutable `ISourceFrameIdentity`, media status, backend error categories, and captured
   frame range. Decimal timestamp strings parse to `bigint`; no floating-point identity conversion.
 - Files under `src/adapter/`
-  Edit: define a small `FramePlaybackAdapter` and implement native process supervision in Electron
+  Edit: define a small `IFramePlaybackAdapter` and implement native process supervision in Electron
   main/preload. Spawn fixed absolute executables without `shell: true`, validate commands and local
   paths, set explicit operation/shutdown timeouts, and surface crashes.
 - File: `src/adapter/latest-frame-mailbox.ts`
@@ -1238,7 +1238,7 @@ See `spikes/native-frame-identity-playback/docs/electron-control-results.md`.
 
 ### Rollback/Containment
 
-UI code consumes only `FramePlaybackAdapter`. A failed native path can be removed without changing
+UI code consumes only `IFramePlaybackAdapter`. A failed native path can be removed without changing
 range rules; a failed UI experiment can be removed without changing native gate evidence.
 
 ## Milestone 5b - Select the unified review-proxy contract

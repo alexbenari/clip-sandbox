@@ -1,7 +1,7 @@
 import type { CandidateId } from '../contracts/types';
 import {
   formatTimestampMs,
-  type RangeCaptureSnapshot,
+  type IRangeCaptureSnapshot,
   RangeCaptureModel,
 } from './range-capture-model';
 
@@ -20,7 +20,7 @@ function renderPosition(label: string, value: { frameIndex: number; timestampMs:
 }
 
 export class RangeCapturePanel {
-  private lastSnapshot: RangeCaptureSnapshot = {
+  private lastSnapshot: IRangeCaptureSnapshot = {
     draft: {
       start: null,
       end: null,
@@ -47,7 +47,7 @@ export class RangeCapturePanel {
     this.render(this.lastSnapshot);
   }
 
-  private render(snapshot: RangeCaptureSnapshot): void {
+  private render(snapshot: IRangeCaptureSnapshot): void {
     const rangesMarkup = snapshot.ranges.length
       ? snapshot.ranges
           .map(

@@ -114,7 +114,7 @@ This specification supersedes the filmstrip with the existing player's single pr
 
 The global app bar remains shell-owned and contains application identity, app-screen selection,
 Activity, Keyboard shortcuts, Settings, and native window controls. GIF Extraction registers as an
-`AppScreen`; the shell must not branch on the screen id to manufacture extraction behavior.
+`IAppScreen`; the shell must not branch on the screen id to manufacture extraction behavior.
 
 The GIF Extraction command bar contains screen-level commands and state:
 
@@ -199,7 +199,7 @@ identity of the picture visible at keydown.
 ### 7.5 Exact Frame-by-Frame Mode
 
 Pausing after exact review is ready resolves and displays an exact frame. Scrubbing and stepping in
-this mode display `DisplayFrame` values carrying canonical identities.
+this mode display `IDisplayFrame` values carrying canonical identities.
 
 While an exact frame is displayed:
 
@@ -451,7 +451,7 @@ merely to achieve new class names.
 ### 14.2 Production Boundaries
 
 1. Keep `src/app/app-controller.ts` as composition root and orchestration layer.
-2. Add the extraction screen through the existing `AppScreen` registration contract.
+2. Add the extraction screen through the existing `IAppScreen` registration contract.
 3. Keep player presentation and local interaction in focused `src/ui/` controls.
 4. Keep range rules outside DOM code.
 5. Keep preparation, playback, and reader lifecycle behind an injected renderer-safe service.

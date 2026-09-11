@@ -34,6 +34,7 @@
 
 ## Naming and code shape
 - Name classes and modules by responsibility, not by implementation details.
+- Prefix every TypeScript interface name with `I` followed by a PascalCase responsibility name, such as `IAppScreen`.
 - When a responsibility changes materially, rename the class or module to match it.
 - Files that contain a single primary class should usually be named after that class.
 - Name methods by what they accomplish, not how they do it.

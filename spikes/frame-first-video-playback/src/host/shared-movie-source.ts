@@ -1,20 +1,20 @@
-import type { FramePosition, SharedMovieSource } from '../contracts/types';
+import type { IFramePosition, ISharedMovieSource } from '../contracts/types';
 import { buildMovieFrameIndex } from '../indexing/movie-frame-index';
 
 export class SharedMovieSourceModel {
-  private currentSource: SharedMovieSource | null = null;
+  private currentSource: ISharedMovieSource | null = null;
 
-  private handoffPosition: FramePosition | null = null;
+  private handoffPosition: IFramePosition | null = null;
 
-  getSource(): SharedMovieSource | null {
+  getSource(): ISharedMovieSource | null {
     return this.currentSource;
   }
 
-  getHandoffPosition(): FramePosition | null {
+  getHandoffPosition(): IFramePosition | null {
     return this.handoffPosition;
   }
 
-  async setSource(file: File): Promise<SharedMovieSource> {
+  async setSource(file: File): Promise<ISharedMovieSource> {
     if (this.currentSource) {
       URL.revokeObjectURL(this.currentSource.objectUrl);
     }
@@ -32,7 +32,7 @@ export class SharedMovieSourceModel {
     return this.currentSource;
   }
 
-  setHandoffPosition(position: FramePosition | null): void {
+  setHandoffPosition(position: IFramePosition | null): void {
     this.handoffPosition = position
       ? {
           frameIndex: position.frameIndex,

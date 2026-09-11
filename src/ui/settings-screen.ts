@@ -1,11 +1,11 @@
-import type { AppScreen } from './app-screen.js';
+import type { IAppScreen } from './app-screen.js';
 import { AppSettingsService, type SettingsResult } from '../app/app-settings-service.js';
 import type { ActivityErrorOptions } from './activity-indicator-control.js';
-import type { AppSettings } from '../app/app-settings.js';
+import type { IAppSettings } from '../app/app-settings.js';
 
 type SettingsFeedback = { progress(message: string): void; success(message: string): void; error(message: string, options?: ActivityErrorOptions): void };
 
-export class SettingsScreen implements AppScreen {
+export class SettingsScreen implements IAppScreen {
   readonly id = 'settings';
   readonly label = 'Settings';
   readonly commands = null;
@@ -61,7 +61,7 @@ export class SettingsScreen implements AppScreen {
     });
   }
   focusInitial(): void { this.folder.focus(); }
-  private render(settings: AppSettings = this.service.current): void {
+  private render(settings: IAppSettings = this.service.current): void {
     this.folder.value = settings.pipelinesRootPath ?? '';
     this.audio.checked = settings.singleClipAudioDefault;
     this.choose.disabled = this.busy;
@@ -85,7 +85,7 @@ export class SettingsScreen implements AppScreen {
       });
     }
   }
-  private async save(change: Partial<AppSettings>, retrying = false): Promise<SettingsResult | void> {
+  private async save(change: Partial<IAppSettings>, retrying = false): Promise<SettingsResult | void> {
     if (this.busy) {
       if (retrying) return { ok: false, error: 'Wait for the current settings change to finish, then retry.' };
       return;

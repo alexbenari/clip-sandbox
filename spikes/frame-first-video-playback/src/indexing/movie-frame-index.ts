@@ -1,8 +1,8 @@
 import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input } from 'mediabunny';
 
-import type { FramePosition, MovieFrameIndex } from '../contracts/types';
+import type { IFramePosition, IMovieFrameIndex } from '../contracts/types';
 
-interface RawFrame {
+interface IRawFrame {
   frameIndex: number;
   timestampMs: number;
   durationMs: number;
@@ -17,7 +17,7 @@ function describeError(error: unknown): string {
     : message;
 }
 
-export async function buildMovieFrameIndex(file: File): Promise<MovieFrameIndex> {
+export async function buildMovieFrameIndex(file: File): Promise<IMovieFrameIndex> {
   const input = new Input({
     source: new BlobSource(file),
     formats: ALL_FORMATS,
@@ -54,7 +54,7 @@ export async function buildMovieFrameIndex(file: File): Promise<MovieFrameIndex>
   }
 
   const sink = new EncodedPacketSink(videoTrack);
-  const rawFrames: RawFrame[] = [];
+  const rawFrames: IRawFrame[] = [];
 
   try {
     for await (const packet of sink.packets(undefined, undefined, { metadataOnly: true })) {
@@ -102,7 +102,7 @@ export async function buildMovieFrameIndex(file: File): Promise<MovieFrameIndex>
     codec = null;
   }
 
-  const frames: FramePosition[] = rawFrames.map((rawFrame, index) => {
+  const frames: IFramePosition[] = rawFrames.map((rawFrame, index) => {
     const nextFrame = rawFrames[index + 1] ?? null;
     const inferredDurationMs = nextFrame
       ? Math.max(1, nextFrame.timestampMs - rawFrame.timestampMs)

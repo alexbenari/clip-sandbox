@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 export type DependencyKind = 'binaryArchive' | 'gitSource' | 'pythonTool';
 
-export interface DependencyPin {
+export interface IDependencyPin {
   readonly kind: DependencyKind;
   readonly version: string;
   readonly commit?: string;
@@ -14,9 +14,9 @@ export interface DependencyPin {
   readonly conditionalMilestone?: number;
 }
 
-export interface DependencyManifest {
+export interface IDependencyManifest {
   readonly schemaVersion: 1;
-  readonly dependencies: Readonly<Record<string, DependencyPin>>;
+  readonly dependencies: Readonly<Record<string, IDependencyPin>>;
   readonly toolchain: {
     readonly libvlcGateVisualStudioMinimumMajorVersion: number;
     readonly bestSourceCompiler: string;
@@ -32,12 +32,12 @@ const immutableVersionPattern = /^(?!latest$)(?!main$)(?!master$).+/i;
 const commitPattern = /^[0-9a-f]{8,40}$/i;
 const sha512Pattern = /^[0-9a-f]{128}$/i;
 
-export async function loadDependencyManifest(path: string): Promise<DependencyManifest> {
+export async function loadDependencyManifest(path: string): Promise<IDependencyManifest> {
   const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
   return parseDependencyManifest(parsed);
 }
 
-export function parseDependencyManifest(value: unknown): DependencyManifest {
+export function parseDependencyManifest(value: unknown): IDependencyManifest {
   if (!isRecord(value) || value.schemaVersion !== 1 || !isRecord(value.dependencies)) {
     throw new Error('Dependency manifest must use schemaVersion 1 and define dependencies.');
   }
@@ -50,7 +50,7 @@ export function parseDependencyManifest(value: unknown): DependencyManifest {
     throw new Error('Dependency manifest must define its toolchain requirements.');
   }
 
-  return value as unknown as DependencyManifest;
+  return value as unknown as IDependencyManifest;
 }
 
 function validateDependency(name: string, value: unknown): void {

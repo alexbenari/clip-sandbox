@@ -1,6 +1,6 @@
 import { BackendError } from '../model/backend-error.js';
 
-interface Mail<TInput, TOutput> {
+interface IMail<TInput, TOutput> {
   readonly input: TInput;
   readonly sourceGeneration: number;
   readonly resolve: (value: TOutput) => void;
@@ -9,7 +9,7 @@ interface Mail<TInput, TOutput> {
 
 export class ProgressiveFrameMailbox<TInput, TOutput> {
   #inFlight = false;
-  #pending: Mail<TInput, TOutput> | null = null;
+  #pending: IMail<TInput, TOutput> | null = null;
   #sourceGeneration = 0;
 
   constructor(private readonly execute: (input: TInput) => Promise<TOutput>) {}
@@ -36,7 +36,7 @@ export class ProgressiveFrameMailbox<TInput, TOutput> {
     return (this.#inFlight ? 1 : 0) + (this.#pending ? 1 : 0);
   }
 
-  async #run(mail: Mail<TInput, TOutput>): Promise<void> {
+  async #run(mail: IMail<TInput, TOutput>): Promise<void> {
     this.#inFlight = true;
     try {
       const value = await this.execute(mail.input);

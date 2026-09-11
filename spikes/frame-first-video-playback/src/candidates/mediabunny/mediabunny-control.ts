@@ -1,11 +1,11 @@
 import { ALL_FORMATS, BlobSource, CanvasSink, Input, type InputVideoTrack } from 'mediabunny';
 
-import type { FramePlaybackControl } from '../../contracts/frame-playback-control';
+import type { IFramePlaybackControl } from '../../contracts/frame-playback-control';
 import type {
-  CandidateSnapshot,
-  FramePosition,
+  ICandidateSnapshot,
+  IFramePosition,
   PlaybackRate,
-  SharedMovieSource,
+  ISharedMovieSource,
 } from '../../contracts/types';
 import {
   findFrameIndexForRatio,
@@ -15,9 +15,9 @@ import {
 import { MediabunnyPanel } from './mediabunny-panel';
 import { assertVideoTrackCanDecode } from './video-decode-preflight';
 
-type SnapshotListener = (snapshot: CandidateSnapshot) => void;
+type SnapshotListener = (snapshot: ICandidateSnapshot) => void;
 
-export class MediabunnyControl implements FramePlaybackControl {
+export class MediabunnyControl implements IFramePlaybackControl {
   readonly id = 'candidate-b' as const;
 
   readonly label = 'Candidate B';
@@ -55,7 +55,7 @@ export class MediabunnyControl implements FramePlaybackControl {
     },
   });
 
-  private snapshot: CandidateSnapshot = {
+  private snapshot: ICandidateSnapshot = {
     candidateId: 'candidate-b',
     status: 'idle',
     playbackRate: 1,
@@ -67,7 +67,7 @@ export class MediabunnyControl implements FramePlaybackControl {
     active: false,
   };
 
-  private source: SharedMovieSource | null = null;
+  private source: ISharedMovieSource | null = null;
 
   private input: Input | null = null;
 
@@ -91,8 +91,8 @@ export class MediabunnyControl implements FramePlaybackControl {
   }
 
   async loadMovie(
-    source: SharedMovieSource,
-    options?: { initialPosition?: FramePosition | null },
+    source: ISharedMovieSource,
+    options?: { initialPosition?: IFramePosition | null },
   ): Promise<void> {
     this.source = source;
     this.updateSnapshot({
@@ -128,7 +128,7 @@ export class MediabunnyControl implements FramePlaybackControl {
     });
   }
 
-  async activate(options?: { handoffPosition?: FramePosition | null }): Promise<void> {
+  async activate(options?: { handoffPosition?: IFramePosition | null }): Promise<void> {
     this.updateSnapshot({
       active: true,
     });
@@ -168,7 +168,7 @@ export class MediabunnyControl implements FramePlaybackControl {
     });
   }
 
-  async stop(): Promise<FramePosition | null> {
+  async stop(): Promise<IFramePosition | null> {
     await this.pause();
     return this.seekToFrame(0);
   }
@@ -190,7 +190,7 @@ export class MediabunnyControl implements FramePlaybackControl {
     }
   }
 
-  async stepFrames(delta: number): Promise<FramePosition | null> {
+  async stepFrames(delta: number): Promise<IFramePosition | null> {
     if (!this.source) {
       return this.snapshot.currentPosition;
     }
@@ -204,14 +204,14 @@ export class MediabunnyControl implements FramePlaybackControl {
     });
   }
 
-  async seekToFrame(frameIndex: number): Promise<FramePosition | null> {
+  async seekToFrame(frameIndex: number): Promise<IFramePosition | null> {
     return this.renderFrameAtIndex(frameIndex, {
       status: this.snapshot.status === 'playing' ? 'playing' : 'paused',
       message: 'Frame seek resolved through shared frame index.',
     });
   }
 
-  async scrubToRatio(ratio: number): Promise<FramePosition | null> {
+  async scrubToRatio(ratio: number): Promise<IFramePosition | null> {
     if (!this.source) {
       return this.snapshot.currentPosition;
     }
@@ -222,7 +222,7 @@ export class MediabunnyControl implements FramePlaybackControl {
     });
   }
 
-  getCurrentPosition(): FramePosition | null {
+  getCurrentPosition(): IFramePosition | null {
     return this.snapshot.currentPosition;
   }
 
@@ -230,7 +230,7 @@ export class MediabunnyControl implements FramePlaybackControl {
     return this.snapshot.selectedStepSize;
   }
 
-  getSnapshot(): CandidateSnapshot {
+  getSnapshot(): ICandidateSnapshot {
     return this.snapshot;
   }
 
@@ -297,8 +297,8 @@ export class MediabunnyControl implements FramePlaybackControl {
 
   private async renderFrameAtIndex(
     frameIndex: number,
-    snapshotPatch: Partial<CandidateSnapshot>,
-  ): Promise<FramePosition | null> {
+    snapshotPatch: Partial<ICandidateSnapshot>,
+  ): Promise<IFramePosition | null> {
     if (!this.source || !this.canvasSink) {
       return this.snapshot.currentPosition;
     }
@@ -327,7 +327,7 @@ export class MediabunnyControl implements FramePlaybackControl {
     return targetPosition;
   }
 
-  private updateSnapshot(patch: Partial<CandidateSnapshot>): void {
+  private updateSnapshot(patch: Partial<ICandidateSnapshot>): void {
     this.snapshot = {
       ...this.snapshot,
       ...patch,

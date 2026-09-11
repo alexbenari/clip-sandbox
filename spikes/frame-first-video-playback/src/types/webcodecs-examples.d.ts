@@ -1,11 +1,11 @@
 declare module 'webcodecs-examples' {
-  export interface WebCodecsPlayerParams {
+  export interface IWebCodecsPlayerParams {
     src: File;
     canvas: HTMLCanvasElement;
   }
 
   export class WebCodecsPlayer {
-    constructor(params: WebCodecsPlayerParams);
+    constructor(params: IWebCodecsPlayerParams);
     duration: number;
     initialize(): Promise<void>;
     play(): Promise<void>;

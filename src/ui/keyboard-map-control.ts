@@ -1,14 +1,14 @@
-import type { AppScreen, ShortcutDescriptor } from './app-screen.js';
+import type { IAppScreen, IShortcutDescriptor } from './app-screen.js';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
 export class KeyboardMapControl {
   private readonly document: Document;
-  private readonly globalShortcuts: readonly ShortcutDescriptor[];
+  private readonly globalShortcuts: readonly IShortcutDescriptor[];
 
   constructor(
     private readonly root: HTMLElement,
-    globalShortcuts: readonly ShortcutDescriptor[],
+    globalShortcuts: readonly IShortcutDescriptor[],
     private readonly requestClose: () => void = () => {},
   ) {
     this.document = root.ownerDocument;
@@ -16,7 +16,7 @@ export class KeyboardMapControl {
     this.root.setAttribute('aria-labelledby', 'keyboardMapHeading');
   }
 
-  render(screen: Pick<AppScreen, 'label' | 'shortcuts'>): void {
+  render(screen: Pick<IAppScreen, 'label' | 'shortcuts'>): void {
     const heading = this.document.createElement('h2');
     heading.id = 'keyboardMapHeading';
     heading.tabIndex = -1;
@@ -82,8 +82,8 @@ export class KeyboardMapControl {
     return button;
   }
 
-  private createShortcutGroups(shortcuts: readonly ShortcutDescriptor[]): DocumentFragment {
-    const groups = new Map<string | null, ShortcutDescriptor[]>();
+  private createShortcutGroups(shortcuts: readonly IShortcutDescriptor[]): DocumentFragment {
+    const groups = new Map<string | null, IShortcutDescriptor[]>();
     for (const shortcut of shortcuts) {
       const group = shortcut.group ?? null;
       const groupShortcuts = groups.get(group) ?? [];
@@ -103,7 +103,7 @@ export class KeyboardMapControl {
     return fragment;
   }
 
-  private createShortcutList(shortcuts: readonly ShortcutDescriptor[]): HTMLDListElement {
+  private createShortcutList(shortcuts: readonly IShortcutDescriptor[]): HTMLDListElement {
     const list = this.document.createElement('dl');
     list.className = 'keyboard-shortcuts';
 
@@ -120,7 +120,7 @@ export class KeyboardMapControl {
     return list;
   }
 
-  private appendSequences(container: HTMLElement, sequences: ShortcutDescriptor['sequences']): void {
+  private appendSequences(container: HTMLElement, sequences: IShortcutDescriptor['sequences']): void {
     sequences.forEach((sequence, sequenceIndex) => {
       if (sequenceIndex > 0) container.append(this.document.createTextNode(' or '));
       sequence.forEach((key, keyIndex) => {

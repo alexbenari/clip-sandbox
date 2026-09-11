@@ -1,22 +1,22 @@
-import type { AppScreen } from './app-screen.js';
+import type { IAppScreen } from './app-screen.js';
 import { FoldablePanelController } from './foldable-panel-controller.js';
 
 type ShellElements = {
   screenHost: HTMLElement;
   commandHost: HTMLElement;
   selector: HTMLSelectElement;
-  screens: readonly [AppScreen, ...AppScreen[]];
+  screens: readonly [IAppScreen, ...IAppScreen[]];
   workspace?: HTMLElement;
   center?: HTMLElement;
   panels?: readonly { root: HTMLElement; content: HTMLElement; foldButton: HTMLButtonElement; revealButton: HTMLButtonElement }[];
-  onBoundsChange?: (screen: AppScreen, width: number, durationMs: number) => void;
-  onBoundsSettled?: (screen: AppScreen) => void;
-  onScreenChange?: (screen: AppScreen) => void;
+  onBoundsChange?: (screen: IAppScreen, width: number, durationMs: number) => void;
+  onBoundsSettled?: (screen: IAppScreen) => void;
+  onScreenChange?: (screen: IAppScreen) => void;
 };
 
 export class ApplicationShellController {
-  private readonly screens = new Map<string, AppScreen>();
-  private current: AppScreen;
+  private readonly screens = new Map<string, IAppScreen>();
+  private current: IAppScreen;
   private readonly panels: FoldablePanelController[] = [];
   private motionPending = false;
   private readonly onSelectionChange = (): void => { this.activate(this.elements.selector.value); };
@@ -47,7 +47,7 @@ export class ApplicationShellController {
     }
   }
 
-  get activeScreen(): AppScreen { return this.current; }
+  get activeScreen(): IAppScreen { return this.current; }
   get workspaceMoving(): boolean { return this.motionPending; }
 
   private prepareWorkspaceResize(duration: number): void {

@@ -113,7 +113,7 @@ The following named values prevent mixing media, indexes, and clocks:
   proxy asset/index, preview-audio selection, frame map, and preparation/version identity.
 - `PreparedReviewLease`: a pin on that bundle and all dependencies until `release()`. Immutable
   metadata does not itself keep files alive; a session or background consumer must hold a lease.
-- `DisplayFrame`: viewport pixels with canonical `SourceFrameIdentity`, proxy `reviewTimeUs`, and
+- `IDisplayFrame`: viewport pixels with canonical `ISourceFrameIdentity`, proxy `reviewTimeUs`, and
   source generation. A delivery sequence number is not a canonical frame ordinal.
 
 BestSource owns its full index format. JavaScript holds opaque artifact references and bounded
@@ -149,8 +149,8 @@ interface FrameReader {
 }
 
 interface ExactFrameSession {
-  getFrame(ordinal: FrameOrdinal): Promise<DisplayFrame>;
-  step(direction: StepDirection): Promise<DisplayFrame>;
+  getFrame(ordinal: FrameOrdinal): Promise<IDisplayFrame>;
+  step(direction: StepDirection): Promise<IDisplayFrame>;
   dispose(): Promise<void>;
 }
 ```

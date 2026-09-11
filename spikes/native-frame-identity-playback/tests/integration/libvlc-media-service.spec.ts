@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { PlaybackDisplayFrame } from '../../src/adapter/frame-playback-adapter.js';
+import type { IPlaybackDisplayFrame } from '../../src/adapter/frame-playback-adapter.js';
 import { LibVlcPlaybackAdapter } from '../../src/adapter/libvlc-playback-adapter.js';
 import { NativeProcessClient } from '../../src/adapter/native-process-client.js';
 
@@ -29,7 +29,7 @@ describe.skipIf(!nativeAvailable)('LibVLC media service', () => {
       await expect(playback.open(target.sourcePath, {
         previewBounds: { maxWidth: 640, maxHeight: 360 },
       })).resolves.toMatchObject({ state: 'playback-ready' });
-      const framePromise = new Promise<PlaybackDisplayFrame>((resolve, reject) => {
+      const framePromise = new Promise<IPlaybackDisplayFrame>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Timed out waiting for a playback frame.')), 10_000);
         let first = true;
         playback.setFrameListener((frame) => {
@@ -83,7 +83,7 @@ describe.skipIf(!nativeAvailable)('LibVLC media service', () => {
 
 function abs(value: bigint): bigint { return value < 0n ? -value : value; }
 
-function nextFrame(playback: LibVlcPlaybackAdapter): Promise<PlaybackDisplayFrame> {
+function nextFrame(playback: LibVlcPlaybackAdapter): Promise<IPlaybackDisplayFrame> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Timed out waiting for a sought playback frame.')), 10_000);
     playback.setFrameListener((frame) => {

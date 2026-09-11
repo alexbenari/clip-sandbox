@@ -1,4 +1,4 @@
-export interface SourceFrameIdentity {
+export interface ISourceFrameIdentity {
   readonly frameIndex: number;
   readonly originalFrameIndex: number;
   readonly pts: bigint;
@@ -9,7 +9,7 @@ export interface SourceFrameIdentity {
   readonly frameInfoHash: string;
 }
 
-export function sourceFrameIdentityFromWire(value: unknown): SourceFrameIdentity {
+export function sourceFrameIdentityFromWire(value: unknown): ISourceFrameIdentity {
   const record = objectRecord(value, 'frame identity');
   const identity = {
     frameIndex: safeInteger(record.frameIndex, 'frameIndex'),
@@ -51,6 +51,6 @@ export function nonemptyString(value: unknown, label: string): string {
   return value;
 }
 
-export function sourceFrameTimeUs(identity: SourceFrameIdentity): bigint {
+export function sourceFrameTimeUs(identity: ISourceFrameIdentity): bigint {
   return identity.pts * identity.timebaseNumerator * 1_000_000n / identity.timebaseDenominator;
 }

@@ -118,7 +118,7 @@ flowchart TB
    experiment. The proxy and canonical indexes remain distinct even when their times agree.
 3. During prepared playback, LibVLC reports proxy time. The exact helper finds the proxy ordinal,
    decodes that picture, and attaches canonical index metadata for the same ordinal. Returning to
-   playback seeks using `DisplayFrame.reviewTimeUs`, not canonical `identity.pts`.
+   playback seeks using `IDisplayFrame.reviewTimeUs`, not canonical `identity.pts`.
 4. Before preparation completes, the original movie can play, but exact controls and range capture
    stay disabled. A completed preparation switches playback to the mapped proxy.
 

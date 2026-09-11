@@ -1,32 +1,32 @@
 import type {
   CandidateId,
-  CandidateSnapshot,
-  FramePosition,
+  ICandidateSnapshot,
+  IFramePosition,
   PlaybackRate,
-  SharedMovieSource,
+  ISharedMovieSource,
 } from './types';
 
-export interface FramePlaybackControl {
+export interface IFramePlaybackControl {
   readonly id: CandidateId;
   readonly label: string;
   mount(host: HTMLElement): void;
   loadMovie(
-    source: SharedMovieSource,
-    options?: { initialPosition?: FramePosition | null },
+    source: ISharedMovieSource,
+    options?: { initialPosition?: IFramePosition | null },
   ): Promise<void>;
-  activate(options?: { handoffPosition?: FramePosition | null }): Promise<void>;
+  activate(options?: { handoffPosition?: IFramePosition | null }): Promise<void>;
   deactivate(): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
-  stop(): Promise<FramePosition | null>;
+  stop(): Promise<IFramePosition | null>;
   setPlaybackRate(rate: PlaybackRate): Promise<void>;
-  stepFrames(delta: number): Promise<FramePosition | null>;
-  seekToFrame(frameIndex: number): Promise<FramePosition | null>;
-  scrubToRatio(ratio: number): Promise<FramePosition | null>;
+  stepFrames(delta: number): Promise<IFramePosition | null>;
+  seekToFrame(frameIndex: number): Promise<IFramePosition | null>;
+  scrubToRatio(ratio: number): Promise<IFramePosition | null>;
   getSelectedStepSize(): 1 | 10;
-  getCurrentPosition(): FramePosition | null;
-  getSnapshot(): CandidateSnapshot;
+  getCurrentPosition(): IFramePosition | null;
+  getSnapshot(): ICandidateSnapshot;
   reportLoadFailure(error: unknown): void;
-  onSnapshotChanged(listener: (snapshot: CandidateSnapshot) => void): () => void;
+  onSnapshotChanged(listener: (snapshot: ICandidateSnapshot) => void): () => void;
   dispose(): Promise<void>;
 }
