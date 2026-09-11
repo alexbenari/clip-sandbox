@@ -12,16 +12,16 @@ type GridVideoMetadataTrackerOptions = {
 };
 
 export class GridVideoMetadataTracker {
-  onComplete: (event: { token: number }) => void;
-  onFailure: (event: { clip: Clip; error: unknown }) => void;
-  setTimer: (callback: () => void, delay: number) => TimerId;
-  clearTimer: (timer: TimerId) => void;
-  debounceMs: number;
-  sequenceToken: number;
-  statesByClipId: Map<string, MetadataStatus>;
-  loggedFailures: Set<string>;
-  complete: boolean;
-  completeTimer: TimerId | null;
+  private readonly onComplete: (event: { token: number }) => void;
+  private readonly onFailure: (event: { clip: Clip; error: unknown }) => void;
+  private readonly setTimer: (callback: () => void, delay: number) => TimerId;
+  private readonly clearTimer: (timer: TimerId) => void;
+  private readonly debounceMs: number;
+  private sequenceToken: number;
+  private statesByClipId: Map<string, MetadataStatus>;
+  private loggedFailures: Set<string>;
+  private complete: boolean;
+  private completeTimer: TimerId | null;
 
   constructor({
     onComplete = () => {},
@@ -114,8 +114,4 @@ export class GridVideoMetadataTracker {
       this.onComplete({ token: this.sequenceToken });
     }, this.debounceMs);
   }
-}
-
-export function createGridVideoMetadataTracker(options?: GridVideoMetadataTrackerOptions): GridVideoMetadataTracker {
-  return new GridVideoMetadataTracker(options);
 }

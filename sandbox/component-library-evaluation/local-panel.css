@@ -1,0 +1,5 @@
+.local-split { display: grid; height: calc(100vh - 52px); grid-template-columns: 240px minmax(0, 1fr); transition: grid-template-columns 280ms cubic-bezier(.2, .7, .2, 1); }
+.local-split.folded { grid-template-columns: 36px minmax(0, 1fr); transition-duration: 240ms; }
+#split-right.local-split { grid-template-columns: minmax(0, 1fr) 240px; }
+#split-right.local-split.folded { grid-template-columns: minmax(0, 1fr) 36px; }
+@media (prefers-reduced-motion: reduce) { #split, #split-right { transition: none; } }

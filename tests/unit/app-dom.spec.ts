@@ -2,7 +2,21 @@
 import { describe, it, beforeEach, expect } from 'vitest';
 
 const baseDom = `
-  <header class="toolbar" id="toolbar">
+  <div id="appShell">
+    <header id="globalAppBar">
+      <select id="appScreenSelector" aria-label="App screen" hidden>
+        <option value="collection" selected>Collection</option>
+      </select>
+      <div id="activityIndicatorRoot">
+        <button id="activityIndicatorBtn" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
+        <section id="activityIndicatorPanel" hidden>
+          <ul id="activityIndicatorList"></ul>
+        </section>
+      </div>
+    </header>
+    <div id="workspaceRow">
+      <div id="screenCommandHost">
+        <header class="toolbar" id="toolbar">
     <button id="pickBtn"></button>
     <div id="orderMenu" data-open="false">
       <button id="orderMenuBtn" aria-expanded="false">Actions</button>
@@ -14,60 +28,72 @@ const baseDom = `
     <button id="toggleTitlesBtn"></button>
     <button id="fsBtn"></button>
     <select id="activeCollectionName" disabled>
-      <option value="">Local Video Grid Reviewer</option>
+      <option value="">Clip Sandbox</option>
     </select>
-    <div class="toolbar-status">
-      <span class="count" id="count"></span>
-      <div id="activityIndicatorRoot">
-        <button id="activityIndicatorBtn" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
-        <section id="activityIndicatorPanel" hidden>
-          <ul id="activityIndicatorList"></ul>
+          <div class="toolbar-status">
+            <span class="count" id="count"></span>
+          </div>
+        </header>
+      </div>
+      <div id="mainScreenHost">
+        <section id="collectionScreen">
+          <section id="collectionConflict" hidden>
+            <p id="collectionConflictSummary"></p>
+            <pre id="collectionConflictList"></pre>
+            <button id="applyCollectionConflictBtn"></button>
+            <button id="cancelCollectionConflictBtn"></button>
+          </section>
+          <section id="saveAsNewDialog" hidden>
+            <input id="saveAsNewNameInput" />
+            <div id="saveAsNewError"></div>
+            <button id="confirmSaveAsNewBtn"></button>
+            <button id="cancelSaveAsNewBtn"></button>
+          </section>
+          <dialog id="unsavedChangesDialog">
+            <p id="unsavedChangesText"></p>
+            <button id="confirmUnsavedChangesBtn"></button>
+            <button id="discardUnsavedChangesBtn"></button>
+            <button id="cancelUnsavedChangesBtn"></button>
+          </dialog>
+          <div id="gridWrap">
+            <div id="grid" style="gap:10px"></div>
+          </div>
         </section>
       </div>
     </div>
-  </header>
-  <section id="collectionConflict" hidden>
-    <p id="collectionConflictSummary"></p>
-    <pre id="collectionConflictList"></pre>
-    <button id="applyCollectionConflictBtn"></button>
-    <button id="cancelCollectionConflictBtn"></button>
-  </section>
-  <section id="saveAsNewDialog" hidden>
-    <input id="saveAsNewNameInput" />
-    <div id="saveAsNewError"></div>
-    <button id="confirmSaveAsNewBtn"></button>
-    <button id="cancelSaveAsNewBtn"></button>
-  </section>
-  <dialog id="unsavedChangesDialog">
-    <p id="unsavedChangesText"></p>
-    <button id="confirmUnsavedChangesBtn"></button>
-    <button id="discardUnsavedChangesBtn"></button>
-    <button id="cancelUnsavedChangesBtn"></button>
-  </dialog>
-  <div id="gridWrap">
-    <div id="grid" style="gap:10px"></div>
+    <div id="clipContextMenu" hidden><div id="clipContextMenuPanel"></div></div>
+    <div id="zoomLayerRoot"></div>
   </div>
-  <div id="clipContextMenu" hidden><div id="clipContextMenuPanel"></div></div>
-  <div id="zoomLayerRoot"></div>
 `;
 
 beforeEach(() => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  };
   document.body.innerHTML = baseDom;
   document.title = '';
+  window.clipSandboxDesktop = { loadAppSettings: async () => ({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: false } }) };
 });
 
-describe('initApp DOM wiring', () => {
+describe('AppController DOM wiring', () => {
   it('initializes count text, titles button, and active source label', async () => {
-    const { initApp } = await import('../../src/app/app-controller.js');
-    initApp();
+    const { AppController } = await import('../../src/app/app-controller.js');
+    new AppController().init();
     const collectionSelect = document.getElementById('activeCollectionName');
     expect(document.getElementById('count').textContent).toBe('0 clips');
     expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Hide Titles');
     expect(collectionSelect.tagName).toBe('SELECT');
     expect(collectionSelect.disabled).toBe(true);
-    expect(collectionSelect.options[0].textContent).toBe('Local Video Grid Reviewer');
-    expect(document.title).toBe('Local Video Grid Reviewer');
+    expect(collectionSelect.options[0].textContent).toBe('No pipeline loaded');
+    expect(document.title).toBe('Clip Sandbox');
     expect(document.getElementById('zoomLayerRoot')).not.toBeNull();
+    expect(document.getElementById('collectionScreen')).not.toBeNull();
+    expect(document.getElementById('appScreenSelector').value).toBe('collection');
+    expect(document.getElementById('appScreenSelector').hidden).toBe(false);
+    expect(document.querySelectorAll('#appScreenSelector option')).toHaveLength(2);
+    expect(document.getElementById('toolbar').parentElement.id).toBe('screenCommandHost');
+    expect(document.getElementById('activityIndicatorRoot').parentElement.id).toBe('globalAppBar');
   });
 });
 

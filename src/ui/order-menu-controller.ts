@@ -1,11 +1,3 @@
-function menuItems(...items: Array<HTMLElement | null | undefined>): HTMLButtonElement[] {
-  return items.filter((el): el is HTMLButtonElement => el instanceof HTMLButtonElement);
-}
-
-function focusableItems(...items: Array<HTMLElement | null | undefined>): HTMLButtonElement[] {
-  return menuItems(...items).filter((el) => !el.disabled);
-}
-
 type OrderMenuControllerOptions = {
   orderMenu?: HTMLElement | null;
   orderMenuBtn?: HTMLButtonElement | null;
@@ -55,7 +47,7 @@ export class OrderMenuController {
     orderMenuBtn.addEventListener('keydown', (e) => this.handleButtonKeyDown(e));
     orderMenuPanel.addEventListener('keydown', (e) => this.handlePanelKeyDown(e));
 
-    for (const item of menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn)) {
+    for (const item of this.menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn)) {
       item.addEventListener('click', () => this.close());
     }
 
@@ -96,7 +88,7 @@ export class OrderMenuController {
   }
 
   focusFirstItem(): void {
-    const first = focusableItems(
+    const first = this.focusableItems(
       this.loadOrderBtn,
       this.saveBtn,
       this.saveAsNewBtn,
@@ -107,7 +99,7 @@ export class OrderMenuController {
   }
 
   moveItemFocus(step: number): void {
-    const items = focusableItems(
+    const items = this.focusableItems(
       this.loadOrderBtn,
       this.saveBtn,
       this.saveAsNewBtn,
@@ -167,7 +159,7 @@ export class OrderMenuController {
     }
     if (e.key === 'End') {
       e.preventDefault();
-      const items = focusableItems(
+      const items = this.focusableItems(
         this.loadOrderBtn,
         this.saveBtn,
         this.saveAsNewBtn,
@@ -177,8 +169,12 @@ export class OrderMenuController {
       if (items.length) items[items.length - 1].focus();
     }
   }
-}
 
-export function createOrderMenuController(options: OrderMenuControllerOptions): OrderMenuController {
-  return new OrderMenuController(options);
+  private menuItems(...items: Array<HTMLElement | null | undefined>): HTMLButtonElement[] {
+    return items.filter((element): element is HTMLButtonElement => element instanceof HTMLButtonElement);
+  }
+
+  private focusableItems(...items: Array<HTMLElement | null | undefined>): HTMLButtonElement[] {
+    return this.menuItems(...items).filter(element => !element.disabled);
+  }
 }

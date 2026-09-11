@@ -23,7 +23,3 @@ export class AppSessionState {
     this.pendingSelectionAction = null;
   }
 }
-
-export function createAppState(): AppSessionState {
-  return new AppSessionState();
-}

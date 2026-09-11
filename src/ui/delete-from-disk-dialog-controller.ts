@@ -1,7 +1,4 @@
-import {
-  deleteFromDiskConfirmationText,
-  deleteFromDiskPreviewOverflowText,
-} from '../app/app-text.js';
+import type { AppText } from '../app/app-text.js';
 
 type DeleteDialogHandlers = {
   onSave?: (() => void) | null;
@@ -15,20 +12,18 @@ type DeleteRequestPreview = {
   affectedSavedCollectionCount: number;
 };
 
-function isDialogOpen(dialog: HTMLDialogElement | null): boolean {
-  return !!(dialog?.open || dialog?.hasAttribute?.('open'));
-}
-
 export class DeleteFromDiskDialogController {
-  preflightDialog: HTMLDialogElement | null;
-  preflightTextEl: HTMLElement | null;
-  confirmDialog: HTMLDialogElement | null;
-  confirmSummaryEl: HTMLElement | null;
-  confirmPreviewEl: HTMLElement | null;
-  preflightHandlers: DeleteDialogHandlers;
-  confirmHandlers: DeleteDialogHandlers;
+  private readonly appText: Pick<AppText, 'deleteFromDiskConfirmationText' | 'deleteFromDiskPreviewOverflowText'>;
+  private readonly preflightDialog: HTMLDialogElement | null;
+  private readonly preflightTextEl: HTMLElement | null;
+  private readonly confirmDialog: HTMLDialogElement | null;
+  private readonly confirmSummaryEl: HTMLElement | null;
+  private readonly confirmPreviewEl: HTMLElement | null;
+  private preflightHandlers: DeleteDialogHandlers;
+  private confirmHandlers: DeleteDialogHandlers;
 
   constructor({
+    appText,
     preflightDialog,
     preflightTextEl,
     confirmPreflightBtn,
@@ -40,6 +35,7 @@ export class DeleteFromDiskDialogController {
     confirmDeleteBtn,
     cancelDeleteBtn,
   }: {
+    appText: Pick<AppText, 'deleteFromDiskConfirmationText' | 'deleteFromDiskPreviewOverflowText'>;
     preflightDialog?: HTMLDialogElement | null;
     preflightTextEl?: HTMLElement | null;
     confirmPreflightBtn?: HTMLElement | null;
@@ -50,7 +46,8 @@ export class DeleteFromDiskDialogController {
     confirmPreviewEl?: HTMLElement | null;
     confirmDeleteBtn?: HTMLElement | null;
     cancelDeleteBtn?: HTMLElement | null;
-  } = {}) {
+  }) {
+    this.appText = appText;
     this.preflightDialog = preflightDialog || null;
     this.preflightTextEl = preflightTextEl || null;
     this.confirmDialog = confirmDialog || null;
@@ -88,11 +85,11 @@ export class DeleteFromDiskDialogController {
   }
 
   isPreflightOpen(): boolean {
-    return isDialogOpen(this.preflightDialog);
+    return this.isDialogOpen(this.preflightDialog);
   }
 
   isConfirmOpen(): boolean {
-    return isDialogOpen(this.confirmDialog);
+    return this.isDialogOpen(this.confirmDialog);
   }
 
   isOpen(): boolean {
@@ -159,14 +156,14 @@ export class DeleteFromDiskDialogController {
 
   openConfirmForDeleteRequest(deleteRequest: DeleteRequestPreview | null | undefined, { onConfirm = null, onCancel = null }: DeleteDialogHandlers = {}): void {
     if (!deleteRequest) return;
-    const summary = deleteFromDiskConfirmationText(
+    const summary = this.appText.deleteFromDiskConfirmationText(
       deleteRequest.selectedClipNames.length,
       deleteRequest.affectedSavedCollectionCount
     );
     const previewNames = deleteRequest.selectedClipNames.slice(0, 5);
     const hiddenCount = Math.max(0, deleteRequest.selectedClipNames.length - previewNames.length);
     const preview = hiddenCount > 0
-      ? `${previewNames.join('\n')}\n${deleteFromDiskPreviewOverflowText(hiddenCount)}`
+      ? `${previewNames.join('\n')}\n${this.appText.deleteFromDiskPreviewOverflowText(hiddenCount)}`
       : previewNames.join('\n');
 
     this.openConfirm({
@@ -189,8 +186,8 @@ export class DeleteFromDiskDialogController {
     }
     return false;
   }
-}
 
-export function createDeleteFromDiskDialogController(options?: ConstructorParameters<typeof DeleteFromDiskDialogController>[0]): DeleteFromDiskDialogController {
-  return new DeleteFromDiskDialogController(options);
+  private isDialogOpen(dialog: HTMLDialogElement | null): boolean {
+    return !!(dialog?.open || dialog?.hasAttribute('open'));
+  }
 }

@@ -1,0 +1,17 @@
+:root { --wa-font-size-m: 14px; --wa-line-height-normal: 1.5; --wa-space-l: 18px; --wa-color-surface-default: #0f172a; --wa-color-surface-border: #334155; --wa-color-text-normal: #e5e7eb; --wa-panel-border-width: 1px; --wa-panel-border-style: solid; --wa-panel-border-radius: 16px; --wa-shadow-l: 0 12px 36px #0008; }
+wa-popover { --max-width: min(380px, calc(100vw - 24px)); --show-duration: 190ms; --hide-duration: 150ms; }
+wa-popover::part(body) { box-sizing: border-box; max-height: calc(100vh - 24px); overflow: auto; }
+.help-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.help-heading h2 { font-size: 18px; }
+.help-heading button { font-size: 12px; padding: 6px 10px; }
+.context { margin-top: 18px; }
+.context strong { color: #7aa2f7; }
+.context p, .hint { margin: 4px 0 0; color: #94a3b8; font-size: 12px; }
+h3 { font-size: 13px; margin: 20px 0 4px; color: #94a3b8; }
+dl { margin: 8px 0 0; }
+dl > div { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 7px 0; }
+dt { font-size: 13px; }
+dd { margin: 0; white-space: nowrap; }
+kbd { font: 12px ui-monospace, monospace; display: inline-block; padding: 3px 6px; border: 1px solid #334155; border-radius: 5px; background: #172238; }
+.workspace-note { padding: 14px; color: #94a3b8; }
+@media (prefers-reduced-motion: reduce) { wa-popover { --show-duration: 0ms; --hide-duration: 0ms; } }

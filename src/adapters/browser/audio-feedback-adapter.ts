@@ -4,15 +4,15 @@ type AudioFeedbackWindow = Window & {
 };
 
 export class AudioFeedbackAdapter {
-  win: AudioFeedbackWindow;
-  audioContext: AudioContext | null;
+  private readonly win: AudioFeedbackWindow;
+  private audioContext: AudioContext | null;
 
   constructor({ win = window }: { win?: AudioFeedbackWindow } = {}) {
     this.win = win;
     this.audioContext = null;
   }
 
-  getAudioContext(): AudioContext | null {
+  private getAudioContext(): AudioContext | null {
     const AudioContextCtor = this.win.AudioContext || this.win.webkitAudioContext;
     if (!AudioContextCtor) return null;
     if (!this.audioContext) this.audioContext = new AudioContextCtor();

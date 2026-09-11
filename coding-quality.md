@@ -2,7 +2,7 @@
 
 ## Purpose and scope
 - This document applies primarily to long-lived application code in layered systems.
-- It assumes object-oriented abstractions are often a good fit, but it is not a mandate to force everything into classes.
+- It treats class ownership as the default for long-lived production behavior in this object-oriented codebase. Any free-function exception should be deliberate and reviewable.
 - Adapt these guidelines rather than applying them literally to one-off scripts, tests, migrations, data pipelines, framework glue, or codebases built around functional or data-oriented patterns.
 - Optimize first for clarity, correctness, cohesion, and changeability.
 
@@ -17,7 +17,7 @@
 
 ## Core principles
 - Prefer designs that keep behavior close to the state and invariants they govern.
-- Prefer object-oriented abstractions when they improve encapsulation, ownership, and boundaries. Do not force classes when simpler structures or functions are the more natural fit.
+- Prefer explicit class ownership for production behavior, including stateless calculations and formatting, so responsibilities and dependencies remain easy to find and evolve.
 - Aim for high cohesion. A class or module should have one cohesive reason to change.
 - Prefer interfaces and capability-based polymorphism over business logic that branches on type or kind when the behavior can live on the owning abstraction instead.
 - Prefer explicit dependencies and clear ownership of state.
@@ -40,6 +40,15 @@
 - Name variables by the role they play in the current scope.
 - Prefer code that a reader can understand quickly over clever compactness.
 
+## Comments
+
+- Do not emit introductory doc blocks on methods, classes, properties or enums — C# `<summary>`/`<param>`, JSDoc `/** … @param */`, Python docstrings, or the equivalent in any language. This is a rule, not a preference.
+- Do not comment an enum at all — neither the type nor its members, in any comment form. A reason worth keeping belongs on the code that acts on the values.
+- Invest in the name instead: precise method and parameter names already say what the block would, without the volume that makes surrounding code harder to read, and without going stale as the code changes. Needing a doc block to explain what something does is a signal that the name is wrong.
+- Keep a doc block only where it records something the signature cannot: a non-obvious reason, constraint, or reference to external authority. Prefer moving that reason into the code as a why-comment at the place it applies.
+- When removing existing blocks, preserve any such reason rather than deleting it with the block.
+- A docstring the runtime reads is behavior, not documentation, and stays — CLI help text (Typer, Click, argparse), MCP tool descriptions, and anything else surfaced to a user or a model at run time. If a consumer requires generated API reference documentation, raise it as a deviation rather than assuming the exception.
+
 ## Layer guidance
 ### Presentation layer
 - Keep pure rendering and local interaction behavior in the UI layer.
@@ -54,7 +63,7 @@
 - Do not move domain rules into the controller layer just because the controller is already coordinating a flow.
 
 ## Tradeoffs and exceptions
-- Prefer free functions when behavior is genuinely stateless, cross-cutting, or more idiomatic in the language or framework.
+- Keep a free function only at a pragmatic language, framework, bootstrap, generated-code, or tooling boundary where a class would make ownership less clear. Record production exceptions in `docs/documentation/object-oriented-exception-register.md`.
 - Prefer duplication over abstraction when the shared pattern is still unstable or the abstraction would obscure intent.
 - A class may own multiple closely related behaviors if they change together and reinforce one responsibility.
 - Follow framework conventions unless there is a strong reason not to. Local design preferences should not fight the platform without a clear payoff.

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
+  <title>Clip Sandbox — Keyboard help pilot</title>
+  <link rel="stylesheet" href="pilot.css">
+  <link rel="stylesheet" href="popover.css"><link rel="stylesheet" href="spectrum.css">
+  <script type="module" src="build/spectrum-popover.js"></script>
+</head>
+<body><sp-theme color="dark" scale="medium">
+  <header class="app-bar"><strong>Clip Sandbox</strong><button id="keyboard-trigger" aria-haspopup="dialog" aria-controls="keyboard-help" aria-expanded="false">Keyboard shortcuts</button></header>
+  <main id="workspace"><div class="command-bar"><h1>Collection</h1><button id="workspace-action">Workspace focus target</button></div>
+    <p class="workspace-note">Keyboard help is available without leaving the workspace.</p>
+  </main>
+  <sp-overlay id="keyboard-help" trigger="keyboard-trigger@click" placement="bottom-end" offset="10" type="auto" receives-focus="true"><sp-popover role="dialog" aria-labelledby="keyboard-heading">
+    <section aria-labelledby="keyboard-heading">
+      <div class="help-heading"><h2 id="keyboard-heading">Keyboard shortcuts</h2><button id="close-help" autofocus aria-label="Close keyboard shortcuts">Close</button></div>
+      <div class="context"><strong>Collection</strong><p>Shortcuts below reflect the active screen.</p></div>
+      <dl><div><dt>Open selected clip</dt><dd><kbd>Enter</kbd></dd></div><div><dt>Move selection</dt><dd><kbd>←</kbd> <kbd>→</kbd></dd></div></dl>
+      <h3>Global</h3>
+      <dl><div><dt>Close active surface</dt><dd><kbd>Esc</kbd></dd></div><div><dt>Toggle fullscreen</dt><dd><kbd>F11</kbd></dd></div></dl>
+      <p class="hint">Read-only reference · illustrative assignments</p>
+    </section>
+  </sp-popover></sp-overlay>
+</sp-theme></body>
+</html>

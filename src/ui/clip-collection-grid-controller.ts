@@ -1,6 +1,9 @@
 import type { Clip } from '../domain/clip.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
-import { createGridVideoMetadataTracker, type GridVideoMetadataTracker } from './grid-video-metadata-tracker.js';
+import { GridVideoMetadataTracker } from './grid-video-metadata-tracker.js';
+import type { DisplayLayoutRules } from './display-layout-rules.js';
+import { ClipLabelFormatter } from './clip-label-formatter.js';
+import { GridPreviewPlaybackController } from './grid-preview-playback-controller.js';
 
 const CLIP_COLLECTION_GRID_STYLE_ID = 'clipCollectionGridStyles';
 const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
@@ -37,9 +40,7 @@ const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
 .clip-collection-grid-root.titles-hidden .filename{ display:none; }
 `;
 
-export const PLACEHOLDER_DURATION = '--:--:--';
-
-type ClipLabelFormatter = (name: string, durationSeconds: number | null) => string;
+type ClipLabelFormatterFn = (name: string, durationSeconds: number | null) => string;
 
 type ClipCard = HTMLElement & {
   dataset: DOMStringMap & {
@@ -62,26 +63,6 @@ type FullscreenGridLayout = GridLayout & {
   targetVisible: number;
 };
 
-type ComputeBestGridFn = (options: {
-  count: number;
-  availW: number;
-  availH: number;
-  gap: number;
-  clips: Clip[];
-}) => GridLayout;
-
-type ComputeFsLayoutFn = (options: {
-  slots: number;
-  availW: number;
-  availH: number;
-  gap: number;
-}) => FullscreenGridLayout;
-
-type FullscreenState = {
-  slots: number;
-  hiddenCards?: ClipCard[];
-};
-
 type GridViewCacheEntry = {
   container: ClipCard;
   collection: ClipSequence | null;
@@ -92,11 +73,10 @@ type ClipCollectionGridControllerOptions = {
   grid?: HTMLElement | null;
   gridRoot?: HTMLElement | null;
   toolbar?: HTMLElement | null;
-  fullscreenState?: FullscreenState | null;
-  formatLabel?: ClipLabelFormatter;
-  computeBestGrid?: ComputeBestGridFn | null;
-  computeFsLayout?: ComputeFsLayoutFn | null;
-  applyGridLayout?: ((cols: number, cellH: number) => void) | null;
+  getAvailableHeight?: () => number;
+  coordinateWorkspaceLayout?: boolean;
+  formatLabel?: ClipLabelFormatterFn;
+  layoutRules?: Pick<DisplayLayoutRules, 'computeBestGrid' | 'computeFullscreenLayout'> | null;
   isFullscreen?: (() => boolean) | null;
   onMetadataFailure?: ((event: { clip: Clip; error: unknown }) => void) | null;
   updateCount?: () => void;
@@ -105,7 +85,6 @@ type ClipCollectionGridControllerOptions = {
   onOpenClip?: (clipId: string) => void;
   onRemoveSelected?: (orderedClipIds: string[]) => void;
   onContextMenu?: (event: {
-    card: ClipCard | null;
     point: { x: number; y: number };
     selectedClipId: string | null;
     selectedClipIds: string[];
@@ -115,18 +94,20 @@ type ClipCollectionGridControllerOptions = {
   metadataRelayoutDebounceMs?: number;
 };
 
-function asClipCard(element: Element | null | undefined): ClipCard | null {
+export class ClipCollectionGridController {
+  private asClipCard(element: Element | null | undefined): ClipCard | null {
   return element instanceof HTMLElement ? element as ClipCard : null;
 }
 
-function gridCards(grid: HTMLElement | null | undefined): ClipCard[] {
+  private gridCards(grid: HTMLElement | null | undefined): ClipCard[] {
   return Array.from(grid?.children || []).flatMap((element) => {
-    const card = asClipCard(element);
+    const card = this.asClipCard(element);
     return card ? [card] : [];
   });
 }
 
-function ensureClipCollectionGridStyles(doc: Document): void {
+  private ensureStyles(): void {
+  const doc = this.doc;
   if (doc.getElementById(CLIP_COLLECTION_GRID_STYLE_ID)) return;
   const styleEl = doc.createElement('style');
   styleEl.id = CLIP_COLLECTION_GRID_STYLE_ID;
@@ -134,94 +115,38 @@ function ensureClipCollectionGridStyles(doc: Document): void {
   (doc.head || doc.documentElement).appendChild(styleEl);
 }
 
-export function updateCardLabel(card: HTMLElement | null | undefined, formatLabel: ClipLabelFormatter): void {
+  private updateCardLabel(card: HTMLElement | null | undefined): void {
   if (!card) return;
   const label = card.querySelector<HTMLElement>('.filename');
   if (!label) return;
   const name = card.dataset.name || '';
   const duration = Number.parseFloat(card.dataset.durationSeconds || '');
-  const text = formatLabel(name, Number.isFinite(duration) ? duration : null);
+  const text = this.formatClipLabel(name, Number.isFinite(duration) ? duration : null);
   label.textContent = text;
   label.title = text;
 }
 
-function setCardDuration(card: HTMLElement | null | undefined, seconds: number | null, formatLabel: ClipLabelFormatter): void {
+  private setCardDuration(card: HTMLElement | null | undefined, seconds: number | null): void {
   if (!card) return;
   if (Number.isFinite(seconds)) card.dataset.durationSeconds = String(seconds);
   else card.dataset.durationSeconds = '';
-  updateCardLabel(card, formatLabel);
+  this.updateCardLabel(card);
 }
 
-function clearGridCards(grid: HTMLElement): void {
-  for (const el of gridCards(grid)) {
+  private clearGridCards(grid: HTMLElement): void {
+  for (const el of this.gridCards(grid)) {
     const url = el.dataset.objectUrl;
     if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
   }
   grid.innerHTML = '';
 }
 
-function startPreviewPlayback(video: HTMLVideoElement | null | undefined): void {
-  try {
-    const result = video?.play?.();
-    if (result && typeof result.catch === 'function') result.catch(() => {});
-  } catch {
-    // Preview playback is best-effort; unsupported test/browser media APIs should not break rendering.
-  }
-}
-
-const gridPreviewPlaybackTokens = new WeakMap<HTMLElement, number>();
-
-function cancelGridPreviewPlayback(grid: HTMLElement | null | undefined): void {
-  if (!grid) return;
-  gridPreviewPlaybackTokens.set(grid, (gridPreviewPlaybackTokens.get(grid) || 0) + 1);
-}
-
-function scheduleGridPreviewPlayback(grid: HTMLElement): void {
-  const view = grid?.ownerDocument?.defaultView || window;
-  const token = (gridPreviewPlaybackTokens.get(grid) || 0) + 1;
-  gridPreviewPlaybackTokens.set(grid, token);
-  const batchSize = 1;
-  const batchDelayMs = 120;
-
-  const schedule = (callback: () => void, delay = 0): void => {
-    if (delay > 0) {
-      view.setTimeout?.(callback, delay);
-      return;
-    }
-    if (typeof view?.requestAnimationFrame === 'function') {
-      view.requestAnimationFrame(callback);
-      return;
-    }
-    setTimeout(callback, 0);
-  };
-
-  const runBatch = (retryIndex = 0, startIndex = 0): void => {
-    if (gridPreviewPlaybackTokens.get(grid) !== token) return;
-    const videos = Array.from(grid?.querySelectorAll?.('video') || []) as HTMLVideoElement[];
-    const readyVideos = videos.filter((video) => video.readyState >= 2 && (video.paused || video.ended));
-    const batch = readyVideos.slice(startIndex, startIndex + batchSize);
-    for (const video of batch) startPreviewPlayback(video);
-
-    const nextIndex = startIndex + batch.length;
-    if (readyVideos.length > nextIndex) {
-      schedule(() => runBatch(retryIndex, nextIndex), batchDelayMs);
-      return;
-    }
-
-    const retryDelays = [800];
-    const delay = retryDelays[retryIndex];
-    if (delay !== undefined) schedule(() => runBatch(retryIndex + 1, 0), delay);
-  };
-
-  schedule(() => schedule(() => runBatch()));
-}
-
-function copyGridSurfaceAttributes(from: HTMLElement | null | undefined, to: HTMLElement): void {
+  private copyGridSurfaceAttributes(from: HTMLElement | null | undefined, to: HTMLElement): void {
   to.className = from?.className || 'clip-collection-grid';
   to.style.cssText = from?.style?.cssText || '';
 }
 
-function showGridSurface(grid: HTMLElement | null | undefined): void {
+  private showGridSurface(grid: HTMLElement | null | undefined): void {
   if (!grid) return;
   grid.style.display = '';
   grid.style.position = '';
@@ -233,7 +158,7 @@ function showGridSurface(grid: HTMLElement | null | undefined): void {
   grid.removeAttribute('aria-hidden');
 }
 
-function hideGridSurface(grid: HTMLElement | null | undefined): void {
+  private hideGridSurface(grid: HTMLElement | null | undefined): void {
   if (!grid) return;
   grid.style.display = '';
   grid.style.position = 'absolute';
@@ -245,21 +170,21 @@ function hideGridSurface(grid: HTMLElement | null | undefined): void {
   grid.setAttribute('aria-hidden', 'true');
 }
 
-function clipSequenceSignature(collection: ClipSequence | null | undefined): string {
+  private clipSequenceSignature(collection: ClipSequence | null | undefined): string {
   return (collection?.orderedClips?.() || []).map((clip) => clip.id).join('\n');
 }
 
-function removeDragOverClasses(grid: HTMLElement): void {
-  for (const el of gridCards(grid)) el.classList.remove('drag-over');
+  private removeDragOverClasses(grid: HTMLElement): void {
+  for (const el of this.gridCards(grid)) el.classList.remove('drag-over');
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
+  private isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   const editable = target.closest('input, textarea, select, [contenteditable], [contenteditable="true"]');
   return !!editable;
 }
 
-function createThumbCard({
+  private createThumbCard({
   doc = document,
   clip,
   cardId,
@@ -280,7 +205,7 @@ function createThumbCard({
   clip: Clip;
   cardId: string;
   mediaSource: string;
-  formatLabel: ClipLabelFormatter;
+  formatLabel: ClipLabelFormatterFn;
   onSelect: (card: ClipCard, event: MouseEvent) => void;
   onDoubleClick?: (card: ClipCard) => void;
   onDragStart: (card: ClipCard, event: DragEvent) => void;
@@ -311,7 +236,7 @@ function createThumbCard({
   vid.addEventListener(
     'canplay',
     () => {
-      startPreviewPlayback(vid);
+      this.previewPlayback.start(vid);
     },
     { once: true }
   );
@@ -327,7 +252,7 @@ function createThumbCard({
 
   vid.addEventListener('loadedmetadata', () => {
     onLoadedMetadata(card, vid, clip, metadataToken);
-    startPreviewPlayback(vid);
+    this.previewPlayback.start(vid);
   });
   vid.addEventListener('error', () => onMetadataError(card, vid, clip, metadataToken));
   card.addEventListener('click', (event) => onSelect(card, event));
@@ -341,60 +266,46 @@ function createThumbCard({
   return card;
 }
 
-export function formatDuration(seconds: number | null | undefined): string {
-  const total = Math.round(Math.max(0, Number(seconds)));
-  if (!Number.isFinite(total)) return PLACEHOLDER_DURATION;
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (v: number) => String(v).padStart(2, '0');
-  return `${pad(h)}:${pad(m)}:${pad(s)}`;
-}
-
-export function formatLabel(name: string, durationSeconds: number | null): string {
-  const hasDuration = Number.isFinite(durationSeconds);
-  const formatted = hasDuration ? formatDuration(durationSeconds) : PLACEHOLDER_DURATION;
-  return `${name} (${formatted})`;
-}
-
-export class ClipCollectionGridController {
-  grid: HTMLElement;
-  gridRoot: HTMLElement | null;
-  toolbar: HTMLElement | null;
-  fullscreenState: FullscreenState | null;
-  formatClipLabel: ClipLabelFormatter;
-  computeBestGridFn: ComputeBestGridFn | null;
-  computeFsLayoutFn: ComputeFsLayoutFn | null;
-  applyGridLayoutFn: ((cols: number, cellH: number) => void) | null;
-  isFullscreen: (() => boolean) | null;
-  onMetadataFailure: ((event: { clip: Clip; error: unknown }) => void) | null;
-  updateCount?: () => void;
-  onSelectionChange?: (selectedClipId: string | null, selectedClipIds: string[]) => void;
-  onOrderChange?: (orderedClipIds: string[]) => void;
-  onOpenClip?: (clipId: string) => void;
-  onRemoveSelected?: (orderedClipIds: string[]) => void;
-  onContextMenu?: NonNullable<ClipCollectionGridControllerOptions['onContextMenu']>;
-  doc: Document;
-  currentCollection: ClipSequence | null;
-  selectedClipIds: Set<string>;
-  dragSourceCardId: string | null;
-  hiddenCards: ClipCard[];
-  currentAppliedCols: number | null;
-  pendingMetadataRelayout: boolean;
-  activeCacheKey: string | null;
-  gridViewCache: Map<string, GridViewCacheEntry>;
-  metadataTracker: GridVideoMetadataTracker;
+  private grid: HTMLElement;
+  private gridRoot: HTMLElement | null;
+  private toolbar: HTMLElement | null;
+  private readonly getAvailableHeight?: () => number;
+  private fullscreenSlots = 12;
+  private cancelPendingRotation: (() => void) | null = null;
+  private formatClipLabel: ClipLabelFormatterFn;
+  private layoutRules: Pick<DisplayLayoutRules, 'computeBestGrid' | 'computeFullscreenLayout'> | null;
+  private isFullscreen: (() => boolean) | null;
+  private onMetadataFailure: ((event: { clip: Clip; error: unknown }) => void) | null;
+  private updateCount?: () => void;
+  private onSelectionChange?: (selectedClipId: string | null, selectedClipIds: string[]) => void;
+  private onOrderChange?: (orderedClipIds: string[]) => void;
+  private onOpenClip?: (clipId: string) => void;
+  private onRemoveSelected?: (orderedClipIds: string[]) => void;
+  private onContextMenu?: NonNullable<ClipCollectionGridControllerOptions['onContextMenu']>;
+  private doc: Document;
+  private currentCollection: ClipSequence | null;
+  private selectedClipIds: Set<string>;
+  private dragSourceCardId: string | null;
+  private hiddenCards: ClipCard[];
+  private currentAppliedCols: number | null;
+  private pendingMetadataRelayout: boolean;
+  private activeCacheKey: string | null;
+  private gridViewCache: Map<string, GridViewCacheEntry>;
+  private metadataTracker: GridVideoMetadataTracker;
+  private readonly coordinateWorkspaceLayout: boolean;
+  private readonly previewPlayback = new GridPreviewPlaybackController();
+  private workspaceBounds: { width: number; height: number } | null = null;
 
   constructor(options: ClipCollectionGridControllerOptions = {}) {
     if (!options.grid) throw new Error('A grid element is required.');
     this.grid = options.grid;
     this.gridRoot = options.gridRoot ?? this.grid?.parentElement ?? null;
     this.toolbar = options.toolbar ?? null;
-    this.fullscreenState = options.fullscreenState ?? null;
-    this.formatClipLabel = options.formatLabel ?? formatLabel;
-    this.computeBestGridFn = options.computeBestGrid ?? null;
-    this.computeFsLayoutFn = options.computeFsLayout ?? null;
-    this.applyGridLayoutFn = options.applyGridLayout ?? null;
+    this.getAvailableHeight = options.getAvailableHeight;
+    this.coordinateWorkspaceLayout = options.coordinateWorkspaceLayout ?? false;
+    const defaultLabelFormatter = new ClipLabelFormatter();
+    this.formatClipLabel = options.formatLabel ?? defaultLabelFormatter.formatLabel.bind(defaultLabelFormatter);
+    this.layoutRules = options.layoutRules ?? null;
     this.isFullscreen = options.isFullscreen ?? null;
     this.onMetadataFailure = options.onMetadataFailure ?? null;
     this.updateCount = options.updateCount;
@@ -412,7 +323,7 @@ export class ClipCollectionGridController {
     this.pendingMetadataRelayout = false;
     this.activeCacheKey = null;
     this.gridViewCache = new Map();
-    this.metadataTracker = options.metadataTracker ?? createGridVideoMetadataTracker({
+    this.metadataTracker = options.metadataTracker ?? new GridVideoMetadataTracker({
       onComplete: () => this.onMetadataComplete(),
       onFailure: ({ clip, error }) => this.onMetadataFailure?.({ clip, error }),
       debounceMs: options.metadataRelayoutDebounceMs ?? 0,
@@ -432,7 +343,6 @@ export class ClipCollectionGridController {
     this.getPrevClip = this.getPrevClip.bind(this);
     this.getOrderedClipIds = this.getOrderedClipIds.bind(this);
     this.getCardCount = this.getCardCount.bind(this);
-    this.getGridElement = this.getGridElement.bind(this);
     this.areTitlesHidden = this.areTitlesHidden.bind(this);
     this.setTitlesHidden = this.setTitlesHidden.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -446,60 +356,49 @@ export class ClipCollectionGridController {
     this.invalidateAllViews = this.invalidateAllViews.bind(this);
     this.retagActiveView = this.retagActiveView.bind(this);
 
-    ensureClipCollectionGridStyles(this.doc);
+    this.ensureStyles();
     this.gridRoot?.classList.add('clip-collection-grid-root');
     this.grid?.classList.add('clip-collection-grid');
     this.gridRoot?.addEventListener('contextmenu', this.onGridContextMenu);
   }
 
-  hiddenCardBuffer(): ClipCard[] {
-    return this.fullscreenState?.hiddenCards || this.hiddenCards;
+  private hiddenCardBuffer(): ClipCard[] {
+    return this.hiddenCards;
   }
 
-  replaceHiddenCards(nextHiddenCards: ClipCard[]): void {
-    if (this.fullscreenState?.hiddenCards) this.fullscreenState.hiddenCards = nextHiddenCards;
-    else this.hiddenCards = nextHiddenCards;
+  private replaceHiddenCards(nextHiddenCards: ClipCard[]): void {
+    this.hiddenCards = nextHiddenCards;
   }
 
-  normalizedCacheKey(cacheKey: string | null | undefined): string | null {
+  private normalizedCacheKey(cacheKey: string | null | undefined): string | null {
     const key = String(cacheKey || '').trim();
     return key || null;
   }
 
-  createCacheEntry(): GridViewCacheEntry {
-    const container = this.doc.createElement('div');
-    copyGridSurfaceAttributes(this.grid, container);
-    return {
-      container: container as ClipCard,
-      collection: null,
-      signature: '',
-    };
-  }
-
-  setActiveGridElement(nextGrid: HTMLElement | null): void {
+  private setActiveGridElement(nextGrid: HTMLElement | null): void {
     if (!nextGrid || nextGrid === this.grid) {
       this.grid?.classList.add('clip-collection-grid');
       if (this.grid?.id !== 'grid') this.grid.id = 'grid';
-      showGridSurface(this.grid);
+      this.showGridSurface(this.grid);
       return;
     }
     if (this.grid?.id === 'grid') this.grid.removeAttribute('id');
-    hideGridSurface(this.grid);
+    this.hideGridSurface(this.grid);
     nextGrid.id = 'grid';
-    showGridSurface(nextGrid);
+    this.showGridSurface(nextGrid);
     nextGrid.classList.add('clip-collection-grid');
     this.grid = nextGrid;
   }
 
-  createActiveGridElement(): HTMLElement {
+  private createActiveGridElement(): HTMLElement {
     const nextGrid = this.doc.createElement('div');
-    copyGridSurfaceAttributes(this.grid, nextGrid);
+    this.copyGridSurfaceAttributes(this.grid, nextGrid);
     this.gridRoot?.appendChild(nextGrid);
     this.setActiveGridElement(nextGrid);
     return nextGrid;
   }
 
-  stashActiveGrid(): void {
+  private stashActiveGrid(): void {
     if (!this.activeCacheKey || !this.currentCollection) return;
     let entry = this.gridViewCache.get(this.activeCacheKey);
     if (!entry) {
@@ -511,21 +410,21 @@ export class ClipCollectionGridController {
       this.gridViewCache.set(this.activeCacheKey, entry);
     }
     this.fsRestore();
-    removeDragOverClasses(this.grid);
-    cancelGridPreviewPlayback(this.grid);
+    this.removeDragOverClasses(this.grid);
+    this.previewPlayback.cancel(this.grid);
     entry.collection = this.currentCollection;
-    entry.signature = clipSequenceSignature(this.currentCollection);
+    entry.signature = this.clipSequenceSignature(this.currentCollection);
     entry.container = this.grid as ClipCard;
-    hideGridSurface(entry.container);
+    this.hideGridSurface(entry.container);
     if (entry.container.id === 'grid') entry.container.removeAttribute('id');
   }
 
-  cachedEntryFor(cacheKey: string | null, collection: ClipSequence | null): GridViewCacheEntry | null {
+  private cachedEntryFor(cacheKey: string | null, collection: ClipSequence | null): GridViewCacheEntry | null {
     const key = this.normalizedCacheKey(cacheKey);
     if (!key) return null;
     const entry = this.gridViewCache.get(key);
     if (!entry) return null;
-    if (entry.signature !== clipSequenceSignature(collection)) {
+    if (entry.signature !== this.clipSequenceSignature(collection)) {
       this.clearCacheEntry(entry);
       this.gridViewCache.delete(key);
       return null;
@@ -533,15 +432,16 @@ export class ClipCollectionGridController {
     return entry;
   }
 
-  clearCacheEntry(entry: GridViewCacheEntry | null): void {
+  private clearCacheEntry(entry: GridViewCacheEntry | null): void {
     if (!entry) return;
-    clearGridCards(entry.container);
+    if (entry.container === this.grid) this.fsRestore();
+    this.clearGridCards(entry.container);
     if (entry.container !== this.grid) entry.container.remove();
     entry.collection = null;
     entry.signature = '';
   }
 
-  showCachedEntry(
+  private showCachedEntry(
     cacheKey: string | null,
     collection: ClipSequence,
     entry: GridViewCacheEntry,
@@ -559,7 +459,7 @@ export class ClipCollectionGridController {
     this.updateCount?.();
     this.recomputeLayout();
     this.notifySelectionChange();
-    scheduleGridPreviewPlayback(this.grid);
+    this.previewPlayback.schedule(this.grid);
   }
 
   invalidateView(cacheKey: string | null | undefined): void {
@@ -581,13 +481,33 @@ export class ClipCollectionGridController {
     this.activeCacheKey = this.normalizedCacheKey(cacheKey);
   }
 
-  readGridMetrics(mode: 'normal' | 'fullscreen'): { gap: number; availW: number; availH: number } {
+  focusSelectedClip(): boolean {
+    const card = this.getCardByClipId(this.getSelectedClipIds()[0]);
+    if (!card) return false;
+    card.tabIndex = -1;
+    card.focus({ preventScroll: true });
+    return true;
+  }
+
+  private allocatedHeight(): number | undefined {
+    if (this.getAvailableHeight) return this.getAvailableHeight();
+    if (this.coordinateWorkspaceLayout && this.gridRoot) {
+      const style = (this.doc.defaultView || window).getComputedStyle(this.gridRoot);
+      return Math.max(0, this.gridRoot.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0));
+    }
+    return undefined;
+  }
+
+  private readGridMetrics(mode: 'normal' | 'fullscreen'): { gap: number; availW: number; availH: number } {
     const view = this.doc.defaultView || window;
     const gap = parseFloat(view.getComputedStyle(this.grid).gap) || 0;
-    const availW = this.gridRoot?.clientWidth || this.grid?.clientWidth || 0;
+    const rootWidth = this.gridRoot?.clientWidth || this.grid?.clientWidth || 0;
+    const padding = this.coordinateWorkspaceLayout && this.gridRoot ? view.getComputedStyle(this.gridRoot) : null;
+    const horizontalPadding = padding ? (parseFloat(padding.paddingLeft) || 0) + (parseFloat(padding.paddingRight) || 0) : 0;
+    const availW = mode === 'normal' && this.workspaceBounds ? this.workspaceBounds.width : rootWidth - horizontalPadding;
     const toolbarHeight = this.toolbar ? Math.ceil(this.toolbar.getBoundingClientRect().height) : 0;
     const chromeH = mode === 'fullscreen' ? 28 : toolbarHeight + 28;
-    const availH = view.innerHeight - chromeH;
+    const availH = mode === 'normal' && this.workspaceBounds ? this.workspaceBounds.height : mode === 'normal' ? this.allocatedHeight() ?? view.innerHeight - chromeH : view.innerHeight - chromeH;
     return { gap, availW, availH };
   }
 
@@ -595,12 +515,13 @@ export class ClipCollectionGridController {
     const count = this.grid.children.length;
     if (count === 0) {
       this.grid.style.gridTemplateColumns = 'repeat(1, 1fr)';
+      if (this.coordinateWorkspaceLayout) this.grid.style.height = '0px';
       this.currentAppliedCols = 1;
       return;
     }
-    if (!this.computeBestGridFn || !this.applyGridLayoutFn) return;
+    if (!this.layoutRules) return;
     const { gap, availW, availH } = this.readGridMetrics('normal');
-    const { cols, cellH } = this.computeBestGridFn({
+    const { cols, cellH } = this.layoutRules.computeBestGrid({
       count,
       availW,
       availH,
@@ -609,21 +530,23 @@ export class ClipCollectionGridController {
     });
     const previousCols = Number.parseInt(this.grid.dataset.layoutCols || '', 10);
     const previousCellH = Number.parseFloat(this.grid.dataset.layoutCellHeight || '');
-    if (previousCols === cols && Number.isFinite(previousCellH) && Math.abs(previousCellH - cellH) < 0.5) {
+    if (!this.coordinateWorkspaceLayout && previousCols === cols && Number.isFinite(previousCellH) && Math.abs(previousCellH - cellH) < 0.5) {
       this.currentAppliedCols = cols;
       return;
     }
-    this.applyGridLayoutFn(cols, cellH);
+    if (this.coordinateWorkspaceLayout) this.applyWorkspaceGrid(cols, cellH, availW, gap);
+    else this.applyGridLayout(cols, cellH);
     this.grid.dataset.layoutCols = String(cols);
     this.grid.dataset.layoutCellHeight = String(cellH);
     this.currentAppliedCols = cols;
   }
 
-  recomputeGridIfColumnCountChanged(): void {
+  private recomputeGridIfColumnCountChanged(): void {
+    if (this.coordinateWorkspaceLayout) { this.computeGrid(); return; }
     const count = this.grid.children.length;
-    if (count === 0 || !this.computeBestGridFn || !this.applyGridLayoutFn) return;
+    if (count === 0 || !this.layoutRules) return;
     const { gap, availW, availH } = this.readGridMetrics('normal');
-    const { cols, cellH } = this.computeBestGridFn({
+    const { cols, cellH } = this.layoutRules.computeBestGrid({
       count,
       availW,
       availH,
@@ -631,14 +554,15 @@ export class ClipCollectionGridController {
       clips: this.currentCollection?.orderedClips?.() || [],
     });
     if (cols === this.currentAppliedCols) return;
-    this.applyGridLayoutFn(cols, cellH);
+    this.applyGridLayout(cols, cellH);
     this.grid.dataset.layoutCols = String(cols);
     this.grid.dataset.layoutCellHeight = String(cellH);
     this.currentAppliedCols = cols;
   }
 
-  onMetadataComplete(): void {
+  private onMetadataComplete(): void {
     if (this.isFullscreen?.()) return;
+    if (this.workspaceBounds) return;
     if (this.dragSourceCardId) {
       this.pendingMetadataRelayout = true;
       return;
@@ -646,34 +570,39 @@ export class ClipCollectionGridController {
     this.recomputeGridIfColumnCountChanged();
   }
 
-  fsComputeAndApplyGrid(): FullscreenGridLayout {
-    if (!this.computeFsLayoutFn || !this.applyGridLayoutFn) {
+  private fsComputeAndApplyGrid(): FullscreenGridLayout {
+    if (this.coordinateWorkspaceLayout) this.clearWorkspaceGrid();
+    if (!this.layoutRules) {
       return { cols: 1, rows: Math.max(1, this.grid.children.length), cellH: 0, targetVisible: this.grid.children.length };
     }
     const { gap, availW, availH } = this.readGridMetrics('fullscreen');
-    const best = this.computeFsLayoutFn({
-      slots: this.fullscreenState?.slots ?? 2,
+    const best = this.layoutRules.computeFullscreenLayout({
+      slots: this.fullscreenSlots,
       availW,
       availH,
       gap,
     });
-    this.applyGridLayoutFn(best.cols, best.cellH);
+    this.applyGridLayout(best.cols, best.cellH);
     return best;
   }
 
   fsRestore(): void {
+    this.cancelRotation();
+    for (const card of this.gridCards(this.grid)) card.style.order = '';
     const cardsToRestore = this.hiddenCardBuffer();
     if (cardsToRestore.length === 0) return;
     cardsToRestore.forEach((element) => {
       element.style.display = '';
+      this.previewPlayback.start(element.querySelector('video'));
     });
     this.replaceHiddenCards([]);
   }
 
-  fsApplySlots(): void {
+  fsApplySlots(slots = this.fullscreenSlots): void {
+    this.fullscreenSlots = slots;
     this.fsRestore();
     const best = this.fsComputeAndApplyGrid();
-    const children = gridCards(this.grid);
+    const children = this.gridCards(this.grid);
     const total = children.length;
     if (total === 0) return;
 
@@ -682,6 +611,7 @@ export class ClipCollectionGridController {
     const nextHiddenCards: ClipCard[] = [];
     for (let i = 0; i < total; i += 1) {
       const element = children[i];
+      element.style.order = String(i);
       if (i === total - 1) {
         element.style.display = '';
         continue;
@@ -697,6 +627,41 @@ export class ClipCollectionGridController {
     this.replaceHiddenCards(nextHiddenCards);
   }
 
+  cancelRotation(): void {
+    this.cancelPendingRotation?.();
+  }
+
+  rotateVisibleClip(): void {
+    if (!this.isFullscreen?.() || this.cancelPendingRotation) return;
+    const cards = this.gridCards(this.grid);
+    const visible = cards.filter(card => card.style.display !== 'none');
+    const hidden = this.hiddenCards;
+    if (visible.length <= 1 || hidden.length === 0) return;
+    const outgoing = visible[Math.floor(Math.random() * visible.length)];
+    const incoming = hidden[Math.floor(Math.random() * hidden.length)];
+    const video = outgoing.querySelector('video');
+    if (!video) return;
+    const finish = () => {
+      this.cancelRotation();
+      if (!this.isFullscreen?.()) return;
+      const outgoingOrder = outgoing.style.order;
+      outgoing.style.order = incoming.style.order;
+      incoming.style.order = outgoingOrder;
+      outgoing.style.display = 'none';
+      incoming.style.display = '';
+      this.hiddenCards = hidden.filter(card => card !== incoming).concat(outgoing);
+      this.previewPlayback.start(incoming.querySelector('video'));
+    };
+    const previousLoop = video.loop;
+    this.cancelPendingRotation = () => {
+      video.removeEventListener('ended', finish);
+      video.loop = previousLoop;
+      this.cancelPendingRotation = null;
+    };
+    video.loop = false;
+    video.addEventListener('ended', finish, { once: true });
+  }
+
   recomputeLayout(): void {
     if (this.isFullscreen?.()) {
       this.fsApplySlots();
@@ -705,7 +670,51 @@ export class ClipCollectionGridController {
     this.computeGrid();
   }
 
-  notifySelectionChange(): void {
+  beginWorkspaceResize(width: number, durationMs: number): void {
+    if (!this.coordinateWorkspaceLayout || this.isFullscreen?.()) return;
+    const padding = this.gridRoot ? getComputedStyle(this.gridRoot) : null;
+    const horizontalPadding = padding ? (parseFloat(padding.paddingLeft) || 0) + (parseFloat(padding.paddingRight) || 0) : 0;
+    this.workspaceBounds = { width: Math.max(0, width - horizontalPadding), height: this.allocatedHeight() ?? this.readGridMetrics('normal').availH };
+    // A reversal samples the current visual card positions through CSS transitions.
+    this.grid.style.setProperty('--grid-duration', `${durationMs}ms`);
+    this.computeGrid();
+  }
+
+  endWorkspaceResize(): void {
+    this.workspaceBounds = null;
+    this.grid.style.setProperty('--grid-duration', '0ms');
+    this.recomputeLayout();
+  }
+
+  private applyGridLayout(cols: number, cellHeight: number): void {
+    this.grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    for (const card of this.gridCards(this.grid)) card.style.height = `${cellHeight}px`;
+  }
+
+  private applyWorkspaceGrid(cols: number, cellHeight: number, width: number, gap: number): void {
+    this.grid.classList.add('workspace-grid');
+    const cellWidth = Math.max(0, (width - (cols - 1) * gap) / cols);
+    Array.from(this.grid.children).forEach((card, index) => {
+      if (!(card instanceof HTMLElement)) return;
+      Object.assign(card.style, {
+        left: `${index % cols * (cellWidth + gap)}px`, top: `${Math.floor(index / cols) * (cellHeight + gap)}px`,
+        width: `${cellWidth}px`, height: `${cellHeight}px`,
+      });
+    });
+    const rows = Math.ceil(this.grid.children.length / cols);
+    this.grid.style.height = `${Math.max(0, rows * (cellHeight + gap) - gap)}px`;
+  }
+
+  private clearWorkspaceGrid(): void {
+    this.workspaceBounds = null;
+    this.grid.classList.remove('workspace-grid');
+    this.grid.style.height = '';
+    for (const card of Array.from(this.grid.children)) {
+      if (card instanceof HTMLElement) { card.style.left = ''; card.style.top = ''; card.style.width = ''; }
+    }
+  }
+
+  private notifySelectionChange(): void {
     this.onSelectionChange?.(this.getSelectedClipId(), this.getSelectedClipIds());
   }
 
@@ -718,9 +727,9 @@ export class ClipCollectionGridController {
     return this.getOrderedClipIds().filter((clipId) => this.selectedClipIds.has(clipId));
   }
 
-  getCardByClipId(clipId: string | null | undefined): ClipCard | null {
+  private getCardByClipId(clipId: string | null | undefined): ClipCard | null {
     if (!clipId) return null;
-    return gridCards(this.grid).find((card) => card.dataset.clipId === clipId) || null;
+    return this.gridCards(this.grid).find((card) => card.dataset.clipId === clipId) || null;
   }
 
   getClipById(clipId: string | null | undefined): Clip | null {
@@ -734,10 +743,10 @@ export class ClipCollectionGridController {
     return this.currentCollection?.orderedClips?.().find((clip) => clip.name === normalizedName)?.id || null;
   }
 
-  getAdjacentClip(clipId: string | null | undefined, offset: number): Clip | null {
+  private getAdjacentClip(clipId: string | null | undefined, offset: number): Clip | null {
     const currentCard = this.getCardByClipId(clipId);
     if (!currentCard) return null;
-    const orderedCards = gridCards(this.grid);
+    const orderedCards = this.gridCards(this.grid);
     const currentIndex = orderedCards.indexOf(currentCard);
     if (currentIndex === -1) return null;
     const adjacentCard = orderedCards[currentIndex + offset];
@@ -753,17 +762,13 @@ export class ClipCollectionGridController {
   }
 
   getOrderedClipIds(): string[] {
-    return gridCards(this.grid)
+    return this.gridCards(this.grid)
       .map((card) => card.dataset.clipId)
       .filter((clipId): clipId is string => !!clipId);
   }
 
   getCardCount(): number {
     return this.grid?.children?.length || 0;
-  }
-
-  getGridElement(): HTMLElement {
-    return this.grid;
   }
 
   areTitlesHidden(): boolean {
@@ -774,8 +779,8 @@ export class ClipCollectionGridController {
     this.gridRoot?.classList.toggle('titles-hidden', !!hidden);
   }
 
-  applySelectionClasses(): void {
-    for (const card of gridCards(this.grid)) {
+  private applySelectionClasses(): void {
+    for (const card of this.gridCards(this.grid)) {
       card.classList.toggle('selected', this.selectedClipIds.has(card.dataset.clipId || ''));
     }
   }
@@ -792,7 +797,7 @@ export class ClipCollectionGridController {
     this.notifySelectionChange();
   }
 
-  selectOnlyCard(card: ClipCard | null | undefined): void {
+  private selectOnlyCard(card: ClipCard | null | undefined): void {
     if (!card) {
       this.clearSelection();
       return;
@@ -802,7 +807,7 @@ export class ClipCollectionGridController {
     this.notifySelectionChange();
   }
 
-  toggleCardSelection(card: ClipCard | null | undefined): void {
+  private toggleCardSelection(card: ClipCard | null | undefined): void {
     const clipId = card?.dataset.clipId || '';
     if (!clipId) return;
     if (this.selectedClipIds.has(clipId)) this.selectedClipIds.delete(clipId);
@@ -811,7 +816,7 @@ export class ClipCollectionGridController {
     this.notifySelectionChange();
   }
 
-  onSelect(card: ClipCard | null | undefined, event: MouseEvent): void {
+  private onSelect(card: ClipCard | null | undefined, event: MouseEvent): void {
     const clipId = card?.dataset.clipId || null;
     if (!clipId) {
       this.clearSelection();
@@ -824,18 +829,17 @@ export class ClipCollectionGridController {
     this.selectOnlyCard(card);
   }
 
-  onDoubleClick(card: ClipCard | null | undefined): void {
+  private onDoubleClick(card: ClipCard | null | undefined): void {
     this.selectOnlyCard(card);
     const clipId = card?.dataset.clipId || null;
     if (clipId) this.onOpenClip?.(clipId);
   }
 
-  onGridContextMenu(event: MouseEvent): void {
+  private onGridContextMenu(event: MouseEvent): void {
     if (!this.onContextMenu) return;
     event.preventDefault();
-    const card = event.target instanceof Element ? asClipCard(event.target.closest('.thumb')) : null;
+    const card = event.target instanceof Element ? this.asClipCard(event.target.closest('.thumb')) : null;
     this.onContextMenu({
-      card,
       point: { x: event.clientX, y: event.clientY },
       selectedClipId: this.getSelectedClipId(),
       selectedClipIds: this.getSelectedClipIds(),
@@ -846,7 +850,7 @@ export class ClipCollectionGridController {
   handleKeyDown(event: KeyboardEvent): boolean {
     if (!this.onRemoveSelected) return false;
     if (!(event?.key === 'Delete' || event?.key === 'Backspace')) return false;
-    if (isEditableTarget(event.target)) return false;
+    if (this.isEditableTarget(event.target)) return false;
     const orderedSelectedClipIds = this.getSelectedClipIds();
     if (orderedSelectedClipIds.length === 0) return false;
     this.onRemoveSelected(orderedSelectedClipIds);
@@ -854,7 +858,7 @@ export class ClipCollectionGridController {
     return true;
   }
 
-  onDragStart(card: ClipCard, event: DragEvent): void {
+  private onDragStart(card: ClipCard, event: DragEvent): void {
     this.dragSourceCardId = card.id;
     card.classList.add('dragging');
     if (!event.dataTransfer) return;
@@ -862,27 +866,27 @@ export class ClipCollectionGridController {
     event.dataTransfer.setData('text/plain', card.id);
   }
 
-  onDragEnd(card: ClipCard): void {
+  private onDragEnd(card: ClipCard): void {
     card.classList.remove('dragging');
     this.dragSourceCardId = null;
-    removeDragOverClasses(this.grid);
+    this.removeDragOverClasses(this.grid);
     if (this.pendingMetadataRelayout) {
       this.pendingMetadataRelayout = false;
       this.onMetadataComplete();
     }
   }
 
-  onDragOver(card: ClipCard, event: DragEvent): void {
+  private onDragOver(card: ClipCard, event: DragEvent): void {
     event.preventDefault();
     if (!this.dragSourceCardId || card.id === this.dragSourceCardId) return;
     card.classList.add('drag-over');
   }
 
-  onDragLeave(card: ClipCard): void {
+  private onDragLeave(card: ClipCard): void {
     card.classList.remove('drag-over');
   }
 
-  onDrop(card: ClipCard, event: DragEvent): void {
+  private onDrop(card: ClipCard, event: DragEvent): void {
     event.preventDefault();
     card.classList.remove('drag-over');
     const srcId = event.dataTransfer?.getData('text/plain') || this.dragSourceCardId;
@@ -896,7 +900,7 @@ export class ClipCollectionGridController {
     this.recomputeLayout();
   }
 
-  onLoadedMetadata(
+  private onLoadedMetadata(
     card: ClipCard,
     video: HTMLVideoElement,
     clip: Clip,
@@ -907,11 +911,11 @@ export class ClipCollectionGridController {
       videoWidth: video.videoWidth,
       videoHeight: video.videoHeight,
     });
-    setCardDuration(card, clip.durationSec, this.formatClipLabel);
+    this.setCardDuration(card, clip.durationSec);
     this.metadataTracker.markLoaded(metadataToken, clip);
   }
 
-  onMetadataError(
+  private onMetadataError(
     _card: ClipCard,
     video: HTMLVideoElement,
     clip: Clip,
@@ -921,6 +925,7 @@ export class ClipCollectionGridController {
   }
 
   renderCollection(collection: ClipSequence | null | undefined, { cacheKey = null }: { cacheKey?: string | null } = {}): void {
+    this.fsRestore();
     const nextCacheKey = this.normalizedCacheKey(cacheKey);
     const previousSelection = new Set(this.selectedClipIds);
     const isSwitchingFromCachedView = nextCacheKey && nextCacheKey !== this.activeCacheKey && this.activeCacheKey !== null;
@@ -942,7 +947,7 @@ export class ClipCollectionGridController {
       this.createActiveGridElement();
     }
 
-    clearGridCards(this.grid);
+    this.clearGridCards(this.grid);
     this.activeCacheKey = nextCacheKey;
     if (!this.currentCollection) {
       this.metadataTracker.reset();
@@ -957,7 +962,7 @@ export class ClipCollectionGridController {
     const fragment = this.doc.createDocumentFragment();
     for (const clip of orderedClips) {
       const mediaSource = clip.mediaSource || URL.createObjectURL(clip.file);
-      const card = createThumbCard({
+      const card = this.createThumbCard({
         doc: this.doc,
         clip,
         cardId: `card-${clip.id}`,
@@ -992,8 +997,8 @@ export class ClipCollectionGridController {
 
   destroy(): void {
     this.fsRestore();
-    cancelGridPreviewPlayback(this.grid);
-    clearGridCards(this.grid);
+    this.previewPlayback.cancel(this.grid);
+    this.clearGridCards(this.grid);
     this.invalidateAllViews();
     this.selectedClipIds = new Set();
     this.dragSourceCardId = null;
@@ -1002,8 +1007,3 @@ export class ClipCollectionGridController {
     this.metadataTracker.reset();
   }
 }
-
-export function createClipCollectionGridController(options: ClipCollectionGridControllerOptions): ClipCollectionGridController {
-  return new ClipCollectionGridController(options);
-}
-

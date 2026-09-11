@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from 'vitest';
-import { createPipelineSession } from '../../src/app/pipeline-session.js';
+import { PipelineSession } from '../../src/app/pipeline-session.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 
@@ -10,7 +10,7 @@ function videoFile(name) {
 
 describe('pipeline session', () => {
   test('loads a pipeline selection and resolves clips from the active sequence', () => {
-    const session = createPipelineSession();
+    const session = new PipelineSession();
     const pipeline = new Pipeline({
       folderName: 'clips',
       videoFiles: [videoFile('alpha.mp4'), videoFile('bravo.mp4')],
@@ -27,7 +27,7 @@ describe('pipeline session', () => {
   });
 
   test('tracks dirty state for active collection order changes', () => {
-    const session = createPipelineSession();
+    const session = new PipelineSession();
     const collection = Collection.fromFilename({
       filename: 'review.txt',
       orderedClipNames: ['alpha.mp4', 'bravo.mp4'],
@@ -51,7 +51,7 @@ describe('pipeline session', () => {
   });
 
   test('inserts a created clip after the source clip in collection mode', () => {
-    const session = createPipelineSession();
+    const session = new PipelineSession();
     const collection = Collection.fromFilename({
       filename: 'review.txt',
       orderedClipNames: ['alpha.mp4', 'bravo.mp4'],
@@ -78,7 +78,7 @@ describe('pipeline session', () => {
   });
 
   test('does not add a created clip when the collection source clip is missing', () => {
-    const session = createPipelineSession();
+    const session = new PipelineSession();
     const collection = Collection.fromFilename({
       filename: 'review.txt',
       orderedClipNames: ['alpha.mp4'],
@@ -103,7 +103,7 @@ describe('pipeline session', () => {
   });
 
   test('inserts a created clip into pipeline mode and rematerializes the active sequence', () => {
-    const session = createPipelineSession();
+    const session = new PipelineSession();
     const pipeline = new Pipeline({
       folderName: 'clips',
       videoFiles: [videoFile('alpha.mp4')],
@@ -118,4 +118,16 @@ describe('pipeline session', () => {
     expect(session.currentClipSequence).toBe(result.sequence);
     expect(session.hasDirtyClipSequenceChanges).toBe(false);
   });
+});
+
+test('dirty state reflects mutations through an escaped active sequence', () => {
+  const session = new PipelineSession();
+  session.loadPipeline(new Pipeline({ videoFiles: [videoFile('alpha.mp4'), videoFile('bravo.mp4')] }));
+  const sequence = session.currentClipSequence;
+  sequence.replaceOrder(['clip_2', 'clip_1']);
+  expect(session.hasDirtyClipSequenceChanges).toBe(true);
+  sequence.replaceOrder(['clip_1', 'clip_2']);
+  expect(session.hasDirtyClipSequenceChanges).toBe(false);
+  sequence.remove('clip_1');
+  expect(session.hasDirtyClipSequenceChanges).toBe(true);
 });

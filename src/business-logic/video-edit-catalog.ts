@@ -24,7 +24,7 @@ const CHISEL_ICON = Object.freeze({
   ],
 });
 
-const VIDEO_EDIT_CATALOG: readonly VideoEdit[] = Object.freeze([
+const VIDEO_EDITS: readonly VideoEdit[] = Object.freeze([
   Object.freeze({
     id: 'loopify',
     label: 'Loopify',
@@ -35,35 +35,30 @@ const VIDEO_EDIT_CATALOG: readonly VideoEdit[] = Object.freeze([
   }),
 ]);
 
-function normalizedSourceBaseName(sourceName = ''): string {
-  const trimmedName = String(sourceName || '').trim();
-  if (!trimmedName) return '';
-  const extensionIndex = trimmedName.lastIndexOf('.');
-  if (extensionIndex <= 0) return trimmedName;
-  return trimmedName.slice(0, extensionIndex);
-}
+export class VideoEditCatalog {
+  listZoomEdits(): VideoEdit[] {
+    return VIDEO_EDITS.filter(edit => edit.availability === 'zoom');
+  }
 
-export function listVideoEdits(): VideoEdit[] {
-  return VIDEO_EDIT_CATALOG.slice();
-}
+  findById(editId: string): VideoEdit | null {
+    const normalizedEditId = String(editId || '').trim().toLowerCase();
+    return VIDEO_EDITS.find(edit => edit.id === normalizedEditId) || null;
+  }
 
-export function listZoomVideoEdits(): VideoEdit[] {
-  return VIDEO_EDIT_CATALOG.filter((edit) => edit.availability === 'zoom');
-}
+  preferredOutputFilename({
+    sourceName = '',
+    editId = '',
+  }: { sourceName?: string; editId?: string } = {}): string {
+    const edit = this.findById(editId);
+    if (!edit) return '';
+    const baseName = this.normalizedSourceBaseName(sourceName);
+    return baseName ? `${baseName}-${edit.filenameSuffix}.mp4` : '';
+  }
 
-export function getVideoEditById(editId: string): VideoEdit | null {
-  const normalizedEditId = String(editId || '').trim().toLowerCase();
-  return VIDEO_EDIT_CATALOG.find((edit) => edit.id === normalizedEditId) || null;
+  private normalizedSourceBaseName(sourceName: string): string {
+    const trimmedName = String(sourceName || '').trim();
+    if (!trimmedName) return '';
+    const extensionIndex = trimmedName.lastIndexOf('.');
+    return extensionIndex <= 0 ? trimmedName : trimmedName.slice(0, extensionIndex);
+  }
 }
-
-export function preferredVideoEditFilename({
-  sourceName = '',
-  editId = '',
-}: { sourceName?: string; editId?: string } = {}): string {
-  const edit = getVideoEditById(editId);
-  if (!edit) return '';
-  const baseName = normalizedSourceBaseName(sourceName);
-  if (!baseName) return '';
-  return `${baseName}-${edit.filenameSuffix}.mp4`;
-}
-

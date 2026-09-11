@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from 'vitest';
-import { Clip } from '../../src/domain/clip.js';
+import { Clip, ClipFileSnapshot } from '../../src/domain/clip.js';
 import { ClipSequence } from '../../src/domain/clip-sequence.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
@@ -388,3 +388,20 @@ describe('clip and sequence models', () => {
   });
 });
 
+
+test('clip snapshots source metadata on construction and replacement', () => {
+  const file = Object.assign(new File(['video'], 'alpha.mp4'), { mediaSource: 'file:///a.mp4', path: 'C:/a.mp4' });
+  const clip = new Clip({ id: 'a', file });
+  expect(clip.file).toBeInstanceOf(ClipFileSnapshot);
+  file.mediaSource = 'file:///b.mp4';
+  file.path = 'C:/b.mp4';
+  expect(clip.file.mediaSource).toBe('file:///a.mp4');
+  expect(clip.file.path).toBe('C:/a.mp4');
+  expect(Reflect.set(clip.file, 'mediaSource', 'file:///c.mp4')).toBe(false);
+  expect(clip.mediaSource).toBe(clip.file.mediaSource);
+  expect(clip.file.size).toBe(file.size);
+  clip.replaceFile(file);
+  file.mediaSource = 'file:///d.mp4';
+  expect(clip.mediaSource).toBe('file:///b.mp4');
+  expect(clip.file.mediaSource).toBe('file:///b.mp4');
+});

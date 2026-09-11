@@ -124,6 +124,13 @@ test.describe('Electron runtime migration', () => {
     await expect(page.locator('#count')).toHaveText('2 clips');
     await expect(page.locator('#activeCollectionName')).toHaveValue('__pipeline__');
     await expect(page).toHaveTitle('clips');
+    await expect(page.locator('#globalAppBar #activityIndicatorBtn')).toBeVisible();
+    await expect(page.locator('#screenCommandHost #pickBtn')).toBeVisible();
+    await expect(page.locator('#appScreenSelector')).toBeVisible();
+    await expect.poll(() => page.locator('#gridWrap').evaluate(el => {
+      const rect = el.getBoundingClientRect();
+      return rect.height > 0 && rect.bottom <= innerHeight + 1;
+    })).toBe(true);
   });
 
   test('switches between saved collections in Electron', async () => {
@@ -227,8 +234,12 @@ test.describe('Electron runtime migration', () => {
 
     await page.keyboard.press('F');
     await expect(page.locator('body')).toHaveClass(/fs-active/);
+    await expect(page.locator('#globalAppBar')).toBeHidden();
+    await expect(page.locator('#screenCommandHost')).toBeHidden();
     await page.keyboard.press('F');
     await expect(page.locator('body')).not.toHaveClass(/fs-active/);
+    await expect(page.locator('#globalAppBar')).toBeVisible();
+    await expect(page.locator('#screenCommandHost')).toBeVisible();
   });
 
   test('runs Loopify end to end from zoom mode and keeps collection changes unsaved', async () => {

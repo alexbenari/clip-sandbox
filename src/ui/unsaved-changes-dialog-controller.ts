@@ -4,14 +4,10 @@ type DialogHandlers = {
   onCancel?: (() => void) | null;
 };
 
-function isDialogOpen(dialog: HTMLDialogElement | null): boolean {
-  return !!(dialog?.open || dialog?.hasAttribute?.('open'));
-}
-
 export class UnsavedChangesDialogController {
-  dialog: HTMLDialogElement | null;
-  messageEl: HTMLElement | null;
-  handlers: DialogHandlers;
+  private readonly dialog: HTMLDialogElement | null;
+  private readonly messageEl: HTMLElement | null;
+  private handlers: DialogHandlers;
 
   constructor({
     dialog,
@@ -48,7 +44,7 @@ export class UnsavedChangesDialogController {
   }
 
   isOpen(): boolean {
-    return isDialogOpen(this.dialog);
+    return this.isDialogOpen();
   }
 
   resetHandlers(): void {
@@ -87,8 +83,8 @@ export class UnsavedChangesDialogController {
     this.cancelFlow();
     return true;
   }
-}
 
-export function createUnsavedChangesDialogController(options?: ConstructorParameters<typeof UnsavedChangesDialogController>[0]): UnsavedChangesDialogController {
-  return new UnsavedChangesDialogController(options);
+  private isDialogOpen(): boolean {
+    return !!(this.dialog?.open || this.dialog?.hasAttribute('open'));
+  }
 }

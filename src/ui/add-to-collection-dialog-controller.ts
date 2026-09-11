@@ -1,9 +1,3 @@
-import {
-  saveAsNewNameRequiredText,
-  saveAsNewInvalidNameText,
-  collectionAlreadyExistsText,
-} from '../app/app-text.js';
-import { Collection } from '../domain/collection.js';
 import type { Pipeline } from '../domain/pipeline.js';
 
 export type AddToCollectionChoice = {
@@ -17,37 +11,21 @@ export type AddToCollectionDestination =
   | { kind: 'existing'; collectionFilename: string | null };
 
 export class AddToCollectionDialogController {
-  dialog: HTMLDialogElement | null;
-  destinationSelect: HTMLSelectElement | null;
-  newCollectionNameLabel: HTMLElement | null;
-  newCollectionNameInput: HTMLInputElement | null;
-  errorMessageEl: HTMLElement | null;
-  confirmBtn: HTMLButtonElement | null;
-  cancelBtn: HTMLButtonElement | null;
-  newChoiceValue: string;
-  validateNewName: (name: string) => string;
-  onConfirm: (destination: AddToCollectionDestination) => void;
-  onCancel: () => void;
-  doc: Document;
-  hasSelection: boolean;
-  externalError: string;
-  choiceByValue: Map<string, AddToCollectionChoice>;
-
-  static validationErrorText(code: string): string {
-    if (code === 'required') return saveAsNewNameRequiredText();
-    if (code === 'illegal-chars') return saveAsNewInvalidNameText();
-    if (code === 'already-exists') return collectionAlreadyExistsText();
-    return '';
-  }
-
-  static validateName({ name = '', pipeline = null }: { name?: string; pipeline?: Pipeline | null } = {}): string {
-    let validationCode: string = Collection.validateCollectionName(name).code;
-    if (!validationCode) {
-      const candidateFilename = Collection.filenameFromCollectionName(name || '');
-      if (pipeline?.getCollectionByFilename(candidateFilename)) validationCode = 'already-exists';
-    }
-    return AddToCollectionDialogController.validationErrorText(validationCode);
-  }
+  private readonly dialog: HTMLDialogElement | null;
+  private readonly destinationSelect: HTMLSelectElement | null;
+  private readonly newCollectionNameLabel: HTMLElement | null;
+  private readonly newCollectionNameInput: HTMLInputElement | null;
+  private readonly errorMessageEl: HTMLElement | null;
+  private readonly confirmBtn: HTMLButtonElement | null;
+  private readonly cancelBtn: HTMLButtonElement | null;
+  private readonly newChoiceValue: string;
+  private readonly validateNewName: (name: string) => string;
+  private readonly onConfirm: (destination: AddToCollectionDestination) => void;
+  private readonly onCancel: () => void;
+  private readonly doc: Document;
+  private hasSelection: boolean;
+  private externalError: string;
+  private choiceByValue: Map<string, AddToCollectionChoice>;
 
   static buildChoices({ pipeline = null, activeCollectionFilename = '' }: { pipeline?: Pipeline | null; activeCollectionFilename?: string } = {}): AddToCollectionChoice[] {
     if (!pipeline) return [];

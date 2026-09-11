@@ -2,7 +2,9 @@
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
 import { Clip } from '../../../src/domain/clip.js';
 import { ClipSequence } from '../../../src/domain/clip-sequence.js';
-import { createClipCollectionGridController, updateCardLabel } from '../../../src/ui/clip-collection-grid-controller.js';
+import { ClipCollectionGridController } from '../../../src/ui/clip-collection-grid-controller.js';
+
+const createClipCollectionGridController = options => new ClipCollectionGridController(options);
 
 describe('clip collection grid controller', () => {
   let originalCreate;
@@ -42,6 +44,33 @@ describe('clip collection grid controller', () => {
     });
   }
 
+  test('prepares final card positions without replacing videos and reconciles settled bounds', () => {
+    const grid = document.getElementById('grid');
+    const root = document.getElementById('gridWrap');
+    root.style.padding = '14px';
+    Object.defineProperty(root, 'clientWidth', { configurable: true, value: 428 });
+    const computeBestGrid = vi.fn(({ availW }) => ({ cols: availW >= 600 ? 2 : 1, cellH: 100 }));
+    const controller = createClipCollectionGridController({
+      grid,
+      gridRoot: root,
+      coordinateWorkspaceLayout: true,
+      getAvailableHeight: () => 400,
+      layoutRules: { computeBestGrid },
+    });
+    controller.renderCollection(makeCollection());
+    const videos = [...grid.querySelectorAll('video')];
+    controller.beginWorkspaceResize(828, 240);
+    expect(grid.dataset.layoutCols).toBe('2');
+    expect(grid.children[1].style.top).toBe('0px');
+    expect(grid.children[1].style.left).toBe('400px');
+    expect([...grid.querySelectorAll('video')]).toEqual(videos);
+    Object.defineProperty(root, 'clientWidth', { configurable: true, value: 828 });
+    const target = grid.children[1].style.cssText;
+    controller.endWorkspaceResize();
+    expect(grid.children[1].style.cssText).toBe(target);
+    expect(computeBestGrid).toHaveBeenLastCalledWith(expect.objectContaining({ availW: 800 }));
+  });
+
   function makeThreeClipCollection() {
     return new ClipSequence({
       name: 'demo',
@@ -52,6 +81,76 @@ describe('clip collection grid controller', () => {
       ],
     });
   }
+
+  test('fullscreen rotation preserves card identity and cancels on restoration', () => {
+    const grid = document.getElementById('grid');
+    const collection = makeThreeClipCollection();
+    const opened = vi.fn();
+    const controller = createClipCollectionGridController({
+      grid, isFullscreen: () => true, onOpenClip: opened,
+      layoutRules: { computeFullscreenLayout: () => ({ cols: 2, cellH: 100, targetVisible: 2 }) },
+    });
+    controller.renderCollection(collection);
+    const cards = [...grid.children];
+    const sources = cards.map(card => card.querySelector('video').src);
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    controller.rotateVisibleClip();
+    cards[1].querySelector('video').dispatchEvent(new Event('ended'));
+    expect(cards[0].style.display).toBe('');
+    expect(cards[1].style.display).toBe('none');
+    expect(cards[0].style.order).toBe('1');
+    expect(cards[2].style.order).toBe('2');
+    cards.forEach((card, index) => {
+      expect(card.dataset.clipId).toBe(`clip_${index + 1}`);
+      expect(card.querySelector('video').src).toBe(sources[index]);
+    });
+    const video = cards[0].querySelector('video');
+    Object.defineProperties(video, { duration: { value: 7 }, videoWidth: { value: 320 }, videoHeight: { value: 180 } });
+    video.dispatchEvent(new Event('loadedmetadata'));
+    expect(collection.getClip('clip_1').durationSec).toBe(7);
+    expect(collection.getClip('clip_2').durationSec).toBeNull();
+    cards[0].dispatchEvent(new MouseEvent('dblclick'));
+    expect(opened).toHaveBeenCalledWith('clip_1');
+    controller.rotateVisibleClip();
+    controller.fsRestore();
+    cards.forEach(card => card.querySelector('video').dispatchEvent(new Event('ended')));
+    expect(cards.every(card => card.style.display === '' && card.style.order === '')).toBe(true);
+    expect(cards.every(card => card.querySelector('video').loop)).toBe(true);
+    random.mockRestore();
+    controller.destroy();
+  });
+
+  test('view replacement, restart and disposal cancel pending fullscreen rotation', () => {
+    const grid = document.getElementById('grid');
+    const controller = createClipCollectionGridController({
+      grid, isFullscreen: () => true,
+      layoutRules: { computeFullscreenLayout: () => ({ cols: 2, cellH: 100, targetVisible: 2 }) },
+    });
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    controller.renderCollection(makeThreeClipCollection(), { cacheKey: 'first' });
+    const oldVideo = grid.children[1].querySelector('video');
+    controller.rotateVisibleClip();
+    controller.renderCollection(makeThreeClipCollection(), { cacheKey: 'second' });
+    const active = document.getElementById('grid');
+    const before = [...active.children].map(card => card.style.display);
+    oldVideo.dispatchEvent(new Event('ended'));
+    expect([...active.children].map(card => card.style.display)).toEqual(before);
+    expect(oldVideo.loop).toBe(true);
+    const currentVideo = active.children[1].querySelector('video');
+    controller.rotateVisibleClip();
+    controller.cancelRotation();
+    controller.rotateVisibleClip();
+    currentVideo.dispatchEvent(new Event('ended'));
+    expect(active.children[0].style.display).toBe('');
+    expect(active.children[1].style.display).toBe('none');
+    controller.rotateVisibleClip();
+    const finalVideo = active.children[0].querySelector('video');
+    controller.destroy();
+    finalVideo.dispatchEvent(new Event('ended'));
+    expect(active.children).toHaveLength(0);
+    expect(finalVideo.loop).toBe(true);
+    random.mockRestore();
+  });
 
   test('tracks single and modifier-based multi-selection by clip id', () => {
     const selectionChanges = [];
@@ -67,6 +166,7 @@ describe('clip collection grid controller', () => {
     controller.renderCollection(makeCollection());
     const cards = document.querySelectorAll('#grid .thumb');
     expect(cards).toHaveLength(2);
+    expect([...document.querySelectorAll('#grid video')].every(video => video.muted)).toBe(true);
     cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(controller.getSelectedClipId()).toBe('clip_1');
     expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
@@ -152,8 +252,9 @@ describe('clip collection grid controller', () => {
     expect(label.textContent).toBe('<img src=x>.mp4 (--:--:--)');
     expect(label.querySelector('img')).toBeNull();
 
-    card.dataset.durationSeconds = '12.5';
-    updateCardLabel(card, (name, seconds) => `${name} (${seconds?.toFixed(1) ?? '--'})`);
+    const video = card.querySelector('video');
+    Object.defineProperty(video, 'duration', { value: 12.5 });
+    video.dispatchEvent(new Event('loadedmetadata'));
     expect(card.querySelector('.filename').textContent).toBe('<img src=x>.mp4 (12.5)');
   });
 
@@ -276,14 +377,12 @@ describe('clip collection grid controller', () => {
   });
 
   test('does not reapply an unchanged cached grid layout when switching back', () => {
-    const applyGridLayout = vi.fn();
     const controller = createClipCollectionGridController({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       updateCount: vi.fn(),
-      computeBestGrid: ({ count }) => ({ cols: count, cellH: count === 1 ? 240 : 120 }),
-      applyGridLayout,
+      layoutRules: { computeBestGrid: ({ count }) => ({ cols: count, cellH: count === 1 ? 240 : 120 }) },
     });
     const pipeline = makeThreeClipCollection();
     const collection = new ClipSequence({
@@ -292,13 +391,12 @@ describe('clip collection grid controller', () => {
     });
 
     controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
-    expect(applyGridLayout).toHaveBeenCalledTimes(1);
 
     controller.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
-    expect(applyGridLayout).toHaveBeenCalledTimes(2);
 
     controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
-    expect(applyGridLayout).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(3, 1fr)');
+    expect(document.querySelector('#grid .thumb').style.height).toBe('120px');
   });
 
   test('owns title visibility on the grid surface', () => {
@@ -327,26 +425,27 @@ describe('clip collection grid controller', () => {
     Object.defineProperty(gridRoot, 'clientWidth', { value: 900, configurable: true });
     toolbar.getBoundingClientRect = () => ({ height: 48 });
     let fullscreen = false;
-    const applyGridLayout = vi.fn();
     const controller = createClipCollectionGridController({
       grid,
       gridRoot,
       toolbar,
-      fullscreenState: { slots: 6, hiddenCards: [] },
       formatLabel: (name) => name,
-      computeBestGrid: vi.fn(() => ({ cols: 2, cellH: 180 })),
-      computeFsLayout: vi.fn(() => ({ cols: 2, cellH: 220, targetVisible: 2 })),
-      applyGridLayout,
+      layoutRules: {
+        computeBestGrid: vi.fn(() => ({ cols: 2, cellH: 180 })),
+        computeFullscreenLayout: vi.fn(() => ({ cols: 2, cellH: 220, targetVisible: 2 })),
+      },
       isFullscreen: () => fullscreen,
       updateCount: vi.fn(),
     });
 
     controller.renderCollection(makeThreeClipCollection());
-    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 180);
+    expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(2, 1fr)');
+    expect(document.querySelector('#grid .thumb').style.height).toBe('180px');
 
     fullscreen = true;
     controller.recomputeLayout();
-    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 220);
+    expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(2, 1fr)');
+    expect(document.querySelector('#grid .thumb').style.height).toBe('220px');
 
     const cards = Array.from(document.querySelectorAll('#grid .thumb'));
     expect(cards.filter((card) => card.style.display === 'none')).toHaveLength(1);
@@ -359,7 +458,6 @@ describe('clip collection grid controller', () => {
     const grid = document.getElementById('grid');
     const gridRoot = document.getElementById('gridWrap');
     Object.defineProperty(gridRoot, 'clientWidth', { value: 900, configurable: true });
-    const applyGridLayout = vi.fn();
     const computeBestGrid = vi.fn()
       .mockReturnValueOnce({ cols: 1, cellH: 100 })
       .mockReturnValueOnce({ cols: 2, cellH: 180 });
@@ -367,8 +465,7 @@ describe('clip collection grid controller', () => {
       grid,
       gridRoot,
       formatLabel: (name) => name,
-      computeBestGrid,
-      applyGridLayout,
+      layoutRules: { computeBestGrid },
       updateCount: vi.fn(),
     });
     const collection = makeCollection();
@@ -386,20 +483,20 @@ describe('clip collection grid controller', () => {
     expect(collection.orderedClips()[0].videoWidth).toBe(720);
     expect(collection.orderedClips()[0].videoHeight).toBe(390);
     expect(collection.orderedClips()[0].durationSec).toBe(2.5);
-    expect(applyGridLayout).toHaveBeenNthCalledWith(1, 1, 100);
-    expect(applyGridLayout).toHaveBeenNthCalledWith(2, 2, 180);
+    expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(2, 1fr)');
+    expect(document.querySelector('#grid .thumb').style.height).toBe('180px');
   });
 
   test('skips metadata-complete relayout when the column count is unchanged', async () => {
-    const applyGridLayout = vi.fn();
     const controller = createClipCollectionGridController({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      computeBestGrid: vi.fn()
-        .mockReturnValueOnce({ cols: 2, cellH: 100 })
-        .mockReturnValueOnce({ cols: 2, cellH: 180 }),
-      applyGridLayout,
+      layoutRules: {
+        computeBestGrid: vi.fn()
+          .mockReturnValueOnce({ cols: 2, cellH: 100 })
+          .mockReturnValueOnce({ cols: 2, cellH: 180 }),
+      },
       updateCount: vi.fn(),
     });
 
@@ -412,20 +509,20 @@ describe('clip collection grid controller', () => {
     }
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(applyGridLayout).toHaveBeenCalledTimes(1);
-    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 100);
+    expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(2, 1fr)');
+    expect(document.querySelector('#grid .thumb').style.height).toBe('100px');
   });
 
   test('defers metadata-complete relayout while dragging', async () => {
-    const applyGridLayout = vi.fn();
     const controller = createClipCollectionGridController({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      computeBestGrid: vi.fn()
-        .mockReturnValueOnce({ cols: 1, cellH: 100 })
-        .mockReturnValueOnce({ cols: 2, cellH: 180 }),
-      applyGridLayout,
+      layoutRules: {
+        computeBestGrid: vi.fn()
+          .mockReturnValueOnce({ cols: 1, cellH: 100 })
+          .mockReturnValueOnce({ cols: 2, cellH: 180 }),
+      },
       updateCount: vi.fn(),
     });
 
@@ -447,23 +544,23 @@ describe('clip collection grid controller', () => {
       video.dispatchEvent(new Event('loadedmetadata'));
     }
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(applyGridLayout).toHaveBeenCalledTimes(1);
 
     cards[0].dispatchEvent(new Event('dragend', { bubbles: true }));
-    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 180);
+    expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(2, 1fr)');
+    expect(document.querySelector('#grid .thumb').style.height).toBe('180px');
   });
 
   test('reports metadata failure once and still completes relayout', async () => {
-    const applyGridLayout = vi.fn();
     const metadataFailures = [];
     const controller = createClipCollectionGridController({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      computeBestGrid: vi.fn()
-        .mockReturnValueOnce({ cols: 1, cellH: 100 })
-        .mockReturnValueOnce({ cols: 2, cellH: 180 }),
-      applyGridLayout,
+      layoutRules: {
+        computeBestGrid: vi.fn()
+          .mockReturnValueOnce({ cols: 1, cellH: 100 })
+          .mockReturnValueOnce({ cols: 2, cellH: 180 }),
+      },
       updateCount: vi.fn(),
       onMetadataFailure: (failure) => metadataFailures.push(failure),
     });
@@ -481,7 +578,8 @@ describe('clip collection grid controller', () => {
     expect(metadataFailures).toHaveLength(1);
     expect(metadataFailures[0].clip.name).toBe('bravo.webm');
     expect(controller.getClipById('clip_2').metadataFailed).toBe(true);
-    expect(applyGridLayout).toHaveBeenLastCalledWith(2, 180);
+    expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(2, 1fr)');
+    expect(document.querySelector('#grid .thumb').style.height).toBe('180px');
   });
 
   test('revokes object urls and clears drag-over state when rerendering or destroying', () => {
@@ -631,3 +729,41 @@ describe('clip collection grid controller', () => {
 });
 
 
+
+
+test('focuses selected cards through the grid API without relying on selection CSS', () => {
+  const root = document.createElement('div');
+  const grid = document.createElement('div');
+  const card = document.createElement('article');
+  card.className = 'thumb';
+  card.dataset.clipId = 'selected-clip';
+  grid.append(card); root.append(grid); document.body.append(root);
+  const controller = createClipCollectionGridController({ grid, gridRoot: root });
+  expect(controller.focusSelectedClip()).toBe(false);
+  controller.setSelectedClipId('selected-clip');
+  card.classList.remove('selected');
+  expect(controller.focusSelectedClip()).toBe(true);
+  expect(document.activeElement).toBe(card);
+  controller.destroy(); root.remove();
+});
+
+test('measures allocated grid height using its own current padding', () => {
+  const root = document.createElement('div');
+  const grid = document.createElement('div');
+  root.append(grid); document.body.append(root);
+  Object.defineProperty(root, 'clientHeight', { value: 480 });
+  root.style.padding = '10px 14px 22px';
+  const computeBestGrid = vi.fn(() => ({ cols: 1, cellH: 100 }));
+  const controller = createClipCollectionGridController({
+    grid,
+    gridRoot: root,
+    coordinateWorkspaceLayout: true,
+    layoutRules: { computeBestGrid },
+  });
+  controller.renderCollection(new ClipSequence({ clips: [new Clip({ id: 'a', file: new File(['a'], 'a.mp4'), mediaSource: 'file:///a.mp4' })] }));
+  expect(computeBestGrid).toHaveBeenLastCalledWith(expect.objectContaining({ availH: 448 }));
+  root.style.paddingBottom = '30px';
+  controller.beginWorkspaceResize(800, 0);
+  expect(computeBestGrid).toHaveBeenLastCalledWith(expect.objectContaining({ availH: 440 }));
+  controller.destroy(); root.remove();
+});

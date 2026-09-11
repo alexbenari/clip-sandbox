@@ -1,7 +1,4 @@
-import {
-  collectionConflictSummaryText,
-  collectionConflictListText,
-} from '../app/app-text.js';
+import type { AppText } from '../app/app-text.js';
 
 type ConflictHandlers = {
   onApply?: (() => void) | null;
@@ -15,24 +12,28 @@ type CollectionConflict = {
 };
 
 export class CollectionConflictController {
-  root: HTMLElement | null;
-  summaryEl: HTMLElement | null;
-  listEl: HTMLElement | null;
-  handlers: ConflictHandlers;
+  private readonly appText: Pick<AppText, 'collectionConflictSummaryText' | 'collectionConflictListText'>;
+  private readonly root: HTMLElement | null;
+  private readonly summaryEl: HTMLElement | null;
+  private readonly listEl: HTMLElement | null;
+  private handlers: ConflictHandlers;
 
   constructor({
+    appText,
     root,
     summaryEl,
     listEl,
     applyBtn,
     cancelBtn,
   }: {
+    appText: Pick<AppText, 'collectionConflictSummaryText' | 'collectionConflictListText'>;
     root?: HTMLElement | null;
     summaryEl?: HTMLElement | null;
     listEl?: HTMLElement | null;
     applyBtn?: HTMLElement | null;
     cancelBtn?: HTMLElement | null;
-  } = {}) {
+  }) {
+    this.appText = appText;
     this.root = root || null;
     this.summaryEl = summaryEl || null;
     this.listEl = listEl || null;
@@ -73,17 +74,13 @@ export class CollectionConflictController {
 
   showConflict(conflict: CollectionConflict | null | undefined, handlers: ConflictHandlers = {}): void {
     this.show({
-      summary: collectionConflictSummaryText(
+      summary: this.appText.collectionConflictSummaryText(
         conflict?.existingNamesInOrder?.length || 0,
         conflict?.missingCount || 0
       ),
-      list: collectionConflictListText(conflict?.missingNames || []),
+      list: this.appText.collectionConflictListText(conflict?.missingNames || []),
       onApply: handlers?.onApply,
       onCancel: handlers?.onCancel,
     });
   }
-}
-
-export function createCollectionConflictController(options?: ConstructorParameters<typeof CollectionConflictController>[0]): CollectionConflictController {
-  return new CollectionConflictController(options);
 }

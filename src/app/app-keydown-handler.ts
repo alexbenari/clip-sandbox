@@ -1,3 +1,14 @@
+import type { ShortcutDescriptor } from '../ui/app-screen.js';
+
+export const COLLECTION_SHORTCUTS: readonly ShortcutDescriptor[] = [
+  { description: 'Open selected clip in Zoom', group: 'Grid', sequences: [['Z']] },
+  { description: 'Remove selection', group: 'Grid', sequences: [['Delete'], ['Backspace']] },
+  { description: 'Toggle audio', group: 'Zoom', sequences: [['A']] },
+  { description: 'Previous clip', group: 'Zoom', sequences: [['Left']] },
+  { description: 'Next clip', group: 'Zoom', sequences: [['Right']] },
+  { description: 'Close Zoom', group: 'Zoom', sequences: [['Escape']] },
+];
+
 type DialogKeyController = {
   isOpen(): boolean;
   handleGlobalKeyDown?: (event: KeyboardEvent) => boolean;
@@ -17,150 +28,99 @@ export type AppKeyDownContext = {
     handleKeyDown(event: KeyboardEvent): unknown;
     getSelectedClipId(): string | null;
   };
-  isEditableTarget(target: EventTarget | null): boolean;
   isFullscreen(): boolean;
   closeZoom(): void;
   browseZoomByOffset(offset: number): void;
   openZoomForClipId(clipId: string | null): void;
 };
 
-type KeyDownRule = {
-  id: string;
-  matches(event: KeyboardEvent): boolean;
-  run(event: KeyboardEvent): void;
-};
+export class AppKeyDownHandler {
+  constructor(private readonly context: AppKeyDownContext) {}
 
-function isPlainKeyPress(event: KeyboardEvent): boolean {
-  return !event.altKey && !event.ctrlKey && !event.metaKey;
-}
+  handle(event: KeyboardEvent): boolean {
+    const context = this.context;
 
-function anyDialogOpen({
-  saveAsNewDialogController,
-  addToCollectionDialogController,
-  deleteFromDiskDialogController,
-  unsavedChangesDialogController,
-}: AppKeyDownContext): boolean {
-  return (
-    saveAsNewDialogController.isOpen()
-    || addToCollectionDialogController.isOpen()
-    || deleteFromDiskDialogController.isOpen()
-    || unsavedChangesDialogController.isOpen()
-  );
-}
+    if (context.saveAsNewDialogController.handleGlobalKeyDown(event)) {
+      event.preventDefault();
+      return true;
+    }
+    if (context.addToCollectionDialogController.isOpen() && event.key === 'Escape') {
+      event.preventDefault();
+      context.addToCollectionDialogController.close();
+      return true;
+    }
+    if (context.deleteFromDiskDialogController.handleGlobalKeyDown(event)) {
+      event.preventDefault();
+      return true;
+    }
+    if (context.unsavedChangesDialogController.handleGlobalKeyDown(event)) {
+      event.preventDefault();
+      return true;
+    }
+    if (event.key === 'Escape' && context.zoomOverlay.isOpen()) {
+      context.closeZoom();
+      event.preventDefault();
+      return true;
+    }
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (context.zoomOverlay.isOpen()) event.preventDefault();
+      else context.gridController.handleKeyDown(event);
+      return true;
+    }
+    if (this.anyDialogOpen()) return true;
+    if (this.isEditableTarget(event.target)) return true;
 
-export function createAppKeyDownHandler(context: AppKeyDownContext): (event: KeyboardEvent) => boolean {
-  const rules: KeyDownRule[] = [
-    {
-      id: 'save-as-new-dialog',
-      matches: (event) => context.saveAsNewDialogController.handleGlobalKeyDown(event),
-      run: (event) => {
-        event.preventDefault();
-      },
-    },
-    {
-      id: 'add-to-collection-escape',
-      matches: (event) => context.addToCollectionDialogController.isOpen() && event.key === 'Escape',
-      run: (event) => {
-        event.preventDefault();
-        context.addToCollectionDialogController.close();
-      },
-    },
-    {
-      id: 'delete-from-disk-dialog',
-      matches: (event) => context.deleteFromDiskDialogController.handleGlobalKeyDown(event),
-      run: (event) => {
-        event.preventDefault();
-      },
-    },
-    {
-      id: 'unsaved-changes-dialog',
-      matches: (event) => context.unsavedChangesDialogController.handleGlobalKeyDown(event),
-      run: (event) => {
-        event.preventDefault();
-      },
-    },
-    {
-      id: 'zoom-escape',
-      matches: (event) => event.key === 'Escape' && context.zoomOverlay.isOpen(),
-      run: (event) => {
-        context.closeZoom();
-        event.preventDefault();
-      },
-    },
-    {
-      id: 'delete-or-backspace',
-      matches: (event) => event.key === 'Delete' || event.key === 'Backspace',
-      run: (event) => {
-        if (context.zoomOverlay.isOpen()) {
-          event.preventDefault();
-          return;
-        }
-        context.gridController.handleKeyDown(event);
-      },
-    },
-    {
-      id: 'dialog-open-blocker',
-      matches: () => anyDialogOpen(context),
-      run: () => {},
-    },
-    {
-      id: 'editable-target-blocker',
-      matches: (event) => context.isEditableTarget(event.target),
-      run: () => {},
-    },
-    {
-      id: 'zoom-close-on-f',
-      matches: (event) =>
-        isPlainKeyPress(event)
-        && context.zoomOverlay.isOpen()
-        && (event.key === 'f' || event.key === 'F'),
-      run: () => {
-        context.closeZoom();
-      },
-    },
-    {
-      id: 'zoom-mute',
-      matches: (event) =>
-        isPlainKeyPress(event)
-        && context.zoomOverlay.isOpen()
-        && (event.key === 'a' || event.key === 'A'),
-      run: (event) => {
-        context.zoomOverlay.toggleMuted();
-        event.preventDefault();
-      },
-    },
-    {
-      id: 'zoom-browse',
-      matches: (event) =>
-        isPlainKeyPress(event)
-        && context.zoomOverlay.isOpen()
-        && (event.key === 'ArrowLeft' || event.key === 'ArrowRight'),
-      run: (event) => {
-        context.browseZoomByOffset(event.key === 'ArrowRight' ? 1 : -1);
-        event.preventDefault();
-      },
-    },
-    {
-      id: 'open-zoom-for-selection',
-      matches: (event) =>
-        isPlainKeyPress(event)
-        && (event.key === 'z' || event.key === 'Z')
-        && !context.zoomOverlay.isOpen()
-        && !context.isFullscreen()
-        && !!context.gridController.getSelectedClipId(),
-      run: (event) => {
-        context.openZoomForClipId(context.gridController.getSelectedClipId());
-        event.preventDefault();
-      },
-    },
-  ];
-
-  return function handleAppKeyDown(event: KeyboardEvent): boolean {
-    for (const rule of rules) {
-      if (!rule.matches(event)) continue;
-      rule.run(event);
+    if (this.isPlainKeyPress(event) && context.zoomOverlay.isOpen() && this.isKey(event, 'f')) {
+      context.closeZoom();
+      return true;
+    }
+    if (this.isPlainKeyPress(event) && context.zoomOverlay.isOpen() && this.isKey(event, 'a')) {
+      context.zoomOverlay.toggleMuted();
+      event.preventDefault();
+      return true;
+    }
+    if (
+      this.isPlainKeyPress(event)
+      && context.zoomOverlay.isOpen()
+      && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+    ) {
+      context.browseZoomByOffset(event.key === 'ArrowRight' ? 1 : -1);
+      event.preventDefault();
+      return true;
+    }
+    if (
+      this.isPlainKeyPress(event)
+      && this.isKey(event, 'z')
+      && !context.zoomOverlay.isOpen()
+      && !context.isFullscreen()
+      && context.gridController.getSelectedClipId()
+    ) {
+      context.openZoomForClipId(context.gridController.getSelectedClipId());
+      event.preventDefault();
       return true;
     }
     return false;
-  };
+  }
+
+  private anyDialogOpen(): boolean {
+    return (
+      this.context.saveAsNewDialogController.isOpen()
+      || this.context.addToCollectionDialogController.isOpen()
+      || this.context.deleteFromDiskDialogController.isOpen()
+      || this.context.unsavedChangesDialogController.isOpen()
+    );
+  }
+
+  private isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    return !!target.closest('input, textarea, select, [contenteditable], [contenteditable="true"]');
+  }
+
+  private isPlainKeyPress(event: KeyboardEvent): boolean {
+    return !event.altKey && !event.ctrlKey && !event.metaKey;
+  }
+
+  private isKey(event: KeyboardEvent, key: string): boolean {
+    return event.key.toLowerCase() === key;
+  }
 }

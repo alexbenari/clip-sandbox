@@ -2,7 +2,21 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const baseDom = `
-  <header class="toolbar" id="toolbar">
+  <div id="appShell">
+    <header id="globalAppBar">
+      <select id="appScreenSelector" aria-label="App screen" hidden>
+        <option value="collection" selected>Collection</option>
+      </select>
+      <div id="activityIndicatorRoot">
+        <button id="activityIndicatorBtn" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
+        <section id="activityIndicatorPanel" hidden>
+          <ul id="activityIndicatorList"></ul>
+        </section>
+      </div>
+    </header>
+    <div id="workspaceRow">
+      <div id="screenCommandHost">
+        <header class="toolbar" id="toolbar">
     <button id="pickBtn">Browse Folder…</button>
     <div id="orderMenu" data-open="false">
       <button id="orderMenuBtn" aria-expanded="false">Actions</button>
@@ -18,58 +32,58 @@ const baseDom = `
     <select id="activeCollectionName" disabled>
       <option value="">Local Video Grid Reviewer</option>
     </select>
-    <div class="toolbar-status">
-      <span class="count" id="count"></span>
-      <div id="activityIndicatorRoot">
-        <button id="activityIndicatorBtn" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
-        <section id="activityIndicatorPanel" hidden>
-          <ul id="activityIndicatorList"></ul>
-        </section>
-      </div>
+        <div class="toolbar-status">
+          <span class="count" id="count"></span>
+        </div>
+      </header>
     </div>
-  </header>
-  <section id="collectionConflict" hidden>
-    <p id="collectionConflictSummary"></p>
-    <pre id="collectionConflictList"></pre>
-    <button id="applyCollectionConflictBtn">Apply</button>
-    <button id="cancelCollectionConflictBtn">Cancel</button>
-  </section>
-  <section id="saveAsNewDialog" hidden>
-    <input id="saveAsNewNameInput" />
-    <div id="saveAsNewError"></div>
-    <button id="confirmSaveAsNewBtn">Confirm</button>
-    <button id="cancelSaveAsNewBtn">Cancel</button>
-  </section>
-  <dialog id="addToCollectionDialog">
-    <select id="addToCollectionSelect"></select>
-    <label id="addToCollectionNameLabel" hidden>
-      <input id="addToCollectionNameInput" />
-    </label>
-    <div id="addToCollectionError"></div>
-    <button id="confirmAddToCollectionBtn">Confirm</button>
-    <button id="cancelAddToCollectionBtn">Cancel</button>
-  </dialog>
-  <dialog id="unsavedChangesDialog">
-    <p id="unsavedChangesText"></p>
-    <button id="confirmUnsavedChangesBtn">Save</button>
-    <button id="discardUnsavedChangesBtn">Discard</button>
-    <button id="cancelUnsavedChangesBtn">Cancel</button>
-  </dialog>
-  <dialog id="deletePreflightDialog">
-    <p id="deletePreflightText"></p>
-    <button id="confirmDeletePreflightBtn">Save and Continue</button>
-    <button id="discardDeletePreflightBtn">Continue Without Saving</button>
-    <button id="cancelDeletePreflightBtn">Cancel</button>
-  </dialog>
-  <dialog id="deleteFromDiskDialog">
-    <p id="deleteFromDiskSummary"></p>
-    <pre id="deleteFromDiskPreview"></pre>
-    <button id="confirmDeleteFromDiskBtn">Delete</button>
-    <button id="cancelDeleteFromDiskBtn">Cancel</button>
-  </dialog>
-  <div id="clipContextMenu" hidden><div id="clipContextMenuPanel"></div></div>
-  <div id="gridWrap"><div id="grid" style="gap:10px"></div></div>
-  <div id="zoomLayerRoot"></div>
+    <div id="mainScreenHost">
+      <section id="collectionScreen">
+        <section id="collectionConflict" hidden>
+          <p id="collectionConflictSummary"></p>
+          <pre id="collectionConflictList"></pre>
+          <button id="applyCollectionConflictBtn">Apply</button>
+          <button id="cancelCollectionConflictBtn">Cancel</button>
+        </section>
+        <section id="saveAsNewDialog" hidden>
+          <input id="saveAsNewNameInput" />
+          <div id="saveAsNewError"></div>
+          <button id="confirmSaveAsNewBtn">Confirm</button>
+          <button id="cancelSaveAsNewBtn">Cancel</button>
+        </section>
+        <dialog id="addToCollectionDialog">
+          <select id="addToCollectionSelect"></select>
+          <label id="addToCollectionNameLabel" hidden>
+            <input id="addToCollectionNameInput" />
+          </label>
+          <div id="addToCollectionError"></div>
+          <button id="confirmAddToCollectionBtn">Confirm</button>
+          <button id="cancelAddToCollectionBtn">Cancel</button>
+        </dialog>
+        <dialog id="unsavedChangesDialog">
+          <p id="unsavedChangesText"></p>
+          <button id="confirmUnsavedChangesBtn">Save</button>
+          <button id="discardUnsavedChangesBtn">Discard</button>
+          <button id="cancelUnsavedChangesBtn">Cancel</button>
+        </dialog>
+        <dialog id="deletePreflightDialog">
+          <p id="deletePreflightText"></p>
+          <button id="confirmDeletePreflightBtn">Save and Continue</button>
+          <button id="discardDeletePreflightBtn">Continue Without Saving</button>
+          <button id="cancelDeletePreflightBtn">Cancel</button>
+        </dialog>
+        <dialog id="deleteFromDiskDialog">
+          <p id="deleteFromDiskSummary"></p>
+          <pre id="deleteFromDiskPreview"></pre>
+          <button id="confirmDeleteFromDiskBtn">Delete</button>
+          <button id="cancelDeleteFromDiskBtn">Cancel</button>
+        </dialog>
+        <div id="gridWrap"><div id="grid" style="gap:10px"></div></div>
+      </section>
+    </div>
+    <div id="clipContextMenu" hidden><div id="clipContextMenuPanel"></div></div>
+    <div id="zoomLayerRoot"></div>
+  </div>
 `;
 
 function waitFor(assertion, { timeout = 250, interval = 10 } = {}) {
@@ -131,9 +145,16 @@ describe('app controller context menu wiring', () => {
 
   beforeEach(() => {
     vi.resetModules();
+    globalThis.ResizeObserver = class {
+      observe() {}
+      disconnect() {}
+    };
     document.body.innerHTML = baseDom;
     document.title = '';
     window.clipSandboxDesktop = {
+      loadAppSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: false } })),
+      saveAppSettings: vi.fn(async (settings) => ({ ok: true, settings })),
+      choosePipelinesRoot: vi.fn(async () => ({ canceled: true })),
       pickFolder: vi.fn(async () => ({
         canceled: false,
         folderPath: 'C:/clips',
@@ -194,9 +215,42 @@ describe('app controller context menu wiring', () => {
     document.body.innerHTML = '';
   });
 
+  test.each(['dialog', 'zoom', 'save', 'conflict'])('records errors without stealing protected %s focus', async (surface) => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="globalUtilityHost"><section id="keyboardMapPanel"></section></div><button id="keyboardMapBtn">Keyboard shortcuts</button>');
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
+    if (surface === 'zoom') {
+      document.getElementById('pickBtn').click();
+      await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
+    }
+    let rejectPick;
+    window.clipSandboxDesktop.pickFolder = vi.fn(() => new Promise((_resolve, reject) => { rejectPick = reject; }));
+    document.getElementById('pickBtn').click();
+    await waitFor(() => expect(rejectPick).toBeTypeOf('function'));
+    let protectedRoot;
+    if (surface === 'dialog') {
+      protectedRoot = document.getElementById('unsavedChangesDialog');
+      protectedRoot.setAttribute('open', '');
+    } else if (surface === 'zoom') {
+      document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      await waitFor(() => expect(document.getElementById('zoomOverlay')).not.toBeNull());
+      protectedRoot = document.getElementById('zoomOverlay');
+    } else {
+      protectedRoot = document.getElementById(surface === 'save' ? 'saveAsNewDialog' : 'collectionConflict');
+      protectedRoot.hidden = false;
+    }
+    protectedRoot.tabIndex = -1;
+    protectedRoot.focus();
+    rejectPick(new Error('Folder unavailable'));
+    await waitFor(() => expect(document.getElementById('activityIndicatorList').textContent).toContain('Folder unavailable'));
+    expect(document.getElementById('globalUtilityHost').hidden).toBe(true);
+    expect(document.activeElement).toBe(protectedRoot);
+    expect(document.getElementById('activityIndicatorBtn').dataset.state).toBe('error');
+  });
+
   test('right-clicking a selected clip opens the app context menu', async () => {
-    const { initApp } = await import('../../../src/app/app-controller.js');
-    initApp();
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -234,8 +288,8 @@ describe('app controller context menu wiring', () => {
       },
     }));
 
-    const { initApp } = await import('../../../src/app/app-controller.js');
-    initApp();
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -319,8 +373,8 @@ describe('app controller context menu wiring', () => {
       },
     }));
 
-    const { initApp } = await import('../../../src/app/app-controller.js');
-    initApp();
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -376,8 +430,8 @@ describe('app controller context menu wiring', () => {
       code: 'process-failed',
     }));
 
-    const { initApp } = await import('../../../src/app/app-controller.js');
-    initApp();
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -398,8 +452,40 @@ describe('app controller context menu wiring', () => {
     await waitFor(() => {
       expect(document.getElementById('activityIndicatorPanel').hidden).toBe(false);
       expect(document.getElementById('activityIndicatorBtn').dataset.state).toBe('error');
-      expect(document.querySelector('#activityIndicatorList li').textContent).toBe('Loopify failed while generating the output clip.');
+      expect(document.querySelector('#activityIndicatorList li').textContent).toContain('Loopify failed while generating the output clip.');
     });
+  });
+
+  test('reports created output when application update fails and allows another edit', async () => {
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const load = vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    window.clipSandboxDesktop.createVideoEdit = vi.fn(async () => ({ ok: true, createdFile: desktopFile({ name: 'alpha-looped.mp4' }) }));
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    const { ElectronFileSystemService } = await import('../../../src/adapters/electron/electron-file-system-service.js');
+    new AppController().init();
+    document.getElementById('pickBtn').click();
+    await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
+    document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    const conversion = vi.spyOn(ElectronFileSystemService.prototype, 'toRendererFile');
+    conversion.mockImplementationOnce(() => { throw new Error('Output refresh failed'); });
+    const runEdit = async () => {
+      document.getElementById('zoomVideo').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
+      await waitFor(() => expect(document.querySelector('[data-item-id="zoom-edit-loopify"]')).not.toBeNull());
+      document.querySelector('[data-item-id="zoom-edit-loopify"]').click();
+    };
+    await runEdit();
+    await waitFor(() => {
+      expect(document.getElementById('activityIndicatorBtn').dataset.state).toBe('error');
+      expect(document.getElementById('activityIndicatorList').textContent).toContain('output clip was created');
+      expect(document.getElementById('activityIndicatorList').textContent).toContain('alpha-looped.mp4');
+    });
+    await runEdit();
+    await waitFor(() => {
+      expect(window.clipSandboxDesktop.createVideoEdit).toHaveBeenCalledTimes(2);
+      expect(document.getElementById('zoomVideo').dataset.name).toBe('alpha-looped.mp4');
+    });
+    conversion.mockRestore();
+    pause.mockRestore(); load.mockRestore();
   });
 
   test('ignores duplicate Loopify requests while one edit is already running', async () => {
@@ -408,8 +494,8 @@ describe('app controller context menu wiring', () => {
       resolveEdit = resolve;
     }));
 
-    const { initApp } = await import('../../../src/app/app-controller.js');
-    initApp();
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -477,8 +563,8 @@ describe('app controller context menu wiring', () => {
       return { mode: 'saved' };
     });
 
-    const { initApp } = await import('../../../src/app/app-controller.js');
-    initApp();
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -584,8 +670,8 @@ describe('app controller context menu wiring', () => {
       return { mode: 'saved' };
     });
 
-    const { initApp } = await import('../../../src/app/app-controller.js');
-    initApp();
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {

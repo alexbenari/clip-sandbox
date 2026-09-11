@@ -24,8 +24,8 @@ type BrowserFileSystemServiceOptions = {
 };
 
 export class BrowserFileSystemService {
-  win: Window;
-  fileSystemAdapter: FileSystemAdapter;
+  private readonly win: Window;
+  private readonly fileSystemAdapter: FileSystemAdapter;
 
   constructor({
     win = window,

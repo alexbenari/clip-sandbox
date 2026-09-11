@@ -1,0 +1,142 @@
+[
+  {
+    "time": 0.5,
+    "centerWidth": 1028,
+    "cardTop": 412,
+    "cardWidth": 326.65625,
+    "moving": "true"
+  },
+  {
+    "time": 3.299999952316284,
+    "centerWidth": 1019.65625,
+    "cardTop": 410.59375,
+    "cardWidth": 325.921875,
+    "moving": "true"
+  },
+  {
+    "time": 32,
+    "centerWidth": 837.65625,
+    "cardTop": 380.609375,
+    "cardWidth": 310.015625,
+    "moving": "true"
+  },
+  {
+    "time": 67.89999985694885,
+    "centerWidth": 727.0625,
+    "cardTop": 362.390625,
+    "cardWidth": 300.34375,
+    "moving": "true"
+  },
+  {
+    "time": 105.79999995231628,
+    "centerWidth": 673.5,
+    "cardTop": 353.546875,
+    "cardWidth": 295.671875,
+    "moving": "true"
+  },
+  {
+    "time": 139,
+    "centerWidth": 760.625,
+    "cardTop": 381.8125,
+    "cardWidth": 276.90625,
+    "moving": "true"
+  },
+  {
+    "time": 172.79999995231628,
+    "centerWidth": 800.28125,
+    "cardTop": 397.390625,
+    "cardWidth": 266.578125,
+    "moving": "true"
+  },
+  {
+    "time": 212.59999990463257,
+    "centerWidth": 814.234375,
+    "cardTop": 403.859375,
+    "cardWidth": 262.28125,
+    "moving": "true"
+  },
+  {
+    "time": 244.29999995231628,
+    "centerWidth": 820.453125,
+    "cardTop": 407.015625,
+    "cardWidth": 260.1875,
+    "moving": "true"
+  },
+  {
+    "time": 280.7000000476837,
+    "centerWidth": 823.3125,
+    "cardTop": 408.5625,
+    "cardWidth": 259.15625,
+    "moving": "true"
+  },
+  {
+    "time": 318.39999985694885,
+    "centerWidth": 824,
+    "cardTop": 409.203125,
+    "cardWidth": 258.734375,
+    "moving": "false"
+  },
+  {
+    "time": 350.59999990463257,
+    "centerWidth": 824,
+    "cardTop": 409.328125,
+    "cardWidth": 258.65625,
+    "moving": "false"
+  },
+  {
+    "time": 384.7000000476837,
+    "centerWidth": 824,
+    "cardTop": 409.328125,
+    "cardWidth": 258.65625,
+    "moving": "false"
+  },
+  {
+    "time": 419.39999985694885,
+    "centerWidth": 824,
+    "cardTop": 409.328125,
+    "cardWidth": 258.65625,
+    "moving": "false"
+  },
+  {
+    "time": 455.2000000476837,
+    "centerWidth": 824,
+    "cardTop": 409.328125,
+    "cardWidth": 258.65625,
+    "moving": "false"
+  },
+  {
+    "time": 491,
+    "centerWidth": 824,
+    "cardTop": 409.328125,
+    "cardWidth": 258.65625,
+    "moving": "false"
+  },
+  {
+    "time": 526.8999998569489,
+    "centerWidth": 824,
+    "cardTop": 409.328125,
+    "cardWidth": 258.65625,
+    "moving": "false"
+  },
+  {
+    "time": 562.5999999046326,
+    "centerWidth": 824,
+    "cardTop": 409.328125,
+    "cardWidth": 258.65625,
+    "moving": "false"
+  },
+  {
+    "time": 598.2000000476837,
+    "centerWidth": 824,
+    "cardTop": 409.328125,
+    "cardWidth": 258.65625,
+    "moving": "false"
+  },
+  {
+    "time": 632.5999999046326,
+    "centerWidth": 824,
+    "cardTop": 409.328125,
+    "cardWidth": 258.65625,
+    "moving": "false"
+  }
+]

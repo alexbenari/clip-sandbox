@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { createContextMenuController } from '../../../src/ui/context-menu-controller.js';
+import { ContextMenuController } from '../../../src/ui/context-menu-controller.js';
 
 describe('context menu controller', () => {
   afterEach(() => {
@@ -15,7 +15,7 @@ describe('context menu controller', () => {
     const root = document.getElementById('root');
     const panel = document.getElementById('panel');
     const trigger = document.getElementById('trigger');
-    const controller = createContextMenuController({ root, panel, document });
+    const controller = new ContextMenuController({ root, panel, document });
     return { root, panel, trigger, controller };
   }
 

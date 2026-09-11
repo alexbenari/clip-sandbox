@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
-import { createZoomOverlayController } from '../../../src/ui/zoom-overlay-controller.js';
+import { ZoomOverlayController } from '../../../src/ui/zoom-overlay-controller.js';
+
+const createZoomOverlayController = options => new ZoomOverlayController(options);
 
 describe('zoom overlay controller', () => {
   let originalPlay;
@@ -22,6 +24,76 @@ describe('zoom overlay controller', () => {
     HTMLMediaElement.prototype.play = originalPlay;
     HTMLMediaElement.prototype.pause = originalPause;
     HTMLMediaElement.prototype.load = originalLoad;
+  });
+
+  test('reports a rejected active playback attempt and duplicate media errors only once', async () => {
+    const failure = new DOMException('Unsupported media', 'NotSupportedError');
+    HTMLMediaElement.prototype.play = vi.fn(() => Promise.reject(failure));
+    const onPlaybackFailure = vi.fn();
+    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), onPlaybackFailure });
+    controller.open({ clipId: 'clip_1', src: 'file:///damaged.mp4', name: 'damaged.mp4' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const video = document.getElementById('zoomVideo');
+    video.dispatchEvent(new Event('error'));
+    video.dispatchEvent(new Event('canplay'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onPlaybackFailure).toHaveBeenCalledOnce();
+    expect(onPlaybackFailure).toHaveBeenCalledWith({ clipId: 'clip_1', name: 'damaged.mp4', error: failure });
+    controller.close();
+  });
+
+  test('ignores closed/replaced videos and superseded attempts without hiding a new clip failure', async () => {
+    const rejectors = [];
+    HTMLMediaElement.prototype.play = vi.fn(() => new Promise((resolve, reject) => rejectors.push(reject)));
+    const onPlaybackFailure = vi.fn();
+    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), onPlaybackFailure });
+    controller.open({ clipId: 'a', src: 'file:///a.mp4', name: 'a.mp4' });
+    const oldVideo = document.getElementById('zoomVideo');
+    controller.close();
+    controller.open({ clipId: 'b', src: 'file:///b.mp4', name: 'b.mp4' });
+    const video = document.getElementById('zoomVideo');
+    video.dispatchEvent(new Event('canplay'));
+    rejectors[0](new DOMException('Closed', 'AbortError'));
+    rejectors[1](new DOMException('Superseded', 'AbortError'));
+    oldVideo.dispatchEvent(new Event('error'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onPlaybackFailure).not.toHaveBeenCalled();
+    const failure = new Error('Current playback failed');
+    rejectors[2](failure);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onPlaybackFailure).toHaveBeenCalledWith({ clipId: 'b', name: 'b.mp4', error: failure });
+    controller.close();
+  });
+
+  test('ignores a late rejected attempt after playback has recovered', async () => {
+    let rejectPlay;
+    HTMLMediaElement.prototype.play = vi.fn(() => new Promise((resolve, reject) => { rejectPlay = reject; }));
+    const onPlaybackFailure = vi.fn();
+    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), onPlaybackFailure });
+    controller.open({ clipId: 'a', src: 'file:///a.mp4', name: 'a.mp4' });
+    document.getElementById('zoomVideo').dispatchEvent(new Event('playing'));
+    rejectPlay(new DOMException('Earlier attempt interrupted', 'AbortError'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onPlaybackFailure).not.toHaveBeenCalled();
+    controller.close();
+  });
+
+  test('reports decode failure after playback starts and permits a report after reopening', () => {
+    const onPlaybackFailure = vi.fn();
+    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), onPlaybackFailure });
+    const clip = { clipId: 'a', src: 'file:///a.mp4', name: 'a.mp4' };
+    controller.open(clip);
+    const video = document.getElementById('zoomVideo');
+    Object.defineProperty(video, 'error', { value: { code: 3, message: 'Decode failed' } });
+    video.dispatchEvent(new Event('error'));
+    video.dispatchEvent(new Event('error'));
+    expect(onPlaybackFailure).toHaveBeenCalledOnce();
+    expect(onPlaybackFailure.mock.calls[0][0].error.message).toContain('Decode failed');
+    controller.close();
+    controller.open(clip);
+    document.getElementById('zoomVideo').dispatchEvent(new Event('error'));
+    expect(onPlaybackFailure).toHaveBeenCalledTimes(2);
+    controller.close();
   });
 
   test('installs default styles when the overlay is first opened', () => {
@@ -79,6 +151,24 @@ describe('zoom overlay controller', () => {
     expect(controller.getCurrentClipId()).toBe('clip_1');
     expect(controller.isOpen()).toBe(true);
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+  });
+
+  test('uses the current preference only when opening a new video', () => {
+    let audioDefault = true;
+    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), document, audioDefault: () => audioDefault });
+    controller.open({ src: 'blob:first', name: 'first.mp4' });
+    const first = document.getElementById('zoomVideo');
+    expect(first.muted).toBe(false);
+    audioDefault = false;
+    expect(first.muted).toBe(false);
+    controller.close();
+    controller.open({ src: 'blob:second', name: 'second.mp4' });
+    expect(document.getElementById('zoomVideo').muted).toBe(true);
+    controller.toggleMuted();
+    expect(document.getElementById('zoomVideo').muted).toBe(false);
+    controller.close();
+    controller.open({ src: 'blob:third', name: 'third.mp4' });
+    expect(document.getElementById('zoomVideo').muted).toBe(true);
   });
 
   test('toggles zoom audio for the current session only', () => {

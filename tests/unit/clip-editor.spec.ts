@@ -2,6 +2,9 @@
 import { describe, expect, test, vi } from 'vitest';
 import { ClipEditor } from '../../src/business-logic/clip-editor.js';
 import { Clip } from '../../src/domain/clip.js';
+import { VideoEditCatalog } from '../../src/business-logic/video-edit-catalog.js';
+
+const videoEditCatalog = new VideoEditCatalog();
 
 describe('clip editor', () => {
   test('builds the Loopify request with the preferred output filename', async () => {
@@ -11,7 +14,7 @@ describe('clip editor', () => {
         createdFile: { name: 'alpha-looped.mp4' },
       })),
     };
-    const editor = new ClipEditor({ runtimeEditingService });
+    const editor = new ClipEditor({ runtimeEditingService, videoEditCatalog });
     const file = new File(['x'], 'alpha.mov', { type: 'video/quicktime' });
     Object.defineProperty(file, 'path', {
       configurable: true,
@@ -43,7 +46,7 @@ describe('clip editor', () => {
 
   test('returns explicit validation failures before reaching the runtime service', async () => {
     const runtimeEditingService = { createVideoEdit: vi.fn() };
-    const editor = new ClipEditor({ runtimeEditingService });
+    const editor = new ClipEditor({ runtimeEditingService, videoEditCatalog });
 
     await expect(editor.createVideoEdit({
       clip: null,

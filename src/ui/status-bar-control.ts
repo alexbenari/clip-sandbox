@@ -20,7 +20,3 @@ export class StatusBarControl {
     }, timeout);
   }
 }
-
-export function createStatusBarControl(options?: ConstructorParameters<typeof StatusBarControl>[0]): StatusBarControl {
-  return new StatusBarControl(options);
-}

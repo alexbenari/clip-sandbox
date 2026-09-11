@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from 'vitest';
-import { createOrderMenuController } from '../../../src/ui/order-menu-controller.js';
+import { OrderMenuController } from '../../../src/ui/order-menu-controller.js';
 
 function setupDom() {
   document.body.innerHTML = `
@@ -23,7 +23,7 @@ function setupDom() {
   const saveAsNewBtn = document.getElementById('saveAsNewBtn');
   const addToCollectionBtn = document.getElementById('addToCollectionBtn');
   const deleteFromDiskBtn = document.getElementById('deleteFromDiskBtn');
-  createOrderMenuController({
+  new OrderMenuController({
     orderMenu,
     orderMenuBtn,
     orderMenuPanel,

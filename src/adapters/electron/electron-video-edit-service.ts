@@ -13,7 +13,7 @@ type ElectronVideoEditWindow = Window & {
 };
 
 export class ElectronVideoEditService {
-  api?: ElectronVideoEditApi | null;
+  private readonly api?: ElectronVideoEditApi | null;
 
   constructor({
     api = (window as ElectronVideoEditWindow).clipSandboxDesktop,
@@ -21,7 +21,7 @@ export class ElectronVideoEditService {
     this.api = api;
   }
 
-  requireApi(): Required<Pick<ElectronVideoEditApi, 'createVideoEdit'>> {
+  private requireApi(): Required<Pick<ElectronVideoEditApi, 'createVideoEdit'>> {
     if (!this.api?.createVideoEdit) {
       throw new Error('Electron video edit API is unavailable.');
     }
@@ -49,8 +49,3 @@ export class ElectronVideoEditService {
     };
   }
 }
-
-export function createElectronVideoEditService(options?: { api?: ElectronVideoEditApi | null }): ElectronVideoEditService {
-  return new ElectronVideoEditService(options);
-}
-

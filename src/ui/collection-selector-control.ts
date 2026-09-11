@@ -1,4 +1,4 @@
-import { activeCollectionText, activeCollectionTabText } from '../app/app-text.js';
+import type { AppText } from '../app/app-text.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
 import type { Collection } from '../domain/collection.js';
 import type { Pipeline } from '../domain/pipeline.js';
@@ -9,33 +9,8 @@ type SelectorChoice = {
   collectionFilename?: string | null;
 };
 
-function selectorOptions(pipeline: Pipeline | null, pipelineSelectionValue: string): SelectorChoice[] {
-  if (!pipeline) return [];
-  return [
-    {
-      label: pipeline.displayLabel(),
-      value: pipelineSelectionValue,
-    },
-    ...pipeline.collections().map((collection) => ({
-      label: collection.collectionName,
-      value: collection.filename,
-      collectionFilename: collection.filename,
-    })),
-  ];
-}
-
-function currentSequenceName({ currentClipSequence = null, activeCollection = null, pipeline = null }: {
-  currentClipSequence?: ClipSequence | null;
-  activeCollection?: Collection | null;
-  pipeline?: Pipeline | null;
-} = {}): string {
-  return currentClipSequence?.name
-    || activeCollection?.collectionName
-    || pipeline?.folderName
-    || '';
-}
-
 export class CollectionSelectorControl {
+  private readonly appText: Pick<AppText, 'activeCollectionText' | 'activeCollectionTabText'>;
   selectEl: HTMLSelectElement | null;
   doc: Document;
   pipelineSelectionValue: string;
@@ -44,18 +19,21 @@ export class CollectionSelectorControl {
   onChange: (event: Event) => void;
 
   constructor({
+    appText,
     selectEl,
     doc = document,
     pipelineSelectionValue = '__pipeline__',
     defaultTitle = '',
     onSelectionRequested = () => {},
   }: {
+    appText: Pick<AppText, 'activeCollectionText' | 'activeCollectionTabText'>;
     selectEl?: HTMLSelectElement | null;
     doc?: Document;
     pipelineSelectionValue?: string;
     defaultTitle?: string;
     onSelectionRequested?: (collectionFilename: string | null) => void;
-  } = {}) {
+  }) {
+    this.appText = appText;
     this.selectEl = selectEl || null;
     this.doc = doc;
     this.pipelineSelectionValue = pipelineSelectionValue;
@@ -83,13 +61,13 @@ export class CollectionSelectorControl {
   } = {}): void {
     if (!(this.selectEl instanceof HTMLSelectElement)) return;
 
-    const sequenceName = currentSequenceName({ currentClipSequence, activeCollection, pipeline });
-    const label = activeCollectionText(sequenceName);
-    const options = selectorOptions(pipeline, this.pipelineSelectionValue);
+    const sequenceName = this.currentSequenceName({ currentClipSequence, activeCollection, pipeline });
+    const label = this.appText.activeCollectionText(sequenceName);
+    const options = this.selectorOptions(pipeline);
     const selectedValue = activeCollection?.filename || this.pipelineSelectionValue;
 
     if (this.doc) {
-      this.doc.title = activeCollectionTabText(sequenceName);
+      this.doc.title = this.appText.activeCollectionTabText(sequenceName);
     }
 
     this.selectEl.innerHTML = '';
@@ -119,8 +97,27 @@ export class CollectionSelectorControl {
   destroy(): void {
     this.selectEl?.removeEventListener('change', this.onChange);
   }
-}
 
-export function createCollectionSelectorControl(options?: ConstructorParameters<typeof CollectionSelectorControl>[0]): CollectionSelectorControl {
-  return new CollectionSelectorControl(options);
+  private selectorOptions(pipeline: Pipeline | null): SelectorChoice[] {
+    if (!pipeline) return [];
+    return [
+      { label: pipeline.displayLabel(), value: this.pipelineSelectionValue },
+      ...pipeline.collections().map(collection => ({
+        label: collection.collectionName,
+        value: collection.filename,
+        collectionFilename: collection.filename,
+      })),
+    ];
+  }
+
+  private currentSequenceName({ currentClipSequence, activeCollection, pipeline }: {
+    currentClipSequence: ClipSequence | null;
+    activeCollection: Collection | null;
+    pipeline: Pipeline | null;
+  }): string {
+    return currentClipSequence?.name
+      || activeCollection?.collectionName
+      || pipeline?.folderName
+      || '';
+  }
 }

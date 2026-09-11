@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test, vi } from 'vitest';
-import { createAppKeyDownHandler } from '../../src/app/app-keydown-handler.js';
+import { AppKeyDownHandler } from '../../src/app/app-keydown-handler.js';
 
 function createContext(overrides = {}) {
   return {
@@ -28,7 +28,6 @@ function createContext(overrides = {}) {
       handleKeyDown: vi.fn(() => false),
       getSelectedClipId: vi.fn(() => null),
     },
-    isEditableTarget: vi.fn(() => false),
     isFullscreen: vi.fn(() => false),
     closeZoom: vi.fn(),
     browseZoomByOffset: vi.fn(),
@@ -45,10 +44,10 @@ describe('app keydown handler', () => {
         isOpen: vi.fn(() => true),
       },
     });
-    const handleKeyDown = createAppKeyDownHandler(context);
+    const handler = new AppKeyDownHandler(context);
     const event = new KeyboardEvent('keydown', { key: 'z', cancelable: true });
 
-    expect(handleKeyDown(event)).toBe(true);
+    expect(handler.handle(event)).toBe(true);
     expect(event.defaultPrevented).toBe(true);
     expect(context.openZoomForClipId).not.toHaveBeenCalled();
   });
@@ -64,10 +63,10 @@ describe('app keydown handler', () => {
         getSelectedClipId: vi.fn(() => 'clip_1'),
       },
     });
-    const handleKeyDown = createAppKeyDownHandler(context);
+    const handler = new AppKeyDownHandler(context);
     const event = new KeyboardEvent('keydown', { key: 'z', cancelable: true });
 
-    expect(handleKeyDown(event)).toBe(true);
+    expect(handler.handle(event)).toBe(true);
     expect(context.openZoomForClipId).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
   });
@@ -75,17 +74,16 @@ describe('app keydown handler', () => {
   test('ignores grid shortcuts for editable targets', () => {
     const input = document.createElement('input');
     const context = createContext({
-      isEditableTarget: vi.fn(() => true),
       gridController: {
         handleKeyDown: vi.fn(() => false),
         getSelectedClipId: vi.fn(() => 'clip_1'),
       },
     });
-    const handleKeyDown = createAppKeyDownHandler(context);
+    const handler = new AppKeyDownHandler(context);
     const event = new KeyboardEvent('keydown', { key: 'z', cancelable: true });
     Object.defineProperty(event, 'target', { value: input });
 
-    expect(handleKeyDown(event)).toBe(true);
+    expect(handler.handle(event)).toBe(true);
     expect(context.openZoomForClipId).not.toHaveBeenCalled();
   });
 
@@ -96,13 +94,13 @@ describe('app keydown handler', () => {
         toggleMuted: vi.fn(),
       },
     });
-    const handleKeyDown = createAppKeyDownHandler(context);
+    const handler = new AppKeyDownHandler(context);
     const event = new KeyboardEvent('keydown', {
       key: 'ArrowRight',
       cancelable: true,
     });
 
-    expect(handleKeyDown(event)).toBe(true);
+    expect(handler.handle(event)).toBe(true);
     expect(context.browseZoomByOffset).toHaveBeenCalledWith(1);
     expect(event.defaultPrevented).toBe(true);
   });
@@ -114,10 +112,10 @@ describe('app keydown handler', () => {
         getSelectedClipId: vi.fn(() => 'clip_7'),
       },
     });
-    const handleKeyDown = createAppKeyDownHandler(context);
+    const handler = new AppKeyDownHandler(context);
     const event = new KeyboardEvent('keydown', { key: 'z', cancelable: true });
 
-    expect(handleKeyDown(event)).toBe(true);
+    expect(handler.handle(event)).toBe(true);
     expect(context.openZoomForClipId).toHaveBeenCalledWith('clip_7');
     expect(event.defaultPrevented).toBe(true);
   });

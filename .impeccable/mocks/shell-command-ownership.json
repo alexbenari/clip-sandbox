@@ -1,0 +1,25 @@
+{
+  "surface": "Application shell",
+  "reviewPending": false,
+  "confirmedDecisions": [
+    "The global app bar owns main-screen navigation, Settings, keyboard-map access, and the combined Activity and Errors surface.",
+    "The existing activity-history concept expands to include persistent errors and technical details; errors do not receive a separate global button.",
+    "The activity/status control is visually separate from the adjacent keyboard-map and Settings controls.",
+    "Each main screen may own an optional command bar in a consistent slot inside the central workspace.",
+    "Side-panel controls remain in their own panel headers.",
+    "The keyboard map is globally accessible and combines Global shortcuts with shortcuts for the active screen.",
+    "Shortcut assignments are presented as read-only keycaps and do not imply remapping.",
+    "Activity history supports wheel and keyboard navigation without permanent scrollbar chrome."
+  ],
+  "illustrativeOnly": [
+    "Exact keyboard assignments",
+    "Example activity and error messages",
+    "Extraction-control internals",
+    "Final names and icons for main screens"
+  ],
+  "artifacts": [
+    "shell-command-levels.png",
+    "activity-errors-open.png",
+    "keyboard-map-open.png"
+  ]
+}

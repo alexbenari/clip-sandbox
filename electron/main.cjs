@@ -3,6 +3,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { readFolderEntries } = require('./folder-entry.cjs');
 const { createVideoEditRuntime } = require('./video-edit-runtime.cjs');
+const { AppSettingsStore } = require('./app-settings-store.cjs');
 
 const WINDOWS_INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000]/;
 const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
@@ -30,6 +31,11 @@ function createMainWindow() {
     width: 1440,
     height: 900,
     show: true,
+    // Keep the native caption buttons; --native-frame is the independent fallback.
+    ...(process.platform === 'win32' && !process.argv.includes('--native-frame') ? {
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { color: '#0f172a', symbolColor: '#e5e7eb', height: 51 },
+    } : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -60,6 +66,15 @@ function validateTopLevelFilename(filename) {
 
 function registerIpc() {
   const videoEditRuntime = createVideoEditRuntime();
+  const settingsStore = new AppSettingsStore(app.getPath('userData'));
+  ipcMain.handle('clip-sandbox:load-app-settings', () => settingsStore.load());
+  ipcMain.handle('clip-sandbox:save-app-settings', (_event, settings) => settingsStore.save(settings));
+  ipcMain.handle('clip-sandbox:choose-pipelines-root', async event => {
+    try {
+      const selectedPath = await pickFolderFromDialog(BrowserWindow.fromWebContents(event.sender));
+      return selectedPath ? { path: selectedPath } : { canceled: true };
+    } catch (error) { return { error: error instanceof Error ? error.message : 'Could not choose a folder.' }; }
+  });
 
   ipcMain.handle('clip-sandbox:pick-folder', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);

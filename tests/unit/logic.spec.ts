@@ -1,12 +1,15 @@
 // @ts-nocheck
 import { describe, it, expect } from 'vitest';
 import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
-import { niceNum } from '../../src/app/app-text.js';
-import { formatDuration } from '../../src/ui/clip-collection-grid-controller.js';
-import {
-  computeBestGrid,
-  computeFsLayout,
-} from '../../src/ui/display-layout-rules.js';
+import { AppText } from '../../src/app/app-text.js';
+import { ClipLabelFormatter } from '../../src/ui/clip-label-formatter.js';
+import { DisplayLayoutRules } from '../../src/ui/display-layout-rules.js';
+
+const appText = new AppText();
+const displayLayoutRules = new DisplayLayoutRules();
+const clipLabelFormatter = new ClipLabelFormatter();
+const computeBestGrid = displayLayoutRules.computeBestGrid.bind(displayLayoutRules);
+const computeFsLayout = displayLayoutRules.computeFullscreenLayout.bind(displayLayoutRules);
 
 describe('video helpers', () => {
   const pipelineFactory = new PipelineFactory();
@@ -49,14 +52,14 @@ describe('video helpers', () => {
 
 describe('formatting', () => {
   it('formats numbers nicely', () => {
-    expect(niceNum(1234)).toBe('1,234');
+    expect(appText.niceNum(1234)).toBe('1,234');
   });
 
   it('formats durations as hh:mm:ss', () => {
-    expect(formatDuration(0)).toBe('00:00:00');
-    expect(formatDuration(61)).toBe('00:01:01');
-    expect(formatDuration(3661.6)).toBe('01:01:02');
-    expect(formatDuration('bad')).toBe('--:--:--');
+    expect(clipLabelFormatter.formatDuration(0)).toBe('00:00:00');
+    expect(clipLabelFormatter.formatDuration(61)).toBe('00:01:01');
+    expect(clipLabelFormatter.formatDuration(3661.6)).toBe('01:01:02');
+    expect(clipLabelFormatter.formatDuration('bad')).toBe('--:--:--');
   });
 });
 

@@ -1,4 +1,4 @@
-import { collectionLoadedText, loadedVideosText } from '../app/app-text.js';
+import type { AppText } from '../app/app-text.js';
 import type { Pipeline } from '../domain/pipeline.js';
 
 type StatusControl = {
@@ -6,12 +6,19 @@ type StatusControl = {
 };
 
 export class LoadStatusControl {
+  private readonly appText: Pick<AppText, 'collectionLoadedText' | 'loadedVideosText'>;
   statusBarControl?: StatusControl | null;
 
   constructor({
+    appText,
     statusControl,
     statusBarControl = statusControl,
-  }: { statusControl?: StatusControl | null; statusBarControl?: StatusControl | null } = {}) {
+  }: {
+    appText: Pick<AppText, 'collectionLoadedText' | 'loadedVideosText'>;
+    statusControl?: StatusControl | null;
+    statusBarControl?: StatusControl | null;
+  }) {
+    this.appText = appText;
     this.statusBarControl = statusBarControl;
   }
 
@@ -19,11 +26,13 @@ export class LoadStatusControl {
     if (pipeline?.videoNames?.().length === 0) {
       return 'No video files found in the selected folder.';
     }
-    return loadedVideosText(clipCount);
+    return this.appText.loadedVideosText(clipCount);
   }
 
   selectionLoadText({ isPipelineMode = true, clipCount = 0 }: { isPipelineMode?: boolean; clipCount?: number } = {}): string {
-    return isPipelineMode ? loadedVideosText(clipCount) : collectionLoadedText(clipCount);
+    return isPipelineMode
+      ? this.appText.loadedVideosText(clipCount)
+      : this.appText.collectionLoadedText(clipCount);
   }
 
   showInitialLoadStatus({ pipeline = null, clipCount = 0, timeout = 2500 }: { pipeline?: Pipeline | null; clipCount?: number; timeout?: number } = {}): void {
@@ -33,8 +42,4 @@ export class LoadStatusControl {
   showSelectionLoadStatus({ isPipelineMode = true, clipCount = 0, timeout = 2500 }: { isPipelineMode?: boolean; clipCount?: number; timeout?: number } = {}): void {
     this.statusBarControl?.show(this.selectionLoadText({ isPipelineMode, clipCount }), timeout);
   }
-}
-
-export function createLoadStatusControl(options?: ConstructorParameters<typeof LoadStatusControl>[0]): LoadStatusControl {
-  return new LoadStatusControl(options);
 }

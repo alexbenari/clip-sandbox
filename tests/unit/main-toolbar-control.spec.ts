@@ -1,6 +1,9 @@
 // @ts-nocheck
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MainToolbarControl } from '../../src/ui/main-toolbar-control.js';
+import { AppText } from '../../src/app/app-text.js';
+
+const appText = new AppText(value => String(value));
 
 describe('main toolbar control', () => {
   afterEach(() => {
@@ -18,6 +21,7 @@ describe('main toolbar control', () => {
     `;
 
     const control = new MainToolbarControl({
+      appText,
       countEl: document.getElementById('count'),
       saveBtn: document.getElementById('saveBtn'),
       saveAsNewBtn: document.getElementById('saveAsNewBtn'),
@@ -55,6 +59,7 @@ describe('main toolbar control', () => {
     `;
 
     const control = new MainToolbarControl({
+      appText,
       countEl: document.getElementById('count'),
       saveBtn: document.getElementById('saveBtn'),
       saveAsNewBtn: document.getElementById('saveAsNewBtn'),
@@ -81,4 +86,67 @@ describe('main toolbar control', () => {
     expect(document.getElementById('deleteFromDiskBtn').disabled).toBe(false);
     expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Show Titles');
   });
+
+  test('owns its button event bindings and removes them when destroyed', () => {
+    const browseButton = document.createElement('button');
+    const saveBtn = document.createElement('button');
+    const saveAsNewBtn = document.createElement('button');
+    const addToCollectionBtn = document.createElement('button');
+    const deleteFromDiskBtn = document.createElement('button');
+    const toggleTitlesBtn = document.createElement('button');
+    const fullscreenButton = document.createElement('button');
+    const handlers = Array.from({ length: 7 }, () => vi.fn());
+    const buttons = [
+      browseButton,
+      saveBtn,
+      saveAsNewBtn,
+      addToCollectionBtn,
+      deleteFromDiskBtn,
+      toggleTitlesBtn,
+      fullscreenButton,
+    ];
+
+    const control = new MainToolbarControl({
+      appText,
+      browseButton,
+      saveBtn,
+      saveAsNewBtn,
+      addToCollectionBtn,
+      deleteFromDiskBtn,
+      toggleTitlesBtn,
+      fullscreenButton,
+      onBrowse: handlers[0],
+      onSave: handlers[1],
+      onSaveAsNew: handlers[2],
+      onAddToCollection: handlers[3],
+      onDeleteFromDisk: handlers[4],
+      onToggleTitles: handlers[5],
+      onToggleFullscreen: handlers[6],
+    });
+
+    buttons.forEach(button => button.click());
+    handlers.forEach(handler => expect(handler).toHaveBeenCalledTimes(1));
+
+    control.destroy();
+    buttons.forEach(button => button.click());
+    handlers.forEach(handler => expect(handler).toHaveBeenCalledTimes(1));
+  });
+});
+
+
+test('focuses Browse and preserves fullscreen button content when updating its label', () => {
+  const browseButton = document.createElement('button');
+  const fullscreenButton = document.createElement('button');
+  fullscreenButton.innerHTML = '<svg></svg><span class="command-label">Full Screen</span>';
+  const icon = fullscreenButton.firstElementChild;
+  document.body.append(browseButton, fullscreenButton);
+  const toolbar = new MainToolbarControl({ appText, browseButton, fullscreenButton });
+  toolbar.focusBrowse();
+  expect(document.activeElement).toBe(browseButton);
+  toolbar.setFullscreenButtonState(true);
+  expect(fullscreenButton.textContent).toBe('Exit Full Screen');
+  toolbar.setFullscreenButtonState(false);
+  expect(fullscreenButton.getAttribute('aria-label')).toBe('Full Screen');
+  expect(fullscreenButton.firstElementChild).toBe(icon);
+  browseButton.remove(); fullscreenButton.remove();
 });

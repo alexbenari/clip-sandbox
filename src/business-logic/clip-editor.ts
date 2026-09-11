@@ -1,5 +1,4 @@
-import { getVideoEditById, preferredVideoEditFilename } from './video-edit-catalog.js';
-import type { VideoEdit } from './video-edit-catalog.js';
+import type { VideoEdit, VideoEditCatalog } from './video-edit-catalog.js';
 import type { Clip } from '../domain/clip.js';
 
 export type VideoEditRequest = {
@@ -31,11 +30,14 @@ export type ClipEditorResult =
 
 export class ClipEditor {
   runtimeEditingService?: RuntimeEditingService;
+  private readonly videoEditCatalog: VideoEditCatalog;
 
   constructor({
     runtimeEditingService,
-  }: { runtimeEditingService?: RuntimeEditingService } = {}) {
+    videoEditCatalog,
+  }: { runtimeEditingService?: RuntimeEditingService; videoEditCatalog: VideoEditCatalog }) {
     this.runtimeEditingService = runtimeEditingService;
+    this.videoEditCatalog = videoEditCatalog;
   }
 
   async createVideoEdit({
@@ -47,7 +49,7 @@ export class ClipEditor {
     editId?: string;
     folderSession?: { folderPath?: string } | null;
   } = {}): Promise<ClipEditorResult> {
-    const edit = getVideoEditById(editId);
+    const edit = this.videoEditCatalog.findById(editId);
     if (!edit) {
       return {
         ok: false,
@@ -81,7 +83,7 @@ export class ClipEditor {
       };
     }
 
-    const preferredOutputFilename = preferredVideoEditFilename({
+    const preferredOutputFilename = this.videoEditCatalog.preferredOutputFilename({
       sourceName: clip.name,
       editId: edit.id,
     });
@@ -129,8 +131,3 @@ export class ClipEditor {
     };
   }
 }
-
-export function createClipEditor(options?: { runtimeEditingService?: RuntimeEditingService }): ClipEditor {
-  return new ClipEditor(options);
-}
-

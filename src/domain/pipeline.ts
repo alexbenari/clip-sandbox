@@ -1,4 +1,4 @@
-import { Clip } from './clip.js';
+import { Clip, ClipFileSnapshot } from './clip.js';
 import { ClipSequence } from './clip-sequence.js';
 import { Collection } from './collection.js';
 import type { ClipFile } from './clip.js';
@@ -37,15 +37,9 @@ export type RemoveVideosResult = {
   changedCollections: RemovedCollectionChange[];
 };
 
-function sortedFiles(files: Iterable<ClipFile>): ClipFile[] {
-  return Array.from(files || []).sort((a, b) =>
-    (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' })
-  );
-}
-
 export class Pipeline {
   #folderName: string;
-  #videoFilesByName: Map<string, ClipFile>;
+  #videoFilesByName: Map<string, ClipFileSnapshot>;
   #clipsByName: Map<string, Clip>;
   #collectionsByFilename: Map<string, Collection>;
 
@@ -85,7 +79,7 @@ export class Pipeline {
 
   setVideoFiles(videoFiles: Iterable<ClipFile>): void {
     this.#videoFilesByName = new Map(
-      sortedFiles(videoFiles).map((file) => [file.name, file])
+      Pipeline.#sortedFiles(videoFiles).map((file) => [file.name, new ClipFileSnapshot(file)])
     );
     for (const [name, clip] of Array.from(this.#clipsByName.entries())) {
       const nextFile = this.#videoFilesByName.get(name);
@@ -97,11 +91,11 @@ export class Pipeline {
     }
   }
 
-  videoFiles(): ClipFile[] {
+  videoFiles(): ClipFileSnapshot[] {
     return Array.from(this.#videoFilesByName.values());
   }
 
-  videoFileMap(): Map<string, ClipFile> {
+  videoFileMap(): Map<string, ClipFileSnapshot> {
     return new Map(this.#videoFilesByName);
   }
 
@@ -115,7 +109,7 @@ export class Pipeline {
 
   upsertVideoFile(videoFile: ClipFile): boolean {
     if (!videoFile?.name) return false;
-    this.#videoFilesByName.set(videoFile.name, videoFile);
+    this.#videoFilesByName.set(videoFile.name, new ClipFileSnapshot(videoFile));
     this.setVideoFiles(this.#videoFilesByName.values());
     return true;
   }
@@ -296,6 +290,12 @@ export class Pipeline {
 
   static #collectionIdentityKey(filename: string | null | undefined): string {
     return Collection.identityKeyFromFilename(filename);
+  }
+
+  static #sortedFiles(files: Iterable<ClipFile>): ClipFile[] {
+    return Array.from(files || []).sort((a, b) =>
+      (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' })
+    );
   }
 
   #clipForFile(file: ClipFile, nextClipId?: () => string): Clip {

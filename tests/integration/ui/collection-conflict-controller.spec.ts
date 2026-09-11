@@ -1,8 +1,11 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
-  createCollectionConflictController,
+  CollectionConflictController,
 } from '../../../src/ui/collection-conflict-controller.js';
+import { AppText } from '../../../src/app/app-text.js';
+
+const appText = new AppText();
 
 describe('collection conflict controller', () => {
   afterEach(() => {
@@ -21,7 +24,8 @@ describe('collection conflict controller', () => {
 
     const onApply = vi.fn();
     const onCancel = vi.fn();
-    const controller = createCollectionConflictController({
+    const controller = new CollectionConflictController({
+      appText,
       root: document.getElementById('root'),
       summaryEl: document.getElementById('summary'),
       listEl: document.getElementById('list'),
@@ -64,7 +68,8 @@ describe('collection conflict controller', () => {
       </section>
     `;
 
-    const controller = createCollectionConflictController({
+    const controller = new CollectionConflictController({
+      appText,
       root: document.getElementById('root'),
       summaryEl: document.getElementById('summary'),
       listEl: document.getElementById('list'),

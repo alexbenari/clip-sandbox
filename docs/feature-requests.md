@@ -1,13 +1,19 @@
 # Feature Requests
 
 ## Next up
-- UI structure
-  - gif extractor, gif pipeline, gif browser (future), gif composer (future): which UI best faciliates this?
-  - pipelines side panel: find component - tree view, collapsanle side panel
-  - gif extractor -> extracted clips side panel (a generic clip display side panel?)
-  - implement gif extractor: control handoff (D:\tmp\dev\clip-sandbox\spikes\native-frame-identity-playback\docs\frame-scrub-supporting-player-control-integration-handoof.md)
+- UI polish and bugfixes
+- implement gif extractor: control handoff (D:\tmp\dev\clip-sandbox\spikes\native-frame-identity-playback\docs\frame-scrub-supporting-player-control-integration-handoof.md)
 
 ## Features
+
+### Pipelines
+#### Pipeline management sidebar
+- Pipelines are viewable via a side-panel tree view 
+- Copy clip/s to pipeline -> drag to that pipeline in the sidebar (supports multi-select)
+- Create a new pipeline -> creates a physical folder names the same as the pipeline
+#### New pipeline from movie
+- Select a movie file => A new pipeline is created under the main pipelines folder. Its default name is a cleanup version of the movie name (remove all codex info and such).
+- The movie is opened in the player control in clip creation mode
 
 ### Design and code quality
 - add `better-result` for error 
@@ -43,15 +49,6 @@ Some quick manipulations on videos that generate new videos in the same collecti
   - Progress when generating video
   - After generation show in compare mode
   
-## Pipelines
-### Pipeline management sidebar
-- Pipelines are viewable via a side-panel tree view 
-- Copy clip/s to pipeline -> drag to that pipeline in the sidebar (supports multi-select)
-- Create a new pipeline -> creates a physical folder names the same as the pipeline
-### New pipeline from movie
-- Select a movie file => A new pipeline is created under the main pipelines folder. Its default name is a cleanup version of the movie name (remove all codex info and such).
-- The movie is opened in the player control in clip creation mode
-
 ## Movie Edit mode
 Allows generating clips from a longer movie.
 - editor control: D:\tmp\dev\clip-sandbox\spikes\native-frame-identity-playback\docs\frame-scrub-supporting-player-control-integration-handoof.md
@@ -122,6 +119,10 @@ A video can have various types of metadata
 - shot type: longshot, closeup, static/moving camera
 - camera motion: ltr, rtl, up, dpwn, zoom, pan etc, camera speed
 - objects: person, hands, etc
+
+## Future components
+- gif browser: search by metadata or filename or any other attributes, filters etc.
+- gif composer: create layouts of gifs
 
 ## Other
 - Support GIF files -> postpone, more complex since app is wired for video files, especially full screen mode

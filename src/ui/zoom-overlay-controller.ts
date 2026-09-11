@@ -13,37 +13,43 @@ type ZoomContextMenuEvent = {
   point: { x: number; y: number };
 };
 
+type ZoomPlaybackFailure = {
+  clipId: string | null;
+  name: string;
+  error: unknown;
+};
+
 type ZoomItem = {
   clipId: string | null;
   src: string;
   name: string;
 };
 
-function ensureZoomOverlayStyles(doc: Document): void {
-  if (doc.getElementById(ZOOM_OVERLAY_STYLE_ID)) return;
-  const styleEl = doc.createElement('style');
-  styleEl.id = ZOOM_OVERLAY_STYLE_ID;
-  styleEl.textContent = DEFAULT_ZOOM_OVERLAY_CSS;
-  (doc.head || doc.documentElement).appendChild(styleEl);
-}
-
 export class ZoomOverlayController {
-  mountEl: HTMLElement | null;
-  doc: Document;
-  onContextMenu: ((event: ZoomContextMenuEvent) => void) | null;
-  overlayEl: HTMLElement | null;
-  frameEl: HTMLElement | null;
-  videoEl: HTMLVideoElement | null;
-  currentItem: ZoomItem | null;
-  handleOverlayClick: (event: MouseEvent) => void;
+  private readonly mountEl: HTMLElement | null;
+  private readonly doc: Document;
+  private readonly onContextMenu: ((event: ZoomContextMenuEvent) => void) | null;
+  private overlayEl: HTMLElement | null;
+  private frameEl: HTMLElement | null;
+  private videoEl: HTMLVideoElement | null;
+  private currentItem: ZoomItem | null;
+  private readonly handleOverlayClick: (event: MouseEvent) => void;
+  private readonly audioDefault: () => boolean;
+  private readonly onPlaybackFailure: (event: ZoomPlaybackFailure) => void;
+  private playbackAttempt = 0;
+  private playbackFailureReported = false;
 
-  constructor({ mountEl, document: doc = document, onContextMenu = null }: {
+  constructor({ mountEl, document: doc = document, onContextMenu = null, audioDefault = () => false, onPlaybackFailure = () => {} }: {
     mountEl?: HTMLElement | null;
     document?: Document;
+    audioDefault?: () => boolean;
+    onPlaybackFailure?: (event: ZoomPlaybackFailure) => void;
     onContextMenu?: ((event: ZoomContextMenuEvent) => void) | null;
   } = {}) {
     this.mountEl = mountEl || null;
     this.doc = doc;
+    this.audioDefault = audioDefault;
+    this.onPlaybackFailure = onPlaybackFailure;
     this.onContextMenu = onContextMenu;
     this.overlayEl = null;
     this.frameEl = null;
@@ -54,15 +60,16 @@ export class ZoomOverlayController {
     };
   }
 
-  ensureMount(): asserts this is this & { mountEl: HTMLElement } {
+  private ensureMount(): HTMLElement {
     if (!this.mountEl) {
       throw new Error('Zoom overlay mount element is required.');
     }
+    return this.mountEl;
   }
 
-  buildOverlay(): void {
-    this.ensureMount();
-    ensureZoomOverlayStyles(this.doc);
+  private buildOverlay(): void {
+    const mountEl = this.ensureMount();
+    this.ensureStyles();
     if (this.overlayEl) return;
 
     this.overlayEl = this.doc.createElement('div');
@@ -80,10 +87,10 @@ export class ZoomOverlayController {
 
     this.overlayEl.appendChild(this.frameEl);
     this.overlayEl.addEventListener('click', this.handleOverlayClick);
-    this.mountEl.replaceChildren(this.overlayEl);
+    mountEl.replaceChildren(this.overlayEl);
   }
 
-  createVideo({ src, name = '' }: { src: string; name?: string }): HTMLVideoElement {
+  private createVideo({ src, name = '' }: { src: string; name?: string }): HTMLVideoElement {
     const nextVideo = this.doc.createElement('video');
     nextVideo.id = 'zoomVideo';
     nextVideo.className = 'zoom-video';
@@ -92,7 +99,7 @@ export class ZoomOverlayController {
     nextVideo.autoplay = true;
     nextVideo.controls = false;
     nextVideo.loop = true;
-    nextVideo.muted = true;
+    nextVideo.muted = !this.audioDefault();
     nextVideo.playsInline = true;
     nextVideo.preload = 'auto';
     nextVideo.addEventListener(
@@ -109,10 +116,14 @@ export class ZoomOverlayController {
     nextVideo.addEventListener(
       'canplay',
       () => {
-        nextVideo.play().catch(() => {});
+        this.startPlayback(nextVideo);
       },
       { once: true }
     );
+    nextVideo.addEventListener('playing', () => {
+      if (nextVideo === this.videoEl) this.playbackAttempt += 1;
+    });
+    nextVideo.addEventListener('error', () => this.reportPlaybackFailure(nextVideo, new Error('Video playback failed.')));
     nextVideo.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       this.onContextMenu?.({
@@ -127,13 +138,41 @@ export class ZoomOverlayController {
     return nextVideo;
   }
 
-  clearVideo(): void {
-    if (!this.videoEl) return;
-    this.videoEl.pause();
-    this.videoEl.removeAttribute('src');
-    this.videoEl.load();
-    this.videoEl.remove();
+  private startPlayback(video: HTMLVideoElement): void {
+    if (video !== this.videoEl) return;
+    const attempt = ++this.playbackAttempt;
+    const failed = (error: unknown) => {
+      if (attempt !== this.playbackAttempt) return;
+      this.reportPlaybackFailure(video, error);
+    };
+    try {
+      void video.play().catch(failed);
+    } catch (error) {
+      failed(error);
+    }
+  }
+
+  private reportPlaybackFailure(video: HTMLVideoElement, error: unknown): void {
+    if (video !== this.videoEl || !this.currentItem || this.playbackFailureReported) return;
+    this.playbackFailureReported = true;
+    const mediaError = video.error;
+    this.onPlaybackFailure({
+      clipId: this.currentItem.clipId,
+      name: this.currentItem.name,
+      error: mediaError ? new Error(`Media error ${mediaError.code}: ${mediaError.message || 'Playback failed.'}`, { cause: error }) : error,
+    });
+  }
+
+  private clearVideo(): void {
+    const video = this.videoEl;
     this.videoEl = null;
+    this.playbackAttempt += 1;
+    this.playbackFailureReported = false;
+    if (!video) return;
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    video.remove();
   }
 
   open({ clipId = null, src, name = '' }: { clipId?: string | null; src?: string; name?: string } = {}): boolean {
@@ -144,7 +183,7 @@ export class ZoomOverlayController {
     this.currentItem = { clipId, src, name };
     this.frameEl?.replaceChildren(this.videoEl);
     this.frameEl?.focus({ preventScroll: true });
-    this.videoEl.play().catch(() => {});
+    this.startPlayback(this.videoEl);
     return true;
   }
 
@@ -168,10 +207,6 @@ export class ZoomOverlayController {
     return !!this.overlayEl;
   }
 
-  getVideoElement(): HTMLVideoElement | null {
-    return this.videoEl;
-  }
-
   toggleMuted(): boolean | null {
     if (!this.videoEl) return null;
     this.videoEl.muted = !this.videoEl.muted;
@@ -181,8 +216,12 @@ export class ZoomOverlayController {
   getCurrentClipId(): string | null {
     return this.currentItem?.clipId || null;
   }
-}
 
-export function createZoomOverlayController(options?: ConstructorParameters<typeof ZoomOverlayController>[0]): ZoomOverlayController {
-  return new ZoomOverlayController(options);
+  private ensureStyles(): void {
+    if (this.doc.getElementById(ZOOM_OVERLAY_STYLE_ID)) return;
+    const styleEl = this.doc.createElement('style');
+    styleEl.id = ZOOM_OVERLAY_STYLE_ID;
+    styleEl.textContent = DEFAULT_ZOOM_OVERLAY_CSS;
+    (this.doc.head || this.doc.documentElement).appendChild(styleEl);
+  }
 }

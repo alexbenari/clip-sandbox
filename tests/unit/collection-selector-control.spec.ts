@@ -1,6 +1,9 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { CollectionSelectorControl } from '../../src/ui/collection-selector-control.js';
+import { AppText } from '../../src/app/app-text.js';
+
+const appText = new AppText();
 
 describe('collection selector control', () => {
   afterEach(() => {
@@ -11,10 +14,11 @@ describe('collection selector control', () => {
   test('renders a disabled placeholder when there is no pipeline', () => {
     document.body.innerHTML = '<select id="select"></select>';
     const control = new CollectionSelectorControl({
+      appText,
       selectEl: document.getElementById('select'),
       doc: document,
       pipelineSelectionValue: '__pipeline__',
-      defaultTitle: 'Local Video Grid Reviewer',
+      defaultTitle: 'Clip Sandbox',
     });
 
     control.render({
@@ -26,8 +30,8 @@ describe('collection selector control', () => {
     const selectEl = document.getElementById('select');
     expect(selectEl.disabled).toBe(true);
     expect(selectEl.value).toBe('');
-    expect(selectEl.options[0].textContent).toBe('Local Video Grid Reviewer');
-    expect(document.title).toBe('Local Video Grid Reviewer');
+    expect(selectEl.options[0].textContent).toBe('No pipeline loaded');
+    expect(document.title).toBe('Clip Sandbox');
   });
 
   test('renders pipeline and collection options and selects the active collection', () => {
@@ -40,10 +44,11 @@ describe('collection selector control', () => {
       folderName: 'clips',
     };
     const control = new CollectionSelectorControl({
+      appText,
       selectEl: document.getElementById('select'),
       doc: document,
       pipelineSelectionValue: '__pipeline__',
-      defaultTitle: 'Local Video Grid Reviewer',
+      defaultTitle: 'Clip Sandbox',
     });
 
     control.render({
@@ -70,10 +75,11 @@ describe('collection selector control', () => {
       folderName: 'clips',
     };
     const control = new CollectionSelectorControl({
+      appText,
       selectEl: document.getElementById('select'),
       doc: document,
       pipelineSelectionValue: '__pipeline__',
-      defaultTitle: 'Local Video Grid Reviewer',
+      defaultTitle: 'Clip Sandbox',
       onSelectionRequested,
     });
 

@@ -11,7 +11,6 @@ export class PipelineSession {
   #pipeline: Pipeline | null = null;
   #activeCollection: Collection | null = null;
   #currentClipSequence: ClipSequence | null = null;
-  #hasDirtyClipSequenceChanges = false;
   #idCounter = 0;
 
   get pipeline() {
@@ -27,7 +26,7 @@ export class PipelineSession {
   }
 
   get hasDirtyClipSequenceChanges() {
-    return this.#hasDirtyClipSequenceChanges;
+    return this.sequenceDiffersFromBaseline();
   }
 
   nextClipId(): string {
@@ -39,14 +38,12 @@ export class PipelineSession {
     this.#pipeline = null;
     this.#activeCollection = null;
     this.#currentClipSequence = null;
-    this.#hasDirtyClipSequenceChanges = false;
   }
 
   loadPipeline(pipeline: Pipeline | null | undefined): PipelineMaterialization | null {
     this.#pipeline = pipeline || null;
     this.#activeCollection = null;
     this.#currentClipSequence = null;
-    this.#hasDirtyClipSequenceChanges = false;
     if (!this.#pipeline) return null;
     const result = this.#pipeline.materializePipeline({
       nextClipId: () => this.nextClipId(),
@@ -68,7 +65,6 @@ export class PipelineSession {
   activateSelection({ collection = null, sequence = null }: { collection?: Collection | null; sequence?: ClipSequence | null } = {}): ClipSequence | null {
     this.#activeCollection = collection || null;
     this.#currentClipSequence = sequence || null;
-    this.refreshDirtyClipSequenceState();
     return this.#currentClipSequence;
   }
 
@@ -92,16 +88,12 @@ export class PipelineSession {
   replaceCurrentOrder(orderedClipIds: Iterable<string>): string[] {
     if (!this.#currentClipSequence) return [];
     const result = this.#currentClipSequence.replaceOrder(orderedClipIds);
-    this.refreshDirtyClipSequenceState();
     return result;
   }
 
   removeFromCurrentSequence(orderedClipIds: Iterable<string>): string[] {
     if (!this.#currentClipSequence) return [];
     const removedClipIds = this.#currentClipSequence.removeMany(orderedClipIds);
-    if (removedClipIds.length > 0) {
-      this.refreshDirtyClipSequenceState();
-    }
     return removedClipIds;
   }
 
@@ -114,18 +106,16 @@ export class PipelineSession {
     this.#pipeline?.upsertCollection(collection);
     this.#currentClipSequence.rename(collection.collectionName);
     this.#activeCollection = collection;
-    this.refreshDirtyClipSequenceState();
     return collection;
   }
 
-  refreshDirtyClipSequenceState(): boolean {
+  private sequenceDiffersFromBaseline(): boolean {
     const baseline = this.#activeCollection
       ? this.#activeCollection.orderedClipNames
       : (this.#pipeline?.videoNames?.() || []);
     const currentNames = this.#currentClipSequence?.clipNamesInOrder?.() || [];
-    this.#hasDirtyClipSequenceChanges = currentNames.length !== baseline.length
+    return currentNames.length !== baseline.length
       || currentNames.some((name, index) => name !== baseline[index]);
-    return this.#hasDirtyClipSequenceChanges;
   }
 
   insertCreatedClipInPipeline(createdFile: ClipFile): CreatedClipInsertResult {
@@ -160,7 +150,6 @@ export class PipelineSession {
     });
     if (!clip) return { ok: false, code: 'invalid-file' };
     this.#currentClipSequence.insertAfter(sourceClipId, clip);
-    this.refreshDirtyClipSequenceState();
     return {
       ok: true,
       clip,
@@ -174,8 +163,4 @@ export class PipelineSession {
       changedCollections: [],
     };
   }
-}
-
-export function createPipelineSession(): PipelineSession {
-  return new PipelineSession();
 }

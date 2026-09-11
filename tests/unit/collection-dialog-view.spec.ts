@@ -3,9 +3,11 @@ import { describe, expect, test } from 'vitest';
 import { AddToCollectionDialogController } from '../../src/ui/add-to-collection-dialog-controller.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
-import { validateSaveAsNewName } from '../../src/ui/save-as-new-dialog-controller.js';
+import { AppText } from '../../src/app/app-text.js';
+import { CollectionNameValidator } from '../../src/app/collection-name-validator.js';
 
 describe('collection dialog view helpers', () => {
+  const validator = new CollectionNameValidator(new AppText());
   const pipeline = {
     getCollectionByFilename: (filename) => (filename === 'existing.txt' ? { filename } : null),
     eligibleDestinationCollections: () => [
@@ -15,17 +17,16 @@ describe('collection dialog view helpers', () => {
   };
 
   test('maps add-to-collection validation codes to user-facing copy', () => {
-    expect(AddToCollectionDialogController.validationErrorText('required')).toContain('name');
-    expect(AddToCollectionDialogController.validationErrorText('illegal-chars')).toContain('cannot');
-    expect(AddToCollectionDialogController.validationErrorText('already-exists')).toContain('already exists');
+    expect(validator.validationErrorText('required')).toContain('name');
+    expect(validator.validationErrorText('illegal-chars')).toContain('cannot');
+    expect(validator.validationErrorText('already-exists')).toContain('already exists');
   });
 
   test('validates add-to-collection and save-as-new names against pipeline collections', () => {
-    expect(AddToCollectionDialogController.validateName({ name: '', pipeline })).toContain('name');
-    expect(AddToCollectionDialogController.validateName({ name: 'bad:name', pipeline })).toContain('cannot');
-    expect(AddToCollectionDialogController.validateName({ name: 'existing', pipeline })).toContain('already exists');
-    expect(validateSaveAsNewName({ name: 'existing', pipeline })).toContain('already exists');
-    expect(validateSaveAsNewName({ name: 'fresh', pipeline })).toBe('');
+    expect(validator.validate('', pipeline)).toContain('name');
+    expect(validator.validate('bad:name', pipeline)).toContain('cannot');
+    expect(validator.validate('existing', pipeline)).toContain('already exists');
+    expect(validator.validate('fresh', pipeline)).toBe('');
   });
 
   test('treats case-only collection names as already existing', () => {
@@ -38,8 +39,7 @@ describe('collection dialog view helpers', () => {
       ],
     });
 
-    expect(AddToCollectionDialogController.validateName({ name: 'highlights', pipeline })).toContain('already exists');
-    expect(validateSaveAsNewName({ name: 'highlights', pipeline })).toContain('already exists');
+    expect(validator.validate('highlights', pipeline)).toContain('already exists');
   });
 
   test('builds add-to-collection destination choices from the pipeline', () => {

@@ -1,21 +1,26 @@
-import { listZoomVideoEdits } from '../business-logic/video-edit-catalog.js';
-import type { VideoEdit } from '../business-logic/video-edit-catalog.js';
+import type { VideoEdit, VideoEditCatalog } from '../business-logic/video-edit-catalog.js';
 import type { ContextMenuController, ContextMenuItem, ContextMenuPoint } from './context-menu-controller.js';
 
 export class ZoomEditMenuControl {
   contextMenuController: Pick<ContextMenuController, 'open'> | null;
+  private readonly videoEditCatalog: Pick<VideoEditCatalog, 'listZoomEdits'>;
 
   constructor({
     contextMenuController,
-  }: { contextMenuController?: Pick<ContextMenuController, 'open'> | null } = {}) {
+    videoEditCatalog,
+  }: {
+    contextMenuController?: Pick<ContextMenuController, 'open'> | null;
+    videoEditCatalog: Pick<VideoEditCatalog, 'listZoomEdits'>;
+  }) {
     this.contextMenuController = contextMenuController || null;
+    this.videoEditCatalog = videoEditCatalog;
   }
 
   buildItems({
     isDisabled = false,
     onSelectEdit = () => {},
   }: { isDisabled?: boolean; onSelectEdit?: (edit: VideoEdit) => void } = {}): ContextMenuItem[] {
-    return listZoomVideoEdits().map((edit) => ({
+    return this.videoEditCatalog.listZoomEdits().map((edit) => ({
       id: `zoom-edit-${edit.id}`,
       label: edit.label,
       icon: edit.icon,
@@ -38,8 +43,3 @@ export class ZoomEditMenuControl {
     });
   }
 }
-
-export function createZoomEditMenuControl(options?: ConstructorParameters<typeof ZoomEditMenuControl>[0]): ZoomEditMenuControl {
-  return new ZoomEditMenuControl(options);
-}
-

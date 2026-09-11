@@ -50,43 +50,6 @@ type CollectionParams = {
   orderedClipNames?: Iterable<string>;
 };
 
-function toFileMap(availableVideoFiles: ReadonlyArray<ClipFile> | Map<string, ClipFile>): Map<string, ClipFile> {
-  if (availableVideoFiles instanceof Map) return new Map(availableVideoFiles);
-  return new Map(Array.from(availableVideoFiles || []).map((file) => [file.name, file]));
-}
-
-function toClipMap(availableClips: ReadonlyArray<Clip> | Map<string, Clip>): Map<string, Clip> {
-  if (availableClips instanceof Map) return new Map(availableClips);
-  return new Map(Array.from(availableClips || []).map((clip) => [clip.name, clip]));
-}
-
-function materializedClips(names: Iterable<string>, clipsByName: Map<string, Clip>): Clip[] {
-  return Array.from(names || []).flatMap((name) => {
-    const clip = clipsByName.get(name);
-    return clip ? [clip] : [];
-  });
-}
-
-function requestedNameAnalysis(collection: Collection, availableNames: Iterable<string> = []): RequestedNameAnalysis {
-  const requestedNames = collection.orderedClipNames;
-  const normalizedAvailableNames = Array.from(availableNames || []);
-  const availableSet = new Set(normalizedAvailableNames);
-  const requestedSet = new Set(requestedNames);
-  const missingNames = requestedNames.filter((name) => !availableSet.has(name));
-  const existingNamesInOrder = requestedNames.filter((name) => availableSet.has(name));
-  const isExactMatch = requestedSet.size === normalizedAvailableNames.length
-    && normalizedAvailableNames.every((name) => requestedSet.has(name));
-
-  return {
-    collectionName: collection?.collectionName || '',
-    requestedNames,
-    existingNamesInOrder,
-    missingNames,
-    missingCount: missingNames.length,
-    matchKind: isExactMatch ? 'exact-match' : 'subset-match',
-  };
-}
-
 export class Collection {
   static ILLEGAL_COLLECTION_NAME_CHARS = /[<>:"/\\|?*]/;
   static WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
@@ -260,15 +223,15 @@ export class Collection {
       throw new Error('A nextClipId function is required to materialize a collection sequence.');
     }
     const clipsByName = availableClips
-      ? toClipMap(availableClips)
-      : new Map(Array.from(toFileMap(availableVideoFiles).values()).map((file) => [
+      ? Collection.#toClipMap(availableClips)
+      : new Map(Array.from(Collection.#toFileMap(availableVideoFiles).values()).map((file) => [
         file.name,
         new Clip({ id: nextClipId!(), file, mediaSource: file.mediaSource || '' }),
       ]));
-    const analysis = requestedNameAnalysis(this, clipsByName.keys());
+    const analysis = this.#requestedNameAnalysis(clipsByName.keys());
     const partialSequence = new ClipSequence({
       name: analysis.collectionName,
-      clips: materializedClips(analysis.existingNamesInOrder, clipsByName),
+      clips: Collection.#materializedClips(analysis.existingNamesInOrder, clipsByName),
     });
 
     if (analysis.missingNames.length > 0) {
@@ -296,6 +259,43 @@ export class Collection {
 
   static #normalizedText(value: unknown): string {
     return String(value || '').trim();
+  }
+
+  static #toFileMap(availableVideoFiles: ReadonlyArray<ClipFile> | Map<string, ClipFile>): Map<string, ClipFile> {
+    if (availableVideoFiles instanceof Map) return new Map(availableVideoFiles);
+    return new Map(Array.from(availableVideoFiles || []).map(file => [file.name, file]));
+  }
+
+  static #toClipMap(availableClips: ReadonlyArray<Clip> | Map<string, Clip>): Map<string, Clip> {
+    if (availableClips instanceof Map) return new Map(availableClips);
+    return new Map(Array.from(availableClips || []).map(clip => [clip.name, clip]));
+  }
+
+  static #materializedClips(names: Iterable<string>, clipsByName: Map<string, Clip>): Clip[] {
+    return Array.from(names || []).flatMap(name => {
+      const clip = clipsByName.get(name);
+      return clip ? [clip] : [];
+    });
+  }
+
+  #requestedNameAnalysis(availableNames: Iterable<string>): RequestedNameAnalysis {
+    const requestedNames = this.orderedClipNames;
+    const normalizedAvailableNames = Array.from(availableNames || []);
+    const availableSet = new Set(normalizedAvailableNames);
+    const requestedSet = new Set(requestedNames);
+    const missingNames = requestedNames.filter(name => !availableSet.has(name));
+    const existingNamesInOrder = requestedNames.filter(name => availableSet.has(name));
+    const isExactMatch = requestedSet.size === normalizedAvailableNames.length
+      && normalizedAvailableNames.every(name => requestedSet.has(name));
+
+    return {
+      collectionName: this.collectionName,
+      requestedNames,
+      existingNamesInOrder,
+      missingNames,
+      missingCount: missingNames.length,
+      matchKind: isExactMatch ? 'exact-match' : 'subset-match',
+    };
   }
 
   static #normalizedFilename(filename: string | null | undefined): string | null {

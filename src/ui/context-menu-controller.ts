@@ -81,42 +81,14 @@ type ContextMenuControllerOptions = {
   document?: Document;
 };
 
-function ensureContextMenuStyles(doc: Document): void {
-  if (doc.getElementById(CONTEXT_MENU_STYLE_ID)) return;
-  const styleEl = doc.createElement('style');
-  styleEl.id = CONTEXT_MENU_STYLE_ID;
-  styleEl.textContent = DEFAULT_CONTEXT_MENU_CSS;
-  (doc.head || doc.documentElement).appendChild(styleEl);
-}
-
-function focusableItems(panel: HTMLElement | null): HTMLElement[] {
-  if (!panel) return [];
-  return Array.from(panel.querySelectorAll<HTMLElement>('[role="menuitem"]')).filter((el) => !('disabled' in el) || !el.disabled);
-}
-
-function createIconElement(doc: Document, icon: ContextMenuIcon | null | undefined): SVGSVGElement | null {
-  if (!icon || icon.kind !== 'svg') return null;
-  const svgEl = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svgEl.setAttribute('viewBox', icon.viewBox || '0 0 16 16');
-  svgEl.setAttribute('aria-hidden', 'true');
-  svgEl.setAttribute('focusable', 'false');
-  for (const pathData of Array.from(icon.paths || [])) {
-    const pathEl = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pathEl.setAttribute('d', pathData);
-    pathEl.setAttribute('fill', 'currentColor');
-    svgEl.appendChild(pathEl);
-  }
-  return svgEl;
-}
-
 export class ContextMenuController {
-  root: HTMLElement | null;
-  panel: HTMLElement | null;
-  doc: Document;
-  openState: boolean;
-  restoreFocusEl: Element | null;
-  onDocumentPointerDown: (event: MouseEvent) => void;
-  onDocumentKeyDown: (event: KeyboardEvent) => void;
+  private readonly root: HTMLElement | null;
+  private readonly panel: HTMLElement | null;
+  private readonly doc: Document;
+  private openState: boolean;
+  private restoreFocusEl: Element | null;
+  private readonly onDocumentPointerDown: (event: MouseEvent) => void;
+  private readonly onDocumentKeyDown: (event: KeyboardEvent) => void;
 
   constructor({
     root,
@@ -158,14 +130,14 @@ export class ContextMenuController {
       }
       if (event.key === 'End') {
         event.preventDefault();
-        const items = focusableItems(this.panel);
+        const items = this.focusableItems();
         if (items.length > 0) items[items.length - 1].focus();
       }
     };
 
     if (!root || !panel) return;
 
-    ensureContextMenuStyles(doc);
+    this.ensureStyles();
     root.classList.add('context-menu-root');
     panel.classList.add('context-menu-panel');
     panel.setAttribute('role', 'menu');
@@ -209,7 +181,7 @@ export class ContextMenuController {
       content.className = 'context-menu-item-content';
       const iconWrap = this.doc.createElement('span');
       iconWrap.className = 'context-menu-item-icon';
-      const iconEl = createIconElement(this.doc, item?.icon);
+      const iconEl = this.createIconElement(item?.icon);
       if (iconEl) {
         iconWrap.appendChild(iconEl);
         content.appendChild(iconWrap);
@@ -230,12 +202,12 @@ export class ContextMenuController {
   }
 
   focusFirstItem(): void {
-    const first = focusableItems(this.panel)[0];
+    const first = this.focusableItems()[0];
     if (first) first.focus();
   }
 
   moveItemFocus(step: number): void {
-    const items = focusableItems(this.panel);
+    const items = this.focusableItems();
     if (items.length === 0) return;
     const currentIndex = items.findIndex((el) => el === this.doc.activeElement);
     const nextIndex = currentIndex < 0 ? 0 : (currentIndex + step + items.length) % items.length;
@@ -272,8 +244,33 @@ export class ContextMenuController {
     this.setOpen(false);
     this.panel.innerHTML = '';
   }
-}
 
-export function createContextMenuController(options?: ContextMenuControllerOptions): ContextMenuController {
-  return new ContextMenuController(options);
+  private ensureStyles(): void {
+    if (this.doc.getElementById(CONTEXT_MENU_STYLE_ID)) return;
+    const styleEl = this.doc.createElement('style');
+    styleEl.id = CONTEXT_MENU_STYLE_ID;
+    styleEl.textContent = DEFAULT_CONTEXT_MENU_CSS;
+    (this.doc.head || this.doc.documentElement).appendChild(styleEl);
+  }
+
+  private focusableItems(): HTMLElement[] {
+    if (!this.panel) return [];
+    return Array.from(this.panel.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      .filter(element => !('disabled' in element) || !element.disabled);
+  }
+
+  private createIconElement(icon: ContextMenuIcon | null | undefined): SVGSVGElement | null {
+    if (!icon || icon.kind !== 'svg') return null;
+    const svgEl = this.doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svgEl.setAttribute('viewBox', icon.viewBox || '0 0 16 16');
+    svgEl.setAttribute('aria-hidden', 'true');
+    svgEl.setAttribute('focusable', 'false');
+    for (const pathData of Array.from(icon.paths || [])) {
+      const pathEl = this.doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+      pathEl.setAttribute('d', pathData);
+      pathEl.setAttribute('fill', 'currentColor');
+      svgEl.appendChild(pathEl);
+    }
+    return svgEl;
+  }
 }

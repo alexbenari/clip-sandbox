@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:">
+  <title>Clip Sandbox — Panel pilot</title>
+  <link rel="stylesheet" href="pilot.css">
+  <script type="module" src="build/pilot.js"></script>
+  <script type="module" src="build/grid-fixture.js"></script>
+</head>
+<body>
+  <header class="app-bar"><strong>Clip Sandbox</strong><span>Panel pilot · Web Awesome</span></header>
+  <wa-split-panel id="split" primary="start" position-in-pixels="240" disabled>
+    <aside slot="start" id="sidebar" aria-label="Pipelines panel">
+      <div id="panel-content" class="panel-content">
+        <div class="panel-heading"><h1>Pipelines</h1><button id="fold" class="fold" aria-label="Fold Pipelines" aria-expanded="true" aria-controls="panel-content">Fold</button></div>
+        <p class="hint">Panel content is a fixture.</p>
+        <button class="sample">Sample pipeline A</button>
+        <button class="sample">Sample pipeline B</button>
+      </div>
+      <button id="reveal" class="reveal" aria-label="Reveal Pipelines" aria-expanded="true" aria-controls="panel-content" hidden>Pipelines</button>
+    </aside>
+    <wa-split-panel slot="end" id="split-right" primary="end" position-in-pixels="240" disabled>
+    <main slot="start" id="workspace">
+      <div class="command-bar"><h2>Collection</h2><button id="workspace-action">Workspace focus target</button></div>
+      <div id="tiles" aria-label="Static workspace fixture">
+        <div>01</div><div>02</div><div>03</div><div>04</div><div>05</div><div>06</div>
+        <div>07</div><div>08</div><div>09</div><div>10</div><div>11</div><div>12</div>
+      </div>
+    </main>
+    <aside slot="end" id="sidebar-right" aria-label="Clips panel">
+      <div id="panel-content-right" class="panel-content">
+        <div class="panel-heading"><button id="fold-right" class="fold" aria-label="Fold Clips" aria-expanded="true" aria-controls="panel-content-right">Fold</button><h2>Clips</h2></div>
+        <p class="hint">Opposite-side fixture.</p>
+        <button class="sample">Sample clip</button>
+      </div>
+      <button id="reveal-right" class="reveal" aria-label="Reveal Clips" aria-expanded="true" aria-controls="panel-content-right" hidden>Clips</button>
+    </aside>
+    </wa-split-panel>
+  </wa-split-panel>
+</body>
+</html>

@@ -42,8 +42,8 @@ type FileSystemAdapterOptions = {
 };
 
 export class FileSystemAdapter {
-  win: BrowserPickerWindow;
-  doc: Document;
+  private readonly win: BrowserPickerWindow;
+  private readonly doc: Document;
 
   constructor({
     win = window,

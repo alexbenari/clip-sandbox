@@ -93,7 +93,3 @@ export class GridContextMenuControl {
     this.contextMenuController?.close(options);
   }
 }
-
-export function createGridContextMenuControl(options?: GridContextMenuOptions): GridContextMenuControl {
-  return new GridContextMenuControl(options);
-}

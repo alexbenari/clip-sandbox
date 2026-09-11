@@ -70,6 +70,68 @@ Use automated verification when unit, integration, or e2e tests can directly pro
 
 Do not claim completion from implementation-level evidence when the requested goal is user-visible behavior.
 
+### UI evaluation: user impact determines the gate
+
+Judge UI implementations and component libraries by effects users can perceive through actual product workflows. Automated and synthetic tests provide evidence; an internal-state discrepancy or extreme input sequence is not, by itself, an adoption blocker.
+
+Before rejecting a UI component or expanding investigation because a test fails:
+
+1. State the user-facing consequence and reproduce it through relevant product controls, input methods and representative timing where possible.
+2. Distinguish ordinary-use failures, reachable edge cases, and synthetic-only findings. Report what was observed; do not infer frequency or severity from a stress-test failure count.
+3. Weigh impact, reachability, recovery and mitigation cost against the component's benefits. Choose the smallest next check that could change the decision; do not let theoretical completeness drive an open-ended comparison.
+4. Keep defects and uncertainty recorded without automatically blocking progress. A successful manual session does not prove absence of a bug, just as a synthetic failure does not prove poor usability.
+
+User-perceivable effects include keyboard and assistive-technology access, focus, playback continuity and data outcomes, not only visual appearance. This principle does not waive explicit correctness, accessibility or data-integrity requirements; it makes the relationship between a test and those requirements explicit.
+
+## Cost-aware subagent delegation
+
+Use the project-local `cost-aware-delegation` skill whenever considering or
+performing subagent delegation. The primary purpose of delegation is to replace
+work by the strong root model with a less expensive model that is expected to be
+comparably reliable for the bounded task. Do not delegate for parallelism alone.
+
+Delegate only when the cheaper model is suitable, the task is large enough to
+amortize briefing and verification, the brief can bound the work precisely, and
+the result can be independently checked for materially less effort than doing the
+task directly. Otherwise keep the task with the root. Keep architecture,
+ambiguous or cross-cutting coding, research synthesis and decisions, user
+interaction, and final acceptance with the root.
+
+Do not fetch current token rates for routine decisions. Use known relative model
+costs and delegate only when the conservative upper estimate of briefing,
+subagent work, verification, and recovery remains clearly below direct root work;
+the skill defines a practical default margin and when current rates merit review.
+
+Before relying on a subagent result, perform the predefined focused check. A
+completion notification without the requested deliverable and evidence is a
+stalled result, not proof of completion. Delegation briefs must require agents to
+report specification or oracle disagreements rather than tune to match them.
+
+When delegation occurs, keep the skill's compact task-local ledger, complete its
+pre-dispatch and acceptance records, and reconcile actual launches before task
+closure. Carry the ledger path and open entries through compaction and handoffs.
+Include a short outcome assessment at task completion; do not infer measured
+savings from successful delivery or change policy from a single result.
+
+## Shell Choice On Windows
+
+On Windows, default to the active shell and use native syntax for that shell.
+Prefer PowerShell for ordinary file, text, and process operations unless the
+task specifically requires Bash, WSL, Git Bash, or another Unix-style toolchain.
+
+If a task is better suited to Bash on Windows, invoke Bash explicitly rather
+than mixing Bash syntax into a PowerShell command. Do not assume shell features,
+quoting rules, pipes, or multiline input forms transfer between shells.
+
+## Cross-Platform Text and JSON Encoding
+
+When generating JSON or other machine-readable text from PowerShell, write
+UTF-8 without a BOM. Windows PowerShell 5's `-Encoding UTF8` emits a BOM, so
+use an explicit BOM-free UTF-8 encoding when the output will be consumed by
+Node or another strict parser. Readers of generated or legacy JSON should
+tolerate and strip a leading UTF-8 BOM before parsing. Keep this producer and
+consumer behavior covered by a regression fixture or test.
+
 ## Shell/Text Extraction
 
 When extracting or matching prose from external sources in shell commands, avoid
@@ -77,3 +139,8 @@ embedding long exact strings with smart punctuation, non-ASCII typography, or
 copied whitespace directly into shell string literals. Prefer stable ASCII
 anchors, structural selectors, wildcard fragments, regexes, or source-loaded
 comparison strings that match the minimum needed text.
+
+Match multiline input syntax to the active shell. Do not use Bash heredocs in
+PowerShell; use PowerShell here-strings instead. More generally, verify that
+shell features and quoting syntax are valid for the current shell before
+running extraction or text-processing commands.

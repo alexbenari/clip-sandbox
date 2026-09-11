@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { createSaveAsNewDialogController } from '../../../src/ui/save-as-new-dialog-controller.js';
+import { SaveAsNewDialogController } from '../../../src/ui/save-as-new-dialog-controller.js';
 
 describe('save-as-new dialog controller', () => {
   afterEach(() => {
@@ -21,7 +21,7 @@ describe('save-as-new dialog controller', () => {
 
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
-    const controller = createSaveAsNewDialogController({
+    const controller = new SaveAsNewDialogController({
       dialog: document.getElementById('dialog'),
       titleEl: document.getElementById('title'),
       textEl: document.getElementById('text'),

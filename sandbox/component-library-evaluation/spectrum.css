@@ -1,0 +1,23 @@
+sp-theme { display: block; color: inherit; font-family: inherit; font-size: inherit; }
+sp-popover {
+  --mod-popover-background-color: #0f172a;
+  --mod-popover-border-color: #334155;
+  --mod-popover-border-width: 1px;
+  --mod-popover-corner-radius: 16px;
+  --mod-popover-animation-distance: 0px;
+  --mod-popover-content-area-spacing-vertical: 0px;
+  --mod-popover-filter: none;
+  --mod-overlay-animation-duration: 150ms;
+  width: max-content;
+  max-width: min(380px, calc(100vw - 24px));
+  font-size: 14px;
+  line-height: 1.5;
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 18px;
+  box-shadow: 0 12px 36px #0008;
+}
+sp-popover[open] { --mod-overlay-animation-duration: 190ms; }
+@media (prefers-reduced-motion: reduce) {
+  sp-popover, sp-popover[open] { --mod-overlay-animation-duration: 0ms; }
+}

@@ -1,0 +1,14 @@
+{
+  "surface": "GIF Extraction workspace",
+  "composition": "Balanced three-pane workbench",
+  "image": "extraction-balanced-three-pane.png",
+  "approved": true,
+  "approvedWithCorrections": [
+    "The Pipelines tree contains pipelines and collections only.",
+    "Clips are dragged from the main workspace or Clips panel to the Pipelines panel.",
+    "Workspace navigation is explicit rather than an unexplained placeholder.",
+    "Folded panels retain a one-click reveal control.",
+    "Drag feedback distinguishes default copy from user-requested move."
+  ],
+  "translationNote": "Preserve the three-pane topology and quiet toolbar; generated imagery and incidental labels are illustrative, not literal product requirements."
+}

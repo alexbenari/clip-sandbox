@@ -1,5 +1,5 @@
-import { createElectronVideoEditService } from './electron-video-edit-service.js';
-import type { ElectronVideoEditApi, ElectronVideoEditService } from './electron-video-edit-service.js';
+import { ElectronVideoEditService } from './electron-video-edit-service.js';
+import type { ElectronVideoEditApi } from './electron-video-edit-service.js';
 import type { CreatedVideoFile, RuntimeVideoEditResult, VideoEditRequest } from '../../business-logic/clip-editor.js';
 import type { ClipFile } from '../../domain/clip.js';
 
@@ -56,9 +56,9 @@ export type DesktopDeleteFileResult =
   | { filename: string; ok: false; code: string; error: Error };
 
 export class ElectronFileSystemService {
-  win: ElectronFileSystemWindow;
-  api?: ElectronDesktopApi | null;
-  videoEditService: ElectronVideoEditService;
+  private readonly win: ElectronFileSystemWindow;
+  private readonly api?: ElectronDesktopApi | null;
+  private readonly videoEditService: ElectronVideoEditService;
 
   constructor({
     win = window,
@@ -71,7 +71,7 @@ export class ElectronFileSystemService {
   } = {}) {
     this.win = win as ElectronFileSystemWindow;
     this.api = api;
-    this.videoEditService = videoEditService || createElectronVideoEditService({ api });
+    this.videoEditService = videoEditService || new ElectronVideoEditService({ api });
   }
 
   createFolderSession(folderPath: string): DesktopFolderSession {
@@ -115,7 +115,7 @@ export class ElectronFileSystemService {
     return file as ClipFile;
   }
 
-  requireApi(): Required<Pick<ElectronDesktopApi, 'pickFolder' | 'saveTextFile' | 'appendTextFile' | 'deleteFiles'>> & ElectronDesktopApi {
+  private requireApi(): Required<Pick<ElectronDesktopApi, 'pickFolder' | 'saveTextFile' | 'appendTextFile' | 'deleteFiles'>> & ElectronDesktopApi {
     if (!this.api) {
       throw new Error('Electron desktop API is unavailable.');
     }

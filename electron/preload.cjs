@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const desktopApi = {
+  loadAppSettings() { return ipcRenderer.invoke('clip-sandbox:load-app-settings'); },
+  saveAppSettings(settings) { return ipcRenderer.invoke('clip-sandbox:save-app-settings', settings); },
+  choosePipelinesRoot() { return ipcRenderer.invoke('clip-sandbox:choose-pipelines-root'); },
   pickFolder() {
     return ipcRenderer.invoke('clip-sandbox:pick-folder');
   },

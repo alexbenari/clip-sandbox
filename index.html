@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Local Video Grid Reviewer</title>
+  <title>Clip Sandbox</title>
   <style>
     :root{
       --bg:#0b0f14;
@@ -76,7 +76,6 @@
       color:#e5e7eb;
       background:#0f172a;
     }
-    .hint{ color:var(--muted); font-size:12px; }
     button{
       appearance:none; border:0; cursor:pointer;
       padding:10px 14px; border-radius:12px;
@@ -317,6 +316,70 @@
       flex-wrap:wrap;
     }
 
+    [hidden]{ display:none !important; }
+    #appShell{ height:100dvh; display:flex; flex-direction:column; }
+    #globalAppBar{ min-height:52px; flex-shrink:0; display:flex; align-items:center; gap:16px; padding:8px 16px; background:var(--panel); border-bottom:1px solid #243147; position:relative; z-index:20; }
+    #globalAppBar{
+      -webkit-app-region:drag;
+      padding-right:max(16px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 12px));
+    }
+    #globalAppBar button, #globalAppBar select, #activityIndicatorPanel{ -webkit-app-region:no-drag; }
+    @media (max-width:900px){
+      #globalAppBar{ gap:8px; padding-left:12px; font-size:13px; }
+      #globalAppBar button{ padding:6px 8px; font-size:12px; }
+      #globalAppBar #activityIndicatorBtn{ padding:0 12px; flex-shrink:0; }
+    }
+    .global-utilities{ display:flex; align-items:center; gap:8px; }
+    .utility-separator{ height:24px; border-left:1px solid #334155; }
+    #globalUtilityHost{ position:fixed; z-index:10000; width:min(420px, calc(100vw - 24px)); padding:20px; overflow:auto; border:1px solid #334155; border-radius:14px; background:#0f172a; box-shadow:0 18px 38px rgba(0,0,0,.4); }
+    #globalUtilityHost h2{ font-size:18px; margin:0 0 16px; }
+    #globalUtilityHost h3{ font-size:14px; margin:20px 0 10px; }
+    #globalUtilityHost > .activity-indicator-panel{ position:static; width:auto; padding:0; border:0; background:transparent; box-shadow:none; }
+    .keyboard-context{ padding-bottom:12px; border-bottom:1px solid #334155; }
+    .keyboard-context span{ display:block; margin:6px 0 0; color:var(--muted); font-size:12px; }
+    .keyboard-shortcuts{ margin:0; }
+    .keyboard-shortcuts > div{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:9px 0; }
+    .keyboard-shortcuts dt{ font-size:13px; line-height:1.4; }
+    .keyboard-shortcuts dd{ margin:0; }
+    .keyboard-keys{ display:flex; align-items:center; gap:4px; flex-shrink:0; }
+    .keyboard-keys kbd{ display:inline-block; min-width:25px; padding:3px 6px; border:1px solid #475569; border-radius:5px; background:#172238; color:#e5e7eb; font:12px ui-monospace, monospace; text-align:center; }
+    #appScreenSelector{ font:inherit; color:var(--fg); background:var(--panel); border:1px solid #334155; border-radius:8px; padding:6px 10px; }
+    #workspaceRow{ flex:1; min-height:0; display:flex; overflow:hidden; }
+    #centralWorkspace{ flex:1; min-width:0; display:flex; flex-direction:column; }
+    .side-panel{ --panel-open-width:240px; --panel-folded-width:36px; width:var(--panel-open-width); flex:none; min-width:0; overflow:hidden; position:relative; background:var(--panel); border-right:1px solid #243147; transition:width var(--panel-duration, 280ms) cubic-bezier(.2,.7,.2,1); }
+    .side-panel:last-child{ border-right:0; border-left:1px solid #243147; }
+    .side-panel.folded{ width:var(--panel-folded-width); }
+    .panel-content{ width:238px; height:100%; padding:12px; opacity:1; transition:opacity 160ms ease, visibility 0ms; }
+    .panel-heading{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .panel-heading h2{ font-size:15px; margin:0; }
+    .panel-heading button{ padding:6px 9px; }
+    .panel-empty{ color:var(--muted); font-size:14px; line-height:1.5; margin-top:24px; }
+    .side-panel.folded .panel-content{ opacity:0; visibility:hidden; transition:opacity 160ms ease, visibility 0ms 160ms; }
+    .panel-reveal{ position:absolute; inset:0; width:35px; border-radius:0; padding:12px 6px; flex-direction:column; display:flex; align-items:center; gap:12px; background:transparent; }
+    #workspaceRow[data-moving="true"] #screenCommandHost{ overflow:hidden; }
+    #grid.workspace-grid{ position:relative; display:block; }
+    #grid.workspace-grid > .thumb{ position:absolute; margin:0; transition:left var(--grid-duration, 0ms) cubic-bezier(.2,.7,.2,1), top var(--grid-duration, 0ms) cubic-bezier(.2,.7,.2,1), width var(--grid-duration, 0ms) cubic-bezier(.2,.7,.2,1), height var(--grid-duration, 0ms) cubic-bezier(.2,.7,.2,1); }
+    @media (prefers-reduced-motion: reduce){ .side-panel, .panel-content, #screenCommandHost, #grid.workspace-grid > .thumb{ transition:none !important; } }
+    #screenCommandHost{ flex-shrink:0; container-type:inline-size; }
+    #mainScreenHost{ flex:1; min-height:0; }
+    #settingsScreen{ height:100%; overflow:auto; padding:24px; }
+    #settingsScreen h1{ font-size:24px; margin:0 0 8px; }
+    #settingsScreen p{ color:var(--muted); line-height:1.5; }
+    .settings-field{ max-width:780px; margin-top:28px; }
+    .settings-field > label{ display:block; font-weight:600; margin-bottom:10px; }
+    .settings-folder{ display:flex; gap:10px; flex-wrap:wrap; }
+    .settings-folder input{ min-width:180px; flex:1; padding:10px 12px; border:1px solid #334155; border-radius:8px; background:var(--panel); color:var(--fg); font:inherit; }
+    .settings-field > .settings-switch{ display:flex; align-items:center; gap:12px; cursor:pointer; }
+    .settings-switch input{ appearance:none; position:relative; width:38px; height:22px; margin:0; flex:none; border:1px solid #64748b; border-radius:12px; background:#334155; cursor:pointer; }
+    .settings-switch input::before{ content:""; position:absolute; width:16px; height:16px; top:2px; left:2px; border-radius:50%; background:#f8fafc; }
+    .settings-switch input:checked{ background:var(--accent); border-color:var(--accent); }
+    .settings-switch input:checked::before{ left:18px; }
+    .settings-switch input:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; }
+    .settings-switch input:disabled{ opacity:.65; cursor:wait; }
+    #settingsStatus{ min-height:24px; }
+    #collectionScreen{ height:100%; min-height:0; display:flex; flex-direction:column; }
+    #collectionScreen #gridWrap{ flex:1; min-height:0; height:auto; }
+    .fs-active #globalAppBar, .fs-active #screenCommandHost, .fs-active .side-panel, .fs-active #globalUtilityHost{ display:none; }
     .fs-active .toolbar{ display:none; }
     .fs-active #gridWrap{ height:100vh; padding:14px; display:block; }
     .fs-active .collection-conflict,
@@ -331,11 +394,7 @@
 
     @media (min-width: 901px) {
       .toolbar{ position:sticky; }
-      .active-collection-name{
-        position:absolute;
-        left:50%;
-        transform:translateX(-50%);
-      }
+      .active-collection-name{ margin-left:auto; }
     }
 
     @media (max-width: 900px) {
@@ -346,13 +405,108 @@
         max-width:none;
       }
     }
+
+    :root{ --ready:#22c55e; --surface-raised:#141f30; --surface-inset:#0c131f; --line:rgba(148,163,184,.2); --radius-control:12px; --shadow-utility:0 18px 38px rgba(0,0,0,.35); }
+    :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+    ::selection{ background:var(--accent); color:var(--bg); }
+    .shell-icon{ width:18px; height:18px; flex:none; pointer-events:none; }
+    .product-identity{ display:flex; align-items:center; gap:10px; white-space:nowrap; font-size:15px; }
+    .product-identity .shell-icon{ color:var(--accent); width:24px; height:24px; }
+    #globalAppBar{ gap:12px; border-color:var(--line); }
+    #globalAppBar button{ display:inline-flex; align-items:center; justify-content:center; min-height:34px; border:1px solid var(--line); background:var(--surface-inset); box-shadow:none; }
+    #globalAppBar .global-utilities button{ width:36px; padding:7px; border-radius:8px; }
+    #globalAppBar button:hover, .utility-header button:hover{ background:var(--surface-raised); }
+    #globalAppBar button[aria-expanded="true"]{ border-color:var(--accent); }
+    #globalAppBar #activityIndicatorBtn{ min-width:112px; width:auto; gap:8px; padding:0 12px; border-radius:var(--radius-control); font-variant-numeric:tabular-nums; }
+    #appScreenSelector{ min-height:34px; font-size:13px; font-weight:600; border-color:var(--line); background-color:var(--surface-inset); }
+    .utility-separator{ border-color:var(--line); }
+    .toolbar{ padding:10px 14px; gap:8px; background:var(--panel); }
+    .toolbar > button, #orderMenuBtn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:36px; white-space:nowrap; }
+    .toolbar button:not(.btn-primary){ background:var(--surface-raised); box-shadow:none; border:1px solid var(--line); }
+    .toolbar button[aria-pressed="true"]{ color:var(--accent); border-color:var(--accent); }
+    .side-panel{ background:var(--panel); border-color:var(--line); }
+    .side-panel:last-child{ border-color:var(--line); }
+    .panel-content{ padding:12px; }
+    .panel-heading{ min-height:36px; padding-bottom:10px; border-bottom:1px solid var(--line); }
+    .panel-heading h2{ font-size:16px; font-weight:600; }
+    .panel-heading button{ width:32px; height:32px; padding:7px; border-radius:8px; background:var(--surface-raised); box-shadow:none; }
+    .panel-empty{ font-size:13px; line-height:1.6; margin:18px 2px; max-width:26ch; }
+    .panel-reveal{ padding:14px 7px; gap:16px; box-shadow:none; }
+    .rail-label{ writing-mode:vertical-rl; font-size:13px; font-weight:600; }
+    .panel-reveal:focus-visible{ outline-offset:-3px; }
+    #globalUtilityHost{ padding:18px; background:var(--panel); border-color:var(--line); box-shadow:var(--shadow-utility); scrollbar-width:none; }
+    #globalUtilityHost::-webkit-scrollbar{ display:none; }
+    .utility-header{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+    #globalUtilityHost .utility-header h2{ margin:0; font-size:18px; font-weight:600; }
+    .utility-header button{ width:32px; height:32px; padding:7px; display:flex; align-items:center; justify-content:center; flex:none; background:transparent; box-shadow:none; border-radius:8px; }
+    #keyboardMapHeading:focus-visible{ outline:0; text-decoration:underline; text-decoration-color:var(--accent); text-underline-offset:6px; }
+    #globalUtilityHost h3{ color:var(--fg); font-weight:600; font-size:14px; margin:16px 0 6px; }
+    .keyboard-context{ font-size:14px; border-color:var(--line); }
+    .keyboard-shortcuts > div{ gap:12px; padding:7px 0; }
+    .keyboard-keys{ flex-wrap:wrap; justify-content:flex-end; }
+    .keyboard-keys kbd{ background:var(--surface-inset); border-color:var(--line); border-radius:6px; }
+    #activityIndicatorPanel .activity-indicator-entry{ padding:12px; background:var(--surface-inset); line-height:1.5; }
+    #activityIndicatorPanel .activity-indicator-entry button{ border:1px solid var(--line); background:var(--surface-raised); box-shadow:none; }
+    #settingsScreen{ padding:24px; }
+    .settings-surface{ max-width:780px; margin:0 auto; padding:24px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); }
+    #settingsScreen h1{ font-size:22px; margin:0 0 8px; }
+    #settingsScreen p{ font-size:13px; line-height:1.6; }
+    .settings-field{ padding-top:20px; margin-top:20px; border-top:1px solid var(--line); }
+    #pipelinesRootPath{ direction:ltr; unicode-bidi:plaintext; background:var(--surface-inset); border-color:var(--line); font-size:13px; }
+    #settingsStatus{ margin:20px 0 0; padding-top:14px; border-top:1px solid var(--line); min-height:36px; }
+    @container (min-width:850px){
+      .toolbar{ display:grid; grid-template-columns:repeat(4, max-content) 1fr; }
+      .toolbar > .active-collection-name{ grid-row:2; grid-column:1 / -1; justify-self:center; margin:0; width:280px; max-width:100%; }
+      .toolbar-status{ grid-row:1; grid-column:5; }
+    }
+    @container (max-width:849px){
+      .toolbar > button, #orderMenuBtn{ padding:8px; }
+      .toolbar > .active-collection-name{ order:20; flex-basis:calc(100% - 60px); width:calc(100% - 60px); max-width:none; min-width:0; }
+      .toolbar-status{ margin-left:0; order:21; width:52px; justify-content:flex-end; }
+    }
+    @media(max-width:900px){
+      #globalAppBar{ gap:8px; }
+      .product-identity{ gap:6px; font-size:14px; }
+      #settingsScreen{ padding:12px; }
+      .settings-surface{ padding:16px; }
+      .settings-folder input{ min-width:0; flex-basis:100%; }
+    }
   </style>
 </head>
 <body>
+  <div id="appShell">
+  <header id="globalAppBar">
+    <strong class="product-identity"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M16 3v18M4 8h4m-4 8h4M16 8h4m-4 8h4M8 12h8"/></svg><span>Clip Sandbox</span></strong>
+    <select id="appScreenSelector" aria-label="App screen" hidden></select>
+    <div class="spacer"></div>
+    <div id="activityIndicatorRoot">
+      <button id="activityIndicatorBtn" type="button" title="Activity and Errors: Ready" aria-label="Activity and Errors: Ready" aria-expanded="false" aria-controls="activityIndicatorPanel"><span class="activity-status-dot" aria-hidden="true"></span><span class="activity-status-label">Ready</span></button>
+      <section id="activityIndicatorPanel" tabindex="-1" aria-label="Activity and Errors" hidden>
+        <div class="utility-header"><h2>Activity and Errors</h2><button type="button" data-utility-close aria-label="Close Activity and Errors" title="Close Activity and Errors"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+        <ul id="activityIndicatorList"></ul>
+      </section>
+    </div>
+    <span class="utility-separator" aria-hidden="true"></span>
+    <div class="global-utilities">
+      <button id="keyboardMapBtn" type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.1M10 9h.1M14 9h.1M18 9h.1M6 12h.1M10 12h.1M14 12h.1M18 12h.1M7 16h10"/></svg></button>
+      <button id="settingsBtn" type="button" aria-label="Settings" title="Settings"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 3-.6 2.3-2 .9-2.2-.6-2 3.4L5 10.7v2.6L3.2 15l2 3.4 2.2-.6 2 .9L10 21h4l.6-2.3 2-.9 2.2.6 2-3.4-1.8-1.7v-2.6L20.8 9l-2-3.4-2.2.6-2-.9L14 3Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    </div>
+    <span class="utility-separator caption-separator" aria-hidden="true"></span>
+  </header>
+  <div id="workspaceRow">
+    <aside id="pipelinesPanel" class="side-panel" aria-label="Pipelines">
+      <div id="pipelinesPanelContent" class="panel-content">
+        <header class="panel-heading"><h2>Pipelines</h2><button id="foldPipelines" type="button" aria-label="Fold Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button></header>
+        <p class="panel-empty">Pipeline browsing will appear here. Use Browse Folder to open a pipeline.</p>
+      </div>
+      <button id="revealPipelines" class="panel-reveal" type="button" aria-label="Show Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5h7l2 3h9v12H3V7Z"/></svg><span class="rail-label">Pipelines</span><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button>
+    </aside>
+    <div id="centralWorkspace">
+    <div id="screenCommandHost">
   <header class="toolbar" id="toolbar">
-    <button id="pickBtn" class="btn-primary">Browse Folder…</button>
+    <button id="pickBtn" class="btn-primary"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5h7l2 3h9v12H3V7Z"/></svg><span>Browse Folder…</span></button>
     <div class="order-menu" id="orderMenu" data-open="false">
-      <button id="orderMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="orderMenuPanel">Actions</button>
+      <button id="orderMenuBtn" aria-label="Actions" title="Actions" aria-haspopup="menu" aria-expanded="false" aria-controls="orderMenuPanel"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Actions</span></button>
       <div class="order-menu-panel" id="orderMenuPanel" role="menu" aria-label="View actions">
         <button id="saveBtn" role="menuitem" title="Save the active collection file in the current pipeline folder" disabled>Save</button>
         <button id="saveAsNewBtn" role="menuitem" title="Save the current sequence as a collection file" disabled>Save as Collection</button>
@@ -360,22 +514,19 @@
         <button id="deleteFromDiskBtn" role="menuitem" title="Delete the current selected clips from disk" disabled>Delete Selected from Disk...</button>
       </div>
     </div>
-    <button id="toggleTitlesBtn" title="Hide or show clip titles">Hide Titles</button>
-    <button id="fsBtn" title="Full screen (hides titles)">Full Screen</button>
+    <button id="toggleTitlesBtn" title="Hide or show clip titles"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16M12 5v14M8 19h8"/></svg><span class="command-label">Hide Titles</span></button>
+    <button id="fsBtn" aria-label="Full Screen" title="Full screen (hides titles)"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span class="command-label">Full Screen</span></button>
     <select class="active-collection-name" id="activeCollectionName" aria-label="Active pipeline view or collection" disabled>
-      <option value="">Local Video Grid Reviewer</option>
+      <option value="">No pipeline loaded</option>
     </select>
     <div class="toolbar-status">
       <span class="count" id="count">0 clips</span>
-      <div id="activityIndicatorRoot">
-        <button id="activityIndicatorBtn" type="button" aria-label="Activity history" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
-        <section id="activityIndicatorPanel" hidden>
-          <ul id="activityIndicatorList"></ul>
-        </section>
-      </div>
+
     </div>
-    <span class="hint">drag to reorder • click to select • Ctrl/Cmd-click to multi-select • right-click for direct add-to-collection or use Actions • double-click or Z to zoom • press Delete to remove from a collection or delete from disk in pipeline view • press F for fullscreen</span>
   </header>
+    </div>
+    <main id="mainScreenHost">
+    <section id="collectionScreen" aria-label="Collection workspace">
 
   <section class="collection-conflict" id="collectionConflict" hidden aria-live="polite">
     <p id="collectionConflictSummary"></p>
@@ -452,13 +603,29 @@
     <div id="grid" aria-live="polite"></div>
   </div>
 
+    </section>
+    </main>
+    </div>
+    <aside id="clipsPanel" class="side-panel" aria-label="Clips">
+      <div id="clipsPanelContent" class="panel-content">
+        <header class="panel-heading"><h2>Clips</h2><button id="foldClips" type="button" aria-label="Fold Clips" aria-controls="clipsPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button></header>
+        <p class="panel-empty">No locked clips yet.</p>
+      </div>
+      <button id="revealClips" class="panel-reveal" type="button" aria-label="Show Clips" aria-controls="clipsPanelContent" aria-expanded="true" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M16 3v18M4 8h4m-4 8h4M16 8h4m-4 8h4M8 12h8"/></svg><span class="rail-label">Clips</span><span id="lockedClipCount" hidden></span><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button>
+    </aside>
+  </div>
+  </div>
+
   <div id="clipContextMenu" hidden>
     <div id="clipContextMenuPanel"></div>
   </div>
   <div id="zoomLayerRoot"></div>
+  <div id="globalUtilityHost" hidden>
+    <section id="keyboardMapPanel" hidden></section>
+  </div>
   <script type="module">
-    import { initApp } from './build/src/app/app-controller.js';
-    initApp();
+    import { AppController } from './build/src/app/app-controller.js';
+    new AppController().init();
   </script>
 </body>
 </html>

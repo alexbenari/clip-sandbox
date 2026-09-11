@@ -8,7 +8,7 @@ type FullscreenElement = HTMLElement & {
 };
 
 export class FullscreenAdapter {
-  doc: FullscreenDocument;
+  private readonly doc: FullscreenDocument;
 
   constructor({ doc = document }: { doc?: FullscreenDocument } = {}) {
     this.doc = doc;

@@ -11,10 +11,6 @@ type DeleteFailureSummary = {
   failedCollectionRewrites?: Array<{ filename: string; collectionName: string; error?: unknown }>;
 };
 
-function errorDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error || '');
-}
-
 export class AppDiagnostics {
   fileSystem: ErrorLogFileSystem;
   validator: ErrorLogValidator;
@@ -59,7 +55,7 @@ export class AppDiagnostics {
   }
 
   async logRuntimeError(problem: string, err: unknown, folderSession: unknown = this.getCurrentFolderSession()): Promise<void> {
-    const detail = `Runtime error\nProblem: ${problem}\nDetails: ${errorDetail(err)}\n\n`;
+    const detail = `Runtime error\nProblem: ${problem}\nDetails: ${this.errorDetail(err)}\n\n`;
     await this.appendErrorLog(detail, folderSession);
   }
 
@@ -67,7 +63,7 @@ export class AppDiagnostics {
     const problem = filename
       ? `Failed to read folder entry: ${filename}`
       : 'Failed to read folder entry';
-    const detail = `Directory enumeration error\nProblem: ${problem}\nAttempts: ${attempts}\nDetails: ${errorDetail(error)}\n\n`;
+    const detail = `Directory enumeration error\nProblem: ${problem}\nAttempts: ${attempts}\nDetails: ${this.errorDetail(error)}\n\n`;
     await this.appendErrorLog(detail, folderSession);
   }
 
@@ -75,26 +71,26 @@ export class AppDiagnostics {
     const problem = filename
       ? `Failed to load video metadata: ${filename}`
       : 'Failed to load video metadata';
-    const detail = `Video metadata error\nProblem: ${problem}\nDetails: ${errorDetail(error) || 'Unknown metadata load failure'}\nFallback: using default layout aspect ratio for this clip.\n\n`;
+    const detail = `Video metadata error\nProblem: ${problem}\nDetails: ${this.errorDetail(error) || 'Unknown metadata load failure'}\nFallback: using default layout aspect ratio for this clip.\n\n`;
     await this.appendErrorLog(detail, folderSession);
   }
 
   async logDeleteFailures(result: DeleteFailureSummary, folderSession: unknown = this.getCurrentFolderSession()): Promise<void> {
     for (const failedDelete of Array.from(result?.failedDeletes || [])) {
       await this.appendErrorLog(
-        `Disk delete error\nFile: ${failedDelete.filename}\nDetails: ${errorDetail(failedDelete.error) || failedDelete.code}\n\n`,
+        `Disk delete error\nFile: ${failedDelete.filename}\nDetails: ${this.errorDetail(failedDelete.error) || failedDelete.code}\n\n`,
         folderSession,
       );
     }
     for (const failedRewrite of Array.from(result?.failedCollectionRewrites || [])) {
       await this.appendErrorLog(
-        `Collection rewrite error\nFile: ${failedRewrite.filename}\nCollection: ${failedRewrite.collectionName}\nDetails: ${errorDetail(failedRewrite.error)}\n\n`,
+        `Collection rewrite error\nFile: ${failedRewrite.filename}\nCollection: ${failedRewrite.collectionName}\nDetails: ${this.errorDetail(failedRewrite.error)}\n\n`,
         folderSession,
       );
     }
   }
-}
 
-export function createAppDiagnostics(options: ConstructorParameters<typeof AppDiagnostics>[0]): AppDiagnostics {
-  return new AppDiagnostics(options);
+  private errorDetail(error: unknown): string {
+    return error instanceof Error ? error.message : String(error || '');
+  }
 }

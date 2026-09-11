@@ -1,23 +1,15 @@
-import {
-  saveAsNewNameRequiredText,
-  saveAsNewInvalidNameText,
-  collectionAlreadyExistsText,
-} from '../app/app-text.js';
-import { Collection } from '../domain/collection.js';
-import type { Pipeline } from '../domain/pipeline.js';
-
 export class SaveAsNewDialogController {
-  dialog: HTMLElement | null;
-  titleEl: HTMLElement | null;
-  textEl: HTMLElement | null;
-  nameInput: HTMLInputElement | null;
-  errorMessageEl: HTMLElement | null;
-  confirmBtn: HTMLButtonElement | null;
-  cancelBtn: HTMLElement | null;
-  validateName: (name: string) => string;
-  onConfirm: (name: string) => void;
-  onCancel: () => void;
-  externalError: string;
+  private readonly dialog: HTMLElement | null;
+  private readonly titleEl: HTMLElement | null;
+  private readonly textEl: HTMLElement | null;
+  private readonly nameInput: HTMLInputElement | null;
+  private readonly errorMessageEl: HTMLElement | null;
+  private readonly confirmBtn: HTMLButtonElement | null;
+  private readonly cancelBtn: HTMLElement | null;
+  private readonly validateName: (name: string) => string;
+  private readonly onConfirm: (name: string) => void;
+  private readonly onCancel: () => void;
+  private externalError: string;
 
   constructor({
     dialog,
@@ -143,18 +135,4 @@ export class SaveAsNewDialogController {
     this.onCancel();
     return true;
   }
-}
-
-export function createSaveAsNewDialogController(options?: ConstructorParameters<typeof SaveAsNewDialogController>[0]): SaveAsNewDialogController {
-  return new SaveAsNewDialogController(options);
-}
-
-export function validateSaveAsNewName({ name = '', pipeline = null }: { name?: string; pipeline?: Pipeline | null } = {}): string {
-  const validation = Collection.validateCollectionName(name);
-  if (validation.code === 'required') return saveAsNewNameRequiredText();
-  if (validation.code === 'illegal-chars') return saveAsNewInvalidNameText();
-  if (!validation.code && pipeline?.getCollectionByFilename(validation.filename)) {
-    return collectionAlreadyExistsText();
-  }
-  return '';
 }
