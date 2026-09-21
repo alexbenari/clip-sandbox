@@ -9,6 +9,7 @@ export interface IExtractionDestinationEntry {
 
 export interface IExtractionDestinationSnapshot {
   readonly destinationHandle: string;
+  readonly folderPath: string;
   readonly entries: readonly IExtractionDestinationEntry[];
 }
 

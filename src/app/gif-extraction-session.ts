@@ -24,7 +24,7 @@ import {
   type RefineGifCommitResult,
 } from './refine-gif-session.js';
 import { ClipExtractionWorkflow, type ClipExtractionEntryState } from './clip-extraction-workflow.js';
-import { ExtractionDestinationSession } from './extraction-destination-session.js';
+import { ExtractionDestinationSession, type IExtractionDestinationPublication } from './extraction-destination-session.js';
 import { GifCaptureThumbnailSession, type GifThumbnailState } from './gif-capture-thumbnail-session.js';
 
 export type { IThumbnailCacheService } from './thumbnail-cache-service.js';
@@ -60,6 +60,7 @@ type GifExtractionSessionOptions = {
   readonly onSuccess?: (message: string) => void;
   readonly onError?: (message: string, error?: unknown) => void;
   readonly extractionService?: IClipExtractionService;
+  readonly onCollectionPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
 };
 
 export class GifExtractionSession implements IRefineGifSessionOwner {
@@ -352,7 +353,13 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     this.extractionWorkflow = this.options.extractionService
       ? new ClipExtractionWorkflow(
         new ClipExtractor(this.options.extractionService),
-        new ExtractionDestinationSession(this.options.extractionService),
+        new ExtractionDestinationSession(this.options.extractionService, {
+          onCollectionPublished: publication => this.options.onCollectionPublished?.(publication),
+          onCollectionPublishedError: error => this.options.onError?.(
+            'The clip was saved, but the Collection view could not refresh.',
+            error,
+          ),
+        }),
         () => this.publish(),
       )
       : null;

@@ -154,7 +154,7 @@ class ClipExtractionRuntime {
         entries.push(publicEntry(name, stat, 'video/mp4'));
       }
     }
-    return { ok: true, result: { destinationHandle: handle, folderName: 'extraction-tmp', entries } };
+    return { ok: true, result: { destinationHandle: handle, folderPath, folderName: 'extraction-tmp', entries } };
   }
 
   async allocateAndExtract(ownerId, host, request, signal) {

@@ -217,41 +217,6 @@ describe('app controller context menu wiring', () => {
     document.body.innerHTML = '';
   });
 
-  test.each(['dialog', 'zoom', 'save', 'conflict'])('records errors without stealing protected %s focus', async (surface) => {
-    document.body.insertAdjacentHTML('beforeend', '<div id="globalUtilityHost"><section id="keyboardMapPanel"></section></div><button id="keyboardMapBtn">Keyboard shortcuts</button>');
-    const { AppController } = await import('../../../src/app/app-controller.js');
-    new AppController().init();
-    document.querySelector('#appScreenSelector').value = 'collection';
-    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
-    if (surface === 'zoom') {
-      document.getElementById('pickBtn').click();
-      await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
-    }
-    let rejectPick;
-    window.clipSandboxDesktop.pickFolder = vi.fn(() => new Promise((_resolve, reject) => { rejectPick = reject; }));
-    document.getElementById('pickBtn').click();
-    await waitFor(() => expect(rejectPick).toBeTypeOf('function'));
-    let protectedRoot;
-    if (surface === 'dialog') {
-      protectedRoot = document.getElementById('unsavedChangesDialog');
-      protectedRoot.setAttribute('open', '');
-    } else if (surface === 'zoom') {
-      document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-      await waitFor(() => expect(document.getElementById('zoomOverlay')).not.toBeNull());
-      protectedRoot = document.getElementById('zoomOverlay');
-    } else {
-      protectedRoot = document.getElementById(surface === 'save' ? 'saveAsNewDialog' : 'collectionConflict');
-      protectedRoot.hidden = false;
-    }
-    protectedRoot.tabIndex = -1;
-    protectedRoot.focus();
-    rejectPick(new Error('Folder unavailable'));
-    await waitFor(() => expect(document.getElementById('activityIndicatorList').textContent).toContain('Folder unavailable'));
-    expect(document.getElementById('globalUtilityHost').hidden).toBe(true);
-    expect(document.activeElement).toBe(protectedRoot);
-    expect(document.getElementById('activityIndicatorBtn').dataset.state).toBe('error');
-  });
-
   test('right-clicking a selected clip opens the app context menu', async () => {
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();

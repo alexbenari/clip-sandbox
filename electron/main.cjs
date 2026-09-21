@@ -3,6 +3,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { readFolderEntries } = require('./folder-entry.cjs');
+const { FolderAccessRegistry } = require('./folder-access-registry.cjs');
 const { createVideoEditRuntime } = require('./video-edit-runtime.cjs');
 const { AppSettingsStore } = require('./app-settings-store.cjs');
 const { registerFrameReviewIpc } = require('./frame-review-ipc.cjs');
@@ -106,6 +107,7 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     resolveFfprobe: () => nativeProducts.ffprobe(),
     environment: nativeEnvironment,
   });
+  const folderAccess = new FolderAccessRegistry();
   ipcMain.handle('clip-sandbox:load-app-settings', () => settingsStore.load());
   ipcMain.handle('clip-sandbox:save-app-settings', (_event, settings) => settingsStore.save(settings));
   ipcMain.handle('clip-sandbox:choose-pipelines-root', async event => {
@@ -120,30 +122,40 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     const folderPath = await pickFolderFromDialog(browserWindow);
     if (!folderPath) return { canceled: true };
 
+    const resolvedFolderPath = folderAccess.remember(event.sender, folderPath);
     return {
       canceled: false,
+      folderPath: resolvedFolderPath,
+      folderName: path.basename(resolvedFolderPath),
+      files: await readFolderEntries(resolvedFolderPath),
+    };
+  });
+
+  ipcMain.handle('clip-sandbox:refresh-folder', async (event, payload = {}) => {
+    const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
+    return {
       folderPath,
       folderName: path.basename(folderPath),
       files: await readFolderEntries(folderPath),
     };
   });
 
-  ipcMain.handle('clip-sandbox:save-text-file', async (_event, payload = {}) => {
-    const folderPath = String(payload.folderPath || '').trim();
+  ipcMain.handle('clip-sandbox:save-text-file', async (event, payload = {}) => {
+    const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
     const filename = validateTopLevelFilename(payload.filename);
     await fs.writeFile(path.join(folderPath, filename), String(payload.text || ''), 'utf8');
     return { mode: 'saved' };
   });
 
-  ipcMain.handle('clip-sandbox:append-text-file', async (_event, payload = {}) => {
-    const folderPath = String(payload.folderPath || '').trim();
+  ipcMain.handle('clip-sandbox:append-text-file', async (event, payload = {}) => {
+    const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
     const filename = validateTopLevelFilename(payload.filename);
     await fs.appendFile(path.join(folderPath, filename), String(payload.text || ''), 'utf8');
     return { mode: 'saved' };
   });
 
-  ipcMain.handle('clip-sandbox:delete-files', async (_event, payload = {}) => {
-    const folderPath = String(payload.folderPath || '').trim();
+  ipcMain.handle('clip-sandbox:delete-files', async (event, payload = {}) => {
+    const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
     const rawFilenames = Array.from(payload.filenames || []).map((filename) => String(filename || '').trim()).filter(Boolean);
     try {
       rawFilenames.forEach((filename) => validateTopLevelFilename(filename));

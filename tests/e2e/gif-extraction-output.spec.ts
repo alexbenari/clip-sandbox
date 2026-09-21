@@ -57,6 +57,12 @@ test('extract current and Extract All publish original-source clips to extractio
     await page.keyboard.press('e');
     await expect(page.locator('[data-range-id="range-1"] .gif-range-extraction'))
       .toContainText('Extracted as cfr-audio-001.mp4', { timeout: 90_000 });
+    const destination = path.join(pipelines, 'extraction-tmp');
+    await page.locator('#appScreenSelector').selectOption('collection');
+    await page.evaluate(folderPath => window.clipSandboxDesktop.__testSetNextFolderPath(folderPath), destination);
+    await page.locator('#pickBtn').click();
+    await expect(page.locator('#grid .thumb')).toHaveCount(1);
+    await page.locator('#appScreenSelector').selectOption('gif-extraction');
     await progress.evaluate(input => {
       input.value = '24';
       input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -76,7 +82,9 @@ test('extract current and Extract All publish original-source clips to extractio
     await expect(page.locator('[data-range-id="range-2"] .gif-range-extraction'))
       .toContainText('Extracted as cfr-audio-002.mp4', { timeout: 90_000 });
 
-    const destination = path.join(pipelines, 'extraction-tmp');
+    await page.locator('#appScreenSelector').selectOption('collection');
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+    await page.locator('#appScreenSelector').selectOption('gif-extraction');
     const output = path.join(destination, 'cfr-audio-001.mp4');
     expect(await fs.readFile(path.join(destination, 'cfr-audio.txt'), 'utf8'))
       .toBe('cfr-audio-001.mp4\ncfr-audio-002.mp4\n');

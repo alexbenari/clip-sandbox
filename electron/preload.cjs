@@ -93,6 +93,9 @@ const desktopApi = {
   pickFolder() {
     return ipcRenderer.invoke('clip-sandbox:pick-folder');
   },
+  refreshFolder(payload) {
+    return ipcRenderer.invoke('clip-sandbox:refresh-folder', payload);
+  },
   createVideoEdit(payload) {
     return ipcRenderer.invoke('clip-sandbox:create-video-edit', payload);
   },

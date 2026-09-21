@@ -40,6 +40,35 @@ describe('electron file system service', () => {
     expect(Object.hasOwn(result.files[0], 'frameReviewSourceHandle')).toBe(false);
   });
 
+  it('reloads a previously selected desktop folder through the desktop api', async () => {
+    const api = {
+      refreshFolder: vi.fn(async ({ folderPath }) => ({
+        folderPath,
+        folderName: 'clips',
+        files: [{
+          name: 'bravo.mp4',
+          relativePath: 'bravo.mp4',
+          path: 'C:/clips/bravo.mp4',
+          mediaSource: 'file:///C:/clips/bravo.mp4',
+          type: 'video/mp4',
+          lastModifiedMs: 456,
+        }],
+      })),
+    };
+    const service = new ElectronFileSystemService({ api });
+
+    const result = await service.refreshFolder({ accessMode: 'readwrite', folderPath: 'C:/clips' });
+
+    expect(api.refreshFolder).toHaveBeenCalledWith({ folderPath: 'C:/clips' });
+    expect(result.folderSession).toEqual({
+      kind: 'desktop-directory',
+      accessMode: 'readwrite',
+      folderPath: 'C:/clips',
+    });
+    expect(result.folderName).toBe('clips');
+    expect(result.files.map(file => file.name)).toEqual(['bravo.mp4']);
+  });
+
   it('maps delete responses into renderer-facing errors', async () => {
     const api = {
       deleteFiles: vi.fn(async () => ({

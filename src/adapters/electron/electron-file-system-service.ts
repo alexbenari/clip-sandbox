@@ -29,6 +29,7 @@ type DesktopDeleteResult = {
 
 type ElectronDesktopApi = ElectronVideoEditApi & {
   pickFolder?: () => Promise<DesktopFolderResult | null | undefined>;
+  refreshFolder?: (request: { folderPath: string }) => Promise<DesktopFolderResult | null | undefined>;
   saveTextFile?: (request: { folderPath: string; filename: string; text: string }) => Promise<{ mode?: string }>;
   appendTextFile?: (request: { folderPath: string; filename: string; text: string }) => Promise<{ mode?: string }>;
   deleteFiles?: (request: { folderPath: string; filenames: Iterable<string> }) => Promise<{
@@ -115,11 +116,11 @@ export class ElectronFileSystemService {
     return file as ClipFile;
   }
 
-  private requireApi(): Required<Pick<ElectronDesktopApi, 'pickFolder' | 'saveTextFile' | 'appendTextFile' | 'deleteFiles'>> & ElectronDesktopApi {
+  private requireApi(): Required<Pick<ElectronDesktopApi, 'pickFolder' | 'refreshFolder' | 'saveTextFile' | 'appendTextFile' | 'deleteFiles'>> & ElectronDesktopApi {
     if (!this.api) {
       throw new Error('Electron desktop API is unavailable.');
     }
-    return this.api as Required<Pick<ElectronDesktopApi, 'pickFolder' | 'saveTextFile' | 'appendTextFile' | 'deleteFiles'>> & ElectronDesktopApi;
+    return this.api as Required<Pick<ElectronDesktopApi, 'pickFolder' | 'refreshFolder' | 'saveTextFile' | 'appendTextFile' | 'deleteFiles'>> & ElectronDesktopApi;
   }
 
   canMutateDisk(folderSession: unknown): folderSession is DesktopFolderSession {
@@ -131,6 +132,11 @@ export class ElectronFileSystemService {
       && typeof session.folderPath === 'string'
       && session.folderPath.length > 0
     );
+  }
+
+  isActiveFolder(folderSession: unknown, folderPath: string): boolean {
+    return this.canMutateDisk(folderSession)
+      && this.normalizedFolderPath(folderSession.folderPath) === this.normalizedFolderPath(folderPath);
   }
 
   validateTopLevelFilename(filename: string): string {
@@ -155,12 +161,34 @@ export class ElectronFileSystemService {
     if (!result || result.canceled) {
       throw new DOMException('The user aborted a request.', 'AbortError');
     }
+    return this.folderSelection(result);
+  }
 
+  async refreshFolder(folderSession: unknown): Promise<{ folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string }> {
+    if (!this.canMutateDisk(folderSession)) {
+      throw new Error('Folder refresh is unavailable for the current folder session.');
+    }
+    const result = await this.requireApi().refreshFolder({ folderPath: folderSession.folderPath });
+    if (!result || result.canceled) {
+      throw new Error('The current folder could not be refreshed.');
+    }
+    return this.folderSelection(result);
+  }
+
+  private folderSelection(result: DesktopFolderResult): { folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string } {
     return {
       folderSession: this.createFolderSession(result.folderPath),
       files: Array.from(result.files || []).map((entry) => this.toRendererFile(entry)),
       folderName: result.folderName || '',
     };
+  }
+
+  private normalizedFolderPath(folderPath: string): string {
+    return String(folderPath || '')
+      .trim()
+      .replace(/\//g, '\\')
+      .replace(/\\+$/, '')
+      .toLocaleLowerCase();
   }
 
   async saveTextFile({

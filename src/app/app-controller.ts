@@ -56,6 +56,7 @@ import { UnsavedChangesDialogController } from '../ui/unsaved-changes-dialog-con
 import { LoadStatusControl } from '../ui/load-status-control.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { Collection } from '../domain/collection.js';
+import { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
 
 const ERROR_LOG_FILENAME = 'err.log';
 const NEW_COLLECTION_CHOICE_VALUE = '__new_collection__';
@@ -102,12 +103,6 @@ type PersistCollectionResult = {
 };
 
 class AppControllerSupport {
-  static folderSessionWithPath(folderSession: unknown): { folderPath?: string } | null {
-  if (typeof folderSession !== 'object' || folderSession === null) return null;
-  const folderPath = (folderSession as { folderPath?: unknown }).folderPath;
-  return typeof folderPath === 'string' && folderPath ? { folderPath } : null;
-}
-
   static isDeferredSaveResult(result: SaveCollectionResult | null | undefined): result is { deferred: true } {
   return !!result && 'deferred' in result && result.deferred === true;
 }
@@ -588,7 +583,13 @@ export class AppController {
         });
       };
 
-    readonly loadPipeline = async ({ folderSession = null, files = [], folderName = '' }: Partial<FolderSelection> = {}): Promise<void> => {
+      readonly loadPipeline = async ({
+        folderSession = null,
+        files = [],
+        folderName = '',
+        preserveCollectionFilename = '',
+        reportInitialLoad = true,
+      }: Partial<FolderSelection> & { preserveCollectionFilename?: string; reportInitialLoad?: boolean } = {}): Promise<void> => {
         await settingsReady;
         try {
           const buildResult = await pipelineFactory.buildPipeline({
@@ -603,14 +604,23 @@ export class AppController {
 
           gridController.invalidateAllViews();
           gridController.retagActiveView(null);
+          const preservedCollection = preserveCollectionFilename
+            ? pipeline.getCollectionByFilename(preserveCollectionFilename)
+            : null;
+          if (preservedCollection) {
+            await this.reloadSelection({ pipeline, collection: preservedCollection, folderSession });
+            return;
+          }
           this.applySelection(result.sequence, {
             collection: null,
             folderSession,
           });
-          loadStatusControl.showInitialLoadStatus({
-            pipeline,
-            clipCount: result.sequence.orderedClips().length,
-          });
+          if (reportInitialLoad) {
+            loadStatusControl.showInitialLoadStatus({
+              pipeline,
+              clipCount: result.sequence.orderedClips().length,
+            });
+          }
         } catch (err) {
           await diagnostics.logRuntimeError('Failed to load the selected folder.', err, folderSession);
           this.showErrorStatus(appText.collectionReadErrorText(err), {
@@ -640,6 +650,20 @@ export class AppController {
             technicalDetails: err instanceof Error ? err.stack ?? err.message : String(err),
           });
         }
+      };
+
+      readonly refreshActiveFolder = async (): Promise<void> => {
+        const folderSession = state.currentFolderSession;
+        if (!fileSystem.canMutateDisk(folderSession)) return;
+
+        const activeCollectionFilename = this.activeCollectionFilename();
+        const selection = await fileSystem.refreshFolder(folderSession);
+        if (state.currentFolderSession !== folderSession || pipelineSession.hasDirtyClipSequenceChanges) return;
+        await this.loadPipeline({
+          ...selection,
+          preserveCollectionFilename: activeCollectionFilename,
+          reportInitialLoad: false,
+        });
       };
 
     readonly onPickFolder = async (): Promise<void> => {
@@ -739,6 +763,7 @@ export class AppController {
         if (!saveResult?.ok) return saveResult;
         const savedCollection = saveResult.collection;
         pipelineSession.markCurrentSequenceSavedAs(savedCollection);
+        await openFolderRefreshSession.afterCollectionSaved();
         this.refreshCollectionSelectorView();
         this.refreshToolbarView();
         this.showStatus(appText.savedCollectionFileText(savedCollection.filename || ''));
@@ -757,6 +782,7 @@ export class AppController {
         const savedCollection = saveResult.collection;
         const previousCacheKey = this.activeGridViewCacheKey();
         pipelineSession.markCurrentSequenceSavedAs(savedCollection);
+        await openFolderRefreshSession.afterCollectionSaved();
         gridController.invalidateView(previousCacheKey);
         gridController.retagActiveView(this.activeGridViewCacheKey());
         saveAsNewDialogController.close();
@@ -878,7 +904,9 @@ export class AppController {
           await zoomVideoEditWorkflow.run({
             edit,
             sourceClip,
-            folderSession: AppControllerSupport.folderSessionWithPath(state.currentFolderSession),
+            folderSession: fileSystem.canMutateDisk(state.currentFolderSession)
+              ? state.currentFolderSession
+              : null,
           });
         } catch (error) {
           const problem = error instanceof VideoEditNotificationError
@@ -1086,6 +1114,20 @@ this.initialized = true;
     validator,
     errorLogFilename: ERROR_LOG_FILENAME,
     getCurrentFolderSession: () => state.currentFolderSession,
+  });
+  const openFolderRefreshSession = new OpenFolderRefreshSession({
+    isActiveFolder: folderPath => fileSystem.isActiveFolder(state.currentFolderSession, folderPath),
+    hasUnsavedActiveSequenceChanges: () => pipelineSession.hasDirtyClipSequenceChanges,
+    refreshActiveFolder: workflows.refreshActiveFolder,
+    onRefreshError: error => {
+      const message = 'The clip was saved, but the Collection view could not refresh.';
+      workflows.showErrorStatus(message, {
+        affected: 'Collection refresh',
+        recovery: 'Open the folder again to refresh its clips.',
+        technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
+      });
+      void diagnostics.logRuntimeError(message, error, state.currentFolderSession);
+    },
   });
   const clipContextMenuController = new ContextMenuController({
     root: clipContextMenu,
@@ -1477,6 +1519,7 @@ this.initialized = true;
       new ElectronThumbnailCacheService({ window }),
       {
         extractionService: new ElectronClipExtractionService(window),
+        onCollectionPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
         onProgress: workflows.showProgressStatus,
         onSuccess: workflows.showStatus,
         onError: (message, error) => {

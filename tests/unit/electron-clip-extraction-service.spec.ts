@@ -6,10 +6,11 @@ import { ElectronClipExtractionService } from '../../src/adapters/electron/elect
 const require = createRequire(import.meta.url);
 
 describe('ElectronClipExtractionService', () => {
-  it('maps safe destination entries without accepting filesystem paths into the model', async () => {
+  it('maps destination entries and its dedicated destination folder path into the model', async () => {
     const api = {
       openDestination: vi.fn(async () => ({ ok: true, result: {
         destinationHandle: 'destination_12345678',
+        folderPath: 'D:\\pipelines\\extraction-tmp',
         entries: [{ name: 'Movie.txt', type: 'text/plain', text: 'Movie-001.mp4\n', path: 'D:\\secret' }],
       } })),
       extract: vi.fn(), saveCollection: vi.fn(), cancel: vi.fn(),
@@ -20,6 +21,7 @@ describe('ElectronClipExtractionService', () => {
 
     expect(snapshot).toEqual({
       destinationHandle: 'destination_12345678',
+      folderPath: 'D:\\pipelines\\extraction-tmp',
       entries: [{ kind: 'collection', filename: 'Movie.txt', content: 'Movie-001.mp4\n' }],
     });
     expect(JSON.stringify(snapshot)).not.toContain('D:\\secret');

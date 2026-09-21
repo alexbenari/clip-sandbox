@@ -8,22 +8,37 @@ import type {
 } from '../frame-review/clip-extraction-api.js';
 import { PipelineSession } from './pipeline-session.js';
 
+export interface IExtractionDestinationPublication {
+  readonly folderPath: string;
+  readonly collectionFilename: string;
+  readonly media: ICreatedExtractionMedia;
+}
+
 export interface IExtractionDestinationSessionSnapshot {
   readonly destinationHandle: string;
+  readonly folderPath: string;
   readonly collectionFilename: string;
   readonly collection: Collection;
 }
 
+type ExtractionDestinationSessionOptions = {
+  readonly onCollectionPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
+  readonly onCollectionPublishedError?: (error: unknown) => void;
+};
+
 export class ExtractionDestinationSession {
   private readonly pipelineSession = new PipelineSession();
   private destinationHandle = '';
+  private folderPath = '';
   private collectionFilename = '';
   private collection: Collection | null = null;
   private readonly pendingPublications = new Map<string, ICreatedExtractionMedia>();
   private latestPendingMediaHandle: string | null = null;
 
-  constructor(private readonly service: Pick<IClipExtractionService,
-    'openExtractionDestination' | 'saveCollection'>) {}
+  constructor(
+    private readonly service: Pick<IClipExtractionService, 'openExtractionDestination' | 'saveCollection'>,
+    private readonly options: ExtractionDestinationSessionOptions = {},
+  ) {}
 
   async open({ movieName }: { movieName: string }): Promise<IExtractionDestinationSessionSnapshot> {
     const collectionName = this.movieStem(movieName);
@@ -31,6 +46,7 @@ export class ExtractionDestinationSession {
     const destination = await this.service.openExtractionDestination();
     this.loadPipeline(destination);
     this.destinationHandle = destination.destinationHandle;
+    this.folderPath = destination.folderPath;
     this.collectionFilename = collectionFilename;
     this.collection = this.pipelineSession.pipeline?.getCollectionByFilename(collectionFilename)
       ?? Collection.fromFilename({ filename: collectionFilename, orderedClipNames: [] });
@@ -67,6 +83,19 @@ export class ExtractionDestinationSession {
     this.collection = collection;
     this.pendingPublications.delete(mediaHandle);
     if (this.latestPendingMediaHandle === mediaHandle) this.latestPendingMediaHandle = null;
+    await this.publishCollectionCommitted(media);
+  }
+
+  private async publishCollectionCommitted(media: ICreatedExtractionMedia): Promise<void> {
+    try {
+      await this.options.onCollectionPublished?.(Object.freeze({
+        folderPath: this.folderPath,
+        collectionFilename: this.collectionFilename,
+        media,
+      }));
+    } catch (error) {
+      this.options.onCollectionPublishedError?.(error);
+    }
   }
 
   private collectionWith(filename: string): Collection {
@@ -125,13 +154,14 @@ export class ExtractionDestinationSession {
     this.assertOpen();
     return Object.freeze({
       destinationHandle: this.destinationHandle,
+      folderPath: this.folderPath,
       collectionFilename: this.collectionFilename,
       collection: this.collection!,
     });
   }
 
   private assertOpen(): void {
-    if (!this.destinationHandle || !this.collection || !this.collectionFilename) {
+    if (!this.destinationHandle || !this.folderPath || !this.collection || !this.collectionFilename) {
       throw new Error('The extraction destination is not open.');
     }
   }

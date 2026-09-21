@@ -41,9 +41,10 @@ export class ElectronClipExtractionService implements IClipExtractionService {
   async openExtractionDestination(): Promise<IExtractionDestinationSnapshot> {
     const result = this.record(this.response(await this.api.openDestination()), 'extraction destination');
     const destinationHandle = this.opaqueId(result.destinationHandle, 'destination');
+    const folderPath = this.absolutePath(result.folderPath);
     if (!Array.isArray(result.entries)) throw new Error('The extraction destination entries are invalid.');
     const entries = result.entries.map(value => this.destinationEntry(value));
-    return Object.freeze({ destinationHandle, entries: Object.freeze(entries) });
+    return Object.freeze({ destinationHandle, folderPath, entries: Object.freeze(entries) });
   }
 
   async extract(request: IExactClipExtractionRequest): Promise<ICreatedExtractionMedia> {
@@ -123,6 +124,13 @@ export class ElectronClipExtractionService implements IClipExtractionService {
   private filename(value: unknown): string {
     if (typeof value !== 'string' || !value || value.length > 255 || /[\\/\u0000]/.test(value)) {
       throw new Error('The extraction filename is invalid.');
+    }
+    return value;
+  }
+
+  private absolutePath(value: unknown): string {
+    if (typeof value !== 'string' || !/^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)/.test(value)) {
+      throw new Error('The extraction destination path is invalid.');
     }
     return value;
   }
