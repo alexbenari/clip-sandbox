@@ -145,7 +145,7 @@ describe('clip extraction runtime', () => {
     expect(copied.map(value => path.basename(value))).toEqual(['Movie-001.mp4', 'Movie-002.mp4']);
   });
 
-  it('encodes selected original frames as lossless YUV video', async () => {
+  it('encodes selected original frames as high-quality bounded YUV video', async () => {
     const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const fs = {
       mkdir: vi.fn(async () => undefined),
@@ -181,12 +181,17 @@ describe('clip extraction runtime', () => {
     });
 
     const videoArguments = runCommand.mock.calls[0][1];
+    expect(videoArguments).toContain("select='between(n,10,20)',setpts=PTS-STARTPTS");
     expect(videoArguments).toContain('libx264');
     expect(videoArguments).toContain('yuv420p');
-    expect(videoArguments).toContain('-qp');
-    expect(videoArguments).toContain('0');
+    expect(videoArguments).toContain('-crf');
+    expect(videoArguments).toContain('16');
+    expect(videoArguments).toContain('-maxrate');
+    expect(videoArguments).toContain('48M');
+    expect(videoArguments).toContain('-bufsize');
+    expect(videoArguments).toContain('96M');
     expect(videoArguments).not.toContain('libx264rgb');
-    expect(videoArguments).not.toContain('crf');
+    expect(videoArguments).not.toContain('-qp');
   });
 
   it('rejects an unknown destination before preparing or running media work', async () => {

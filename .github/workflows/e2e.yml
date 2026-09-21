@@ -28,10 +28,15 @@ jobs:
           if ($actualSha512 -ne $expectedSha512) {
             throw "Cygwin setup SHA-512 mismatch. Expected $expectedSha512; got $actualSha512."
           }
-          & $setupPath -q -N -R 'C:\cygwin64' -s 'https://mirrors.kernel.org/sourceware/cygwin/' `
-            -P 'gcc-g++,mingw64-x86_64-gcc-g++,cmake,make,python3,pkg-config'
-          if ($LASTEXITCODE -ne 0) {
-            throw "Cygwin setup failed with exit code $LASTEXITCODE."
+          $setupProcess = Start-Process -FilePath $setupPath -ArgumentList @(
+            '-q'
+            '-N'
+            '-R', 'C:\cygwin64'
+            '-s', 'https://mirrors.kernel.org/sourceware/cygwin/'
+            '-P', 'gcc-g++,mingw64-x86_64-gcc-g++,cmake,make,python3,pkg-config'
+          ) -Wait -PassThru -NoNewWindow
+          if ($setupProcess.ExitCode -ne 0) {
+            throw "Cygwin setup failed with exit code $($setupProcess.ExitCode)."
           }
           $requiredTools = @(
             'C:\cygwin64\bin\cmake.exe',

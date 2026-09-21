@@ -182,16 +182,16 @@ class ClipExtractionRuntime {
       const boundary = await this.probeFrameTimes(
         ffprobe, source.sourcePath, source.selectedStream, request.startFrameIndex, request.endFrameIndex,
         { runCommand: this.runCommand, signal, environment: this.environment });
+      const startSeconds = (Number(boundary.startUs) / 1_000_000).toFixed(6);
+      const endSeconds = (Number(boundary.endUs) / 1_000_000).toFixed(6);
       const videoResult = await this.runCommand(ffmpeg, [
         '-hide_banner', '-nostdin', '-y', '-noautorotate', '-i', source.sourcePath,
         '-map', `0:${source.selectedStream}`,
         '-vf', `select='between(n,${request.startFrameIndex},${request.endFrameIndex})',setpts=PTS-STARTPTS`,
-        '-fps_mode', 'passthrough', '-an', '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast',
+        '-fps_mode', 'passthrough', '-an', '-c:v', 'libx264', '-crf', '16', '-maxrate', '48M', '-bufsize', '96M', '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p', videoPath,
       ], { cwd: workspace, signal, env: this.environment });
       if (!videoResult.ok) return errorResult(videoResult.code, 'The selected frames could not be encoded.');
-      const startSeconds = (Number(boundary.startUs) / 1_000_000).toFixed(6);
-      const endSeconds = (Number(boundary.endUs) / 1_000_000).toFixed(6);
       const muxResult = await this.runCommand(ffmpeg, [
         '-hide_banner', '-nostdin', '-y', '-copyts', '-i', videoPath, '-i', source.sourcePath,
         '-map', '0:v:0', '-map', '1:a:0?', '-filter:a', `atrim=start=${startSeconds}:end=${endSeconds},asetpts=PTS-STARTPTS`,
