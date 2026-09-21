@@ -163,8 +163,6 @@ export class ReviewSession {
       const wasPlaying = playbackStatus.state === 'playing';
       if (wasPlaying) await this.options.playback.pause();
       await this.options.exact.open({
-        proxyPath: prepared.proxyPath,
-        proxyIndexPath: prepared.proxyIndexPath,
         canonicalSourcePath: prepared.canonicalSourcePath,
         canonicalIndexPath: prepared.canonicalIndexPath,
         maxWidth: this.options.previewBounds.maxWidth,

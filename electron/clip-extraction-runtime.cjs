@@ -186,8 +186,8 @@ class ClipExtractionRuntime {
         '-hide_banner', '-nostdin', '-y', '-noautorotate', '-i', source.sourcePath,
         '-map', `0:${source.selectedStream}`,
         '-vf', `select='between(n,${request.startFrameIndex},${request.endFrameIndex})',setpts=PTS-STARTPTS`,
-        '-fps_mode', 'passthrough', '-an', '-c:v', 'libx264rgb', '-crf', '0', '-preset', 'ultrafast',
-        '-pix_fmt', 'rgb24', videoPath,
+        '-fps_mode', 'passthrough', '-an', '-c:v', 'libx264', '-qp', '0', '-preset', 'ultrafast',
+        '-pix_fmt', 'yuv420p', videoPath,
       ], { cwd: workspace, signal, env: this.environment });
       if (!videoResult.ok) return errorResult(videoResult.code, 'The selected frames could not be encoded.');
       const startSeconds = (Number(boundary.startUs) / 1_000_000).toFixed(6);

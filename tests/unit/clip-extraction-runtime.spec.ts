@@ -145,6 +145,50 @@ describe('clip extraction runtime', () => {
     expect(copied.map(value => path.basename(value))).toEqual(['Movie-001.mp4', 'Movie-002.mp4']);
   });
 
+  it('encodes selected original frames as lossless YUV video', async () => {
+    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
+    const fs = {
+      mkdir: vi.fn(async () => undefined),
+      readdir: vi.fn(async () => []),
+      stat: vi.fn(async () => ({ isFile: () => true, size: 10, mtimeMs: 123 })),
+      mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
+      rm: vi.fn(async () => undefined),
+      copyFile: vi.fn(async () => undefined),
+    };
+    const runCommand = vi.fn(async (_command: string, _args: string[]) => ({ ok: true, exitCode: 0 }));
+    const runtime = createClipExtractionRuntime({
+      fs,
+      getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
+      resolveFfmpeg: vi.fn(() => 'D:\\products\\ffmpeg.exe'),
+      resolveFfprobe: vi.fn(() => 'D:\\products\\ffprobe.exe'),
+      probeFrameTimes: vi.fn(async () => ({ startUs: 1_000_000n, endUs: 2_000_000n })),
+      runCommand,
+      verifyMedia: vi.fn(async () => undefined),
+      randomId: vi.fn(() => 'opaque12345678'),
+    });
+    const destination = await runtime.openDestination(7);
+
+    await runtime.extract(7, {
+      prepareExtractionSource: vi.fn(async () => ({ sourcePath: 'D:\\movies\\Movie.mkv', selectedStream: 0 })),
+    }, {
+      operationId: 'extract_12345678',
+      destinationHandle: destination.result.destinationHandle,
+      sourceHandle: 'source_12345678',
+      sourceGeneration: 1,
+      collectionName: 'Movie',
+      startFrameIndex: 10,
+      endFrameIndex: 20,
+    });
+
+    const videoArguments = runCommand.mock.calls[0][1];
+    expect(videoArguments).toContain('libx264');
+    expect(videoArguments).toContain('yuv420p');
+    expect(videoArguments).toContain('-qp');
+    expect(videoArguments).toContain('0');
+    expect(videoArguments).not.toContain('libx264rgb');
+    expect(videoArguments).not.toContain('crf');
+  });
+
   it('rejects an unknown destination before preparing or running media work', async () => {
     const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const runCommand = vi.fn();

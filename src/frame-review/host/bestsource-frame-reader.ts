@@ -16,8 +16,6 @@ export interface IHostExactFrame {
 }
 
 export interface IExactFrameOpenRequest {
-  readonly proxyPath: string;
-  readonly proxyIndexPath: string;
   readonly canonicalSourcePath: string;
   readonly canonicalIndexPath: string;
   readonly maxWidth: number;
@@ -41,8 +39,8 @@ export class BestSourceFrameReader implements IExactFrameReader {
   async open(request: IExactFrameOpenRequest): Promise<number> {
     const generation = ++this.sourceGeneration;
     const response = await this.client.request('open', {
-      sourcePath: request.proxyPath,
-      indexPath: request.proxyIndexPath,
+      sourcePath: request.canonicalSourcePath,
+      indexPath: request.canonicalIndexPath,
       identitySourcePath: request.canonicalSourcePath,
       identityIndexPath: request.canonicalIndexPath,
       sourceGeneration: generation,

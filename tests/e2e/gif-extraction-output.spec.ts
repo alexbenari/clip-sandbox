@@ -83,10 +83,10 @@ test('extract current and Extract All publish original-source clips to extractio
     expect((await fs.stat(output)).size).toBeGreaterThan(0);
     const products = new NativeProductLocator({ projectFolder: project, packaged: false });
     const probe = JSON.parse(execFileSync(products.ffprobe(), [
-      '-v', 'error', '-show_entries', 'stream=codec_type,width,height', '-of', 'json', output,
+      '-v', 'error', '-show_entries', 'stream=codec_type,width,height,pix_fmt', '-of', 'json', output,
     ], { encoding: 'utf8', windowsHide: true, env: products.environment() }));
     expect(probe.streams).toEqual(expect.arrayContaining([
-      expect.objectContaining({ codec_type: 'video', width: 320, height: 180 }),
+      expect.objectContaining({ codec_type: 'video', width: 320, height: 180, pix_fmt: 'yuv420p' }),
       expect.objectContaining({ codec_type: 'audio' }),
     ]));
     await page.screenshot({ path: path.join(reviewDirectory, 'ms7-extraction-1280.png') });
