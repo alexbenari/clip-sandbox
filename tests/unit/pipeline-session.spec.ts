@@ -118,6 +118,19 @@ describe('pipeline session', () => {
     expect(session.currentClipSequence).toBe(result.sequence);
     expect(session.hasDirtyClipSequenceChanges).toBe(false);
   });
+
+  test('publishes a created clip into a named collection without changing the active selection', () => {
+    const session = new PipelineSession();
+    const pipeline = new Pipeline({ folderName: 'extraction-tmp' });
+    session.loadPipeline(pipeline);
+
+    const result = session.publishCreatedClipToCollection('Movie.txt', videoFile('Movie-001.mp4'));
+
+    expect(result.ok).toBe(true);
+    expect(result.collection.orderedClipNames).toEqual(['Movie-001.mp4']);
+    expect(pipeline.videoNames()).toEqual(['Movie-001.mp4']);
+    expect(session.activeCollection).toBeNull();
+  });
 });
 
 test('dirty state reflects mutations through an escaped active sequence', () => {

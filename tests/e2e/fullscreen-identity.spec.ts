@@ -3,21 +3,39 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { NativeProductLocator } = require('../../electron/native-product-locator.cjs');
+const products = new NativeProductLocator({ projectFolder: path.resolve('.'), packaged: false });
+const ffmpeg = products.ffmpeg();
 
 test('natural fullscreen rotation preserves source identity through exit and Zoom', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-identity-'));
   const clips = path.join(directory, 'clips');
   await fs.mkdir(clips);
   const examples = [
-    { name: 'amber.mp4', color: 'orange', size: '320x180', duration: 1 },
-    { name: 'blue.mp4', color: 'blue', size: '180x320', duration: 2 },
-    { name: 'green.mp4', color: 'green', size: '240x240', duration: 3 },
-    { name: 'red.mp4', color: 'red', size: '480x270', duration: 4 },
+    { name: 'amber.mp4', rgb: [255, 165, 0], size: '320x180', duration: 1 },
+    { name: 'blue.mp4', rgb: [0, 0, 255], size: '180x320', duration: 2 },
+    { name: 'green.mp4', rgb: [0, 128, 0], size: '240x240', duration: 3 },
+    { name: 'red.mp4', rgb: [255, 0, 0], size: '480x270', duration: 4 },
   ];
   for (const sample of examples) {
-    execFileSync(path.resolve('node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe'),
-      ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `color=c=${sample.color}:s=${sample.size}:r=24`,
-        '-t', String(sample.duration), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', path.join(clips, sample.name)], { windowsHide: true });
+    const [width, height] = sample.size.split('x').map(Number);
+    const frame = Buffer.alloc(width * height * 3);
+    for (let offset = 0; offset < frame.length; offset += 3) {
+      frame[offset] = sample.rgb[0];
+      frame[offset + 1] = sample.rgb[1];
+      frame[offset + 2] = sample.rgb[2];
+    }
+    const input = Buffer.concat(Array.from({ length: sample.duration * 24 }, () => frame));
+    execFileSync(ffmpeg,
+      ['-hide_banner', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', sample.size, '-r', '24', '-i', 'pipe:0',
+        '-t', String(sample.duration), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', path.join(clips, sample.name)], {
+        windowsHide: true,
+        env: products.environment(),
+        input,
+      });
   }
   const env: NodeJS.ProcessEnv = { ...process.env, CLIP_SANDBOX_E2E: '1' };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -51,7 +69,7 @@ test('natural fullscreen rotation preserves source identity through exit and Zoo
     await page.screenshot({ path: 'test-results/encapsulation-fullscreen.png' });
     await page.keyboard.press('f');
     await expect(page.locator('#grid .thumb:visible')).toHaveCount(4);
-    expect(await readCards()).toEqual(before);
+    await expect.poll(readCards).toEqual(before);
     const card = page.locator(`#grid .thumb[data-name="${rotatedName}"]`);
     await card.click();
     await expect(card).toHaveClass(/selected/);

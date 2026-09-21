@@ -9,17 +9,58 @@ function fixture() {
   const commandHost = document.createElement('div');
   const selector = document.createElement('select');
   document.body.append(selector, commandHost, screenHost);
-  const screen = (id: string, commands: boolean): IAppScreen => {
+  const screen = (id: string, commands: boolean, selectorStatus: IAppScreen['selectorStatus'] = 'fixed'): IAppScreen => {
     const root = document.createElement('section');
     const input = document.createElement('input');
     root.append(input);
-    return { id, label: id, root, commands: commands ? document.createElement('nav') : null, shortcuts: [], focusInitial: vi.fn(() => input.focus()) };
+    return {
+      id,
+      label: id,
+      selectorStatus,
+      root,
+      commands: commands ? document.createElement('nav') : null,
+      shortcuts: [],
+      panelContributions: Object.freeze([]),
+      focusInitial: vi.fn(() => input.focus()),
+      onActivate: vi.fn(),
+      onDeactivate: vi.fn(),
+    };
   };
-  // Collection, Settings and a future editor exercise the same caller contract.
   const collection = screen('Collection', true);
   const settings = screen('Settings', false);
   const extraction = screen('Extraction', true);
-  return { screenHost, commandHost, selector, collection, settings, extraction };
+  const refine = screen('Refine', true, 'contextual');
+  return { screenHost, commandHost, selector, collection, settings, extraction, refine };
+}
+
+function panelFixture(id: string) {
+  const root = document.createElement('aside');
+  root.style.setProperty('--panel-open-width', '240px');
+  root.style.setProperty('--panel-folded-width', '36px');
+  const content = document.createElement('div'); content.id = `${id}-content`;
+  const contributionHost = document.createElement('div'); contributionHost.id = `${id}-host`;
+  const fallbackContent = document.createElement('p'); fallbackContent.textContent = `No ${id} content`;
+  const foldButton = document.createElement('button');
+  const revealButton = document.createElement('button');
+  content.append(contributionHost);
+  root.append(content, foldButton, revealButton);
+  return { id, root, content, contributionHost, fallbackContent, foldButton, revealButton };
+}
+
+function workspaceFixture(commandHost: HTMLElement, screenHost: HTMLElement, panel: ReturnType<typeof panelFixture>) {
+  const workspace = document.createElement('div');
+  const center = document.createElement('div');
+  Object.defineProperty(workspace, 'clientWidth', { value: 1200 });
+  document.body.append(workspace);
+  workspace.append(panel.root, center);
+  center.append(commandHost, screenHost);
+  return { workspace, center };
+}
+
+function panelContentFixture() {
+  const root = document.createElement('section');
+  const mount = vi.fn((host: HTMLElement) => host.replaceChildren(root));
+  return { root, mount };
 }
 
 describe('application shell screen ownership', () => {
@@ -30,15 +71,11 @@ describe('application shell screen ownership', () => {
     Object.defineProperty(workspace, 'clientWidth', { value: 1200 });
     const finishes: (() => void)[] = [];
     const panels = ['left', 'right'].map(id => {
-      const root = document.createElement('aside');
-      root.style.setProperty('--panel-open-width', '240px');
-      root.style.setProperty('--panel-folded-width', '36px');
-      const content = document.createElement('div'); content.id = id;
-      const foldButton = document.createElement('button');
-      const revealButton = document.createElement('button');
-      root.append(content, foldButton, revealButton); workspace.append(root);
+      const panel = panelFixture(id);
+      const { root } = panel;
+      workspace.append(root);
       Object.defineProperty(root, 'getAnimations', { value: () => [{ transitionProperty: 'width', effect: { target: root }, finished: new Promise<void>(resolve => finishes.push(resolve)) }] });
-      return { root, content, foldButton, revealButton };
+      return panel;
     });
     document.body.append(workspace); workspace.append(center); center.append(f.commandHost, f.screenHost);
     const changed = vi.fn(); const settled = vi.fn();
@@ -64,6 +101,7 @@ describe('application shell screen ownership', () => {
     expect(f.selector.hidden).toBe(true);
     expect(f.commandHost.firstElementChild).toBe(f.collection.commands);
     expect(f.collection.focusInitial).toHaveBeenCalledOnce();
+    expect(f.collection.onActivate).toHaveBeenCalledOnce();
     expect(f.collection.root.contains(document.activeElement)).toBe(true);
   });
 
@@ -79,6 +117,66 @@ describe('application shell screen ownership', () => {
     expect(f.settings.root.contains(document.activeElement)).toBe(true);
     expect(f.selector.hidden).toBe(false);
     expect(f.selector.value).toBe('Settings');
+    expect(f.collection.onDeactivate).toHaveBeenCalledOnce();
+    expect(f.settings.onActivate).toHaveBeenCalledOnce();
+  });
+
+  it('supports the fixed GIF Extraction caller and preserves the Clips fold state', () => {
+    const f = fixture();
+    const clips = panelFixture('clips');
+    const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);
+    const sharedRanges = panelContentFixture();
+    const extraction = { ...f.extraction, panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
+    const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips], screens: [f.collection, f.settings, extraction, f.refine] });
+
+    clips.foldButton.click();
+    shell.activate(extraction.id);
+
+    expect(clips.root.classList.contains('folded')).toBe(true);
+    expect(sharedRanges.mount).toHaveBeenCalledWith(clips.contributionHost);
+    expect(clips.contributionHost.firstElementChild).toBe(sharedRanges.root);
+    expect(Array.from(f.selector.options).map(option => option.value)).toEqual(['Collection', 'Settings', 'Extraction']);
+  });
+
+  it('supports contextual Refine Gif with deterministic lifecycle, a temporary label, and one-time Clips expansion', () => {
+    const f = fixture();
+    const clips = panelFixture('clips');
+    const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);
+    const sharedRanges = panelContentFixture();
+    const extraction = { ...f.extraction, panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
+    const refine = { ...f.refine, panelContributions: [{ panelId: 'clips', content: sharedRanges, entryBehavior: 'expand-once' as const }] } satisfies IAppScreen;
+    const order: string[] = [];
+    extraction.onDeactivate = vi.fn(() => order.push('extraction:deactivate'));
+    refine.onActivate = vi.fn(() => order.push('refine:activate'));
+    refine.focusInitial = vi.fn(() => order.push('refine:focus'));
+    const shell = new ApplicationShellController({
+      ...f,
+      ...workspace,
+      panels: [clips],
+      screens: [f.collection, f.settings, extraction, refine],
+      onScreenChange: screen => order.push(`${screen.id}:changed`),
+    });
+    shell.activate(extraction.id);
+    order.length = 0;
+    clips.foldButton.click();
+
+    shell.activate(refine.id);
+
+    expect(order).toEqual(['extraction:deactivate', 'refine:activate', 'refine:focus', 'Refine:changed']);
+    expect(clips.root.classList.contains('folded')).toBe(false);
+    expect(sharedRanges.mount).toHaveBeenCalledWith(clips.contributionHost);
+    expect(clips.contributionHost.firstElementChild).toBe(sharedRanges.root);
+    expect(f.selector.value).toBe('Refine');
+    expect(Array.from(f.selector.options).map(option => [option.value, option.textContent])).toEqual([
+      ['Collection', 'Collection'], ['Settings', 'Settings'], ['Extraction', 'Extraction'], ['Refine', 'Refine'],
+    ]);
+
+    clips.foldButton.click();
+    shell.activate(extraction.id);
+    shell.activate(refine.id);
+    expect(clips.root.classList.contains('folded')).toBe(true);
+    shell.activate(f.collection.id);
+    expect(Array.from(f.selector.options).map(option => option.value)).toEqual(['Collection', 'Settings', 'Extraction']);
   });
 
   it('settles rapid requests with matching commands, selector and focus', () => {

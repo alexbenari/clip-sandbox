@@ -10,7 +10,8 @@
     "src/adapters/browser/**/*.ts",
     "src/adapters/electron/**/*.ts",
     "src/app/**/*.ts",
-    "src/ui/**/*.ts"
+    "src/ui/**/*.ts",
+    "src/frame-review/**/*.ts"
   ],
   "exclude": [
     "build",

@@ -58,6 +58,20 @@ describe('FoldablePanelController', () => {
     expect(first.change).toHaveBeenCalledOnce(); expect(second.change).not.toHaveBeenCalled();
   });
 
+  it('expands idempotently through the semantic operation', () => {
+    const f = fixture();
+    const controller = new FoldablePanelController({ ...f, onChange: f.change, onSettled: f.settled });
+    controller.setFolded(true);
+    f.change.mockClear();
+
+    controller.expand();
+    controller.expand();
+
+    expect(controller.folded).toBe(false);
+    expect(f.change).toHaveBeenCalledOnce();
+    expect(f.change).toHaveBeenCalledWith(280);
+  });
+
   it('lets the latest reversal settle while ignoring stale finished animations', async () => {
     const f = fixture(); const media = mediaQuery(); vi.spyOn(window, 'matchMedia').mockReturnValue(media);
     const first = deferred(); const second = deferred();

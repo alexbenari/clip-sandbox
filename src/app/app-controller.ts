@@ -19,6 +19,7 @@ import { AppDiagnostics } from './app-diagnostics.js';
 import { AppKeyDownHandler } from './app-keydown-handler.js';
 import { ZoomVideoEditWorkflow, VideoEditNotificationError } from './zoom-video-edit-workflow.js';
 import { ApplicationEventController } from './application-event-controller.js';
+import { ApplicationShutdownCoordinator } from './application-shutdown-coordinator.js';
 import { DisplayLayoutRules } from '../ui/display-layout-rules.js';
 import { AppText } from './app-text.js';
 import { CollectionNameValidator } from './collection-name-validator.js';
@@ -29,6 +30,15 @@ import { MainToolbarControl } from '../ui/main-toolbar-control.js';
 import { ApplicationShellController } from '../ui/application-shell-controller.js';
 import { CollectionScreen } from '../ui/collection-screen.js';
 import { SettingsScreen } from '../ui/settings-screen.js';
+import { GifExtractionScreen } from '../ui/gif-extraction-screen.js';
+import { RefineGifScreen } from '../ui/refine-gif-screen.js';
+import { FrameReviewPlayerControl } from '../ui/frame-review-player-control.js';
+import { GifWorkflowKeyboardController } from '../ui/gif-workflow-keyboard-controller.js';
+import { GifRangesPanelControl } from '../ui/gif-ranges-panel-control.js';
+import { ElectronFrameReviewService } from '../adapters/electron/electron-frame-review-service.js';
+import { ElectronThumbnailCacheService } from '../adapters/electron/electron-thumbnail-cache-service.js';
+import { ElectronClipExtractionService } from '../adapters/electron/electron-clip-extraction-service.js';
+import { GifExtractionSession } from './gif-extraction-session.js';
 import { AppSettingsService } from './app-settings-service.js';
 import { AppSettingsParser } from './app-settings.js';
 import { ElectronAppSettingsService } from '../adapters/electron/electron-app-settings-service.js';
@@ -1454,22 +1464,88 @@ this.initialized = true;
   const keyboardPanel = utilityHost ? AppControllerSupport.requiredElement('keyboardMapPanel') : null;
   const keyboardMap = keyboardPanel ? new KeyboardMapControl(keyboardPanel, GLOBAL_UTILITY_SHORTCUTS, () => utilities?.close()) : null;
   const collectionScreen = new CollectionScreen(AppControllerSupport.requiredElement('collectionScreen'), toolbar, gridController, mainToolbarControl);
-  const shell = new ApplicationShellController({
+  const frameReviewPlayer = new FrameReviewPlayerControl({ document });
+  const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
+  const gifRangesPanel = AppControllerSupport.optionalElement('gifRangesPanel') ?? undefined;
+  let gifExtractionSession: GifExtractionSession | undefined;
+  let gifRangesPanelControl: GifRangesPanelControl | undefined;
+  let refineGifScreen: RefineGifScreen;
+  let shell: ApplicationShellController;
+  try {
+    gifExtractionSession = new GifExtractionSession(
+      new ElectronFrameReviewService(window),
+      new ElectronThumbnailCacheService({ window }),
+      {
+        extractionService: new ElectronClipExtractionService(window),
+        onProgress: workflows.showProgressStatus,
+        onSuccess: workflows.showStatus,
+        onError: (message, error) => {
+          workflows.showErrorStatus(message);
+          if (error !== undefined) void diagnostics.logRuntimeError(message, error);
+        },
+      },
+    );
+    if (gifRangesPanel) {
+      gifRangesPanelControl = new GifRangesPanelControl(gifRangesPanel, gifExtractionSession, {
+        document,
+        onRefine: rangeId => {
+          const result = gifExtractionSession?.beginRefinement(rangeId);
+          if (result?.kind === 'started') shell.activate(refineGifScreen.id);
+          else if (result?.kind === 'rejected') workflows.showErrorStatus(result.message);
+        },
+      });
+    }
+  } catch (error) {
+    const unavailable = error instanceof Error && (
+      error.message === 'Electron frame-review API is unavailable.'
+      || error.message === 'Electron thumbnail-cache API is unavailable.'
+      || error.message === 'Electron clip-extraction API is unavailable.'
+    );
+    if (!unavailable) throw error;
+    // Non-Electron DOM tests and unsupported hosts keep the shell available without native movie opening.
+  }
+  const gifExtractionScreen = new GifExtractionScreen({
+    player: frameReviewPlayer,
+    keyboard: gifWorkflowKeyboard,
+    session: gifExtractionSession,
+    rangesPanel: gifRangesPanelControl,
+    document,
+  });
+  refineGifScreen = new RefineGifScreen({
+    player: frameReviewPlayer,
+    keyboard: gifWorkflowKeyboard,
+    session: gifExtractionSession,
+    rangesPanel: gifRangesPanelControl,
+    onBack: rangeId => {
+      shell.activate(gifExtractionScreen.id);
+      if (rangeId) gifRangesPanelControl?.focusRange(rangeId);
+    },
+    document,
+  });
+  const panels = ['pipelines', 'clips'].flatMap(name => {
+    const root = AppControllerSupport.optionalElement(`${name}Panel`);
+    const contributionHost = AppControllerSupport.optionalElement(`${name}PanelHost`);
+    if (!root || !contributionHost) return [];
+    const label = name[0].toUpperCase() + name.slice(1);
+    return [{
+      id: name,
+      root,
+      content: AppControllerSupport.requiredElement(`${name}PanelContent`),
+      contributionHost,
+      fallbackContent: AppControllerSupport.optionalElement(`${name}PanelFallback`) ?? undefined,
+      foldButton: AppControllerSupport.requiredElement<HTMLButtonElement>(`fold${label}`),
+      revealButton: AppControllerSupport.requiredElement<HTMLButtonElement>(`reveal${label}`),
+    }];
+  });
+  shell = new ApplicationShellController({
     screenHost: AppControllerSupport.requiredElement('mainScreenHost'),
     commandHost: AppControllerSupport.requiredElement('screenCommandHost'),
     selector: AppControllerSupport.requiredElement<HTMLSelectElement>('appScreenSelector'),
-    screens: [collectionScreen, settingsScreen],
+    screens: [collectionScreen, gifExtractionScreen, refineGifScreen, settingsScreen],
     onScreenChange: screen => keyboardMap?.render(screen),
     workspace: AppControllerSupport.optionalElement('workspaceRow') ?? undefined,
     center: AppControllerSupport.optionalElement('centralWorkspace') ?? undefined,
-    panels: ['pipelines', 'clips'].flatMap(name => {
-      const root = AppControllerSupport.optionalElement(`${name}Panel`);
-      if (!root) return [];
-      const label = name[0].toUpperCase() + name.slice(1);
-      return [{ root, content: AppControllerSupport.requiredElement(`${name}PanelContent`),
-        foldButton: AppControllerSupport.requiredElement<HTMLButtonElement>(`fold${label}`),
-        revealButton: AppControllerSupport.requiredElement<HTMLButtonElement>(`reveal${label}`) }];
-    }),
+    panels,
     onBoundsChange: (screen, width, duration) => {
       if (screen === collectionScreen) gridController.beginWorkspaceResize(width, duration);
     },
@@ -1494,23 +1570,41 @@ this.initialized = true;
   const settingsReady = settingsScreen.load();
   const workspaceResize = new ResizeObserver(() => { if (!shell.workspaceMoving) recomputeLayout(); });
   workspaceResize.observe(gridWrap);
-  new ApplicationEventController({
-    document,
-    window,
-    onFullscreenChange: workflows.onFsChange,
-    onResize: recomputeLayout,
-    onKeyDown: workflows.onKeyDown,
-    onGlobalKeyDown: workflows.onGlobalKeyDown,
-    onPageHide: () => {
+  const shutdown = new ApplicationShutdownCoordinator({
+    stopActions: () => {
       fullscreenSession.destroy();
-      gridController.destroy();
       workspaceResize.disconnect();
       shell.destroy();
+    },
+    disposeWorkflow: () => gifExtractionSession?.dispose() ?? Promise.resolve(),
+    destroyControls: () => {
+      gridController.destroy();
+      gifExtractionScreen.destroy();
+      refineGifScreen.destroy();
+      gifRangesPanelControl?.destroy();
+      frameReviewPlayer.destroy();
       utilities?.destroy();
       activityIndicatorControl.destroy();
       collectionSelectorControl.destroy();
       mainToolbarControl.destroy();
     },
+    reportFailure: error => {
+      void diagnostics.logRuntimeError('Failed to dispose the GIF extraction workflow during shutdown.', error);
+    },
+  });
+  new ApplicationEventController({
+    document,
+    window,
+    onFullscreenChange: workflows.onFsChange,
+    onResize: recomputeLayout,
+    onKeyDown: event => {
+      workflows.onKeyDown(event);
+      if (!event.defaultPrevented && shell.activeScreen !== collectionScreen) gifWorkflowKeyboard.handleKeyDown(event);
+    },
+    onGlobalKeyDown: workflows.onGlobalKeyDown,
+    onKeyUp: event => gifWorkflowKeyboard.handleKeyUp(event),
+    onWindowBlur: () => gifWorkflowKeyboard.releaseHeldSteps(),
+    onPageHide: () => { void shutdown.begin(); },
   });
   }
 }

@@ -74,11 +74,13 @@ function createLoopifyArgs(sourcePath, outputPath) {
 
 function runProcess(command, args, {
   cwd = process.cwd(),
+  env = process.env,
   spawnProcess = spawn,
 } = {}) {
   return new Promise((resolve) => {
     const child = spawnProcess(command, args, {
       cwd,
+      env,
       stdio: 'ignore',
       windowsHide: true,
     });
@@ -105,6 +107,7 @@ function createVideoEditRuntime({
   resolveBinary = resolveFfmpegBinary,
   runCommand = runProcess,
   createEntry = createFolderEntry,
+  processEnvironment = process.env,
 } = {}) {
   return {
     async createVideoEdit(payload = {}) {
@@ -131,6 +134,7 @@ function createVideoEditRuntime({
       });
       const runResult = await runCommand(binaryPath, createLoopifyArgs(validated.sourcePath, output.absolutePath), {
         cwd: validated.outputFolderPath,
+        env: processEnvironment,
       });
       if (!runResult.ok) {
         return {

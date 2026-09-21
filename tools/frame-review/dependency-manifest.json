@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "platform": "windows-x64",
+  "dependencies": {
+    "libvlc": {
+      "kind": "binaryArchive",
+      "version": "4.0.0-dev-baad2c52",
+      "commit": "baad2c52",
+      "url": "https://artifacts.videolan.org/vlc/nightly-win64/20260812-0429/vlc-4.0.0-dev-win64-baad2c52.zip",
+      "sha512": "d600546eaa8f6b79efdf5d98a262945a2e751c738ae468b55a58e391da77ec22084b91aac64cc5eb123262725ca5c0a9fdf1657e072c1ba39614a8c6c47db340",
+      "sourceUrl": "https://code.videolan.org/videolan/vlc/-/tree/baad2c52",
+      "license": "LGPL-2.1-or-later",
+      "architecture": "windows-x64"
+    },
+    "libvlcSource": {
+      "kind": "gitSource",
+      "version": "baad2c523c1934470bb351105efc352e0678dd55",
+      "commit": "baad2c523c1934470bb351105efc352e0678dd55",
+      "url": "https://code.videolan.org/videolan/vlc.git",
+      "sourceUrl": "https://code.videolan.org/videolan/vlc/-/tree/baad2c523c1934470bb351105efc352e0678dd55",
+      "license": "LGPL-2.1-or-later"
+    },
+    "bestsource": {
+      "kind": "gitSource",
+      "version": "825af4e691524a3c98383d0cfe7d85b4142005cc",
+      "commit": "825af4e691524a3c98383d0cfe7d85b4142005cc",
+      "url": "https://github.com/vapoursynth/bestsource.git",
+      "sourceUrl": "https://github.com/vapoursynth/bestsource/tree/825af4e691524a3c98383d0cfe7d85b4142005cc",
+      "license": "MIT"
+    },
+    "vcpkg": {
+      "kind": "gitSource",
+      "version": "aae277acf4e7de287ddb5e208b5316614de6aad7",
+      "commit": "aae277acf4e7de287ddb5e208b5316614de6aad7",
+      "url": "https://github.com/microsoft/vcpkg.git",
+      "sourceUrl": "https://github.com/microsoft/vcpkg/tree/aae277acf4e7de287ddb5e208b5316614de6aad7",
+      "license": "MIT"
+    },
+    "ffmpeg": {
+      "kind": "vcpkgPackage",
+      "version": "9.0",
+      "sourceArchiveSha512": "4327d259b2ed9cc35a6139606643bf9c9db5fb0372a9eb259fed61af50505a2b59f0c3d94c51fec89d2e0cd552a413c5f50514683931c94c429824198d56ec56",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/ffmpeg",
+      "sourceUrl": "https://github.com/FFmpeg/FFmpeg/tree/n9.0",
+      "license": "GPL-2.0-or-later",
+      "features": [
+        "core",
+        "avcodec",
+        "avfilter",
+        "avformat",
+        "dav1d",
+        "ffmpeg",
+        "ffprobe",
+        "gpl",
+        "swresample",
+        "swscale",
+        "x264"
+      ]
+    },
+    "x264": {
+      "kind": "vcpkgPackage",
+      "version": "0.164.3108#2",
+      "commit": "31e19f92f00c7003fa115047ce50978bc98c3a0d",
+      "sourceArchiveSha512": "707ff486677a1b5502d6d8faa588e7a03b0dee45491c5cba89341be4be23d3f2e48272c3b11d54cfc7be1b8bf4a3dfc3c3bb6d9643a6b5a2ed77539c85ecf294",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/x264",
+      "sourceUrl": "https://code.videolan.org/videolan/x264/-/tree/31e19f92f00c7003fa115047ce50978bc98c3a0d",
+      "license": "GPL-2.0-or-later"
+    },
+    "dav1d": {
+      "kind": "vcpkgPackage",
+      "version": "1.5.4",
+      "sourceArchiveSha512": "7ee5906640495919462b2242c44a8c3cc577fdda52fc25257792f6df919429d54e4a48c315a7a11759385f044f68d3d6573fd720853f447e2d8520a13693827f",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/dav1d",
+      "sourceUrl": "https://code.videolan.org/videolan/dav1d/-/tree/1.5.4",
+      "license": "BSD-2-Clause AND ISC"
+    },
+    "xxhash": {
+      "kind": "vcpkgPackage",
+      "version": "0.8.3",
+      "sourceArchiveSha512": "8b5c8b9aad4e869f28310b12cc314037feda81d92f26c23eaecdb35dc65042ca2e65f2e9606033e62a31bcc737a9a950500ffcbdb8677d6ab20e820ea14f2b79",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/xxhash",
+      "sourceUrl": "https://github.com/Cyan4973/xxHash/tree/v0.8.3",
+      "license": "BSD-2-Clause"
+    },
+    "libp2p": {
+      "kind": "gitSource",
+      "version": "869fa993041f9f3af7d9ac8b10158920c6ddce66",
+      "commit": "869fa993041f9f3af7d9ac8b10158920c6ddce66",
+      "url": "https://github.com/sekrit-twc/libp2p.git",
+      "sourceUrl": "https://github.com/sekrit-twc/libp2p/tree/869fa993041f9f3af7d9ac8b10158920c6ddce66",
+      "license": "WTFPL"
+    },
+    "nlohmannJson": {
+      "kind": "vcpkgPackage",
+      "version": "3.12.0#2",
+      "sourceArchiveSha512": "6cc1e86261f8fac21cc17a33da3b6b3c3cd5c116755651642af3c9e99bb3538fd42c1bd50397a77c8fb6821bc62d90e6b91bcdde77a78f58f2416c62fc53b97d",
+      "pinSource": "vcpkg:aae277acf4e7de287ddb5e208b5316614de6aad7/ports/nlohmann-json",
+      "sourceUrl": "https://github.com/nlohmann/json/tree/v3.12.0",
+      "license": "MIT"
+    }
+  },
+  "toolchain": {
+    "architecture": "x64",
+    "cmakeMinimum": "3.25",
+    "nodeMinimum": "22.0.0",
+    "compiler": "C:/cygwin64/bin/x86_64-w64-mingw32-g++.exe",
+    "triplet": "x64-mingw-release"
+  }
+}

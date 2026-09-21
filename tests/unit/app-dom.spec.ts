@@ -91,9 +91,19 @@ describe('AppController DOM wiring', () => {
     expect(document.getElementById('collectionScreen')).not.toBeNull();
     expect(document.getElementById('appScreenSelector').value).toBe('collection');
     expect(document.getElementById('appScreenSelector').hidden).toBe(false);
-    expect(document.querySelectorAll('#appScreenSelector option')).toHaveLength(2);
+    expect([...document.querySelectorAll('#appScreenSelector option')].map(option => option.textContent)).toEqual([
+      'Collection', 'GIF Extraction', 'Settings',
+    ]);
     expect(document.getElementById('toolbar').parentElement.id).toBe('screenCommandHost');
     expect(document.getElementById('activityIndicatorRoot').parentElement.id).toBe('globalAppBar');
+    expect(document.getElementById('refineGifScreen').hidden).toBe(true);
+    const screenSelector = document.getElementById('appScreenSelector');
+    screenSelector.value = 'gif-extraction';
+    screenSelector.dispatchEvent(new Event('change'));
+    expect(document.getElementById('gifExtractionScreen').hidden).toBe(false);
+    expect(document.querySelector('#screenCommandHost [data-command="open-movie"]')).not.toBeNull();
+    expect(document.querySelectorAll('.frame-review-player input[type="range"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-contextual="true"]')).toHaveLength(0);
   });
 });
 

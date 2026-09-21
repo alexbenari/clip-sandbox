@@ -60,6 +60,10 @@ export class FoldablePanelController {
 
   get moving(): boolean { return this.movingState; }
 
+  expand(): void {
+    this.setFolded(false);
+  }
+
   setFolded(folded: boolean): void {
     if (this.destroyed || folded === this.foldedState) return;
 

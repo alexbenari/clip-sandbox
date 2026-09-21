@@ -18,6 +18,7 @@ describe('electron file system service', () => {
             type: 'text/plain',
             mediaSource: 'file:///C:/clips/alpha.txt',
             lastModifiedMs: 123,
+            frameReviewSourceHandle: 'source_12345678',
           },
         ],
       })),
@@ -36,6 +37,7 @@ describe('electron file system service', () => {
     expect(result.files[0].name).toBe('alpha.txt');
     expect(result.files[0].webkitRelativePath).toBe('alpha.txt');
     expect(result.files[0].path).toBe('C:/clips/alpha.txt');
+    expect(Object.hasOwn(result.files[0], 'frameReviewSourceHandle')).toBe(false);
   });
 
   it('maps delete responses into renderer-facing errors', async () => {

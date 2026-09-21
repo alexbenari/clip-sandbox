@@ -405,3 +405,14 @@ test('clip snapshots source metadata on construction and replacement', () => {
   expect(clip.mediaSource).toBe('file:///b.mp4');
   expect(clip.file.mediaSource).toBe('file:///b.mp4');
 });
+
+test('clip snapshots omit frame-review session capabilities', () => {
+  const file = Object.assign(new File(['video'], 'alpha.mp4'), {
+    mediaSource: 'file:///a.mp4',
+    frameReviewSourceHandle: 'source_12345678',
+  });
+
+  const clip = new Clip({ id: 'a', file });
+
+  expect(Object.hasOwn(clip.file, 'frameReviewSourceHandle')).toBe(false);
+});

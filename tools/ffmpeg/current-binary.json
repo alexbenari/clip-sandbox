@@ -1,5 +1,0 @@
-{
-  "platforms": {
-    "win32-x64": "../../node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe"
-  }
-}

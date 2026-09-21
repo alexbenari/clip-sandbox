@@ -1,4 +1,4 @@
-import type { IAppScreen } from './app-screen.js';
+import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
 import { AppSettingsService, type SettingsResult } from '../app/app-settings-service.js';
 import type { ActivityErrorOptions } from './activity-indicator-control.js';
 import type { IAppSettings } from '../app/app-settings.js';
@@ -8,6 +8,8 @@ type SettingsFeedback = { progress(message: string): void; success(message: stri
 export class SettingsScreen implements IAppScreen {
   readonly id = 'settings';
   readonly label = 'Settings';
+  readonly selectorStatus = 'fixed' as const;
+  readonly panelContributions: readonly IAppScreenPanelContribution[] = Object.freeze([]);
   readonly commands = null;
   readonly shortcuts = [];
   readonly root: HTMLElement;

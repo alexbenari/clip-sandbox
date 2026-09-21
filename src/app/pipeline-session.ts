@@ -7,6 +7,10 @@ type CreatedClipInsertResult =
   | { ok: false; code: 'missing-pipeline' | 'invalid-file' | 'missing-context' | 'missing-source-clip' }
   | { ok: true; clip: Clip; sequence: ClipSequence };
 
+type PublishedCreatedClipResult =
+  | { ok: false; code: 'missing-pipeline' | 'invalid-file' | 'invalid-destination' }
+  | { ok: true; collection: Collection };
+
 export class PipelineSession {
   #pipeline: Pipeline | null = null;
   #activeCollection: Collection | null = null;
@@ -155,6 +159,19 @@ export class PipelineSession {
       clip,
       sequence: this.#currentClipSequence,
     };
+  }
+
+  publishCreatedClipToCollection(collectionFilename: string, createdFile: ClipFile): PublishedCreatedClipResult {
+    if (!this.#pipeline) return { ok: false, code: 'missing-pipeline' };
+    if (!createdFile?.name || !this.#pipeline.upsertVideoFile(createdFile)) {
+      return { ok: false, code: 'invalid-file' };
+    }
+    const mutation = this.#pipeline.addClipsToCollection({
+      collectionFilename,
+      clipNames: [createdFile.name],
+    });
+    if (!mutation.ok) return { ok: false, code: 'invalid-destination' };
+    return { ok: true, collection: mutation.collection };
   }
 
   removeVideos(videoNames: Iterable<string>): RemoveVideosResult {

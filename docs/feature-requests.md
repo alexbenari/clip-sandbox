@@ -53,10 +53,13 @@ Some quick manipulations on videos that generate new videos in the same collecti
 Allows generating clips from a longer movie.
 - editor control: D:\tmp\dev\clip-sandbox\spikes\native-frame-identity-playback\docs\frame-scrub-supporting-player-control-integration-handoof.md
 - viewer with support for as-you-watch actions
-  - q,w,a: start-stop-capture
-    - As the movie plays, when a is pressed a clip is created from the timestaps between q and a
+  - q/w, a/s, z/x: start-stop-capture
+    - As the movie plays, when a is pressed a clip is created from the timestaps between q and w
       - new clip is added to the current pipeline with a default name: [start-stop]
-    - q,w can be pressed multiple times, only last one before x was pressed counts
+    - x locks the clip
+    - a/s jump to q/w frame
+    - z loops between q and a frame
+    - q,w can be pressed multiple times, only last one before z was pressed counts
     - graphic indication of current start and stop ts + thumbnail. Clicking a resets start and stop
     - a -> if clip boundaries are illegal: either start.stop missing or stop is before start -> nothing happens
 - Movie edit mode is initiated from within a pipeline

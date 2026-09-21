@@ -4,3 +4,9 @@ playwright-report/
 test-results/
 .worktrees/
 .firecrawl/
+tests/fixtures/gif-extraction/generated/
+tools/frame-review/.deps/
+native-build/frame-review/
+frame-index-cache/
+proxy-cache/
+.impeccable/review/

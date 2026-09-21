@@ -1,0 +1,159 @@
+{
+    "schemaVersion":  1,
+    "generator":  "tools/gif-extraction/create-fixtures.ps1",
+    "sourcePattern":  "deterministic FFmpeg testsrc video with synthetic sine audio",
+    "fixtures":  [
+                     {
+                         "id":  "cfr-audio",
+                         "source":  "generated/cfr-audio.mkv",
+                         "reviewSource":  "generated/cfr-audio.mkv",
+                         "requiresTimestampRepair":  false,
+                         "expectedFailure":  null,
+                         "selectedRange":  {
+                                               "startFrame":  8,
+                                               "endFrame":  23
+                                           },
+                         "expected":  {
+                                          "width":  320,
+                                          "height":  180,
+                                          "sourceFrameCount":  72,
+                                          "reviewFrameCount":  72,
+                                          "sourceStartTime":  "0.333",
+                                          "sourceEndTime":  "1",
+                                          "reviewStartTime":  "0.333",
+                                          "audioSampleRate":  48000,
+                                          "selectedFrameHashes":  [
+                                                                      "06ebf96a6b004c0418a26d8663e5687d",
+                                                                      "a81cc8509ad746568d9d2b21601ce5a9",
+                                                                      "7d39f80c6cc009ce4e5ab0d2356101f5",
+                                                                      "6e09c121c41c437d2e518821a916beaa",
+                                                                      "569d16b6991c84cd6102387cab208a02",
+                                                                      "def0a085e6b5f5a9e994050625a4b77f",
+                                                                      "ae862a9d40d6ccc4edd653b20df36422",
+                                                                      "3b5ce5fd78143241cdd226920a85812d",
+                                                                      "81bb7cc9ab2d822e857f2edabe5fb2a2",
+                                                                      "312af40088cff220474326931d569ba2",
+                                                                      "5751cab5c56b6b1ed48593aa4cd19676",
+                                                                      "07b54b61939a1af290e287a4ea81c841",
+                                                                      "09754525a964d4958d85a60306d67faf",
+                                                                      "ea164475fcd90bf0f28953c572eb9f00",
+                                                                      "93333ab02eb4ad325e09ee1b15cb50a4",
+                                                                      "1dc53f6f1e5b249eaa7bf3e93b69822c"
+                                                                  ]
+                                      }
+                     },
+                     {
+                         "id":  "vfr-audio",
+                         "source":  "generated/vfr-audio.mkv",
+                         "reviewSource":  "generated/vfr-audio.mkv",
+                         "requiresTimestampRepair":  false,
+                         "expectedFailure":  null,
+                         "selectedRange":  {
+                                               "startFrame":  7,
+                                               "endFrame":  19
+                                           },
+                         "expected":  {
+                                          "width":  320,
+                                          "height":  180,
+                                          "sourceFrameCount":  72,
+                                          "reviewFrameCount":  72,
+                                          "sourceStartTime":  "0.375",
+                                          "sourceEndTime":  "1.083",
+                                          "reviewStartTime":  "0.375",
+                                          "audioSampleRate":  48000,
+                                          "selectedFrameHashes":  [
+                                                                      "65d2d41a62fa7276ade8d3b93614ced7",
+                                                                      "06ebf96a6b004c0418a26d8663e5687d",
+                                                                      "a81cc8509ad746568d9d2b21601ce5a9",
+                                                                      "7d39f80c6cc009ce4e5ab0d2356101f5",
+                                                                      "6e09c121c41c437d2e518821a916beaa",
+                                                                      "569d16b6991c84cd6102387cab208a02",
+                                                                      "def0a085e6b5f5a9e994050625a4b77f",
+                                                                      "ae862a9d40d6ccc4edd653b20df36422",
+                                                                      "3b5ce5fd78143241cdd226920a85812d",
+                                                                      "81bb7cc9ab2d822e857f2edabe5fb2a2",
+                                                                      "312af40088cff220474326931d569ba2",
+                                                                      "5751cab5c56b6b1ed48593aa4cd19676",
+                                                                      "07b54b61939a1af290e287a4ea81c841"
+                                                                  ]
+                                      }
+                     },
+                     {
+                         "id":  "timestamp-repair",
+                         "source":  "generated/timestamp-repair-source.mkv",
+                         "reviewSource":  "generated/timestamp-repair-normalized.mkv",
+                         "requiresTimestampRepair":  true,
+                         "expectedFailure":  null,
+                         "selectedRange":  {
+                                               "startFrame":  5,
+                                               "endFrame":  15
+                                           },
+                         "expected":  {
+                                          "width":  320,
+                                          "height":  180,
+                                          "sourceFrameCount":  72,
+                                          "reviewFrameCount":  72,
+                                          "sourceStartTime":  "5.208",
+                                          "sourceEndTime":  "5.667",
+                                          "reviewStartTime":  "0.208",
+                                          "audioSampleRate":  48000,
+                                          "selectedFrameHashes":  [
+                                                                      "f212e3e0cb6af43cfa3a1d0751c52b42",
+                                                                      "67fa390ee95c9d4b016236782980fad7",
+                                                                      "65d2d41a62fa7276ade8d3b93614ced7",
+                                                                      "06ebf96a6b004c0418a26d8663e5687d",
+                                                                      "a81cc8509ad746568d9d2b21601ce5a9",
+                                                                      "7d39f80c6cc009ce4e5ab0d2356101f5",
+                                                                      "6e09c121c41c437d2e518821a916beaa",
+                                                                      "569d16b6991c84cd6102387cab208a02",
+                                                                      "def0a085e6b5f5a9e994050625a4b77f",
+                                                                      "ae862a9d40d6ccc4edd653b20df36422",
+                                                                      "3b5ce5fd78143241cdd226920a85812d"
+                                                                  ]
+                                      }
+                     },
+                     {
+                         "id":  "odd-dimensions-audio",
+                         "source":  "generated/odd-dimensions-audio.mkv",
+                         "reviewSource":  "generated/odd-dimensions-audio.mkv",
+                         "requiresTimestampRepair":  false,
+                         "expectedFailure":  null,
+                         "selectedRange":  {
+                                               "startFrame":  3,
+                                               "endFrame":  11
+                                           },
+                         "expected":  {
+                                          "width":  321,
+                                          "height":  181,
+                                          "sourceFrameCount":  72,
+                                          "reviewFrameCount":  72,
+                                          "sourceStartTime":  "0.125",
+                                          "sourceEndTime":  "0.5",
+                                          "reviewStartTime":  "0.125",
+                                          "audioSampleRate":  48000,
+                                          "selectedFrameHashes":  [
+                                                                      "47207dde2eb49656fa7ff5d032c0e8f4",
+                                                                      "b62f74edf2a4f4c3c9f1d52d76ee7884",
+                                                                      "dbb9d8c129c083aaba513fea7929b54a",
+                                                                      "ca2ec6afe0253e78e9f9057ca008d998",
+                                                                      "612a981a6e7480533fb6b1879da022a0",
+                                                                      "1c264e823ffac40f29eb2c531bc76c92",
+                                                                      "061e69a5db543d0830a4c5a17d3fbeb2",
+                                                                      "1dd43aab8f215585117ca31247a56beb",
+                                                                      "5ec6e3db9f7fca7b40b1bad36d1e73b3"
+                                                                  ]
+                                      }
+                     },
+                     {
+                         "id":  "no-audio",
+                         "source":  "generated/no-audio.mkv",
+                         "reviewSource":  "generated/no-audio.mkv",
+                         "requiresTimestampRepair":  false,
+                         "expectedFailure":  "missing-audio",
+                         "selectedRange":  {
+                                               "startFrame":  4,
+                                               "endFrame":  8
+                                           }
+                     }
+                 ]
+}
