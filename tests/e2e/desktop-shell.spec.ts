@@ -12,6 +12,8 @@ for (const nativeFrame of [false, true]) {
     try {
       const page = await app.firstWindow();
       page.setDefaultTimeout(5000);
+      expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(true);
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].unmaximize());
       const readOverlay = () => page.evaluate(() => {
         const overlay = (navigator as Navigator & { windowControlsOverlay?: { visible: boolean; getTitlebarAreaRect(): DOMRect } }).windowControlsOverlay;
         const rect = overlay?.getTitlebarAreaRect();

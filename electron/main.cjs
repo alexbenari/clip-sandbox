@@ -49,7 +49,7 @@ function createMainWindow(frameReviewRuntime) {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
-    show: true,
+    show: false,
     // Keep the native caption buttons; --native-frame is the independent fallback.
     ...(process.platform === 'win32' && !process.argv.includes('--native-frame') ? {
       titleBarStyle: 'hidden',
@@ -61,6 +61,9 @@ function createMainWindow(frameReviewRuntime) {
       preload: path.join(__dirname, 'preload.cjs'),
     },
   });
+
+  win.maximize();
+  win.show();
 
   const frameReviewHost = frameReviewRuntime.createHost();
   const webContentsId = win.webContents.id;
