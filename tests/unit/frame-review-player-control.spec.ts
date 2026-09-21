@@ -190,6 +190,23 @@ describe('FrameReviewPlayerControl', () => {
     expect(review.scrubToFrame).toHaveBeenCalledWith(42);
   });
 
+  it('stops playback on the current exact frame when an arrow step begins, without stepping after a quick release', async () => {
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const review = session();
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
+    control.attachSession(review.value);
+    await control.togglePlayback();
+
+    control.pressStep(1);
+    control.releaseStep(1);
+
+    await vi.waitFor(() => expect(review.enterFrameScrub).toHaveBeenCalledOnce());
+    expect(review.pressAdjacent).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(control.capturePoint()).toMatchObject({
+      kind: 'exact-frame', identity: { frameIndex: 12 },
+    }));
+  });
+
   it('does not let a late playback frame replace the exact frame chosen through the progress bar', async () => {
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const review = session();

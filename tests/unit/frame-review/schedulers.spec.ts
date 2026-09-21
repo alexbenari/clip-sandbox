@@ -80,4 +80,25 @@ describe('bounded frame request scheduling', () => {
     secondLanding.resolve(2);
     await scheduler.whenIdle();
   });
+
+  it('repeats held adjacent-frame actions at four times the normal 150 ms cadence', async () => {
+    vi.useFakeTimers();
+    const calls: number[] = [];
+    const scheduler = new AdjacentStepScheduler(
+      { stepAdjacent: async (direction) => { calls.push(direction); return calls.length; } },
+      () => undefined,
+    );
+
+    scheduler.press(1);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(calls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(37);
+    expect(calls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls).toHaveLength(3);
+    scheduler.release(1);
+    await vi.advanceTimersByTimeAsync(38);
+    await scheduler.whenIdle();
+  });
 });

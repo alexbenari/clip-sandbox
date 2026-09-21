@@ -152,13 +152,10 @@ export class GifRangesPanelControl implements IAppPanelContent {
     card.className = 'gif-range-card is-draft';
     card.setAttribute('role', 'listitem');
     card.setAttribute('aria-label', 'Current range draft');
-    card.append(this.renderThumbnail(thumbnail, null));
+    card.append(this.renderThumbnail(thumbnail, null), this.renderLockIcon(false, 'Unlocked range draft'));
     const body = this.document.createElement('div');
     body.className = 'gif-range-body';
-    body.innerHTML = `
-      <div class="gif-range-card-heading"><strong>Current draft</strong><span class="gif-range-state">Unlocked</span></div>
-      <div class="gif-range-endpoints"><span>Start ${this.endpointText(start)}</span><span>End ${this.endpointText(end)}</span></div>
-      <p>Set both endpoints, then press A to lock.</p>`;
+    body.append(this.renderRangeDetails(start, end));
     card.append(body);
     return card;
   }
@@ -172,27 +169,16 @@ export class GifRangesPanelControl implements IAppPanelContent {
     card.tabIndex = 0;
     card.setAttribute('role', 'listitem');
     card.setAttribute('aria-label', `Range ${number}, ${range.kind === 'needs-exact-frames'
-      ? 'needs exact frames' : this.extractionText(extractionState)}`);
+      ? 'unlocked range; exact frames required' : 'locked exact range'}`);
     if (selected) card.setAttribute('aria-current', 'true');
-    card.append(this.renderThumbnail(range.thumbnail, range.id));
+    card.append(
+      this.renderThumbnail(range.thumbnail, range.id),
+      this.renderLockIcon(range.kind === 'ready-to-extract', range.kind === 'ready-to-extract'
+        ? 'Locked exact range' : 'Unlocked range; exact frames required'),
+    );
     const body = this.document.createElement('div');
     body.className = 'gif-range-body';
-    const status = this.document.createElement('div');
-    status.className = 'gif-range-card-heading';
-    const title = this.document.createElement('strong');
-    title.textContent = `Range ${number}`;
-    const state = this.document.createElement('span');
-    state.className = 'gif-range-state';
-    state.innerHTML = range.kind === 'needs-exact-frames'
-      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>Needs exact frames'
-      : `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="10" width="12" height="9" rx="2"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/></svg>${this.extractionStateLabel(extractionState)}`;
-    status.append(title, state);
-    const endpoints = this.document.createElement('div');
-    endpoints.className = 'gif-range-endpoints';
-    endpoints.innerHTML = `<span>Start ${this.endpointText(range.start)}</span><span>End ${this.endpointText(range.end)}</span>`;
-    const duration = this.document.createElement('p');
-    duration.textContent = this.durationText(range.start, range.end);
-    body.append(status, endpoints, duration);
+    body.append(this.renderRangeDetails(range.start, range.end));
     if (range.kind === 'needs-exact-frames') {
       const actions = this.document.createElement('div');
       actions.className = 'gif-range-actions';
@@ -204,11 +190,13 @@ export class GifRangesPanelControl implements IAppPanelContent {
       actions.append(refine);
       body.append(actions);
     } else {
-      const extraction = this.document.createElement('p');
-      extraction.className = `gif-range-extraction is-${extractionState.kind}`;
-      extraction.setAttribute('role', 'status');
-      extraction.textContent = this.extractionText(extractionState);
-      body.append(extraction);
+      if (extractionState.kind !== 'pending') {
+        const extraction = this.document.createElement('p');
+        extraction.className = `gif-range-extraction is-${extractionState.kind}`;
+        extraction.setAttribute('role', 'status');
+        extraction.textContent = this.extractionText(extractionState);
+        body.append(extraction);
+      }
       if (extractionState.kind !== 'completed') {
         const actions = this.document.createElement('div');
         actions.className = 'gif-range-actions';
@@ -229,6 +217,32 @@ export class GifRangesPanelControl implements IAppPanelContent {
     }
     card.append(body);
     return card;
+  }
+
+  private renderRangeDetails(start: CaptureEndpoint | null, end: CaptureEndpoint | null): HTMLElement {
+    const details = this.document.createElement('div');
+    details.className = 'gif-range-details';
+    const endpoints = this.document.createElement('span');
+    endpoints.textContent = `${this.endpointText(start)} – ${this.endpointText(end)}`;
+    details.append(endpoints);
+    if (start && end) {
+      const duration = this.document.createElement('span');
+      duration.textContent = this.durationText(start, end);
+      details.append(duration);
+    }
+    return details;
+  }
+
+  private renderLockIcon(locked: boolean, label: string): HTMLElement {
+    const icon = this.document.createElement('span');
+    icon.className = `gif-range-lock ${locked ? 'is-locked' : 'is-unlocked'}`;
+    icon.setAttribute('role', 'img');
+    icon.setAttribute('aria-label', label);
+    icon.title = label;
+    icon.innerHTML = locked
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="10" width="12" height="9" rx="2"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="10" width="12" height="9" rx="2"/><path d="M9 10V7a3 3 0 0 1 5.2-2.1"/></svg>';
+    return icon;
   }
 
   private renderThumbnail(state: GifThumbnailState, rangeId: CapturedRangeId | null): HTMLElement {
@@ -317,7 +331,9 @@ export class GifRangesPanelControl implements IAppPanelContent {
 
   private durationText(start: CaptureEndpoint, end: CaptureEndpoint): string {
     const duration = CaptureEndpointValue.positionUs(end) - CaptureEndpointValue.positionUs(start);
-    return `${this.timeText(duration)} selected`;
+    const seconds = duration / 1_000_000n;
+    const milliseconds = (duration % 1_000_000n) / 1_000n;
+    return `(${seconds}.${String(milliseconds).padStart(3, '0')} sec)`;
   }
 
   private extractionText(state: NonNullable<GifRangeView['extraction']>): string {
@@ -328,19 +344,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
       case 'failed': return `Extraction failed: ${state.message}`;
       case 'publication-failed': return `Clip created; collection save failed: ${state.message}`;
       case 'cancelled': return 'Extraction cancelled. Ready to retry.';
-      default: return 'Ready for exact extraction';
-    }
-  }
-
-  private extractionStateLabel(state: NonNullable<GifRangeView['extraction']>): string {
-    switch (state.kind) {
-      case 'extracting': return 'Extracting';
-      case 'publishing': return 'Saving clip';
-      case 'completed': return 'Extracted';
-      case 'failed': return 'Extraction failed';
-      case 'publication-failed': return 'Save failed';
-      case 'cancelled': return 'Ready to retry';
-      default: return 'Ready to extract';
+      case 'pending': return '';
     }
   }
 

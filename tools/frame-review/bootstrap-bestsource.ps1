@@ -15,6 +15,23 @@ $mingwBin = 'C:\cygwin64\bin'
 if (-not (Test-Path -LiteralPath (Join-Path $mingwBin 'x86_64-w64-mingw32-g++.exe'))) {
     throw 'The x86_64 MinGW compiler is missing from C:\cygwin64\bin.'
 }
+$nativeCmakeCandidates = @()
+if ($env:ProgramFiles) {
+    $nativeCmakeCandidates += Join-Path $env:ProgramFiles 'CMake\bin\cmake.exe'
+}
+$nativeCmakeCandidates += @(
+    Get-Command cmake.exe -All -CommandType Application -ErrorAction SilentlyContinue |
+        Where-Object { $_.Source -notlike "$mingwBin\*" } |
+        Select-Object -ExpandProperty Source
+)
+$nativeCmake = $nativeCmakeCandidates |
+    Where-Object { $_ -and (Test-Path -LiteralPath $_) } |
+    Select-Object -First 1
+if (-not $nativeCmake) {
+    throw 'A native Windows CMake executable is required for vcpkg orchestration.'
+}
+$nativeCmakeDirectory = Split-Path -Parent $nativeCmake
+$env:PATH = "$nativeCmakeDirectory;$env:PATH"
 New-Item -ItemType Directory -Force -Path $depsRoot | Out-Null
 
 function Sync-PinnedGitSource([object]$pin, [string]$destination) {
@@ -124,7 +141,7 @@ $hostBin2cDirectory = Join-Path $installedRoot 'x64-windows\manual-tools\ffmpeg-
 if (-not (Test-Path -LiteralPath (Join-Path $hostBin2cDirectory 'bin2c.exe'))) {
     throw 'vcpkg did not provide the host bin2c tool required by the FFmpeg programs.'
 }
-$env:PATH = "$hostBin2cDirectory;$mingwBin;$env:PATH"
+$env:PATH = "$hostBin2cDirectory;$nativeCmakeDirectory;$mingwBin;$env:PATH"
 & $vcpkgExe install `
     "ffmpeg[core,avcodec,avfilter,avformat,dav1d,ffmpeg,ffprobe,gpl,swresample,swscale,x264]:$triplet" `
     "xxhash:$triplet" `
@@ -203,7 +220,7 @@ pkg_config_path = ['$(Posix (Join-Path $dependencyRoot 'lib\pkgconfig'))']
 "@
 Write-Utf8NoBom $nativeFile $machine
 
-$env:PATH = "$(Split-Path -Parent $ninja);$mingwBin;$env:PATH"
+$env:PATH = "$(Split-Path -Parent $ninja);$nativeCmakeDirectory;$mingwBin;$env:PATH"
 $setupArguments = @('setup', $bestSourceBuild, $bestSourceSource, '--native-file', $nativeFile, '-Denable_plugin=false')
 if (Test-Path -LiteralPath (Join-Path $bestSourceBuild 'meson-private')) {
     $setupArguments += '--reconfigure'

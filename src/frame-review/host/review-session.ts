@@ -54,8 +54,7 @@ export class ReviewSession {
     );
     this.adjacentScheduler.setSourceGeneration(1);
     options.playback.setFrameListener((frame) => {
-      if (this.disposed) return;
-      this.currentExactFrame = null;
+      if (this.disposed || this.currentExactFrame) return;
       options.emit(Object.freeze({
         type: 'display-frame',
         frame: Object.freeze({ ...frame, sourceGeneration: 1 }),
@@ -84,7 +83,8 @@ export class ReviewSession {
 
   async play(): Promise<void> {
     this.requireOpen();
-    await this.options.playback.play();
+    if (this.currentExactFrame) await this.options.playback.playAt(this.currentExactFrame.reviewTimeUs);
+    else await this.options.playback.play();
     this.currentExactFrame = null;
   }
 

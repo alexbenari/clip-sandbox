@@ -52,6 +52,7 @@ export class FrameReviewPlayerControl {
   private renderRevision = 0;
   private playing = false;
   private scrubbingExact = false;
+  private readonly heldStepDirections = new Set<AdjacentDirection>();
   private progressInteractionActive = false;
   private busy = false;
   private busyMessage = '';
@@ -137,6 +138,7 @@ export class FrameReviewPlayerControl {
     this.displayedFrame = null;
     this.playing = false;
     this.scrubbingExact = false;
+    this.heldStepDirections.clear();
     this.progressInteractionActive = false;
     this.busy = false;
     this.busyMessage = '';
@@ -210,13 +212,20 @@ export class FrameReviewPlayerControl {
   }
 
   pressStep(direction: AdjacentDirection): void {
-    if (!this.session || !this.reviewState?.captureEnabled || this.playing || this.busy || this.destroyed) return;
+    if (!this.session || !this.reviewState?.captureEnabled || this.busy || this.destroyed) return;
+    this.heldStepDirections.add(direction);
+    if (this.playing) {
+      void this.enterExactScrubForHeldStep(direction);
+      return;
+    }
     this.scrubbingExact = true;
     void this.session.pressAdjacent(direction).catch(error => this.showError(error));
   }
 
   releaseStep(direction?: AdjacentDirection): void {
     if (!this.session || this.destroyed) return;
+    if (direction === undefined) this.heldStepDirections.clear();
+    else this.heldStepDirections.delete(direction);
     void this.session.releaseAdjacent(direction).catch(error => this.showError(error));
   }
 
@@ -287,6 +296,31 @@ export class FrameReviewPlayerControl {
       this.busy = false;
       this.busyMessage = '';
       this.renderState();
+    }
+  }
+
+  private async enterExactScrubForHeldStep(direction: AdjacentDirection): Promise<void> {
+    const session = this.session;
+    if (!session) return;
+    this.busy = true;
+    this.busyMessage = 'Resolving exact frame';
+    this.playing = false;
+    this.scrubbingExact = true;
+    this.clearError();
+    this.renderState();
+    try {
+      await this.requestDisplay(await session.enterFrameScrub());
+      if (this.session === session && !this.destroyed && this.heldStepDirections.has(direction)) {
+        await session.pressAdjacent(direction);
+      }
+    } catch (error) {
+      if (!this.isSuperseded(error)) this.showError(error);
+    } finally {
+      if (this.session === session && !this.destroyed) {
+        this.busy = false;
+        this.busyMessage = '';
+        this.renderState();
+      }
     }
   }
 

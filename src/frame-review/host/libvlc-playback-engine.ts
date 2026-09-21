@@ -32,6 +32,7 @@ export interface IReviewPlaybackEngine {
   setFrameListener(listener: ((frame: IHostPlaybackFrame) => void) | undefined): void;
   open(sourcePath: string, options: IPlaybackOpenOptions): Promise<IPlaybackStatus>;
   play(): Promise<void>;
+  playAt(timestampUs: bigint): Promise<void>;
   pause(): Promise<void>;
   setRate(rate: number): Promise<void>;
   seek(timestampUs: bigint): Promise<void>;
@@ -63,6 +64,12 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
   }
 
   async play(): Promise<void> { await this.client.request('play'); }
+
+  async playAt(timestampUs: bigint): Promise<void> {
+    if (timestampUs < 0n) throw new BackendError('invalid-request', 'Playback time must not be negative.', true);
+    await this.client.request('play-at', { timeUs: timestampUs.toString() });
+  }
+
   async pause(): Promise<void> { await this.client.request('pause'); }
 
   async setRate(rate: number): Promise<void> {

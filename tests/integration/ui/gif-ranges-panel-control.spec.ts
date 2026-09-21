@@ -15,7 +15,7 @@ describe('GifRangesPanelControl', () => {
     expect(host.firstElementChild).toBe(root);
   });
 
-  it('shows the start thumbnail and makes inexact state visible with text and shape', () => {
+  it('makes an inexact range visually compact while retaining its unlocked state for assistive technology', () => {
     const snapshot: IGifExtractionSessionSnapshot = {
       lifecycle: 'open', source: null, reviewState: null, capture: null,
       draftThumbnail: { kind: 'empty' }, selectedRangeId: null, refinement: null, message: null,
@@ -41,7 +41,10 @@ describe('GifRangesPanelControl', () => {
     expect(root.querySelector('img')?.getAttribute('src')).toBe('blob:start-frame');
     expect(root.querySelector('img')?.getAttribute('alt')).toBe('Captured start frame');
     expect(root.querySelector('.gif-range-card')?.classList.contains('is-inexact')).toBe(true);
-    expect(root.textContent).toContain('Needs exact frames');
+    expect(root.querySelector('.gif-range-lock')?.getAttribute('aria-label')).toBe('Unlocked range; exact frames required');
+    expect([...root.querySelectorAll('.gif-range-details span')].map(item => item.textContent))
+      .toEqual(['00:00.010 – 00:00.020', '(0.010 sec)']);
+    expect(root.querySelector('.gif-range-state')).toBeNull();
     expect(root.textContent).toContain('0 exact');
     const card = root.querySelector<HTMLElement>('.gif-range-card')!;
     card.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -102,7 +105,7 @@ describe('GifRangesPanelControl', () => {
       message: null, ranges: [{ ...exact, id: inexact.id }, exact] as never,
     });
     expect(root.querySelectorAll('.gif-range-card')).toHaveLength(1);
-    expect(root.textContent).toContain('Ready to extract');
+    expect(root.querySelector('.gif-range-lock')?.getAttribute('aria-label')).toBe('Locked exact range');
     expect(control.focusRange(inexact.id)).toBe(true);
     expect(document.activeElement?.getAttribute('data-range-id')).toBe('range_1');
   });
@@ -135,7 +138,7 @@ describe('GifRangesPanelControl', () => {
     new GifRangesPanelControl(root, session as never, { document });
 
     expect(root.textContent).toContain('Clip created; collection save failed');
-    expect(root.textContent).toContain('Save failed');
+    expect(root.querySelector('.gif-range-extraction')?.textContent).toContain('collection save failed');
     expect(root.querySelector('[data-range-id="range_1"]')?.getAttribute('aria-current')).toBe('true');
     expect(root.querySelector<HTMLButtonElement>('[data-extract-all]')?.title).toBe('Resolve the failed ranges below.');
     root.querySelector<HTMLButtonElement>('[data-retry-publication="range_1"]')?.click();

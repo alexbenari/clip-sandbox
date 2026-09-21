@@ -11,6 +11,12 @@ const nativeService = path.join(project, 'native-build', 'frame-review', 'bin', 
 const movie = path.join(project, 'tests', 'fixtures', 'gif-extraction', 'generated', 'cfr-audio.mkv');
 const reviewDirectory = path.join(project, '.impeccable', 'review');
 
+function timeMilliseconds(value) {
+  const [hours, minutes, secondsAndMilliseconds] = value.split(':');
+  const [seconds, milliseconds] = secondsAndMilliseconds.split('.');
+  return (((Number(hours) * 60 + Number(minutes)) * 60 + Number(seconds)) * 1_000) + Number(milliseconds);
+}
+
 test.skip(process.platform !== 'win32' || !existsSync(dependenciesPath) || !existsSync(nativeService) || !existsSync(movie),
   'The explicit frame-review native build and fixture are not available.');
 
@@ -57,7 +63,8 @@ test('captures exact and inexact ranges without interrupting playback', async ()
 
     await expect(page.locator('.gif-range-card.is-exact')).toHaveCount(1);
     await expect(page.locator('.gif-range-card.is-exact img')).toHaveCount(1);
-    await expect(page.locator('#clipsPanelHost')).toContainText('Ready to extract');
+    await expect(page.locator('#clipsPanelHost [data-extract-range]')).toHaveText('Extract');
+    await expect(page.locator('#clipsPanelHost .gif-range-lock')).toHaveAttribute('aria-label', 'Locked exact range');
 
     const play = page.locator('.frame-review-transport [data-command="play-pause"]');
     await play.click();
@@ -66,6 +73,25 @@ test('captures exact and inexact ranges without interrupting playback', async ()
     const currentTime = page.locator('.frame-review-progress-row [data-time="current"]');
     const initialPlaybackTime = await currentTime.textContent();
     await expect.poll(() => currentTime.textContent(), { timeout: 10_000 }).not.toBe(initialPlaybackTime);
+    const playbackRate = page.getByLabel('Playback speed');
+    await playbackRate.selectOption('4');
+    await page.keyboard.press('ArrowRight');
+    await expect(play).toHaveAttribute('aria-label', 'Play');
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame');
+    const initialScrubFrame = await page.locator('.frame-review-identity').textContent();
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('ArrowLeft');
+    await expect.poll(() => page.locator('.frame-review-identity').textContent(), { timeout: 10_000 })
+      .not.toBe(initialScrubFrame);
+    const scrubbedTime = timeMilliseconds(await currentTime.textContent());
+    await play.click();
+    await expect(play).toHaveAttribute('aria-label', 'Pause');
+    const resumedPlaybackTime = await currentTime.textContent();
+    await expect.poll(() => currentTime.textContent(), { timeout: 10_000 }).not.toBe(resumedPlaybackTime);
+    expect(timeMilliseconds(await currentTime.textContent())).toBeGreaterThanOrEqual(scrubbedTime);
+    await playbackRate.selectOption('1');
+    await expect(page.locator('.frame-review-error')).toBeEmpty();
     await page.keyboard.press('q');
     const markedStartTime = await currentTime.textContent();
     await expect.poll(() => currentTime.textContent(), { timeout: 10_000 }).not.toBe(markedStartTime);
@@ -75,12 +101,13 @@ test('captures exact and inexact ranges without interrupting playback', async ()
     await expect(play).toHaveAttribute('aria-label', 'Pause');
     await expect(page.locator('.gif-range-card.is-inexact')).toHaveCount(1);
     await expect(page.locator('.gif-range-card.is-inexact img')).toHaveCount(1);
-    await expect(page.locator('#clipsPanelHost')).toContainText('Needs exact frames');
+    await expect(page.locator('#clipsPanelHost .is-inexact .gif-range-lock'))
+      .toHaveAttribute('aria-label', 'Unlocked range; exact frames required');
     await page.screenshot({ path: path.join(reviewDirectory, 'ms5-capture-1280.png') });
 
     await page.keyboard.press('q');
     await expect(page.locator('.gif-range-card.is-draft')).toHaveCount(1);
-    await expect(page.locator('#clipsPanelHost')).toContainText('Current draft');
+    await expect(page.locator('#clipsPanelHost')).not.toContainText('Set both endpoints');
 
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(900, 680));
     await expect(progress).toBeInViewport();

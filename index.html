@@ -444,25 +444,25 @@
     .gif-ranges-summary span{ color:var(--muted); font-size:12px; }
     .gif-ranges-summary button{ min-height:32px; padding:6px 9px; font-size:12px; }
     .gif-range-list{ display:flex; flex-direction:column; gap:9px; margin-top:11px; }
-    .gif-range-card{ display:grid; grid-template-columns:72px minmax(0,1fr); gap:9px; padding:8px; border:1px solid transparent; border-radius:10px; background:var(--surface-inset); cursor:pointer; }
+    .gif-range-card{ position:relative; display:flex; flex-direction:column; gap:7px; padding:6px; border:1px solid transparent; border-radius:10px; background:var(--surface-inset); cursor:pointer; }
     .gif-range-card.is-draft{ cursor:default; opacity:.82; }
     .gif-range-card.is-inexact{ border-style:dashed; border-color:var(--accent); }
     .gif-range-card.is-exact{ border-color:rgba(34,197,94,.5); }
     .gif-range-card.is-selected{ outline:2px solid var(--accent); outline-offset:1px; }
-    .gif-range-thumbnail{ position:relative; aspect-ratio:16/9; align-self:start; display:grid; place-items:center; overflow:hidden; border-radius:8px; background:#03060a; color:var(--muted); font-size:12px; text-align:center; }
+    .gif-range-thumbnail{ position:relative; aspect-ratio:16/9; align-self:stretch; display:grid; place-items:center; overflow:hidden; border-radius:8px; background:#03060a; color:var(--muted); font-size:12px; text-align:center; }
     .gif-range-thumbnail img{ width:100%; height:100%; object-fit:cover; }
     .gif-range-thumbnail.is-loading::after{ content:""; width:100%; height:100%; background:linear-gradient(135deg,var(--surface-inset),var(--panel)); }
     .gif-range-thumbnail button{ width:100%; height:100%; padding:4px; border:0; border-radius:0; background:transparent; color:var(--muted); font-size:12px; box-shadow:none; }
-    .gif-range-body{ min-width:0; }
-    .gif-range-card-heading{ display:flex; align-items:flex-start; justify-content:space-between; gap:6px; }
-    .gif-range-card-heading strong{ font-size:13px; }
-    .gif-range-state{ display:inline-flex; align-items:center; gap:3px; color:var(--muted); font-size:12px; line-height:1.2; text-align:right; }
-    .gif-range-state svg{ width:11px; height:11px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; }
-    .gif-range-endpoints{ display:grid; grid-template-columns:1fr; gap:2px; margin-top:7px; color:var(--fg); font:12px ui-monospace, Consolas, monospace; font-variant-numeric:tabular-nums; }
-    .gif-range-body p{ margin:5px 0 0; color:var(--muted); font-size:12px; }
-    .gif-range-actions{ display:flex; justify-content:flex-end; margin-top:7px; }
+    .gif-range-lock{ position:absolute; top:12px; right:12px; width:28px; height:28px; display:grid; place-items:center; border:1px solid rgba(148,163,184,.3); border-radius:8px; background:rgba(3,6,10,.82); box-shadow:0 3px 10px rgba(0,0,0,.28); }
+    .gif-range-lock.is-locked{ color:var(--success); }
+    .gif-range-lock.is-unlocked{ color:var(--accent); }
+    .gif-range-lock svg{ width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .gif-range-body{ min-width:0; display:grid; grid-template-columns:minmax(0,1fr); gap:6px; }
+    .gif-range-details{ min-width:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 6px; color:var(--fg); font:12px ui-monospace, Consolas, monospace; font-variant-numeric:tabular-nums; }
+    .gif-range-details span:last-child{ color:var(--muted); }
+    .gif-range-actions{ display:flex; justify-content:flex-end; }
     .gif-range-actions button{ min-height:28px; padding:5px 8px; font-size:12px; box-shadow:none; }
-    .gif-range-extraction{ margin:7px 0 0; color:var(--muted); font-size:12px; line-height:1.35; }
+    .gif-range-extraction{ grid-column:1 / -1; margin:0; color:var(--muted); font-size:12px; line-height:1.35; }
     .gif-range-extraction.is-completed{ color:var(--accent); }
     .gif-range-extraction.is-failed,.gif-range-extraction.is-publication-failed{ color:var(--danger); }
     .gif-source-replacement-dialog{ width:min(480px,calc(100vw - 32px)); padding:0; border:1px solid var(--line); border-radius:14px; background:var(--panel); color:var(--fg); box-shadow:var(--shadow-utility); }

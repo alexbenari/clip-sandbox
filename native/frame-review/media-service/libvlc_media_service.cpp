@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -360,6 +361,7 @@ public:
             else if (command == "close") Close(request_id);
             else if (command == "prime") Prime(request_id);
             else if (command == "play") Play(request_id);
+            else if (command == "play-at") PlayAt(request_id, request.metadata);
             else if (command == "pause") Pause(request_id);
             else if (command == "stop") Stop(request_id);
             else if (command == "rate") Rate(request_id, request.metadata);
@@ -446,6 +448,36 @@ private:
         Status(request_id, "play");
     }
 
+    void PlayAt(const std::string& request_id, const nlohmann::json& request) {
+        RequirePlayer();
+        const auto value = Required<std::string>(request, "timeUs");
+        std::size_t consumed = 0;
+        const auto time_us = std::stoll(value, &consumed);
+        if (consumed != value.size() || time_us < 0) throw std::invalid_argument("invalid playback seek time");
+
+        frames_->SetOutputSuppressed(true);
+        try {
+            const auto state = api_.get_state(player_);
+            if (state != libvlc_Playing && state != libvlc_Paused) {
+                StartPlayback();
+                PausePlayer();
+            }
+            const auto generation = frames_->BeginSeek();
+            if (api_.set_time(player_, time_us, false) != 0) {
+                throw std::runtime_error("libvlc_media_player_set_time failed");
+            }
+            if (!frames_->WaitForSeek(generation, std::chrono::seconds(5))) {
+                throw std::runtime_error("timed out waiting for LibVLC seek completion");
+            }
+            StartPlayback();
+        } catch (...) {
+            frames_->SetOutputSuppressed(false);
+            throw;
+        }
+        frames_->SetOutputSuppressed(false);
+        Status(request_id, "play-at");
+    }
+
     void Prime(const std::string& request_id) {
         RequirePlayer();
         const auto previous_frame = frames_->WrittenFrameGeneration();
@@ -465,7 +497,13 @@ private:
     }
 
     void StartPlayback() {
-        if (api_.get_state(player_) != libvlc_Playing) {
+        const auto state = api_.get_state(player_);
+        if (state == libvlc_Paused) {
+            api_.set_pause(player_, false);
+            if (!frames_->WaitForState(libvlc_Playing, std::chrono::seconds(10))) {
+                throw std::runtime_error("timed out resuming LibVLC playback");
+            }
+        } else if (state != libvlc_Playing) {
             if (api_.play(player_) != 0) throw std::runtime_error("libvlc_media_player_play failed");
             if (!frames_->WaitForState(libvlc_Playing, std::chrono::seconds(10))) {
                 throw std::runtime_error("timed out waiting for LibVLC playing state");
@@ -480,7 +518,7 @@ private:
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
         frames_->SetDisplaySize(display_width, display_height);
-        if (desired_rate_ != 1.0f) {
+        if (std::abs(api_.get_rate(player_) - desired_rate_) > 0.001f) {
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
             auto state = api_.get_state(player_);
             while (state != libvlc_Playing && state != libvlc_Paused &&
