@@ -6,7 +6,8 @@ import { FrameReviewState, type IFrameReviewState } from '../model/frame-review-
 import { ScrubRequestScheduler } from '../scrub-request-scheduler.js';
 import type { IExactFrameReader, IHostExactFrame } from './bestsource-frame-reader.js';
 import type { IHostPlaybackFrame, IReviewPlaybackEngine } from './libvlc-playback-engine.js';
-import type { IPreparedReviewHostResult, PreparationPhase } from './review-preparation-service.js';
+import type { IExactReviewProxyHostResult, IReviewPreparationUpdate } from './review-preparation-service.js';
+import type { IPlaybackProxyEntry } from './playback-proxy-cache.js';
 
 export type HostFrameReviewEvent =
   | Readonly<{ type: 'state'; state: IFrameReviewState }>
@@ -21,9 +22,9 @@ export interface IReviewSessionOptions {
   readonly exact: IExactFrameReader;
   readonly prepare: (
     sourcePath: string,
-    emit: (phase: PreparationPhase) => void,
+    emit: (update: IReviewPreparationUpdate) => void,
     signal?: AbortSignal,
-  ) => Promise<IPreparedReviewHostResult>;
+  ) => Promise<IExactReviewProxyHostResult>;
   readonly emit: (event: HostFrameReviewEvent) => void;
 }
 
@@ -36,6 +37,8 @@ export class ReviewSession {
   private playbackDurationUs: bigint | null = null;
   private currentExactFrame: IHostExactFrame | null = null;
   private preparationPromise: Promise<void> = Promise.resolve();
+  private proxyActivationPromise: Promise<void> | null = null;
+  private proxyActivationError: unknown = null;
   private exactReady = false;
   private opened = false;
   private disposed = false;
@@ -150,10 +153,12 @@ export class ReviewSession {
     try {
       const prepared = await this.options.prepare(
         this.options.sourcePath,
-        (phase) => { if (!this.disposed) this.publishState(phase); },
+        update => this.reportPreparation(update),
         this.abortController.signal,
       );
       if (this.disposed) return;
+      await this.proxyActivationPromise;
+      if (this.proxyActivationError) throw this.proxyActivationError;
       const playbackStatus = await this.options.playback.status();
       const wasPlaying = playbackStatus.state === 'playing';
       if (wasPlaying) await this.options.playback.pause();
@@ -165,13 +170,15 @@ export class ReviewSession {
         maxWidth: this.options.previewBounds.maxWidth,
         maxHeight: this.options.previewBounds.maxHeight,
       });
-      await this.options.playback.open(prepared.proxyPath, {
-        muted: false,
-        maxWidth: this.options.previewBounds.maxWidth,
-        maxHeight: this.options.previewBounds.maxHeight,
-      });
-      await this.options.playback.seek(playbackStatus.timestampUs);
-      await this.options.playback.setRate(playbackStatus.rate);
+      if (!this.proxyActivationPromise) {
+        await this.options.playback.open(prepared.proxyPath, {
+          muted: false,
+          maxWidth: this.options.previewBounds.maxWidth,
+          maxHeight: this.options.previewBounds.maxHeight,
+        });
+        await this.options.playback.seek(playbackStatus.timestampUs);
+        await this.options.playback.setRate(playbackStatus.rate);
+      }
       if (wasPlaying) await this.options.playback.play();
       if (this.disposed) return;
       this.exactReady = true;
@@ -197,6 +204,29 @@ export class ReviewSession {
     this.currentExactFrame = frame;
     this.options.emit(Object.freeze({ type: 'display-frame', frame }));
     return frame;
+  }
+
+  private reportPreparation(update: IReviewPreparationUpdate): void {
+    if (this.disposed) return;
+    this.publishState(update.phase, { progressPercent: update.progressPercent });
+    if (!update.proxy || this.proxyActivationPromise) return;
+    this.proxyActivationPromise = this.activateProxy(update.proxy).catch(error => {
+      this.proxyActivationError = error;
+    });
+  }
+
+  private async activateProxy(proxy: IPlaybackProxyEntry): Promise<void> {
+    const playbackStatus = await this.options.playback.status();
+    const wasPlaying = playbackStatus.state === 'playing';
+    if (wasPlaying) await this.options.playback.pause();
+    await this.options.playback.open(proxy.proxyPath, {
+      muted: false,
+      maxWidth: this.options.previewBounds.maxWidth,
+      maxHeight: this.options.previewBounds.maxHeight,
+    });
+    await this.options.playback.seek(playbackStatus.timestampUs);
+    await this.options.playback.setRate(playbackStatus.rate);
+    if (wasPlaying) await this.options.playback.play();
   }
 
   private publishState(

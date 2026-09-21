@@ -1,6 +1,10 @@
 import { DEFAULT_APP_SETTINGS, type IAppSettings } from './app-settings.js';
 
-export type SettingsResult = { ok: true; settings: IAppSettings; warning?: string } | { ok: false; error: string };
+export type SettingsWarningKind = 'ignored-fields' | 'recovered-defaults';
+export type SettingsResult =
+  | { ok: true; settings: IAppSettings }
+  | { ok: true; settings: IAppSettings; warning: string; warningKind: SettingsWarningKind }
+  | { ok: false; error: string };
 export type RootChoice = { kind: 'chosen'; path: string } | { kind: 'canceled' } | { kind: 'error'; error: string };
 export interface IAppSettingsPersistence {
   load(): Promise<SettingsResult>;

@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 const baseDom = `
   <div id="appShell">
     <header id="globalAppBar">
-      <select id="appScreenSelector" aria-label="App screen" hidden>
-        <option value="collection" selected>Collection</option>
-      </select>
+      <label id="appScreenSwitcher">
+        <select id="appScreenSelector" aria-label="Workspace" hidden>
+          <option value="collection" selected>Collection</option>
+        </select>
+      </label>
       <div id="activityIndicatorRoot">
         <button id="activityIndicatorBtn" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
         <section id="activityIndicatorPanel" hidden>
@@ -152,7 +154,7 @@ describe('app controller context menu wiring', () => {
     document.body.innerHTML = baseDom;
     document.title = '';
     window.clipSandboxDesktop = {
-      loadAppSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: false } })),
+      loadAppSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: false, startupScreenId: 'gif-extraction' } })),
       saveAppSettings: vi.fn(async (settings) => ({ ok: true, settings })),
       choosePipelinesRoot: vi.fn(async () => ({ canceled: true })),
       pickFolder: vi.fn(async () => ({
@@ -219,6 +221,8 @@ describe('app controller context menu wiring', () => {
     document.body.insertAdjacentHTML('beforeend', '<div id="globalUtilityHost"><section id="keyboardMapPanel"></section></div><button id="keyboardMapBtn">Keyboard shortcuts</button>');
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     if (surface === 'zoom') {
       document.getElementById('pickBtn').click();
       await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
@@ -251,6 +255,8 @@ describe('app controller context menu wiring', () => {
   test('right-clicking a selected clip opens the app context menu', async () => {
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -290,6 +296,8 @@ describe('app controller context menu wiring', () => {
 
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -375,6 +383,8 @@ describe('app controller context menu wiring', () => {
 
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -432,6 +442,8 @@ describe('app controller context menu wiring', () => {
 
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -463,6 +475,8 @@ describe('app controller context menu wiring', () => {
     const { AppController } = await import('../../../src/app/app-controller.js');
     const { ElectronFileSystemService } = await import('../../../src/adapters/electron/electron-file-system-service.js');
     new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     document.getElementById('pickBtn').click();
     await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
     document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
@@ -496,6 +510,8 @@ describe('app controller context menu wiring', () => {
 
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -565,6 +581,8 @@ describe('app controller context menu wiring', () => {
 
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {
@@ -672,6 +690,8 @@ describe('app controller context menu wiring', () => {
 
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     document.getElementById('pickBtn').click();
 
     await waitFor(() => {

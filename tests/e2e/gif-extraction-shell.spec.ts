@@ -12,7 +12,7 @@ test('GIF Extraction is fixed with one shared player while Refine Gif remains co
     const page = await app.firstWindow();
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1280, 800));
 
-    await expect(page.locator('#appScreenSelector option')).toHaveText(['Collection', 'GIF Extraction', 'Settings']);
+    await expect(page.locator('#appScreenSelector option')).toHaveText(['GIF Extraction', 'Collection', 'Settings']);
     await expect(page.locator('#appScreenSelector option', { hasText: 'Refine Gif' })).toHaveCount(0);
     await expect(page.locator('#refineGifScreen')).toBeHidden();
 

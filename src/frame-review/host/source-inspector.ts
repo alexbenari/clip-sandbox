@@ -3,12 +3,12 @@ import path from 'node:path';
 
 import { FRAME_REVIEW_PROTOCOL_VERSION } from '../binary-frame-protocol.js';
 import { FRAME_REVIEW_PROXY_PROFILE_ID } from './ffmpeg-proxy-creator.js';
-import type { IPreparedReviewIdentity } from './prepared-review-cache.js';
+import type { IExactReviewProxyIdentity } from './exact-review-proxy-cache.js';
 import { NativeCommandProcess } from './native-process-client.js';
 
 export interface ISourceInspection {
   readonly sourcePath: string;
-  readonly identity: IPreparedReviewIdentity;
+  readonly identity: IExactReviewProxyIdentity;
   readonly sourceWidth: number;
   readonly sourceHeight: number;
   readonly durationUs: string;
@@ -54,7 +54,7 @@ export class SourceInspector {
       throw new Error('FFprobe returned invalid source dimensions.');
     }
     const selectedStream = this.nonnegativeInteger(signature.streamIndex, 'selected stream');
-    const identity: IPreparedReviewIdentity = Object.freeze({
+    const identity: IExactReviewProxyIdentity = Object.freeze({
       schemaVersion: 1,
       sourceSampleDigest: this.string(signature.sampleDigest, 'sample digest'),
       sourceBytes: String(this.nonnegativeInteger(signature.sourceBytes, 'source bytes')),

@@ -30,6 +30,7 @@ export class FrameReviewPlayerControl {
   private readonly emptyState: HTMLElement;
   private readonly busyState: HTMLElement;
   private readonly readiness: HTMLElement;
+  private readonly preparationProgress: HTMLProgressElement;
   private readonly currentTime: HTMLElement;
   private readonly duration: HTMLElement;
   private readonly progress: HTMLInputElement;
@@ -51,6 +52,7 @@ export class FrameReviewPlayerControl {
   private renderRevision = 0;
   private playing = false;
   private scrubbingExact = false;
+  private progressInteractionActive = false;
   private busy = false;
   private busyMessage = '';
   private destroyed = false;
@@ -68,7 +70,10 @@ export class FrameReviewPlayerControl {
         <div class="frame-review-empty">Open a movie to begin</div>
         <div class="frame-review-busy" role="status" aria-live="polite" hidden></div>
       </div>
-      <div class="frame-review-readiness" role="status" aria-live="polite">No movie open</div>
+      <div class="frame-review-readiness" role="status" aria-live="polite">
+        <span data-readiness-text>No movie open</span>
+        <progress class="frame-review-preparation-progress" max="100" aria-label="Review preparation progress"></progress>
+      </div>
       <div class="frame-review-progress-row">
         <span data-time="current">00:00:00.000</span>
         <input type="range" min="0" max="100000" value="0" aria-label="Movie position" disabled>
@@ -101,6 +106,7 @@ export class FrameReviewPlayerControl {
     this.emptyState = this.required(this.root.querySelector('.frame-review-empty'), HTMLElement, 'empty state');
     this.busyState = this.required(this.root.querySelector('.frame-review-busy'), HTMLElement, 'busy state');
     this.readiness = this.required(this.root.querySelector('.frame-review-readiness'), HTMLElement, 'readiness state');
+    this.preparationProgress = this.required(this.root.querySelector('.frame-review-preparation-progress'), HTMLProgressElement, 'preparation progress');
     this.currentTime = this.required(this.root.querySelector('[data-time="current"]'), HTMLElement, 'current time');
     this.duration = this.required(this.root.querySelector('[data-time="duration"]'), HTMLElement, 'duration');
     this.progress = this.required(this.root.querySelector('input[type="range"]'), HTMLInputElement, 'movie position');
@@ -131,6 +137,7 @@ export class FrameReviewPlayerControl {
     this.displayedFrame = null;
     this.playing = false;
     this.scrubbingExact = false;
+    this.progressInteractionActive = false;
     this.busy = false;
     this.busyMessage = '';
     this.frameRenderer.clear(this.canvas);
@@ -232,6 +239,8 @@ export class FrameReviewPlayerControl {
     this.playbackRate.addEventListener('change', () => { void this.setPlaybackRate(); });
     this.progress.addEventListener('input', () => this.previewProgress());
     this.progress.addEventListener('change', () => { void this.commitProgress(); });
+    this.progress.addEventListener('pointerdown', () => { this.progressInteractionActive = true; });
+    this.progress.addEventListener('pointercancel', () => { this.progressInteractionActive = false; });
     this.bindStepButton(this.stepLeft, -1);
     this.bindStepButton(this.stepRight, 1);
   }
@@ -294,6 +303,7 @@ export class FrameReviewPlayerControl {
 
   private previewProgress(): void {
     if (!this.session) return;
+    this.progressInteractionActive = true;
     this.updateCurrentTimeFromProgress();
     if (!this.playing && this.reviewState?.captureEnabled) void this.scrubToProgressFrame();
   }
@@ -301,16 +311,18 @@ export class FrameReviewPlayerControl {
   private async commitProgress(): Promise<void> {
     const session = this.session;
     if (!session) return;
-    if (!this.playing && this.reviewState?.captureEnabled) {
-      await this.scrubToProgressFrame();
-      return;
-    }
     try {
-      this.scrubbingExact = false;
-      await session.seekPlayback(this.progressTimestampUs());
-      this.clearError();
+      if (!this.playing && this.reviewState?.captureEnabled) {
+        await this.scrubToProgressFrame();
+      } else {
+        this.scrubbingExact = false;
+        await session.seekPlayback(this.progressTimestampUs());
+        this.clearError();
+      }
     } catch (error) {
       this.showError(error);
+    } finally {
+      if (this.session === session) this.progressInteractionActive = false;
     }
   }
 
@@ -339,7 +351,7 @@ export class FrameReviewPlayerControl {
       return;
     }
     if (event.type === 'display-frame') {
-      if (event.frame.kind === 'playback-frame' && this.scrubbingExact) return;
+      if (event.frame.kind === 'playback-frame' && (this.scrubbingExact || this.progressInteractionActive)) return;
       if (event.frame.sourceGeneration === this.reviewState?.sourceGeneration) void this.requestDisplay(event.frame);
       return;
     }
@@ -429,10 +441,19 @@ export class FrameReviewPlayerControl {
     this.playPause.setAttribute('aria-label', this.playPause.title);
     this.playIcon.toggleAttribute('hidden', this.playing);
     this.pauseIcon.toggleAttribute('hidden', !this.playing);
-    this.readiness.textContent = this.readinessText();
+    const preparing = this.isPreparing();
+    this.readiness.hidden = !preparing;
+    this.readiness.classList.toggle('is-preparing', preparing);
+    this.readiness.setAttribute('aria-busy', String(preparing));
+    const readinessText = this.required(this.readiness.querySelector('[data-readiness-text]'), HTMLElement, 'readiness text');
+    readinessText.textContent = this.readinessText();
+    const progressPercent = this.reviewState?.progressPercent ?? null;
+    this.preparationProgress.hidden = !preparing;
+    if (progressPercent === null) this.preparationProgress.removeAttribute('value');
+    else this.preparationProgress.value = progressPercent;
     this.frameIdentity.textContent = this.displayedFrame?.kind === 'exact-frame'
       ? `Frame ${this.displayedFrame.identity.frameIndex.toLocaleString()}`
-      : exactReady ? 'Playback time' : attached ? 'Preparing frame index' : 'Frame unavailable';
+      : attached ? 'Playback time' : 'Frame unavailable';
     this.emptyState.hidden = this.displayedFrame !== null;
     this.busyState.hidden = !this.busy;
     this.busyState.textContent = this.busy ? this.busyMessage : '';
@@ -449,6 +470,11 @@ export class FrameReviewPlayerControl {
     return state.progressPercent === null ? description : `${description} · ${Math.round(state.progressPercent)}%`;
   }
 
+  private isPreparing(): boolean {
+    const phase = this.reviewState?.phase;
+    return phase !== undefined && phase !== 'exact-ready' && phase !== 'failed' && phase !== 'closed';
+  }
+
   private phaseLabel(phase: IFrameReviewState['phase']): string {
     const labels: Record<IFrameReviewState['phase'], string> = {
       opening: 'Opening movie',
@@ -458,6 +484,7 @@ export class FrameReviewPlayerControl {
       normalizing: 'Normalizing timestamps',
       indexing: 'Building exact frame index',
       'proxy-encoding': 'Creating review proxy',
+      'proxy-ready': 'Review proxy ready',
       'proxy-indexing': 'Indexing review proxy',
       validating: 'Validating exact frames',
       'exact-ready': 'Exact review ready',

@@ -105,6 +105,15 @@ describe('application shell screen ownership', () => {
     expect(f.collection.root.contains(document.activeElement)).toBe(true);
   });
 
+  it('activates the explicit initial screen instead of relying on registration order', () => {
+    const f = fixture();
+    const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings, f.extraction], initialScreenId: f.extraction.id });
+
+    expect(shell.activeScreen).toBe(f.extraction);
+    expect(f.selector.value).toBe(f.extraction.id);
+    expect(f.extraction.root.contains(document.activeElement)).toBe(true);
+  });
+
   it('switches to a commandless screen without stale commands or inactive focus', () => {
     const f = fixture();
     const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings, f.extraction] });

@@ -30,9 +30,9 @@ async function createScenarioFolder(name) {
   return { tempRoot, folderPath };
 }
 
-async function launchApp() {
+async function launchApp(profilePath) {
   const electronApp = await electron.launch({
-    args: ['.'],
+    args: ['.', `--user-data-dir=${profilePath}`],
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -40,6 +40,7 @@ async function launchApp() {
     },
   });
   const page = await electronApp.firstWindow();
+  await page.locator('#appScreenSelector').selectOption('collection');
   await page.waitForSelector('#pickBtn');
   return { electronApp, page };
 }
@@ -101,9 +102,11 @@ test.describe('Electron runtime migration', () => {
   let page;
   let tempRoot;
   let folderPath;
+  let profilePath;
 
   test.beforeEach(async () => {
-    ({ electronApp, page } = await launchApp());
+    profilePath = await fsp.mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-scenario-profile-'));
+    ({ electronApp, page } = await launchApp(profilePath));
   });
 
   test.afterEach(async () => {
@@ -113,6 +116,8 @@ test.describe('Electron runtime migration', () => {
     await removeTempRoot(tempRoot);
     tempRoot = null;
     folderPath = null;
+    await fsp.rm(profilePath, { recursive: true, force: true });
+    profilePath = null;
   });
 
   test('loads clips from an Electron-selected folder', async () => {

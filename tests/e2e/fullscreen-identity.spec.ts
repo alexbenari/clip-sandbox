@@ -39,9 +39,10 @@ test('natural fullscreen rotation preserves source identity through exit and Zoo
   }
   const env: NodeJS.ProcessEnv = { ...process.env, CLIP_SANDBOX_E2E: '1' };
   delete env.ELECTRON_RUN_AS_NODE;
-  const app = await electron.launch({ args: ['.', `--user-data-dir=${path.join(directory, 'profile')}`], env });
+    const app = await electron.launch({ args: ['.', `--user-data-dir=${path.join(directory, 'profile')}`], env });
   try {
     const page = await app.firstWindow();
+    await page.locator('#appScreenSelector').selectOption('collection');
     await page.locator('#pickBtn').waitFor();
     await page.evaluate(async folder => {
       await (window as unknown as Window & { clipSandboxDesktop: { __testSetNextFolderPath(path: string): Promise<void> } }).clipSandboxDesktop.__testSetNextFolderPath(folder);

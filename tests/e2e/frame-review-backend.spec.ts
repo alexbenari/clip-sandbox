@@ -33,7 +33,7 @@ test('Electron reuses prepared review in-session and after restart', async () =>
     expect(first.state.phase).toBe('exact-ready');
     expect(first.state.preparedReview.cacheHit).toBe(false);
     const cacheKey = first.state.preparedReview.cacheKey;
-    const manifestPath = path.join(project, 'proxy-cache', cacheKey, 'manifest.json');
+    const manifestPath = path.join(project, 'exact-review-proxy-cache', cacheKey, 'manifest.json');
     const mtime = (await fs.stat(manifestPath)).mtimeMs;
 
     const exact = await page.evaluate(async ({ sessionId }) => {

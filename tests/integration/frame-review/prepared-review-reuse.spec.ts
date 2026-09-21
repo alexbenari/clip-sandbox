@@ -66,17 +66,19 @@ describe.runIf(available)('prepared review production integration', () => {
     const first = await openPrepared(new FrameReviewHost(configuration), movie);
     expect(first.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: false } });
     expect(first.phases).toContain('proxy-encoding');
+    expect(first.phases.indexOf('proxy-ready')).toBeLessThan(first.phases.indexOf('indexing'));
     const exactFrame = await first.session.enterFrameScrub();
     expect(exactFrame.identity.frameIndex).toBe(0);
     await expect(first.session.captureCurrentPoint()).resolves.toMatchObject({
       kind: 'exact-frame', identity: { frameIndex: 0 },
     });
-    const manifestPath = path.join(root, 'proxy-cache', first.session.state().preparedReview!.cacheKey, 'manifest.json');
+    const manifestPath = path.join(root, 'exact-review-proxy-cache', first.session.state().preparedReview!.cacheKey, 'manifest.json');
     const firstMtime = (await stat(manifestPath)).mtimeMs;
 
     const second = await openPrepared(first.host, movie);
     expect(second.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: true } });
     expect(second.phases).not.toContain('proxy-encoding');
+    expect(second.phases).not.toContain('proxy-ready');
     await first.session.dispose();
     await second.session.dispose();
     await first.host.dispose();

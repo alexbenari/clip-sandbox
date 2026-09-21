@@ -5,12 +5,12 @@ import { describe, expect, it } from 'vitest';
 
 import { FrameReviewPaths } from '../../../src/frame-review/host/frame-review-paths.js';
 import {
-  PreparedReviewCache,
-  type IPreparedReviewBuildResult,
-  type IPreparedReviewIdentity,
-} from '../../../src/frame-review/host/prepared-review-cache.js';
+  ExactReviewProxyCache,
+  type IExactReviewProxyBuildResult,
+  type IExactReviewProxyIdentity,
+} from '../../../src/frame-review/host/exact-review-proxy-cache.js';
 
-const identity: IPreparedReviewIdentity = Object.freeze({
+const identity: IExactReviewProxyIdentity = Object.freeze({
   schemaVersion: 1,
   sourceSampleDigest: 'source-digest',
   sourceBytes: '1200',
@@ -27,12 +27,12 @@ const identity: IPreparedReviewIdentity = Object.freeze({
   indexingOptions: Object.freeze({ decoderInstances: 2, seekPreroll: 20, maxCacheBytes: 268435456 }),
 });
 
-describe('prepared review cache', () => {
+describe('exact review proxy cache', () => {
   it('publishes once and reuses the same durable entry without touching its manifest', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-frame-review-'));
-    const cache = new PreparedReviewCache(new FrameReviewPaths(root));
+    const cache = new ExactReviewProxyCache(new FrameReviewPaths(root));
     let builds = 0;
-    const build = async (workspace: IPreparedReviewBuildResult['workspace']): Promise<IPreparedReviewBuildResult> => {
+    const build = async (workspace: IExactReviewProxyBuildResult['workspace']): Promise<IExactReviewProxyBuildResult> => {
       builds += 1;
       await writeFile(`${workspace.canonicalIndexFile}.0.bsindex`, 'index');
       await writeFile(workspace.proxyFile, 'proxy');
@@ -55,9 +55,9 @@ describe('prepared review cache', () => {
 
   it('coalesces concurrent writers for one identity', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-frame-review-'));
-    const cache = new PreparedReviewCache(new FrameReviewPaths(root));
+    const cache = new ExactReviewProxyCache(new FrameReviewPaths(root));
     let builds = 0;
-    const build = async (workspace: IPreparedReviewBuildResult['workspace']): Promise<IPreparedReviewBuildResult> => {
+    const build = async (workspace: IExactReviewProxyBuildResult['workspace']): Promise<IExactReviewProxyBuildResult> => {
       builds += 1;
       await new Promise((resolve) => setTimeout(resolve, 20));
       await Promise.all([
@@ -79,7 +79,7 @@ describe('prepared review cache', () => {
 
   it('keeps a shared writer alive when one of two consumers cancels', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-frame-review-'));
-    const cache = new PreparedReviewCache(new FrameReviewPaths(root));
+    const cache = new ExactReviewProxyCache(new FrameReviewPaths(root));
     const firstConsumer = new AbortController();
     const secondConsumer = new AbortController();
     let builds = 0;
@@ -88,9 +88,9 @@ describe('prepared review cache', () => {
     let markBuildStarted: (() => void) | undefined;
     const buildStarted = new Promise<void>((resolve) => { markBuildStarted = resolve; });
     const build = async (
-      workspace: IPreparedReviewBuildResult['workspace'],
+      workspace: IExactReviewProxyBuildResult['workspace'],
       writerSignal: AbortSignal,
-    ): Promise<IPreparedReviewBuildResult> => {
+    ): Promise<IExactReviewProxyBuildResult> => {
       builds += 1;
       markBuildStarted?.();
       await buildGate;
@@ -118,9 +118,9 @@ describe('prepared review cache', () => {
 
   it('rebuilds a stale manifest and removes abandoned partial workspaces', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-frame-review-'));
-    const cache = new PreparedReviewCache(new FrameReviewPaths(root));
+    const cache = new ExactReviewProxyCache(new FrameReviewPaths(root));
     let builds = 0;
-    const build = async (workspace: IPreparedReviewBuildResult['workspace']): Promise<IPreparedReviewBuildResult> => {
+    const build = async (workspace: IExactReviewProxyBuildResult['workspace']): Promise<IExactReviewProxyBuildResult> => {
       builds += 1;
       await Promise.all([
         writeFile(`${workspace.canonicalIndexFile}.0.bsindex`, 'index'),
@@ -143,9 +143,9 @@ describe('prepared review cache', () => {
 
   it('invalidates changed source bytes and an incompatible cached protocol', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-frame-review-'));
-    const cache = new PreparedReviewCache(new FrameReviewPaths(root));
+    const cache = new ExactReviewProxyCache(new FrameReviewPaths(root));
     let builds = 0;
-    const build = async (workspace: IPreparedReviewBuildResult['workspace']): Promise<IPreparedReviewBuildResult> => {
+    const build = async (workspace: IExactReviewProxyBuildResult['workspace']): Promise<IExactReviewProxyBuildResult> => {
       builds += 1;
       await Promise.all([
         writeFile(`${workspace.canonicalIndexFile}.0.bsindex`, 'index'),
@@ -172,7 +172,7 @@ describe('prepared review cache', () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-frame-review-'));
     const file = path.join(root, 'application-file');
     await writeFile(file, 'not a directory');
-    const cache = new PreparedReviewCache(new FrameReviewPaths(file));
+    const cache = new ExactReviewProxyCache(new FrameReviewPaths(file));
     await expect(cache.getOrCreate(identity, async () => { throw new Error('builder must not run'); }))
       .rejects.toMatchObject({ category: 'cache-unavailable', recoverable: false });
   });
@@ -180,12 +180,12 @@ describe('prepared review cache', () => {
   it('does not publish or retain temporary entries after a cancelled build', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-frame-review-'));
     const paths = new FrameReviewPaths(root);
-    const cache = new PreparedReviewCache(paths);
+    const cache = new ExactReviewProxyCache(paths);
     await expect(cache.getOrCreate(identity, async (workspace) => {
       await writeFile(workspace.proxyFile, 'partial');
       throw new DOMException('cancelled', 'AbortError');
     })).rejects.toMatchObject({ name: 'AbortError' });
     expect(await readdir(paths.frameIndexCache)).toEqual([]);
-    expect(await readdir(paths.proxyCache)).toEqual([]);
+    expect(await readdir(paths.exactReviewProxyCache)).toEqual([]);
   });
 });

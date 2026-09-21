@@ -4,9 +4,11 @@ import { describe, it, beforeEach, expect } from 'vitest';
 const baseDom = `
   <div id="appShell">
     <header id="globalAppBar">
-      <select id="appScreenSelector" aria-label="App screen" hidden>
-        <option value="collection" selected>Collection</option>
-      </select>
+      <label id="appScreenSwitcher">
+        <select id="appScreenSelector" aria-label="Workspace" hidden>
+          <option value="collection" selected>Collection</option>
+        </select>
+      </label>
       <div id="activityIndicatorRoot">
         <button id="activityIndicatorBtn" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
         <section id="activityIndicatorPanel" hidden>
@@ -80,6 +82,15 @@ describe('AppController DOM wiring', () => {
   it('initializes count text, titles button, and active source label', async () => {
     const { AppController } = await import('../../src/app/app-controller.js');
     new AppController().init();
+    expect(document.getElementById('appScreenSelector').value).toBe('gif-extraction');
+    expect(document.getElementById('appScreenSelector').hidden).toBe(false);
+    expect([...document.querySelectorAll('#appScreenSelector option')].map(option => option.textContent)).toEqual([
+      'GIF Extraction', 'Collection', 'Settings',
+    ]);
+    expect(document.querySelector('#screenCommandHost [data-command="open-movie"]')).not.toBeNull();
+    const screenSelector = document.getElementById('appScreenSelector');
+    screenSelector.value = 'collection';
+    screenSelector.dispatchEvent(new Event('change'));
     const collectionSelect = document.getElementById('activeCollectionName');
     expect(document.getElementById('count').textContent).toBe('0 clips');
     expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Hide Titles');
@@ -89,15 +100,9 @@ describe('AppController DOM wiring', () => {
     expect(document.title).toBe('Clip Sandbox');
     expect(document.getElementById('zoomLayerRoot')).not.toBeNull();
     expect(document.getElementById('collectionScreen')).not.toBeNull();
-    expect(document.getElementById('appScreenSelector').value).toBe('collection');
-    expect(document.getElementById('appScreenSelector').hidden).toBe(false);
-    expect([...document.querySelectorAll('#appScreenSelector option')].map(option => option.textContent)).toEqual([
-      'Collection', 'GIF Extraction', 'Settings',
-    ]);
     expect(document.getElementById('toolbar').parentElement.id).toBe('screenCommandHost');
     expect(document.getElementById('activityIndicatorRoot').parentElement.id).toBe('globalAppBar');
     expect(document.getElementById('refineGifScreen').hidden).toBe(true);
-    const screenSelector = document.getElementById('appScreenSelector');
     screenSelector.value = 'gif-extraction';
     screenSelector.dispatchEvent(new Event('change'));
     expect(document.getElementById('gifExtractionScreen').hidden).toBe(false);

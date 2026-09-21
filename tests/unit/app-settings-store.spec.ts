@@ -25,41 +25,62 @@ describe('AppSettingsStore', () => {
 
     await expect(store.load()).resolves.toEqual({
       ok: true,
-      settings: { pipelinesRootPath: null, singleClipAudioDefault: false },
+      settings: { pipelinesRootPath: null, singleClipAudioDefault: false, startupScreenId: 'gif-extraction' },
     });
   });
 
-  it('round trips a Unicode Windows path and writes version 1 without a BOM', async () => {
+  it('round trips a Unicode Windows path as versionless settings without a BOM', async () => {
     const directory = await createDirectory();
-    const settings = { pipelinesRootPath: 'C:\\יצירה\\clips 🎞', singleClipAudioDefault: true };
+    const settings = { pipelinesRootPath: 'C:\\יצירה\\clips 🎞', singleClipAudioDefault: true, startupScreenId: 'collection' };
     const store = new AppSettingsStore(directory);
 
     await expect(store.save(settings)).resolves.toEqual({ ok: true, settings });
     const raw = await realFs.readFile(path.join(directory, 'app-settings.json'));
     expect(raw[0]).not.toBe(0xef);
-    expect(JSON.parse(raw.toString('utf8'))).toEqual({ version: 1, ...settings });
+    expect(JSON.parse(raw.toString('utf8'))).toEqual(settings);
     await expect(new AppSettingsStore(directory).load()).resolves.toEqual({ ok: true, settings });
   });
 
   it('accepts one leading BOM while reading', async () => {
     const directory = await createDirectory();
-    await realFs.writeFile(path.join(directory, 'app-settings.json'), '\ufeff{"version":1,"pipelinesRootPath":null,"singleClipAudioDefault":true}', 'utf8');
+    await realFs.writeFile(path.join(directory, 'app-settings.json'), '\ufeff{"pipelinesRootPath":null,"singleClipAudioDefault":true,"startupScreenId":"collection"}', 'utf8');
 
     await expect(new AppSettingsStore(directory).load()).resolves.toEqual({
       ok: true,
-      settings: { pipelinesRootPath: null, singleClipAudioDefault: true },
+      settings: { pipelinesRootPath: null, singleClipAudioDefault: true, startupScreenId: 'collection' },
     });
   });
 
-  it('defaults with a warning for malformed or unsupported settings', async () => {
+  it('derives known settings, ignores unknown fields, and reports the ignored fields', async () => {
+    const directory = await createDirectory();
+    await realFs.writeFile(path.join(directory, 'app-settings.json'), '{"pipelinesRootPath":null,"singleClipAudioDefault":true,"startupScreenId":"collection","obsoletePreference":true,"futureSettings":{"theme":"night"}}', 'utf8');
+
+    await expect(new AppSettingsStore(directory).load()).resolves.toEqual({
+      ok: true,
+      settings: { pipelinesRootPath: null, singleClipAudioDefault: true, startupScreenId: 'collection' },
+      warning: 'Ignored unrecognized saved settings fields: obsoletePreference, futureSettings.',
+      warningKind: 'ignored-fields',
+    });
+  });
+
+  it('does not persist unknown fields supplied by the renderer', async () => {
+    const directory = await createDirectory();
+    const settings = { pipelinesRootPath: null, singleClipAudioDefault: false, startupScreenId: 'gif-extraction' };
+
+    await expect(new AppSettingsStore(directory).save({ ...settings, staleField: 'ignore me' })).resolves.toEqual({ ok: true, settings });
+    await expect(realFs.readFile(path.join(directory, 'app-settings.json'), 'utf8')).resolves.toBe(`${JSON.stringify(settings)}\n`);
+  });
+
+  it('defaults with a warning for malformed settings', async () => {
     const directory = await createDirectory();
     const filePath = path.join(directory, 'app-settings.json');
-    await realFs.writeFile(filePath, '{"version":99}', 'utf8');
+    await realFs.writeFile(filePath, '[]', 'utf8');
 
     const result = await new AppSettingsStore(directory).load();
     expect(result.ok).toBe(true);
-    expect(result.settings).toEqual({ pipelinesRootPath: null, singleClipAudioDefault: false });
+    expect(result.settings).toEqual({ pipelinesRootPath: null, singleClipAudioDefault: false, startupScreenId: 'gif-extraction' });
     expect(result.warning).toEqual(expect.any(String));
+    expect(result.warningKind).toBe('recovered-defaults');
 
     await realFs.writeFile(filePath, '{broken', 'utf8');
     expect((await new AppSettingsStore(directory).load()).warning).toEqual(expect.any(String));
@@ -68,12 +89,12 @@ describe('AppSettingsStore', () => {
   it('rejects invalid payloads before filesystem writes and preserves the old file', async () => {
     const directory = await createDirectory();
     const store = new AppSettingsStore(directory);
-    const original = { pipelinesRootPath: null, singleClipAudioDefault: false };
+    const original = { pipelinesRootPath: null, singleClipAudioDefault: false, startupScreenId: 'gif-extraction' };
     await store.save(original);
     const writeFile = vi.fn(realFs.writeFile.bind(realFs));
     const invalidStore = new AppSettingsStore(directory, { ...realFs, writeFile });
 
-    await expect(invalidStore.save({ pipelinesRootPath: 'relative', singleClipAudioDefault: true })).resolves.toEqual({
+    await expect(invalidStore.save({ pipelinesRootPath: 'relative', singleClipAudioDefault: true, startupScreenId: 'gif-extraction' })).resolves.toEqual({
       ok: false,
       error: expect.any(String),
     });
@@ -83,7 +104,7 @@ describe('AppSettingsStore', () => {
 
   it('preserves the old file when rename fails', async () => {
     const directory = await createDirectory();
-    const original = { pipelinesRootPath: null, singleClipAudioDefault: false };
+    const original = { pipelinesRootPath: null, singleClipAudioDefault: false, startupScreenId: 'gif-extraction' };
     const store = new AppSettingsStore(directory);
     await store.save(original);
     const failingFs = {
@@ -92,7 +113,7 @@ describe('AppSettingsStore', () => {
     };
 
     await expect(new AppSettingsStore(directory, failingFs).save({
-      pipelinesRootPath: 'C:\\clips', singleClipAudioDefault: true,
+      pipelinesRootPath: 'C:\\clips', singleClipAudioDefault: true, startupScreenId: 'collection',
     })).resolves.toEqual({ ok: false, error: 'rename failed' });
     await expect(store.load()).resolves.toEqual({ ok: true, settings: original });
   });
@@ -109,15 +130,15 @@ describe('AppSettingsStore', () => {
       return realFs.writeFile(...args);
     });
     const store = new AppSettingsStore(directory, { ...realFs, writeFile });
-    const first = store.save({ pipelinesRootPath: 'C:\\first', singleClipAudioDefault: false });
+    const first = store.save({ pipelinesRootPath: 'C:\\first', singleClipAudioDefault: false, startupScreenId: 'gif-extraction' });
     await firstWriteStarted;
-    const second = store.save({ pipelinesRootPath: 'C:\\second', singleClipAudioDefault: true });
+    const second = store.save({ pipelinesRootPath: 'C:\\second', singleClipAudioDefault: true, startupScreenId: 'collection' });
 
     await expect(first).resolves.toMatchObject({ ok: true });
     await expect(second).resolves.toMatchObject({ ok: true });
     await expect(store.load()).resolves.toEqual({
       ok: true,
-      settings: { pipelinesRootPath: 'C:\\second', singleClipAudioDefault: true },
+      settings: { pipelinesRootPath: 'C:\\second', singleClipAudioDefault: true, startupScreenId: 'collection' },
     });
   });
 });

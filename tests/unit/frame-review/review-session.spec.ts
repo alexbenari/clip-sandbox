@@ -7,7 +7,7 @@ import type {
   IPlaybackStatus,
   IReviewPlaybackEngine,
 } from '../../../src/frame-review/host/libvlc-playback-engine.js';
-import type { IPreparedReviewHostResult, PreparationPhase } from '../../../src/frame-review/host/review-preparation-service.js';
+import type { IExactReviewProxyHostResult, IReviewPreparationUpdate } from '../../../src/frame-review/host/review-preparation-service.js';
 import { ReviewSession } from '../../../src/frame-review/host/review-session.js';
 
 function deferred<T>() {
@@ -33,7 +33,7 @@ const exactFrame: IHostExactFrame = Object.freeze({
   pixels: new Uint8Array(64 * 48 * 4),
 });
 
-const prepared: IPreparedReviewHostResult = Object.freeze({
+const prepared: IExactReviewProxyHostResult = Object.freeze({
   cacheKey: 'a'.repeat(64), cacheHit: false,
   canonicalIndexPath: 'C:/cache/canonical-index', proxyPath: 'C:/cache/proxy.mkv',
   proxyIndexPath: 'C:/cache/proxy-index', frameMapPath: 'C:/cache/frame-map.json',
@@ -56,8 +56,9 @@ class PlaybackFake implements IReviewPlaybackEngine {
   timestampUs = 1_500_000n;
   stateValue = 'paused';
   shutdownCount = 0;
+  readonly openedPaths: string[] = [];
   setFrameListener(listener: ((frame: IHostPlaybackFrame) => void) | undefined) { this.listener = listener; }
-  async open(_path: string, _options: IPlaybackOpenOptions) { return this.status(); }
+  async open(path: string, _options: IPlaybackOpenOptions) { this.openedPaths.push(path); return this.status(); }
   async play() { this.stateValue = 'playing'; }
   async pause() { this.stateValue = 'paused'; }
   async setRate(_rate: number) {}
@@ -80,7 +81,7 @@ class ExactFake implements IExactFrameReader {
 
 describe('review session', () => {
   it('keeps playback capture inexact until preparation enables canonical scrub capture', async () => {
-    const preparation = deferred<IPreparedReviewHostResult>();
+    const preparation = deferred<IExactReviewProxyHostResult>();
     const playback = new PlaybackFake();
     const exact = new ExactFake();
     const events: unknown[] = [];
@@ -90,7 +91,7 @@ describe('review session', () => {
       previewBounds: { maxWidth: 960, maxHeight: 540 },
       playback,
       exact,
-      prepare: (_path: string, _emit: (phase: PreparationPhase) => void) => preparation.promise,
+      prepare: (_path: string, _emit: (update: IReviewPreparationUpdate) => void) => preparation.promise,
       emit: (event) => events.push(event),
     });
 
@@ -113,7 +114,7 @@ describe('review session', () => {
   });
 
   it('disposes idempotently and suppresses late preparation', async () => {
-    const preparation = deferred<IPreparedReviewHostResult>();
+    const preparation = deferred<IExactReviewProxyHostResult>();
     const playback = new PlaybackFake();
     const exact = new ExactFake();
     const emit = vi.fn();
@@ -130,5 +131,28 @@ describe('review session', () => {
     expect(exact.shutdownCount).toBe(1);
     expect(session.state().phase).toBe('closed');
     expect(emit).not.toHaveBeenCalledWith(expect.objectContaining({ state: expect.objectContaining({ phase: 'exact-ready' }) }));
+  });
+
+  it('switches to the review proxy before canonical exact-frame review is ready', async () => {
+    const preparation = deferred<IExactReviewProxyHostResult>();
+    const playback = new PlaybackFake();
+    let report: ((update: IReviewPreparationUpdate) => void) | undefined;
+    const session = new ReviewSession({
+      id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      prepare: (_path, emit) => { report = emit; return preparation.promise; }, emit: () => undefined,
+    });
+
+    await session.open();
+    report?.({
+      phase: 'proxy-ready', progressPercent: null,
+      proxy: { cacheKey: 'a'.repeat(64), cacheHit: false, proxyPath: 'C:/early/proxy.mkv', normalizedSourcePath: null },
+    });
+    await vi.waitFor(() => expect(playback.openedPaths).toContain('C:/early/proxy.mkv'));
+    expect(session.state()).toMatchObject({ phase: 'proxy-ready', captureEnabled: false });
+
+    preparation.resolve(prepared);
+    await session.whenPrepared();
+    expect(session.state()).toMatchObject({ phase: 'exact-ready', captureEnabled: true });
   });
 });

@@ -7,8 +7,8 @@ afterEach(() => { document.body.innerHTML = ''; });
 
 describe('Settings screen', () => {
   function setup() {
-    const settings = { pipelinesRootPath: 'D:\\יצירה\\<clips>', singleClipAudioDefault: false };
-    const port = { load: vi.fn(async () => ({ ok: true as const, settings })), save: vi.fn<[IAppSettings], Promise<SettingsResult>>(async (value) => ({ ok: true, settings: value })), chooseRoot: vi.fn(async () => ({ kind: 'canceled' as const })) };
+    const settings: IAppSettings = { pipelinesRootPath: 'D:\\יצירה\\<clips>', singleClipAudioDefault: false, startupScreenId: 'gif-extraction' };
+    const port = { load: vi.fn<[], Promise<SettingsResult>>(async () => ({ ok: true, settings })), save: vi.fn<[IAppSettings], Promise<SettingsResult>>(async (value) => ({ ok: true, settings: value })), chooseRoot: vi.fn(async () => ({ kind: 'canceled' as const })) };
     const feedback = { progress: vi.fn(), success: vi.fn(), error: vi.fn() };
     const service = new AppSettingsService(port);
     const screen = new SettingsScreen(service, feedback);
@@ -35,6 +35,18 @@ describe('Settings screen', () => {
     choose.click();
     await vi.waitFor(() => expect(choose.disabled).toBe(false));
     expect(port.save).not.toHaveBeenCalled();
+  });
+  it('reports ignored saved fields without claiming that all settings were reset', async () => {
+    const { screen, port, feedback } = setup();
+    port.load.mockResolvedValueOnce({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: true, startupScreenId: 'collection' }, warning: 'Ignored unrecognized saved settings field: obsoletePreference.', warningKind: 'ignored-fields' });
+
+    await screen.load();
+
+    expect(screen.root.querySelector('#settingsStatus')?.textContent).toBe('Some saved settings were ignored.');
+    expect(feedback.error).toHaveBeenCalledWith('Some saved settings were ignored.', expect.objectContaining({
+      affected: 'Load settings',
+      technicalDetails: 'Ignored unrecognized saved settings field: obsoletePreference.',
+    }));
   });
   it('disables changes while saving, restores a failed change and permits recovery', async () => {
     const { screen, audio, choose, port, feedback } = setup();
@@ -66,7 +78,7 @@ describe('Settings screen', () => {
     expect(feedback.error).toHaveBeenCalledOnce();
     await service.save({ ...service.current, pipelinesRootPath: 'D:/new-root' });
     await retry();
-    expect(service.current).toEqual({ pipelinesRootPath: 'D:/new-root', singleClipAudioDefault: true });
+    expect(service.current).toEqual({ pipelinesRootPath: 'D:/new-root', singleClipAudioDefault: true, startupScreenId: 'gif-extraction' });
     expect(audio.checked).toBe(true);
   });
 

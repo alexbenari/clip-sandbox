@@ -8,6 +8,7 @@ export type FrameReviewPhase =
   | 'normalizing'
   | 'indexing'
   | 'proxy-encoding'
+  | 'proxy-ready'
   | 'proxy-indexing'
   | 'validating'
   | 'exact-ready'

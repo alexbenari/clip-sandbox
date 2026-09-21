@@ -9,4 +9,7 @@ tools/frame-review/.deps/
 native-build/frame-review/
 frame-index-cache/
 proxy-cache/
+review-proxy-cache/
+exact-review-proxy-cache/
+playback-proxy-cache/
 .impeccable/review/

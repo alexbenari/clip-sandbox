@@ -40,7 +40,7 @@ import { ElectronThumbnailCacheService } from '../adapters/electron/electron-thu
 import { ElectronClipExtractionService } from '../adapters/electron/electron-clip-extraction-service.js';
 import { GifExtractionSession } from './gif-extraction-session.js';
 import { AppSettingsService } from './app-settings-service.js';
-import { AppSettingsParser } from './app-settings.js';
+import { AppSettingsParser, DEFAULT_STARTUP_SCREEN_ID } from './app-settings.js';
 import { ElectronAppSettingsService } from '../adapters/electron/electron-app-settings-service.js';
 import { ActivityIndicatorControl, type ActivityErrorOptions } from '../ui/activity-indicator-control.js';
 import { ContextMenuController } from '../ui/context-menu-controller.js';
@@ -1541,7 +1541,9 @@ this.initialized = true;
     screenHost: AppControllerSupport.requiredElement('mainScreenHost'),
     commandHost: AppControllerSupport.requiredElement('screenCommandHost'),
     selector: AppControllerSupport.requiredElement<HTMLSelectElement>('appScreenSelector'),
-    screens: [collectionScreen, gifExtractionScreen, refineGifScreen, settingsScreen],
+    selectorHost: AppControllerSupport.requiredElement('appScreenSwitcher'),
+    initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
+    screens: [gifExtractionScreen, collectionScreen, refineGifScreen, settingsScreen],
     onScreenChange: screen => keyboardMap?.render(screen),
     workspace: AppControllerSupport.optionalElement('workspaceRow') ?? undefined,
     center: AppControllerSupport.optionalElement('centralWorkspace') ?? undefined,
@@ -1568,6 +1570,12 @@ this.initialized = true;
     shell.activate(settingsScreen.id);
   });
   const settingsReady = settingsScreen.load();
+  const initialScreenId = shell.activeScreen.id;
+  void settingsReady.then(() => {
+    if (shell.activeScreen.id === initialScreenId && shell.activeScreen.id !== settingsService.current.startupScreenId) {
+      shell.activate(settingsService.current.startupScreenId);
+    }
+  });
   const workspaceResize = new ResizeObserver(() => { if (!shell.workspaceMoving) recomputeLayout(); });
   workspaceResize.observe(gridWrap);
   const shutdown = new ApplicationShutdownCoordinator({

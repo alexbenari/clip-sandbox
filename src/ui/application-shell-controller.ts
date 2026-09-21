@@ -15,7 +15,9 @@ type ShellElements = {
   screenHost: HTMLElement;
   commandHost: HTMLElement;
   selector: HTMLSelectElement;
+  selectorHost?: HTMLElement;
   screens: readonly [IAppScreen, ...IAppScreen[]];
+  initialScreenId?: string;
   workspace?: HTMLElement;
   center?: HTMLElement;
   panels?: readonly ShellPanel[];
@@ -64,7 +66,10 @@ export class ApplicationShellController {
     for (const screen of elements.screens) {
       this.screens.set(screen.id, screen);
     }
-    this.current = elements.screens[0];
+    const initialScreenId = elements.initialScreenId ?? elements.screens[0].id;
+    const initialScreen = this.screens.get(initialScreenId);
+    if (!initialScreen) throw new Error(`Unknown initial app screen: ${initialScreenId}`);
+    this.current = initialScreen;
     const doc = elements.screenHost.ownerDocument;
     elements.selector.replaceChildren(...elements.screens.filter(screen => screen.selectorStatus === 'fixed').map(screen => {
       const option = doc.createElement('option');
@@ -183,6 +188,8 @@ export class ApplicationShellController {
       option.dataset.contextual = 'true';
       this.elements.selector.append(option);
     }
-    this.elements.selector.hidden = this.elements.selector.options.length <= 1;
+    const hidden = this.elements.selector.options.length <= 1;
+    this.elements.selector.hidden = hidden;
+    this.elements.selectorHost?.toggleAttribute('hidden', hidden);
   }
 }

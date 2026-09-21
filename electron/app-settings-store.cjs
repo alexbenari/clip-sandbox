@@ -2,11 +2,12 @@ const fsPromises = require('node:fs').promises;
 const path = require('node:path');
 
 const SETTINGS_FILENAME = 'app-settings.json';
-const SETTINGS_VERSION = 1;
 const DEFAULT_SETTINGS = Object.freeze({
   pipelinesRootPath: null,
   singleClipAudioDefault: false,
+  startupScreenId: 'gif-extraction',
 });
+const SETTINGS_FIELDS = new Set(Object.keys(DEFAULT_SETTINGS));
 
 let temporaryFileCounter = 0;
 
@@ -14,20 +15,24 @@ function cloneSettings(settings) {
   return {
     pipelinesRootPath: settings.pipelinesRootPath,
     singleClipAudioDefault: settings.singleClipAudioDefault,
+    startupScreenId: settings.startupScreenId,
+  };
+}
+
+function deriveKnownSettings(value) {
+  return {
+    pipelinesRootPath: value.pipelinesRootPath,
+    singleClipAudioDefault: value.singleClipAudioDefault,
+    startupScreenId: value.startupScreenId ?? DEFAULT_SETTINGS.startupScreenId,
   };
 }
 
 function validateSettings(value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return 'Settings must be an object with exactly two fields';
+    return 'Settings must be an object';
   }
 
-  const keys = Object.keys(value).sort();
-  if (keys.length !== 2 || keys[0] !== 'pipelinesRootPath' || keys[1] !== 'singleClipAudioDefault') {
-    return 'Settings must be an object with exactly two fields';
-  }
-
-  const { pipelinesRootPath, singleClipAudioDefault } = value;
+  const { pipelinesRootPath, singleClipAudioDefault, startupScreenId } = value;
   if (pipelinesRootPath !== null &&
       (typeof pipelinesRootPath !== 'string' ||
        pipelinesRootPath.trim().length === 0 ||
@@ -37,6 +42,9 @@ function validateSettings(value) {
   }
   if (typeof singleClipAudioDefault !== 'boolean') {
     return 'singleClipAudioDefault must be a boolean';
+  }
+  if (typeof startupScreenId !== 'string' || startupScreenId.trim().length === 0) {
+    return 'startupScreenId must be nonempty text';
   }
 
   return null;
@@ -73,18 +81,18 @@ class AppSettingsStore {
         text = text.slice(1);
       }
       const document = JSON.parse(text);
-      if (document === null || typeof document !== 'object' || Array.isArray(document) || document.version !== SETTINGS_VERSION) {
-        throw new Error('unsupported settings version');
+      if (document === null || typeof document !== 'object' || Array.isArray(document)) {
+        throw new Error('settings must be an object');
       }
-      const settings = {
-        pipelinesRootPath: document.pipelinesRootPath,
-        singleClipAudioDefault: document.singleClipAudioDefault,
-      };
+      const settings = deriveKnownSettings(document);
       const validationError = validateSettings(settings);
-      if (validationError !== null || Object.keys(document).some((key) => !['version', 'pipelinesRootPath', 'singleClipAudioDefault'].includes(key))) {
-        throw new Error(validationError || 'unexpected settings fields');
+      if (validationError !== null) {
+        throw new Error(validationError);
       }
-      return { ok: true, settings };
+      const ignoredFields = Object.keys(document).filter((field) => !SETTINGS_FIELDS.has(field));
+      return ignoredFields.length === 0
+        ? { ok: true, settings }
+        : { ok: true, settings, warning: this.#ignoredFieldsWarning(ignoredFields), warningKind: 'ignored-fields' };
     } catch (error) {
       return this.#loadWarning(`Could not load settings: ${this.#errorMessage(error)}`);
     }
@@ -107,7 +115,7 @@ class AppSettingsStore {
     try {
       await this.#fs.mkdir(this.#directoryPath, { recursive: true });
       temporaryPath = this.#temporaryPath();
-      const serialized = `${JSON.stringify({ version: SETTINGS_VERSION, ...settings })}\n`;
+      const serialized = `${JSON.stringify(settings)}\n`;
       await this.#fs.writeFile(temporaryPath, serialized, { encoding: 'utf8', flag: 'wx' });
       await this.#fs.rename(temporaryPath, this.#settingsFilePath);
       temporaryPath = undefined;
@@ -133,7 +141,12 @@ class AppSettingsStore {
   }
 
   #loadWarning(message) {
-    return { ok: true, settings: cloneSettings(DEFAULT_SETTINGS), warning: message };
+    return { ok: true, settings: cloneSettings(DEFAULT_SETTINGS), warning: message, warningKind: 'recovered-defaults' };
+  }
+
+  #ignoredFieldsWarning(fields) {
+    const label = fields.length === 1 ? 'field' : 'fields';
+    return `Ignored unrecognized saved settings ${label}: ${fields.join(', ')}.`;
   }
 
   #errorMessage(error) {

@@ -6,6 +6,35 @@
 
 ## Features
 
+## Small bugs
+- The message when opening a movie should appear in the same place other messages appear (e.g. frame indexing etc). Maybe we should make it into its own little component displayign msg + progress? 
+- when clicking open folder in Collection screen the file explorer selection should open on the folder defined in settings
+- why does extraction of a single clip take so long? 
+- extraction is all wrong - the colors are bad and the frames are not exact - see the single extracted one
+- pipeline side panel is not populated
+- after extraction should be possible to sqitch to the pipeline view of extracted clips by clicking on the side panel
+- In the status - report after each clip was extracted, name and time it took to extract
+- Status history: clear history should remove all but the latest one
+- Extraction of clip should have a progress indication and "Extracting exact range" should show in the standard location.  No need for the detailed progress message in the thumbnail (Encoding fromt the original  source etc)
+## Movie Edit mode
+- l/r arrow switches to frame scrub mode, space switches back
+- frame scrub is X2 speed on long press
+- extracted clip thumbnail: more economic in space - just [start-end] no "Start frame" etc
+Allows generating clips from a longer movie.
+- editor control: D:\tmp\dev\clip-sandbox\spikes\native-frame-identity-playback\docs\frame-scrub-supporting-player-control-integration-handoof.md
+- viewer with support for as-you-watch actions
+  - q/w, a/s, z/x: start-stop-capture
+    - As the movie plays, when a is pressed a clip is created from the timestaps between q and w
+      - new clip is added to the current pipeline with a default name: [start-stop]
+    - x locks the clip
+    - a/s jump to q/w frame
+    - z loops between q and a frame
+    - q,w can be pressed multiple times, only last one before z was pressed counts
+    - graphic indication of current start and stop ts + thumbnail. Clicking a resets start and stop
+    - a -> if clip boundaries are illegal: either start.stop missing or stop is before start -> nothing happens
+- Movie edit mode is initiated from within a pipeline
+- Allow captuuring frames and enhancing them
+
 ### Pipelines
 #### Pipeline management sidebar
 - Pipelines are viewable via a side-panel tree view 
@@ -49,21 +78,7 @@ Some quick manipulations on videos that generate new videos in the same collecti
   - Progress when generating video
   - After generation show in compare mode
   
-## Movie Edit mode
-Allows generating clips from a longer movie.
-- editor control: D:\tmp\dev\clip-sandbox\spikes\native-frame-identity-playback\docs\frame-scrub-supporting-player-control-integration-handoof.md
-- viewer with support for as-you-watch actions
-  - q/w, a/s, z/x: start-stop-capture
-    - As the movie plays, when a is pressed a clip is created from the timestaps between q and w
-      - new clip is added to the current pipeline with a default name: [start-stop]
-    - x locks the clip
-    - a/s jump to q/w frame
-    - z loops between q and a frame
-    - q,w can be pressed multiple times, only last one before z was pressed counts
-    - graphic indication of current start and stop ts + thumbnail. Clicking a resets start and stop
-    - a -> if clip boundaries are illegal: either start.stop missing or stop is before start -> nothing happens
-- Movie edit mode is initiated from within a pipeline
-- Allow captuuring frames and enhancing them
+
 
 ### Gif composition mode
 A workspace for creating compositions of gifs

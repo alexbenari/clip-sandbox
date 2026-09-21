@@ -1,7 +1,7 @@
 import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
 import { AppSettingsService, type SettingsResult } from '../app/app-settings-service.js';
 import type { ActivityErrorOptions } from './activity-indicator-control.js';
-import type { IAppSettings } from '../app/app-settings.js';
+import { isStartupScreenId, type IAppSettings } from '../app/app-settings.js';
 
 type SettingsFeedback = { progress(message: string): void; success(message: string): void; error(message: string, options?: ActivityErrorOptions): void };
 
@@ -16,6 +16,7 @@ export class SettingsScreen implements IAppScreen {
   private readonly folder: HTMLInputElement;
   private readonly choose: HTMLButtonElement;
   private readonly audio: HTMLInputElement;
+  private readonly startupScreen: HTMLSelectElement;
   private readonly status: HTMLElement;
   private busy = true;
 
@@ -40,15 +41,26 @@ export class SettingsScreen implements IAppScreen {
         </label>
         <p>Start newly opened single-clip playback with audio. Grid previews stay muted.</p>
       </div>
+      <div class="settings-field">
+        <label for="startupScreenId">Startup workspace</label>
+        <select id="startupScreenId">
+          <option value="gif-extraction">GIF Extraction</option>
+          <option value="collection">Collection</option>
+        </select>
+      </div>
       <p id="settingsStatus" role="status" aria-live="polite"></p></div>`;
     const folder = this.root.querySelector('#pipelinesRootPath');
     const choose = this.root.querySelector('#choosePipelinesRoot');
     const audio = this.root.querySelector('#singleClipAudioDefault');
+    const startupScreen = this.root.querySelector('#startupScreenId');
     const status = this.root.querySelector('#settingsStatus');
-    if (!(folder instanceof HTMLInputElement) || !(choose instanceof HTMLButtonElement) || !(audio instanceof HTMLInputElement) || !(status instanceof HTMLElement)) throw new Error('Settings template is incomplete.');
-    this.folder = folder; this.choose = choose; this.audio = audio; this.status = status;
+    if (!(folder instanceof HTMLInputElement) || !(choose instanceof HTMLButtonElement) || !(audio instanceof HTMLInputElement) || !(startupScreen instanceof HTMLSelectElement) || !(status instanceof HTMLElement)) throw new Error('Settings template is incomplete.');
+    this.folder = folder; this.choose = choose; this.audio = audio; this.startupScreen = startupScreen; this.status = status;
     choose.addEventListener('click', () => { void this.chooseFolder(); });
     audio.addEventListener('change', () => { void this.save({ singleClipAudioDefault: audio.checked }); });
+    startupScreen.addEventListener('change', () => {
+      if (isStartupScreenId(startupScreen.value)) void this.save({ startupScreenId: startupScreen.value });
+    });
     this.render();
   }
   async load(): Promise<void> {
@@ -58,16 +70,23 @@ export class SettingsScreen implements IAppScreen {
     if (result.ok === false) this.reportError('Could not read settings. Defaults are in use.', {
       affected: 'Load settings', recovery: 'Check access to your settings folder. You can still choose and save preferences.', technicalDetails: result.error,
     });
-    else if (result.warning) this.reportError('Some saved settings could not be loaded. Defaults are in use.', {
-      affected: 'Load settings', recovery: 'Review your preferences and save them again.', technicalDetails: result.warning,
-    });
+    else if ('warning' in result) {
+      const ignoredFields = result.warningKind === 'ignored-fields';
+      this.reportError(ignoredFields ? 'Some saved settings were ignored.' : 'Could not read settings. Defaults are in use.', {
+        affected: 'Load settings',
+        recovery: ignoredFields ? 'Review your preferences and save them again.' : 'Check access to your settings folder. You can still choose and save preferences.',
+        technicalDetails: result.warning,
+      });
+    }
   }
   focusInitial(): void { this.folder.focus(); }
   private render(settings: IAppSettings = this.service.current): void {
     this.folder.value = settings.pipelinesRootPath ?? '';
     this.audio.checked = settings.singleClipAudioDefault;
+    this.startupScreen.value = settings.startupScreenId;
     this.choose.disabled = this.busy;
     this.audio.disabled = this.busy;
+    this.startupScreen.disabled = this.busy;
     this.root.setAttribute('aria-busy', String(this.busy));
   }
   private reportError(message: string, options: ActivityErrorOptions): void {

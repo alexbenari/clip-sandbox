@@ -13,6 +13,7 @@ test('panels reclaim width continuously, reverse, and preserve the working grid'
   const app = await electron.launch({ args: ['.', `--user-data-dir=${path.join(directory, 'profile')}`], env });
   try {
     const page = await app.firstWindow();
+    await page.locator('#appScreenSelector').selectOption('collection');
     // Use content dimensions so native frame height cannot move this fixture away from a column boundary.
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1100, 900));
     await page.evaluate(async folder => { await (window as any).clipSandboxDesktop.__testSetNextFolderPath(folder); }, clips);

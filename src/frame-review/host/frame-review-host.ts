@@ -12,9 +12,10 @@ import { FrameMapValidator } from './frame-map-validator.js';
 import { FrameReviewPaths } from './frame-review-paths.js';
 import { LibVlcPlaybackEngine } from './libvlc-playback-engine.js';
 import { NativeCommandProcess, NativeProcessClient } from './native-process-client.js';
-import { PreparedReviewCache } from './prepared-review-cache.js';
+import { ExactReviewProxyCache } from './exact-review-proxy-cache.js';
+import { PlaybackProxyCache } from './playback-proxy-cache.js';
 import { ReviewPreparationService } from './review-preparation-service.js';
-import type { IPreparedReviewHostResult } from './review-preparation-service.js';
+import type { IExactReviewProxyHostResult } from './review-preparation-service.js';
 import { ReviewSession, type HostFrameReviewEvent } from './review-session.js';
 import { SourceInspector } from './source-inspector.js';
 import { SourceNormalizer } from './source-normalizer.js';
@@ -55,7 +56,8 @@ export interface IFrameReviewHostOpenRequest {
 }
 
 export class FrameReviewHost {
-  private static readonly preparedCaches = new Map<string, PreparedReviewCache>();
+  private static readonly exactReviewProxyCaches = new Map<string, ExactReviewProxyCache>();
+  private static readonly playbackProxyCaches = new Map<string, PlaybackProxyCache>();
   private readonly sources = new Map<string, string>();
   private readonly sessions = new Map<string, ReviewSession>();
   private readonly paths: FrameReviewPaths;
@@ -85,11 +87,16 @@ export class FrameReviewHost {
     });
     const indexer = new BestSourceFrameIndexer(
       path.join(configuration.nativeBinaryFolder, 'bestsource_gate.exe'), commandProcess);
-    const preparedReviewCacheKey = `${this.paths.frameIndexCache}\n${this.paths.proxyCache}`;
-    let preparedReviewCache = FrameReviewHost.preparedCaches.get(preparedReviewCacheKey);
-    if (!preparedReviewCache) {
-      preparedReviewCache = new PreparedReviewCache(this.paths);
-      FrameReviewHost.preparedCaches.set(preparedReviewCacheKey, preparedReviewCache);
+    const exactReviewProxyCacheKey = `${this.paths.frameIndexCache}\n${this.paths.exactReviewProxyCache}`;
+    let exactReviewProxyCache = FrameReviewHost.exactReviewProxyCaches.get(exactReviewProxyCacheKey);
+    if (!exactReviewProxyCache) {
+      exactReviewProxyCache = new ExactReviewProxyCache(this.paths);
+      FrameReviewHost.exactReviewProxyCaches.set(exactReviewProxyCacheKey, exactReviewProxyCache);
+    }
+    let playbackProxyCache = FrameReviewHost.playbackProxyCaches.get(this.paths.playbackProxyCache);
+    if (!playbackProxyCache) {
+      playbackProxyCache = new PlaybackProxyCache(this.paths);
+      FrameReviewHost.playbackProxyCaches.set(this.paths.playbackProxyCache, playbackProxyCache);
     }
     this.preparation = new ReviewPreparationService({
       inspector,
@@ -97,7 +104,8 @@ export class FrameReviewHost {
       frameIndexCache: new FrameIndexCache(indexer),
       proxyCreator: new FfmpegProxyCreator(configuration.ffmpegExecutable, commandProcess),
       frameMapValidator: new FrameMapValidator(),
-      preparedReviewCache,
+      exactReviewProxyCache,
+      playbackProxyCache,
     });
   }
 
@@ -108,7 +116,7 @@ export class FrameReviewHost {
     return handle;
   }
 
-  async prepareExtractionSource(sourceHandleValue: string, signal?: AbortSignal): Promise<IPreparedReviewHostResult> {
+  async prepareExtractionSource(sourceHandleValue: string, signal?: AbortSignal): Promise<IExactReviewProxyHostResult> {
     const sourceHandle = FrameReviewOpaqueId.sourceHandle(sourceHandleValue);
     const sourcePath = this.sources.get(sourceHandle);
     if (!sourcePath) throw new BackendError('invalid-request', 'Frame-review source handle is unknown.', true);

@@ -10,8 +10,8 @@ describe('Electron settings boundary', () => {
   }
   it('parses successful values and preserves persistence diagnostics', async () => {
     const { api, adapter } = setup();
-    api.loadAppSettings.mockResolvedValue({ ok: true, settings: DEFAULT_APP_SETTINGS, warning: 'Recovered defaults' });
-    await expect(adapter.load()).resolves.toEqual({ ok: true, settings: DEFAULT_APP_SETTINGS, warning: 'Recovered defaults' });
+    api.loadAppSettings.mockResolvedValue({ ok: true, settings: DEFAULT_APP_SETTINGS, warning: 'Recovered defaults', warningKind: 'recovered-defaults' });
+    await expect(adapter.load()).resolves.toEqual({ ok: true, settings: DEFAULT_APP_SETTINGS, warning: 'Recovered defaults', warningKind: 'recovered-defaults' });
     await expect(adapter.save(DEFAULT_APP_SETTINGS)).resolves.toEqual({ ok: false, error: 'Disk full' });
     expect(api.saveAppSettings).toHaveBeenCalledWith(DEFAULT_APP_SETTINGS);
   });
@@ -19,6 +19,8 @@ describe('Electron settings boundary', () => {
     const { api, adapter } = setup();
     api.loadAppSettings.mockResolvedValue({ ok: true, settings: { singleClipAudioDefault: 'yes' } });
     expect((await adapter.load()).ok).toBe(false);
+    api.loadAppSettings.mockResolvedValue({ ok: true, settings: DEFAULT_APP_SETTINGS, warning: 'Legacy warning without a kind' });
+    await expect(adapter.load()).resolves.toEqual({ ok: false, error: 'Invalid settings response.' });
     api.loadAppSettings.mockRejectedValue(new Error('IPC unavailable'));
     await expect(adapter.load()).resolves.toEqual({ ok: false, error: 'IPC unavailable' });
   });

@@ -208,6 +208,33 @@ describe('FrameReviewPlayerControl', () => {
     expect(control.capturePoint()).toMatchObject({ kind: 'exact-frame', identity: { frameIndex: 8 } });
   });
 
+  it('keeps an active playback drag stable until its final timestamp seek commits', async () => {
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const review = session(state('indexing', false));
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
+    control.attachSession(review.value);
+    await control.togglePlayback();
+    const progress = control.root.querySelector<HTMLInputElement>('input[type="range"]')!;
+
+    progress.value = '75000';
+    progress.dispatchEvent(new Event('input', { bubbles: true }));
+    review.emit(frameEvent(playbackFrame(400_000n, 99)));
+
+    expect(progress.value).toBe('75000');
+    progress.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(review.seekPlayback).toHaveBeenCalledWith(3_000_000n));
+  });
+
+  it('uses the one centered readiness surface for temporary preparation status', () => {
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const review = session(state('proxy-encoding', false));
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
+    control.attachSession(review.value);
+
+    expect(control.root.querySelector('[data-readiness-text]')?.textContent).toBe('Creating review proxy');
+    expect(control.root.querySelector('.frame-review-identity')?.textContent).toBe('Playback time');
+  });
+
   it('routes held stepping to the session and releases it during teardown without disposing the session', () => {
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const review = session();

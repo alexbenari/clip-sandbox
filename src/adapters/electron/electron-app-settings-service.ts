@@ -21,7 +21,11 @@ export class ElectronAppSettingsService implements IAppSettingsPersistence {
       const result = raw as Record<string, unknown>;
       if (result.ok === true) {
         const settings = this.parser.parse(result.settings);
-        if (settings) return { ok: true, settings, ...(typeof result.warning === 'string' ? { warning: result.warning } : {}) };
+        if (settings && result.warning === undefined) return { ok: true, settings };
+        if (settings && typeof result.warning === 'string'
+          && (result.warningKind === 'ignored-fields' || result.warningKind === 'recovered-defaults')) {
+          return { ok: true, settings, warning: result.warning, warningKind: result.warningKind };
+        }
       }
       return { ok: false, error: typeof result.error === 'string' ? result.error : 'Invalid settings response.' };
     } catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Settings are unavailable.' }; }

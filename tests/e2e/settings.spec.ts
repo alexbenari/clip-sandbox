@@ -14,6 +14,7 @@ test('settings survive restart without replacing the working collection and gove
   let app = await launch();
   try {
     let page = await app.firstWindow();
+    await page.locator('#appScreenSelector').selectOption('collection');
     const setNextFolder = async (folder: string) => {
       await page.evaluate(async next => {
         await (window as any).clipSandboxDesktop.__testSetNextFolderPath(next);
@@ -30,10 +31,13 @@ test('settings survive restart without replacing the working collection and gove
     await expect(page.locator('#screenCommandHost')).toBeHidden();
     await expect(page.locator('#pipelinesRootPath')).toBeFocused();
     await expect(page.locator('#singleClipAudioDefault')).not.toBeChecked();
+    await expect(page.locator('#startupScreenId')).toHaveValue('gif-extraction');
     await setNextFolder(chosenRoot);
     await page.locator('#choosePipelinesRoot').click();
     await expect(page.locator('#pipelinesRootPath')).toHaveValue(chosenRoot);
     await page.locator('#singleClipAudioDefault').check();
+    await expect(page.locator('#settingsStatus')).toHaveText('Saved');
+    await page.locator('#startupScreenId').selectOption('collection');
     await expect(page.locator('#settingsStatus')).toHaveText('Saved');
     await expect(page.locator('#singleClipAudioDefault')).toBeChecked();
     await page.screenshot({ path: 'test-results/settings-desktop.png' });
@@ -53,6 +57,8 @@ test('settings survive restart without replacing the working collection and gove
     await app.close();
     app = await launch();
     page = await app.firstWindow();
+    await expect.poll(() => page.locator('#appScreenSelector').inputValue()).toBe('collection');
+    await expect(page.locator('#toolbar')).toBeVisible();
     await page.locator('#settingsBtn').click();
     await expect(page.locator('#pipelinesRootPath')).toHaveValue(chosenRoot);
     await expect(page.locator('#singleClipAudioDefault')).toBeChecked();
@@ -84,6 +90,7 @@ test('unreadable settings report defaults and a failed save can be retried', asy
   const app = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], cwd: process.cwd(), env });
   try {
     const page = await app.firstWindow();
+    await expect(page.locator('#appScreenSelector')).toHaveValue('gif-extraction');
     await page.locator('#settingsBtn').click();
     await expect(page.locator('#settingsStatus')).toContainText('Defaults are in use.');
     await expect(page.locator('#singleClipAudioDefault')).not.toBeChecked();
@@ -101,6 +108,30 @@ test('unreadable settings report defaults and a failed save can be retried', asy
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(900, 650));
     await expect(page.locator('#choosePipelinesRoot')).toBeInViewport();
     await page.screenshot({ path: 'test-results/settings-narrow.png' });
+  } finally {
+    await app.close();
+    await fsp.rm(profile, { recursive: true, force: true });
+  }
+});
+
+test('unknown saved settings are ignored and reported in the Activity status', async () => {
+  const profile = await fsp.mkdtemp(path.join(os.tmpdir(), 'clip-settings-unknown-'));
+  await fsp.writeFile(path.join(profile, 'app-settings.json'), JSON.stringify({
+    pipelinesRootPath: null,
+    singleClipAudioDefault: true,
+    startupScreenId: 'collection',
+    obsoletePreference: true,
+  }));
+  const env: NodeJS.ProcessEnv = { ...process.env, CLIP_SANDBOX_E2E: '1' };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const app = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], cwd: process.cwd(), env });
+  try {
+    const page = await app.firstWindow();
+    await expect(page.locator('#appScreenSelector')).toHaveValue('collection');
+    await page.locator('#settingsBtn').click();
+    await expect(page.locator('#settingsStatus')).toHaveText('Some saved settings were ignored.');
+    await expect(page.locator('#singleClipAudioDefault')).toBeChecked();
+    await expect(page.locator('#activityIndicatorList')).toContainText('Some saved settings were ignored.');
   } finally {
     await app.close();
     await fsp.rm(profile, { recursive: true, force: true });

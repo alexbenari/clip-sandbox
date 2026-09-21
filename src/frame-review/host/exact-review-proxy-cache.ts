@@ -5,7 +5,7 @@ import path from 'node:path';
 import { BackendError } from '../model/backend-error.js';
 import type { FrameReviewPaths } from './frame-review-paths.js';
 
-export interface IPreparedReviewIdentity {
+export interface IExactReviewProxyIdentity {
   readonly schemaVersion: 1;
   readonly sourceSampleDigest: string;
   readonly sourceBytes: string;
@@ -26,7 +26,7 @@ export interface IPreparedReviewIdentity {
   }>;
 }
 
-export interface IPreparedReviewWorkspace {
+export interface IExactReviewProxyWorkspace {
   readonly cacheKey: string;
   readonly indexTemporaryDirectory: string;
   readonly proxyTemporaryDirectory: string;
@@ -37,8 +37,8 @@ export interface IPreparedReviewWorkspace {
   readonly normalizedSourceFile: string;
 }
 
-export interface IPreparedReviewBuildResult {
-  readonly workspace: IPreparedReviewWorkspace;
+export interface IExactReviewProxyBuildResult {
+  readonly workspace: IExactReviewProxyWorkspace;
   readonly frameCount: number;
   readonly sourceWidth: number;
   readonly sourceHeight: number;
@@ -46,7 +46,7 @@ export interface IPreparedReviewBuildResult {
   readonly normalizedSource?: boolean;
 }
 
-export interface IPreparedReviewEntry {
+export interface IExactReviewProxyEntry {
   readonly cacheKey: string;
   readonly cacheHit: boolean;
   readonly canonicalIndexPath: string;
@@ -61,10 +61,10 @@ export interface IPreparedReviewEntry {
   readonly normalizedSourcePath: string | null;
 }
 
-interface IPreparedReviewManifest {
+interface IExactReviewProxyManifest {
   readonly schemaVersion: 1;
   readonly cacheKey: string;
-  readonly identity: IPreparedReviewIdentity;
+  readonly identity: IExactReviewProxyIdentity;
   readonly canonicalIndex: string;
   readonly proxy: string;
   readonly proxyIndex: string;
@@ -77,26 +77,26 @@ interface IPreparedReviewManifest {
   readonly preparedAtUtc: string;
 }
 
-interface IActivePreparedReviewWriter {
+interface IActiveExactReviewProxyWriter {
   readonly controller: AbortController;
-  promise: Promise<IPreparedReviewEntry>;
+  promise: Promise<IExactReviewProxyEntry>;
   consumers: number;
   settled: boolean;
 }
 
-export class PreparedReviewCache {
-  private readonly activeWriters = new Map<string, IActivePreparedReviewWriter>();
+export class ExactReviewProxyCache {
+  private readonly activeWriters = new Map<string, IActiveExactReviewProxyWriter>();
 
   constructor(private readonly paths: FrameReviewPaths) {}
 
   async getOrCreate(
-    identity: IPreparedReviewIdentity,
+    identity: IExactReviewProxyIdentity,
     build: (
-      workspace: IPreparedReviewWorkspace,
+      workspace: IExactReviewProxyWorkspace,
       writerSignal: AbortSignal,
-    ) => Promise<IPreparedReviewBuildResult>,
+    ) => Promise<IExactReviewProxyBuildResult>,
     consumerSignal?: AbortSignal,
-  ): Promise<IPreparedReviewEntry> {
+  ): Promise<IExactReviewProxyEntry> {
     this.throwIfAborted(consumerSignal);
     const cacheKey = this.cacheKey(identity);
     const cached = await this.load(cacheKey, identity);
@@ -121,24 +121,28 @@ export class PreparedReviewCache {
     return this.joinWriter(active, consumerSignal);
   }
 
-  cacheKey(identity: IPreparedReviewIdentity): string {
+  find(identity: IExactReviewProxyIdentity): Promise<IExactReviewProxyEntry | null> {
+    return this.load(this.cacheKey(identity), identity);
+  }
+
+  cacheKey(identity: IExactReviewProxyIdentity): string {
     this.assertIdentity(identity);
     return createHash('sha256').update(this.stableStringify(identity)).digest('hex');
   }
 
   private async buildAndPublish(
     cacheKey: string,
-    identity: IPreparedReviewIdentity,
-    build: (workspace: IPreparedReviewWorkspace) => Promise<IPreparedReviewBuildResult>,
+    identity: IExactReviewProxyIdentity,
+    build: (workspace: IExactReviewProxyWorkspace) => Promise<IExactReviewProxyBuildResult>,
     writerSignal: AbortSignal,
-  ): Promise<IPreparedReviewEntry> {
+  ): Promise<IExactReviewProxyEntry> {
     await this.removeInvalidEntry(cacheKey);
     const workspace = await this.createWorkspace(cacheKey);
     try {
       const result = await build(workspace);
       this.throwIfAborted(writerSignal);
       this.assertBuildResult(result, workspace);
-      const manifest: IPreparedReviewManifest = Object.freeze({
+      const manifest: IExactReviewProxyManifest = Object.freeze({
         schemaVersion: 1,
         cacheKey,
         identity,
@@ -157,7 +161,7 @@ export class PreparedReviewCache {
         `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
       this.throwIfAborted(writerSignal);
       const indexFinal = this.entryPath(this.paths.frameIndexCache, cacheKey);
-      const proxyFinal = this.entryPath(this.paths.proxyCache, cacheKey);
+      const proxyFinal = this.entryPath(this.paths.exactReviewProxyCache, cacheKey);
       await rename(workspace.indexTemporaryDirectory, indexFinal);
       try {
         await rename(workspace.proxyTemporaryDirectory, proxyFinal);
@@ -166,7 +170,7 @@ export class PreparedReviewCache {
         throw error;
       }
       const published = await this.load(cacheKey, identity);
-      if (!published) throw new Error('Prepared review publication did not validate.');
+      if (!published) throw new Error('Exact-review proxy publication did not validate.');
       return Object.freeze({ ...published, cacheHit: false });
     } catch (error) {
       await Promise.all([
@@ -177,16 +181,16 @@ export class PreparedReviewCache {
     }
   }
 
-  private async createWorkspace(cacheKey: string): Promise<IPreparedReviewWorkspace> {
+  private async createWorkspace(cacheKey: string): Promise<IExactReviewProxyWorkspace> {
     try {
       await Promise.all([
         mkdir(this.paths.frameIndexCache, { recursive: true }),
-        mkdir(this.paths.proxyCache, { recursive: true }),
+        mkdir(this.paths.exactReviewProxyCache, { recursive: true }),
       ]);
       await this.cleanIncompleteWorkspaces(cacheKey);
       const nonce = `${process.pid}-${randomUUID()}`;
       const indexTemporaryDirectory = path.join(this.paths.frameIndexCache, `.partial-${cacheKey}-${nonce}`);
-      const proxyTemporaryDirectory = path.join(this.paths.proxyCache, `.partial-${cacheKey}-${nonce}`);
+      const proxyTemporaryDirectory = path.join(this.paths.exactReviewProxyCache, `.partial-${cacheKey}-${nonce}`);
       await Promise.all([mkdir(indexTemporaryDirectory), mkdir(proxyTemporaryDirectory)]);
       return Object.freeze({
         cacheKey,
@@ -203,9 +207,9 @@ export class PreparedReviewCache {
     }
   }
 
-  private async load(cacheKey: string, identity: IPreparedReviewIdentity): Promise<IPreparedReviewEntry | null> {
+  private async load(cacheKey: string, identity: IExactReviewProxyIdentity): Promise<IExactReviewProxyEntry | null> {
     const indexDirectory = this.entryPath(this.paths.frameIndexCache, cacheKey);
-    const proxyDirectory = this.entryPath(this.paths.proxyCache, cacheKey);
+    const proxyDirectory = this.entryPath(this.paths.exactReviewProxyCache, cacheKey);
     const manifestPath = path.join(proxyDirectory, 'manifest.json');
     try {
       const parsed: unknown = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -249,9 +253,9 @@ export class PreparedReviewCache {
     }
   }
 
-  private isCompatibleManifest(value: unknown, cacheKey: string, identity: IPreparedReviewIdentity): value is IPreparedReviewManifest {
+  private isCompatibleManifest(value: unknown, cacheKey: string, identity: IExactReviewProxyIdentity): value is IExactReviewProxyManifest {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-    const manifest = value as Partial<IPreparedReviewManifest>;
+    const manifest = value as Partial<IExactReviewProxyManifest>;
     return manifest.schemaVersion === 1
       && manifest.cacheKey === cacheKey
       && this.stableStringify(manifest.identity) === this.stableStringify(identity)
@@ -267,20 +271,20 @@ export class PreparedReviewCache {
   }
 
   private entryPath(root: string, cacheKey: string): string {
-    if (!/^[a-f0-9]{64}$/.test(cacheKey)) throw new Error('Prepared review cache key is invalid.');
+    if (!/^[a-f0-9]{64}$/.test(cacheKey)) throw new Error('Exact-review proxy cache key is invalid.');
     return path.join(root, cacheKey);
   }
 
   private async removeInvalidEntry(cacheKey: string): Promise<void> {
     await Promise.all([
       rm(this.entryPath(this.paths.frameIndexCache, cacheKey), { recursive: true, force: true }),
-      rm(this.entryPath(this.paths.proxyCache, cacheKey), { recursive: true, force: true }),
+      rm(this.entryPath(this.paths.exactReviewProxyCache, cacheKey), { recursive: true, force: true }),
     ]);
   }
 
   private async cleanIncompleteWorkspaces(cacheKey: string): Promise<void> {
     const prefix = `.partial-${cacheKey}-`;
-    for (const root of [this.paths.frameIndexCache, this.paths.proxyCache]) {
+    for (const root of [this.paths.frameIndexCache, this.paths.exactReviewProxyCache]) {
       const entries = await readdir(root, { withFileTypes: true });
       await Promise.all(entries
         .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix))
@@ -289,14 +293,14 @@ export class PreparedReviewCache {
   }
 
   private contained(root: string, relative: string): string {
-    if (path.isAbsolute(relative)) throw new Error('Prepared review manifest contains an absolute path.');
+    if (path.isAbsolute(relative)) throw new Error('Exact-review proxy manifest contains an absolute path.');
     const resolvedRoot = path.resolve(root);
     const resolved = path.resolve(resolvedRoot, relative);
-    if (path.dirname(resolved) !== resolvedRoot) throw new Error('Prepared review manifest escapes its cache entry.');
+    if (path.dirname(resolved) !== resolvedRoot) throw new Error('Exact-review proxy manifest escapes its cache entry.');
     return resolved;
   }
 
-  private assertIdentity(identity: IPreparedReviewIdentity): void {
+  private assertIdentity(identity: IExactReviewProxyIdentity): void {
     if (!identity || identity.schemaVersion !== 1 || !identity.sourceSampleDigest
       || !identity.sourceBytes || !identity.sourceDurationUs || !identity.streamMetadataDigest
       || !identity.signatureProfileVersion || identity.preparationContractVersion !== 'prepared-review-v1'
@@ -304,16 +308,16 @@ export class PreparedReviewCache {
       || identity.frameMapVersion !== 'ordinal-identity-v1'
       || !Number.isSafeInteger(identity.selectedStream) || identity.selectedStream < 0
       || identity.nativeProtocolVersion !== 1) {
-      throw new Error('Prepared review identity is incomplete or invalid.');
+      throw new Error('Exact-review proxy identity is incomplete or invalid.');
     }
   }
 
-  private assertBuildResult(result: IPreparedReviewBuildResult, workspace: IPreparedReviewWorkspace): void {
+  private assertBuildResult(result: IExactReviewProxyBuildResult, workspace: IExactReviewProxyWorkspace): void {
     if (result.workspace !== workspace || !Number.isSafeInteger(result.frameCount) || result.frameCount < 1
       || !Number.isSafeInteger(result.sourceWidth) || result.sourceWidth < 1
       || !Number.isSafeInteger(result.sourceHeight) || result.sourceHeight < 1
       || !/^\d+$/.test(result.durationUs)) {
-      throw new Error('Prepared review builder returned invalid metadata.');
+      throw new Error('Exact-review proxy builder returned invalid metadata.');
     }
   }
 
@@ -336,15 +340,15 @@ export class PreparedReviewCache {
     const code = (error as NodeJS.ErrnoException)?.code;
     if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS' || code === 'ENOTDIR' || code === 'EEXIST') {
       return new BackendError('cache-unavailable',
-        'Prepared-review caches under the application folder are not writable.', false);
+        'Exact-review proxy cache under the application folder is not writable.', false);
     }
     return error instanceof Error ? error : new Error(String(error));
   }
 
   private joinWriter(
-    writer: IActivePreparedReviewWriter,
+    writer: IActiveExactReviewProxyWriter,
     consumerSignal?: AbortSignal,
-  ): Promise<IPreparedReviewEntry> {
+  ): Promise<IExactReviewProxyEntry> {
     writer.consumers += 1;
     return new Promise((resolve, reject) => {
       let finished = false;

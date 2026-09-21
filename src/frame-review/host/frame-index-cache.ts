@@ -3,7 +3,12 @@ import type { BestSourceFrameIndexer, IFrameIndexResult } from './bestsource-fra
 export class FrameIndexCache {
   constructor(private readonly indexer: BestSourceFrameIndexer) {}
 
-  build(sourcePath: string, indexPath: string, signal?: AbortSignal): Promise<IFrameIndexResult> {
-    return this.indexer.index(sourcePath, indexPath, signal);
+  build(
+    sourcePath: string,
+    indexPath: string,
+    signal?: AbortSignal,
+    onProgress?: (percent: number) => void,
+  ): Promise<IFrameIndexResult> {
+    return this.indexer.index(sourcePath, indexPath, signal, onProgress);
   }
 }

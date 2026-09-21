@@ -10,6 +10,7 @@ test('keyboard help is contextual and readonly, with exclusive utilities and pre
   const app = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
   try {
     const page = await app.firstWindow();
+    await page.locator('#appScreenSelector').selectOption('collection');
     await page.evaluate(async folder => { await (window as any).clipSandboxDesktop.__testSetNextFolderPath(folder); }, path.resolve('tests/e2e/fixtures/video-edit/clips'));
     await page.locator('#pickBtn').click();
     await expect(page.locator('#grid .thumb')).toHaveCount(2);

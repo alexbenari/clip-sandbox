@@ -14,6 +14,7 @@ test('created edit survives a UI callback failure and editing becomes available 
   try {
     const page = await app.firstWindow();
     page.setDefaultTimeout(5000);
+    await page.locator('#appScreenSelector').selectOption('collection');
     await page.locator('#pickBtn').waitFor();
     await page.evaluate(async folder => {
       const desktop = Reflect.get(window, 'clipSandboxDesktop');
