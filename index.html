@@ -357,6 +357,29 @@
     .panel-heading h2{ font-size:15px; margin:0; }
     .panel-heading button{ padding:6px 9px; }
     .panel-empty{ color:var(--muted); font-size:14px; line-height:1.5; margin-top:24px; }
+    #pipelinesPanelMount{ height:calc(100% - 48px); min-height:0; }
+    #pipelinesPanelHost{ height:100%; min-height:0; overflow:auto; padding-right:2px; }
+    .pipeline-catalog-loading,.pipeline-catalog-empty,.pipeline-catalog-error{ color:var(--muted); font-size:13px; line-height:1.55; margin:18px 2px; }
+    .pipeline-catalog-error{ color:#fca5a5; }
+    .pipeline-tree-entry{ padding:8px 0; border-bottom:1px solid rgba(148,163,184,.16); }
+    .pipeline-tree-entry:last-child{ border-bottom:0; }
+    .pipeline-tree-header{ display:flex; align-items:center; gap:6px; }
+    .pipeline-tree-expand,.pipeline-tree-load,.pipeline-tree-collection{ min-height:30px; padding:5px 7px; border:1px solid transparent; border-radius:8px; background:transparent; box-shadow:none; color:var(--fg); font:inherit; text-align:left; }
+    .pipeline-tree-expand{ min-width:0; flex:1; display:flex; align-items:center; gap:7px; font-size:13px; font-weight:600; }
+    .pipeline-tree-expand:hover,.pipeline-tree-collection:hover{ background:var(--surface-raised); }
+    .pipeline-tree-expand:focus-visible,.pipeline-tree-load:focus-visible,.pipeline-tree-collection:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+    .pipeline-tree-load{ flex:none; color:var(--accent); font-size:12px; }
+    .pipeline-tree-disclosure{ width:12px; height:12px; flex:none; position:relative; }
+    .pipeline-tree-disclosure::before{ content:""; position:absolute; width:5px; height:5px; top:3px; left:2px; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(-45deg); transition:transform 150ms ease; }
+    .pipeline-tree-expand[aria-expanded="true"] .pipeline-tree-disclosure::before,.pipeline-tree-collection[aria-expanded="true"] .pipeline-tree-disclosure::before{ transform:rotate(45deg); top:2px; }
+    .pipeline-tree-details{ padding:6px 0 2px 19px; }
+    .pipeline-tree-content{ display:grid; gap:10px; }
+    .pipeline-tree-group h3{ margin:0 0 4px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+    .pipeline-tree-group ul{ margin:0; padding:0; list-style:none; }
+    .pipeline-tree-collection{ width:100%; display:flex; align-items:center; gap:7px; color:#dbeafe; font-size:13px; font-weight:600; }
+    .pipeline-tree-clip-list{ display:grid; gap:2px; padding-left:19px !important; }
+    .pipeline-tree-clip{ overflow:hidden; color:var(--fg); font-size:12px; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
+    .pipeline-tree-empty{ color:var(--muted); font-size:12px; line-height:1.45; }
     .side-panel.folded .panel-content{ opacity:0; visibility:hidden; transition:opacity 160ms ease, visibility 0ms 160ms; }
     .panel-reveal{ position:absolute; inset:0; width:35px; border-radius:0; padding:12px 6px; flex-direction:column; display:flex; align-items:center; gap:12px; background:transparent; }
     #workspaceRow[data-moving="true"] #screenCommandHost{ overflow:hidden; }
@@ -607,7 +630,7 @@
     <aside id="pipelinesPanel" class="side-panel" aria-label="Pipelines">
       <div id="pipelinesPanelContent" class="panel-content">
         <header class="panel-heading"><h2>Pipelines</h2><button id="foldPipelines" type="button" aria-label="Fold Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button></header>
-        <div id="pipelinesPanelHost"><p id="pipelinesPanelFallback" class="panel-empty">Pipeline browsing will appear here. Use Browse Folder to open a pipeline.</p></div>
+        <div id="pipelinesPanelMount"><div id="pipelinesPanelHost"><p id="pipelinesPanelFallback" class="panel-empty">Pipeline browsing will appear here. Use Browse Folder to open a pipeline.</p></div></div>
       </div>
       <button id="revealPipelines" class="panel-reveal" type="button" aria-label="Show Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5h7l2 3h9v12H3V7Z"/></svg><span class="rail-label">Pipelines</span><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button>
     </aside>

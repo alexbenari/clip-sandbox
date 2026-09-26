@@ -3,7 +3,12 @@ import { AppSettingsService, type SettingsResult } from '../app/app-settings-ser
 import type { ActivityErrorOptions } from './activity-indicator-control.js';
 import { isStartupScreenId, type IAppSettings } from '../app/app-settings.js';
 
-type SettingsFeedback = { progress(message: string): void; success(message: string): void; error(message: string, options?: ActivityErrorOptions): void };
+type SettingsFeedback = {
+  progress(message: string): void;
+  success(message: string): void;
+  error(message: string, options?: ActivityErrorOptions): void;
+  pipelinesRootChanged?(): void;
+};
 
 export class SettingsScreen implements IAppScreen {
   readonly id = 'settings';
@@ -125,7 +130,11 @@ export class SettingsScreen implements IAppScreen {
         technicalDetails: result.error, retry: () => this.save(change, true),
       });
     }
-    else { this.status.textContent = 'Saved'; this.feedback.success('Settings saved'); }
+    else {
+      this.status.textContent = 'Saved';
+      this.feedback.success('Settings saved');
+      if ('pipelinesRootPath' in change) this.feedback.pipelinesRootChanged?.();
+    }
     return result;
   }
 }

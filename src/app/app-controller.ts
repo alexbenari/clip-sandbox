@@ -57,6 +57,8 @@ import { LoadStatusControl } from '../ui/load-status-control.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { Collection } from '../domain/collection.js';
 import { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
+import type { IPipelineCatalogEntry } from './pipeline-catalog.js';
+import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
 
 const ERROR_LOG_FILENAME = 'err.log';
 const NEW_COLLECTION_CHOICE_VALUE = '__new_collection__';
@@ -589,7 +591,7 @@ export class AppController {
         folderName = '',
         preserveCollectionFilename = '',
         reportInitialLoad = true,
-      }: Partial<FolderSelection> & { preserveCollectionFilename?: string; reportInitialLoad?: boolean } = {}): Promise<void> => {
+      }: Partial<FolderSelection> & { preserveCollectionFilename?: string; reportInitialLoad?: boolean } = {}): Promise<boolean> => {
         await settingsReady;
         try {
           const buildResult = await pipelineFactory.buildPipeline({
@@ -600,7 +602,7 @@ export class AppController {
           });
           const { pipeline } = buildResult;
           const result = pipelineSession.loadPipeline(pipeline);
-          if (!result) return;
+          if (!result) return false;
 
           gridController.invalidateAllViews();
           gridController.retagActiveView(null);
@@ -609,7 +611,7 @@ export class AppController {
             : null;
           if (preservedCollection) {
             await this.reloadSelection({ pipeline, collection: preservedCollection, folderSession });
-            return;
+            return true;
           }
           this.applySelection(result.sequence, {
             collection: null,
@@ -621,12 +623,14 @@ export class AppController {
               clipCount: result.sequence.orderedClips().length,
             });
           }
+          return true;
         } catch (err) {
           await diagnostics.logRuntimeError('Failed to load the selected folder.', err, folderSession);
           this.showErrorStatus(appText.collectionReadErrorText(err), {
             affected: 'Open folder', recovery: 'Check that the folder is accessible, then choose it again.',
             technicalDetails: err instanceof Error ? err.stack ?? err.message : String(err),
           });
+          return false;
         }
       };
 
@@ -650,6 +654,30 @@ export class AppController {
             technicalDetails: err instanceof Error ? err.stack ?? err.message : String(err),
           });
         }
+      };
+
+    readonly loadCatalogPipeline = async (entry: IPipelineCatalogEntry): Promise<void> => {
+        try {
+          const selection = await fileSystem.openPipelineCatalogEntry(entry);
+          if (await this.loadPipeline(selection)) shell.activate(collectionScreen.id);
+        } catch (err) {
+          await diagnostics.logRuntimeError(`Failed to open pipeline ${entry.name}.`, err, state.currentFolderSession);
+          this.showErrorStatus(`Could not open ${entry.name}.`, {
+            affected: 'Open pipeline',
+            recovery: 'Check that the pipeline folder is still accessible, then refresh Pipelines.',
+            technicalDetails: err instanceof Error ? err.stack ?? err.message : String(err),
+          });
+        }
+      };
+
+    readonly onCatalogPipelineRequested = async (entry: IPipelineCatalogEntry): Promise<void> => {
+        if (pipelineSession.hasDirtyClipSequenceChanges) {
+          state.setPendingSelectionAction({ type: 'open-catalog-pipeline', pipeline: entry });
+          this.refreshCollectionSelectorView();
+          this.openUnsavedDialog();
+          return;
+        }
+        await this.loadCatalogPipeline(entry);
       };
 
       readonly refreshActiveFolder = async (): Promise<void> => {
@@ -695,6 +723,10 @@ export class AppController {
         state.clearPendingSelectionAction();
         if (nextPendingAction.type === 'browse-folder') {
           await this.triggerFolderPicker();
+          return;
+        }
+        if (nextPendingAction.type === 'open-catalog-pipeline') {
+          await this.loadCatalogPipeline(nextPendingAction.pipeline);
           return;
         }
         if (nextPendingAction.type === 'switch-selection') {
@@ -1500,8 +1532,26 @@ this.initialized = true;
   workflows.clearLoadedState();
   recomputeLayout();
   workflows.setTitlesHidden(false);
+  const pipelinesPanelHost = AppControllerSupport.optionalElement('pipelinesPanelHost');
+  const pipelineCatalogControl = pipelinesPanelHost ? new PipelineCatalogControl({
+    host: pipelinesPanelHost,
+    catalog: fileSystem,
+    onLoadPipeline: workflows.onCatalogPipelineRequested,
+    onError: (message, error) => {
+      workflows.showErrorStatus(message, {
+        affected: 'Pipelines',
+        recovery: 'Check the Pipelines top folder in Settings, then try again.',
+        technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
+      });
+      void diagnostics.logRuntimeError(message, error);
+    },
+    document,
+  }) : null;
   const settingsScreen = new SettingsScreen(settingsService, {
-    progress: workflows.showProgressStatus, success: workflows.showStatus, error: workflows.showErrorStatus,
+    progress: workflows.showProgressStatus,
+    success: workflows.showStatus,
+    error: workflows.showErrorStatus,
+    pipelinesRootChanged: () => { void pipelineCatalogControl?.load(); },
   });
   const keyboardPanel = utilityHost ? AppControllerSupport.requiredElement('keyboardMapPanel') : null;
   const keyboardMap = keyboardPanel ? new KeyboardMapControl(keyboardPanel, GLOBAL_UTILITY_SHORTCUTS, () => utilities?.close()) : null;
@@ -1567,7 +1617,7 @@ this.initialized = true;
   });
   const panels = ['pipelines', 'clips'].flatMap(name => {
     const root = AppControllerSupport.optionalElement(`${name}Panel`);
-    const contributionHost = AppControllerSupport.optionalElement(`${name}PanelHost`);
+    const contributionHost = AppControllerSupport.optionalElement(name === 'pipelines' ? 'pipelinesPanelMount' : `${name}PanelHost`);
     if (!root || !contributionHost) return [];
     const label = name[0].toUpperCase() + name.slice(1);
     return [{
@@ -1575,7 +1625,7 @@ this.initialized = true;
       root,
       content: AppControllerSupport.requiredElement(`${name}PanelContent`),
       contributionHost,
-      fallbackContent: AppControllerSupport.optionalElement(`${name}PanelFallback`) ?? undefined,
+      fallbackContent: AppControllerSupport.optionalElement(name === 'pipelines' ? 'pipelinesPanelHost' : `${name}PanelFallback`) ?? undefined,
       foldButton: AppControllerSupport.requiredElement<HTMLButtonElement>(`fold${label}`),
       revealButton: AppControllerSupport.requiredElement<HTMLButtonElement>(`reveal${label}`),
     }];
@@ -1615,6 +1665,7 @@ this.initialized = true;
   const settingsReady = settingsScreen.load();
   const initialScreenId = shell.activeScreen.id;
   void settingsReady.then(() => {
+    void pipelineCatalogControl?.load();
     if (shell.activeScreen.id === initialScreenId && shell.activeScreen.id !== settingsService.current.startupScreenId) {
       shell.activate(settingsService.current.startupScreenId);
     }
@@ -1636,6 +1687,7 @@ this.initialized = true;
       frameReviewPlayer.destroy();
       utilities?.destroy();
       activityIndicatorControl.destroy();
+      pipelineCatalogControl?.destroy();
       collectionSelectorControl.destroy();
       mainToolbarControl.destroy();
     },

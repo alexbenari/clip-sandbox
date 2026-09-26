@@ -1,5 +1,8 @@
+import type { IPipelineCatalogEntry } from './pipeline-catalog.js';
+
 export type PendingSelectionAction =
   | { type: 'browse-folder' }
+  | { type: 'open-catalog-pipeline'; pipeline: IPipelineCatalogEntry }
   | { type: 'switch-selection'; collectionFilename: string | null }
   | null;
 

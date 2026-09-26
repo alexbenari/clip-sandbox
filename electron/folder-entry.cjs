@@ -14,6 +14,10 @@ const VIDEO_EXT_TO_MIME = new Map([
   ['.mpeg', 'video/mpeg'],
 ]);
 
+function isVideoFilename(filename) {
+  return VIDEO_EXT_TO_MIME.has(path.extname(filename).toLowerCase());
+}
+
 function isTopLevelFile(dirent) {
   return dirent?.isFile?.() === true;
 }
@@ -53,6 +57,7 @@ async function readFolderEntries(folderPath) {
 
 module.exports = {
   createFolderEntry,
+  isVideoFilename,
   readFolderEntries,
 };
 

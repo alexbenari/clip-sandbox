@@ -58,7 +58,7 @@ test('refines inexact ranges through the contextual screen and preserves queue c
     await expect(page.locator('.gif-range-card.is-inexact')).toHaveCount(1);
     await captureInexactRange(page, '34000', '48000');
     await expect(page.locator('.gif-range-card.is-inexact')).toHaveCount(2);
-    await expect(page.locator('#clipsPanelHost')).toContainText('Needs exact frames');
+    await expect(page.locator('#clipsPanelHost')).toContainText('2 need frames');
 
     const cards = page.locator('.gif-range-card.is-inexact');
     const firstRangeId = await cards.nth(0).getAttribute('data-range-id');
@@ -70,7 +70,7 @@ test('refines inexact ranges through the contextual screen and preserves queue c
     await cards.nth(0).getByRole('button', { name: 'Refine range 1' }).click();
     await expect(page.locator('#refineGifScreen')).toBeVisible();
     await expect(page.locator('.gif-refinement-workbench')).toBeVisible();
-    await expect(page.locator('#clipsPanelHost')).toContainText('Needs exact frames');
+    await expect(page.locator('#clipsPanelHost')).toContainText('2 need frames');
     await expect(page.locator('.frame-review-transport [data-command="play-pause"]')).toHaveAttribute('aria-label', 'Play');
     await expect(page.locator('.frame-review-identity')).toContainText('Frame');
     await expect(page.locator('[data-command="set-start"]')).toHaveAttribute('aria-pressed', 'true');
@@ -110,7 +110,7 @@ test('refines inexact ranges through the contextual screen and preserves queue c
     await expect(page.getByRole('button', { name: /^Extract All/ })).toBeEnabled();
     const refinedCard = page.locator(`.gif-range-card[data-range-id="${firstRangeId}"]`);
     await expect(refinedCard).toHaveClass(/is-exact/);
-    await expect(refinedCard).toContainText('Ready to extract');
+    await expect(refinedCard).toContainText('Extract');
     await expect(refinedCard.locator('img')).toHaveCount(1);
     await expect(page.locator(`.gif-range-card[data-range-id="${secondRangeId}"]`)).toHaveClass(/is-inexact/);
     await expect(page.locator('.gif-range-card')).toHaveCount(2);

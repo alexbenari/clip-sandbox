@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SettingsScreen } from '../../src/ui/settings-screen.js';
-import { AppSettingsService, type SettingsResult } from '../../src/app/app-settings-service.js';
+import { AppSettingsService, type RootChoice, type SettingsResult } from '../../src/app/app-settings-service.js';
 import type { IAppSettings } from '../../src/app/app-settings.js';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
 describe('Settings screen', () => {
-  function setup() {
+  function setup(pipelinesRootChanged?: () => void) {
     const settings: IAppSettings = { pipelinesRootPath: 'D:\\יצירה\\<clips>', singleClipAudioDefault: false, startupScreenId: 'gif-extraction' };
-    const port = { load: vi.fn<[], Promise<SettingsResult>>(async () => ({ ok: true, settings })), save: vi.fn<[IAppSettings], Promise<SettingsResult>>(async (value) => ({ ok: true, settings: value })), chooseRoot: vi.fn(async () => ({ kind: 'canceled' as const })) };
-    const feedback = { progress: vi.fn(), success: vi.fn(), error: vi.fn() };
+    const port = { load: vi.fn<[], Promise<SettingsResult>>(async () => ({ ok: true, settings })), save: vi.fn<[IAppSettings], Promise<SettingsResult>>(async (value) => ({ ok: true, settings: value })), chooseRoot: vi.fn<[], Promise<RootChoice>>(async () => ({ kind: 'canceled' })) };
+    const feedback = { progress: vi.fn(), success: vi.fn(), error: vi.fn(), pipelinesRootChanged };
     const service = new AppSettingsService(port);
     const screen = new SettingsScreen(service, feedback);
     document.body.append(screen.root);
@@ -35,6 +35,17 @@ describe('Settings screen', () => {
     choose.click();
     await vi.waitFor(() => expect(choose.disabled).toBe(false));
     expect(port.save).not.toHaveBeenCalled();
+  });
+  it('refreshes the pipeline catalog only after a selected root has been saved', async () => {
+    const pipelinesRootChanged = vi.fn();
+    const { screen, choose, port } = setup(pipelinesRootChanged);
+    port.chooseRoot.mockResolvedValueOnce({ kind: 'chosen', path: 'C:/pipelines' });
+
+    await screen.load();
+    choose.click();
+
+    await vi.waitFor(() => expect(pipelinesRootChanged).toHaveBeenCalledOnce());
+    expect(port.save).toHaveBeenCalledWith(expect.objectContaining({ pipelinesRootPath: 'C:/pipelines' }));
   });
   it('reports ignored saved fields without claiming that all settings were reset', async () => {
     const { screen, port, feedback } = setup();

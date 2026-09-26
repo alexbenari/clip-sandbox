@@ -4,6 +4,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const { readFolderEntries } = require('./folder-entry.cjs');
 const { FolderAccessRegistry } = require('./folder-access-registry.cjs');
+const { PipelineCatalogRuntime } = require('./pipeline-catalog-runtime.cjs');
 const { createVideoEditRuntime } = require('./video-edit-runtime.cjs');
 const { AppSettingsStore } = require('./app-settings-store.cjs');
 const { registerFrameReviewIpc } = require('./frame-review-ipc.cjs');
@@ -108,6 +109,7 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     environment: nativeEnvironment,
   });
   const folderAccess = new FolderAccessRegistry();
+  const pipelineCatalogRuntime = new PipelineCatalogRuntime({ settingsStore, folderAccess });
   ipcMain.handle('clip-sandbox:load-app-settings', () => settingsStore.load());
   ipcMain.handle('clip-sandbox:save-app-settings', (_event, settings) => settingsStore.save(settings));
   ipcMain.handle('clip-sandbox:choose-pipelines-root', async event => {
@@ -130,6 +132,11 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
       files: await readFolderEntries(resolvedFolderPath),
     };
   });
+  ipcMain.handle('clip-sandbox:list-pipeline-catalog', event => pipelineCatalogRuntime.listPipelines(event.sender));
+  ipcMain.handle('clip-sandbox:describe-pipeline-catalog-entry', (event, payload = {}) =>
+    pipelineCatalogRuntime.describePipeline(event.sender, payload.pipelineId));
+  ipcMain.handle('clip-sandbox:open-pipeline-catalog-entry', (event, payload = {}) =>
+    pipelineCatalogRuntime.openPipeline(event.sender, payload.pipelineId));
 
   ipcMain.handle('clip-sandbox:refresh-folder', async (event, payload = {}) => {
     const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);

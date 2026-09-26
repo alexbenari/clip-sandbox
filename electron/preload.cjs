@@ -90,6 +90,9 @@ const desktopApi = {
   loadAppSettings() { return ipcRenderer.invoke('clip-sandbox:load-app-settings'); },
   saveAppSettings(settings) { return ipcRenderer.invoke('clip-sandbox:save-app-settings', settings); },
   choosePipelinesRoot() { return ipcRenderer.invoke('clip-sandbox:choose-pipelines-root'); },
+  listPipelineCatalog() { return ipcRenderer.invoke('clip-sandbox:list-pipeline-catalog'); },
+  describePipelineCatalogEntry(payload) { return ipcRenderer.invoke('clip-sandbox:describe-pipeline-catalog-entry', payload); },
+  openPipelineCatalogEntry(payload) { return ipcRenderer.invoke('clip-sandbox:open-pipeline-catalog-entry', payload); },
   pickFolder() {
     return ipcRenderer.invoke('clip-sandbox:pick-folder');
   },

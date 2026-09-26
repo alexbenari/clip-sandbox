@@ -2,6 +2,12 @@ import { ElectronVideoEditService } from './electron-video-edit-service.js';
 import type { ElectronVideoEditApi } from './electron-video-edit-service.js';
 import type { CreatedVideoFile, RuntimeVideoEditResult, VideoEditRequest } from '../../business-logic/clip-editor.js';
 import type { ClipFile } from '../../domain/clip.js';
+import type {
+  IPipelineCatalogCollection,
+  IPipelineCatalogDetails,
+  IPipelineCatalogEntry,
+  PipelineCatalogResult,
+} from '../../app/pipeline-catalog.js';
 
 type ElectronFolderEntry = {
   name?: string;
@@ -30,6 +36,9 @@ type DesktopDeleteResult = {
 type ElectronDesktopApi = ElectronVideoEditApi & {
   pickFolder?: () => Promise<DesktopFolderResult | null | undefined>;
   refreshFolder?: (request: { folderPath: string }) => Promise<DesktopFolderResult | null | undefined>;
+  listPipelineCatalog?: () => Promise<unknown>;
+  describePipelineCatalogEntry?: (request: { pipelineId: string }) => Promise<unknown>;
+  openPipelineCatalogEntry?: (request: { pipelineId: string }) => Promise<DesktopFolderResult | null | undefined>;
   saveTextFile?: (request: { folderPath: string; filename: string; text: string }) => Promise<{ mode?: string }>;
   appendTextFile?: (request: { folderPath: string; filename: string; text: string }) => Promise<{ mode?: string }>;
   deleteFiles?: (request: { folderPath: string; filenames: Iterable<string> }) => Promise<{
@@ -175,6 +184,42 @@ export class ElectronFileSystemService {
     return this.folderSelection(result);
   }
 
+  async listPipelineCatalog(): Promise<PipelineCatalogResult> {
+    const api = this.requireApi();
+    if (!api.listPipelineCatalog) throw new Error('Pipeline catalog is unavailable.');
+    const raw = await api.listPipelineCatalog();
+    if (!ElectronFileSystemService.isRecord(raw)) throw new Error('Invalid pipeline catalog response.');
+    if (raw.kind === 'unconfigured') return { kind: 'unconfigured' };
+    if (raw.kind !== 'available' || !Array.isArray(raw.entries)) throw new Error('Invalid pipeline catalog response.');
+    const entries = raw.entries.map(entry => this.parsePipelineCatalogEntry(entry));
+    if (new Set(entries.map(entry => entry.id)).size !== entries.length) {
+      throw new Error('Invalid pipeline catalog response.');
+    }
+    return { kind: 'available', entries };
+  }
+
+  async describePipelineCatalogEntry(entry: IPipelineCatalogEntry): Promise<IPipelineCatalogDetails> {
+    const api = this.requireApi();
+    if (!api.describePipelineCatalogEntry) throw new Error('Pipeline catalog is unavailable.');
+    const raw = await api.describePipelineCatalogEntry({ pipelineId: entry.id });
+    if (!ElectronFileSystemService.isRecord(raw)
+      || !Array.isArray(raw.clipNames) || !Array.isArray(raw.collections)) {
+      throw new Error('Invalid pipeline details response.');
+    }
+    return {
+      clipNames: this.parseCatalogNames(raw.clipNames),
+      collections: raw.collections.map(collection => this.parsePipelineCatalogCollection(collection)),
+    };
+  }
+
+  async openPipelineCatalogEntry(entry: IPipelineCatalogEntry): Promise<{ folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string }> {
+    const api = this.requireApi();
+    if (!api.openPipelineCatalogEntry) throw new Error('Pipeline catalog is unavailable.');
+    const result = await api.openPipelineCatalogEntry({ pipelineId: entry.id });
+    if (!result || result.canceled) throw new Error('The selected pipeline could not be opened.');
+    return this.folderSelection(result);
+  }
+
   private folderSelection(result: DesktopFolderResult): { folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string } {
     return {
       folderSession: this.createFolderSession(result.folderPath),
@@ -189,6 +234,35 @@ export class ElectronFileSystemService {
       .replace(/\//g, '\\')
       .replace(/\\+$/, '')
       .toLocaleLowerCase();
+  }
+
+  private parsePipelineCatalogEntry(value: unknown): IPipelineCatalogEntry {
+    if (!ElectronFileSystemService.isRecord(value)
+      || typeof value.id !== 'string' || value.id.length === 0
+      || typeof value.name !== 'string' || value.name.trim().length === 0) {
+      throw new Error('Invalid pipeline catalog response.');
+    }
+    return Object.freeze({ id: value.id, name: value.name });
+  }
+
+  private parsePipelineCatalogCollection(value: unknown): IPipelineCatalogCollection {
+    if (!ElectronFileSystemService.isRecord(value)
+      || typeof value.name !== 'string' || value.name.trim().length === 0
+      || !Array.isArray(value.clipNames)) {
+      throw new Error('Invalid pipeline details response.');
+    }
+    return Object.freeze({ name: value.name, clipNames: this.parseCatalogNames(value.clipNames) });
+  }
+
+  private parseCatalogNames(value: readonly unknown[]): readonly string[] {
+    if (value.some(name => typeof name !== 'string' || name.length === 0)) {
+      throw new Error('Invalid pipeline details response.');
+    }
+    return Object.freeze([...value] as string[]);
+  }
+
+  private static isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
   }
 
   async saveTextFile({

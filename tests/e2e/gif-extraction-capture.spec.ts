@@ -84,6 +84,12 @@ test('captures exact and inexact ranges without interrupting playback', async ()
     await page.keyboard.up('ArrowLeft');
     await expect.poll(() => page.locator('.frame-review-identity').textContent(), { timeout: 10_000 })
       .not.toBe(initialScrubFrame);
+    await progress.evaluate((input) => {
+      input.value = '8';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 8');
     const scrubbedTime = timeMilliseconds(await currentTime.textContent());
     await play.click();
     await expect(play).toHaveAttribute('aria-label', 'Pause');

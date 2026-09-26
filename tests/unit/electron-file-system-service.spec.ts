@@ -69,6 +69,38 @@ describe('electron file system service', () => {
     expect(result.files.map(file => file.name)).toEqual(['bravo.mp4']);
   });
 
+  it('uses opaque catalog entry ids to list, describe, and open a configured pipeline', async () => {
+    const api = {
+      listPipelineCatalog: vi.fn(async () => ({ kind: 'available', entries: [{ id: 'pipeline_1', name: 'Sample' }] })),
+      describePipelineCatalogEntry: vi.fn(async ({ pipelineId }) => ({
+        clipNames: ['sample-01.mp4'],
+        collections: [{ name: 'Review', clipNames: ['sample-01.mp4'] }],
+        pipelineId,
+      })),
+      openPipelineCatalogEntry: vi.fn(async ({ pipelineId }) => ({
+        folderPath: 'C:/pipelines/Sample',
+        folderName: 'Sample',
+        files: [{ name: 'sample-01.mp4', type: 'video/mp4', mediaSource: 'file:///C:/pipelines/Sample/sample-01.mp4' }],
+        pipelineId,
+      })),
+    };
+    const service = new ElectronFileSystemService({ api });
+    const catalog = await service.listPipelineCatalog();
+    if (catalog.kind !== 'available') throw new Error('Expected an available pipeline catalog.');
+    const entry = catalog.entries[0]!;
+
+    await expect(service.describePipelineCatalogEntry(entry)).resolves.toEqual({
+      clipNames: ['sample-01.mp4'],
+      collections: [{ name: 'Review', clipNames: ['sample-01.mp4'] }],
+    });
+    await expect(service.openPipelineCatalogEntry(entry)).resolves.toMatchObject({
+      folderName: 'Sample',
+      folderSession: { folderPath: 'C:/pipelines/Sample' },
+    });
+    expect(api.describePipelineCatalogEntry).toHaveBeenCalledWith({ pipelineId: 'pipeline_1' });
+    expect(api.openPipelineCatalogEntry).toHaveBeenCalledWith({ pipelineId: 'pipeline_1' });
+  });
+
   it('maps delete responses into renderer-facing errors', async () => {
     const api = {
       deleteFiles: vi.fn(async () => ({
