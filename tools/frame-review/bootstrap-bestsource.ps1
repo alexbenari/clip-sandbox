@@ -188,6 +188,8 @@ if (-not (Test-Path -LiteralPath $libp2pMesonDestination) -or
 $vcpkgToolDownloads = Join-Path $vcpkgSource 'downloads\tools'
 $meson = Get-ChildItem $vcpkgToolDownloads -Recurse -Filter meson.py -File |
     Select-Object -First 1 -ExpandProperty FullName
+$python = Get-ChildItem (Join-Path $vcpkgToolDownloads 'python') -Recurse -Filter python.exe -File |
+    Select-Object -First 1 -ExpandProperty FullName
 $ninjaFetchOutput = & $vcpkgExe fetch ninja "--downloads-root=$(Join-Path $vcpkgSource 'downloads')" --disable-metrics
 if ($LASTEXITCODE -ne 0) { throw 'Failed to acquire the pinned vcpkg Ninja tool.' }
 $ninja = $ninjaFetchOutput | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
@@ -198,8 +200,8 @@ if (-not $ninja) {
 }
 $pkgConfig = Get-ChildItem (Join-Path $vcpkgToolDownloads 'msys2') -Recurse -Filter pkg-config.exe -File |
     Where-Object FullName -Like '*mingw64*' | Select-Object -First 1 -ExpandProperty FullName
-if (-not $meson -or -not $ninja -or -not $pkgConfig) {
-    throw "vcpkg tool discovery failed: Meson=$([bool]$meson), Ninja=$([bool]$ninja), MinGW pkg-config=$([bool]$pkgConfig). Ninja fetch output: $($ninjaFetchOutput -join '; ')"
+if (-not $meson -or -not $python -or -not $ninja -or -not $pkgConfig) {
+    throw "vcpkg tool discovery failed: Meson=$([bool]$meson), Python=$([bool]$python), Ninja=$([bool]$ninja), MinGW pkg-config=$([bool]$pkgConfig). Ninja fetch output: $($ninjaFetchOutput -join '; ')"
 }
 
 function Posix([string]$path) { return $path.Replace('\', '/') }
@@ -232,11 +234,11 @@ $setupArguments = @('setup', $bestSourceBuild, $bestSourceSource, '--native-file
 if (Test-Path -LiteralPath (Join-Path $bestSourceBuild 'meson-private')) {
     $setupArguments += '--reconfigure'
 }
-python $meson @setupArguments
+& $python $meson @setupArguments
 if ($LASTEXITCODE -ne 0) { throw 'Failed to configure BestSource.' }
-python $meson compile -C $bestSourceBuild
+& $python $meson compile -C $bestSourceBuild
 if ($LASTEXITCODE -ne 0) { throw 'Failed to build BestSource.' }
-python $meson install -C $bestSourceBuild
+& $python $meson install -C $bestSourceBuild
 if ($LASTEXITCODE -ne 0) { throw 'Failed to install BestSource.' }
 [IO.File]::WriteAllText($bestSourceStamp, $bestSourceFingerprint, [Text.UTF8Encoding]::new($false))
 
