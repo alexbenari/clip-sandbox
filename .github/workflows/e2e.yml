@@ -57,7 +57,7 @@ jobs:
           path: |
             tools/frame-review/.deps
             native-build/frame-review
-          key: frame-review-${{ runner.os }}-${{ hashFiles('tools/frame-review/**', 'native/frame-review/**') }}
+          key: frame-review-${{ runner.os }}-${{ hashFiles('tools/frame-review/*.ps1', 'tools/frame-review/*.mjs', 'tools/frame-review/*.json', 'tools/frame-review/tests/*.mjs', 'tools/frame-review/toolchains/*', 'native/frame-review/**') }}
           restore-keys: |
             frame-review-${{ runner.os }}-
 
