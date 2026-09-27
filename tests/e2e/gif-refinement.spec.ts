@@ -28,13 +28,21 @@ async function seekFrame(page, value: string): Promise<void> {
 
 async function captureInexactRange(page, start: string, end: string): Promise<void> {
   const play = page.locator('.frame-review-transport [data-command="play-pause"]');
+  const progress = page.locator('.frame-review-progress-row input');
+  const status = page.locator('#gifExtractionScreen .gif-workflow-local-status');
   await expect(play).toBeEnabled();
   if (await play.getAttribute('aria-label') === 'Play') await play.click();
-  await page.keyboard.press('q');
   await seekFrame(page, start);
-  await page.keyboard.press('w');
+  await expect.poll(() => progress.inputValue(), { timeout: 10_000 }).not.toBe(start);
+  await page.keyboard.press('q');
+  await expect(status).toHaveText('Start marked');
   await seekFrame(page, end);
+  await expect.poll(() => progress.inputValue(), { timeout: 10_000 }).not.toBe(end);
+  await page.keyboard.press('w');
+  await expect(status).toHaveText('End marked');
+  await expect(page.locator('[data-command="lock-range"]')).toBeEnabled();
   await page.keyboard.press('a');
+  await expect(status).toHaveText('Range locked');
 }
 
 test('refines inexact ranges through the contextual screen and preserves queue context', async () => {
