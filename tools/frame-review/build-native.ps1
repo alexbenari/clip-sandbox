@@ -11,6 +11,8 @@ if (-not (Test-Path -LiteralPath $resolvedPath)) {
 node (Join-Path $toolRoot 'verify-dependencies.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Frame-review dependency verification failed.' }
 $resolved = Get-Content -LiteralPath $resolvedPath -Raw | ConvertFrom-Json
+$cygwinBin = Split-Path -Parent $resolved.cmake.path
+$env:PATH = "$cygwinBin;$env:PATH"
 $sourceRoot = Join-Path $repositoryRoot 'native\frame-review'
 $buildRoot = Join-Path $repositoryRoot 'native-build\frame-review'
 $sourceRootCygwin = (& $resolved.cmake.cygpathPath -u $sourceRoot).Trim()
