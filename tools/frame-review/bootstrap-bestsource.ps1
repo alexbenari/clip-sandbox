@@ -191,7 +191,7 @@ $meson = Get-ChildItem $vcpkgToolDownloads -Recurse -Filter meson.py -File |
 $python = Get-ChildItem (Join-Path $vcpkgToolDownloads 'python') -Recurse -Filter python.exe -File |
     Select-Object -First 1 -ExpandProperty FullName
 $ninjaFetchOutput = & $vcpkgExe fetch ninja "--downloads-root=$(Join-Path $vcpkgSource 'downloads')" --disable-metrics
-if ($LASTEXITCODE -ne 0) { throw 'Failed to acquire the pinned vcpkg Ninja tool.' }
+if ($LASTEXITCODE -ne 0) { throw 'Failed to resolve the vcpkg Ninja tool.' }
 $ninja = $ninjaFetchOutput | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
     Select-Object -Last 1
 if (-not $ninja) {

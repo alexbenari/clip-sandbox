@@ -130,9 +130,11 @@ Sync-PinnedGitSource $manifest.dependencies.vcpkg $vcpkgRoot 'vcpkg'
 if ($LASTEXITCODE -ne 0) { throw 'Pinned FFmpeg and BestSource bootstrap failed.' }
 
 $installedRoot = Join-Path $depsRoot 'vcpkg-installed'
-$vcpkgToolsRoot = Join-Path $vcpkgRoot 'downloads\tools'
-$ninja = Get-ChildItem -LiteralPath $vcpkgToolsRoot -Recurse -Filter ninja.exe -File |
-    Select-Object -First 1 -ExpandProperty FullName
+$vcpkgExe = Join-Path $vcpkgRoot 'vcpkg.exe'
+$ninjaFetchOutput = & $vcpkgExe fetch ninja "--downloads-root=$(Join-Path $vcpkgRoot 'downloads')" --disable-metrics
+if ($LASTEXITCODE -ne 0) { throw 'Failed to resolve the vcpkg Ninja tool.' }
+$ninja = $ninjaFetchOutput | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+    Select-Object -Last 1
 $cmake = 'C:\cygwin64\bin\cmake.exe'
 $ctest = 'C:\cygwin64\bin\ctest.exe'
 $make = 'C:\cygwin64\bin\make.exe'
@@ -141,7 +143,7 @@ $missingCygwinTools = @(@($cmake, $ctest, $make, $cygpath) | Where-Object {
     -not (Test-Path -LiteralPath $_)
 })
 if (-not $ninja -or $missingCygwinTools.Count -gt 0) {
-    throw 'The Cygwin CMake, CTest, make, cygpath, and pinned vcpkg Ninja tools are required.'
+    throw "Frame-review build tools are missing: Ninja=$([bool]$ninja), Cygwin tools=$($missingCygwinTools -join ', '). Ninja fetch output: $($ninjaFetchOutput -join '; ')"
 }
 $cmakeVersion = (& $cmake --version | Select-Object -First 1)
 Assert-MinimumVersion 'CMake' $cmakeVersion $manifest.toolchain.cmakeMinimum
