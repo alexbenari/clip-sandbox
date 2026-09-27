@@ -185,16 +185,21 @@ if (-not (Test-Path -LiteralPath $libp2pMesonDestination) -or
     Write-Utf8NoBom $libp2pMesonDestination $libp2pMesonText
 }
 
-$meson = Get-ChildItem (Join-Path $vcpkgSource 'downloads\tools') -Recurse -Filter meson.py -File |
+$vcpkgToolDownloads = Join-Path $vcpkgSource 'downloads\tools'
+$meson = Get-ChildItem $vcpkgToolDownloads -Recurse -Filter meson.py -File |
     Select-Object -First 1 -ExpandProperty FullName
-& $vcpkgExe fetch ninja "--downloads-root=$(Join-Path $vcpkgSource 'downloads')" --disable-metrics | Out-Null
+$ninjaFetchOutput = & $vcpkgExe fetch ninja "--downloads-root=$(Join-Path $vcpkgSource 'downloads')" --disable-metrics
 if ($LASTEXITCODE -ne 0) { throw 'Failed to acquire the pinned vcpkg Ninja tool.' }
-$ninja = Get-ChildItem (Join-Path $vcpkgSource 'downloads\tools') -Recurse -Filter ninja.exe -File |
-    Select-Object -First 1 -ExpandProperty FullName
-$pkgConfig = Get-ChildItem (Join-Path $vcpkgSource 'downloads\tools\msys2') -Recurse -Filter pkg-config.exe -File |
+$ninja = $ninjaFetchOutput | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+    Select-Object -Last 1
+if (-not $ninja) {
+    $ninja = Get-ChildItem $vcpkgToolDownloads -Recurse -Filter ninja.exe -File |
+        Select-Object -First 1 -ExpandProperty FullName
+}
+$pkgConfig = Get-ChildItem (Join-Path $vcpkgToolDownloads 'msys2') -Recurse -Filter pkg-config.exe -File |
     Where-Object FullName -Like '*mingw64*' | Select-Object -First 1 -ExpandProperty FullName
 if (-not $meson -or -not $ninja -or -not $pkgConfig) {
-    throw 'vcpkg did not provide Meson, Ninja, and MinGW pkg-config.'
+    throw "vcpkg tool discovery failed: Meson=$([bool]$meson), Ninja=$([bool]$ninja), MinGW pkg-config=$([bool]$pkgConfig). Ninja fetch output: $($ninjaFetchOutput -join '; ')"
 }
 
 function Posix([string]$path) { return $path.Replace('\', '/') }
