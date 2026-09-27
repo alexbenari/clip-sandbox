@@ -26,8 +26,6 @@ public:
     decltype(&libvlc_media_player_get_time) get_time;
     decltype(&libvlc_media_player_get_length) get_length;
     decltype(&libvlc_media_player_set_time) set_time;
-    decltype(&libvlc_media_player_get_rate) get_rate;
-    decltype(&libvlc_media_player_set_rate) set_rate;
     decltype(&libvlc_media_player_next_frame) next_frame;
     decltype(&libvlc_media_player_previous_frame) previous_frame;
     decltype(&libvlc_media_player_watch_time) watch_time;

@@ -39,7 +39,6 @@ export class FrameReviewPlayerControl {
   private readonly pauseIcon: SVGElement;
   private readonly stepLeft: HTMLButtonElement;
   private readonly stepRight: HTMLButtonElement;
-  private readonly playbackRate: HTMLSelectElement;
   private readonly frameIdentity: HTMLElement;
   private readonly error: HTMLElement;
   private readonly frameRenderer: IFrameReviewFrameRenderer;
@@ -91,15 +90,6 @@ export class FrameReviewPlayerControl {
         <button type="button" data-command="step-right" aria-label="Step forward one frame" title="Step forward one frame" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 5v14M6 6l8 6-8 6V6Z"/></svg>
         </button>
-        <label>Speed
-          <select aria-label="Playback speed" disabled>
-            <option value="0.25">0.25×</option>
-            <option value="0.5">0.5×</option>
-            <option value="1" selected>1×</option>
-            <option value="2">2×</option>
-            <option value="4">4×</option>
-          </select>
-        </label>
         <output class="frame-review-identity">Frame unavailable</output>
       </div>
       <p class="frame-review-error" role="alert"></p>`;
@@ -116,7 +106,6 @@ export class FrameReviewPlayerControl {
     this.pauseIcon = this.required(this.playPause.querySelector('[data-icon="pause"]'), SVGElement, 'pause icon');
     this.stepLeft = this.required(this.root.querySelector('[data-command="step-left"]'), HTMLButtonElement, 'back step control');
     this.stepRight = this.required(this.root.querySelector('[data-command="step-right"]'), HTMLButtonElement, 'forward step control');
-    this.playbackRate = this.required(this.root.querySelector('select'), HTMLSelectElement, 'playback rate');
     this.frameIdentity = this.required(this.root.querySelector('.frame-review-identity'), HTMLElement, 'frame identity');
     this.error = this.required(this.root.querySelector('.frame-review-error'), HTMLElement, 'player error');
     this.bind();
@@ -245,7 +234,6 @@ export class FrameReviewPlayerControl {
 
   private bind(): void {
     this.playPause.addEventListener('click', () => { void this.togglePlayback(); });
-    this.playbackRate.addEventListener('change', () => { void this.setPlaybackRate(); });
     this.progress.addEventListener('input', () => this.previewProgress());
     this.progress.addEventListener('change', () => { void this.commitProgress(); });
     this.progress.addEventListener('pointerdown', () => { this.progressInteractionActive = true; });
@@ -321,17 +309,6 @@ export class FrameReviewPlayerControl {
         this.busyMessage = '';
         this.renderState();
       }
-    }
-  }
-
-  private async setPlaybackRate(): Promise<void> {
-    const session = this.session;
-    if (!session) return;
-    try {
-      await session.setRate(Number(this.playbackRate.value));
-      this.clearError();
-    } catch (error) {
-      this.showError(error);
     }
   }
 
@@ -466,7 +443,6 @@ export class FrameReviewPlayerControl {
     this.progress.max = exactReady && frameCount > 0 ? String(Math.max(0, frameCount - 1)) : '100000';
     this.progress.disabled = !attached || duration <= 0n || this.busy;
     this.playPause.disabled = !attached || this.busy;
-    this.playbackRate.disabled = !attached || this.busy;
     this.stepLeft.disabled = !exactReady || this.playing || this.busy;
     this.stepRight.disabled = !exactReady || this.playing || this.busy;
     this.duration.textContent = this.formatTime(duration);

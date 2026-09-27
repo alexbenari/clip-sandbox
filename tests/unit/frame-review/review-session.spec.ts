@@ -55,9 +55,7 @@ class PlaybackFake implements IReviewPlaybackEngine {
   listener: ((frame: IHostPlaybackFrame) => void) | undefined;
   timestampUs = 1_500_000n;
   stateValue = 'paused';
-  rate = 1;
   shutdownCount = 0;
-  readonly requestedRates: number[] = [];
   readonly requestedPlayAtTimes: bigint[] = [];
   readonly openedPaths: string[] = [];
   setFrameListener(listener: ((frame: IHostPlaybackFrame) => void) | undefined) { this.listener = listener; }
@@ -69,10 +67,9 @@ class PlaybackFake implements IReviewPlaybackEngine {
     this.stateValue = 'playing';
   }
   async pause() { this.stateValue = 'paused'; }
-  async setRate(rate: number) { this.rate = rate; this.requestedRates.push(rate); }
   async seek(timestampUs: bigint) { this.timestampUs = timestampUs; }
   async status(): Promise<IPlaybackStatus> {
-    return { state: this.stateValue, sourceGeneration: 1, timestampUs: this.timestampUs, lengthUs: 4_000_000n, rate: this.rate };
+    return { state: this.stateValue, sourceGeneration: 1, timestampUs: this.timestampUs, lengthUs: 4_000_000n };
   }
   async shutdown() { this.shutdownCount += 1; }
 }
@@ -162,24 +159,6 @@ describe('review session', () => {
     preparation.resolve(prepared);
     await session.whenPrepared();
     expect(session.state()).toMatchObject({ phase: 'exact-ready', captureEnabled: true });
-  });
-
-  it('keeps the selected rate through exact scrubbing and playback resume', async () => {
-    const playback = new PlaybackFake();
-    const session = new ReviewSession({
-      id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
-      prepare: async () => prepared, emit: () => undefined,
-    });
-    await session.open();
-    await session.whenPrepared();
-
-    await session.setRate(4);
-    await session.enterFrameScrub();
-    await session.play();
-
-    expect(playback.requestedRates).toEqual([1, 4]);
-    expect(playback.rate).toBe(4);
   });
 
   it('resumes playback from the last exact scrub frame instead of the prior playback timestamp', async () => {

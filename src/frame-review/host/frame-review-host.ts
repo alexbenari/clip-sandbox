@@ -37,7 +37,6 @@ export interface IFrameReviewHostSession {
   state(): ReturnType<ReviewSession['state']>;
   play(): Promise<void>;
   pause(): Promise<void>;
-  setRate(rate: number): Promise<void>;
   seekPlayback(timestampUs: bigint): Promise<void>;
   enterFrameScrub(): Promise<IHostExactFrame>;
   scrubToFrame(frameIndex: number): Promise<IHostExactFrame>;

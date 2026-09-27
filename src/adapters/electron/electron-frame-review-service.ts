@@ -115,7 +115,6 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
   state(): IFrameReviewState { return this.currentState; }
   play(): Promise<void> { return this.voidCommand('play'); }
   pause(): Promise<void> { return this.voidCommand('pause'); }
-  setRate(rate: number): Promise<void> { return this.voidCommand('set-rate', { rate }); }
   seekPlayback(timestampUs: bigint): Promise<void> { return this.voidCommand('seek-playback', { timestampUs: timestampUs.toString() }); }
   enterFrameScrub(): Promise<IExactDisplayFrame> { return this.exactCommand('enter-scrub'); }
   scrubToFrame(frameIndex: number): Promise<IExactDisplayFrame> { return this.exactCommand('scrub-to-frame', { frameIndex }); }

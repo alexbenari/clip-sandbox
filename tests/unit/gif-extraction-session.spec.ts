@@ -28,7 +28,7 @@ function reviewSession(): IFrameReviewSession {
   });
   return {
     id: 'session_12345678', state: () => current,
-    play: vi.fn(), pause: vi.fn(), setRate: vi.fn(), seekPlayback: vi.fn(), enterFrameScrub: vi.fn(),
+    play: vi.fn(), pause: vi.fn(), seekPlayback: vi.fn(), enterFrameScrub: vi.fn(),
     scrubToFrame: vi.fn(), stepAdjacent: vi.fn(), pressAdjacent: vi.fn(), releaseAdjacent: vi.fn(),
     captureCurrentPoint: vi.fn(), subscribe: vi.fn(() => () => undefined), dispose: vi.fn(async () => undefined),
   } as unknown as IFrameReviewSession;

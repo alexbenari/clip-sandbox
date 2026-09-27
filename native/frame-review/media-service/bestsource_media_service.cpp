@@ -109,7 +109,7 @@ public:
                 frame_generation_ = 0;
                 WriteStatus(request_id, "shutdown", "closed");
                 return false;
-            } else if (command == "play" || command == "pause" || command == "stop" || command == "rate") {
+            } else if (command == "play" || command == "pause" || command == "stop") {
                 WriteError(request_id, "unsupported-command",
                            "BestSource exact-frame service does not own clocked playback");
             } else {

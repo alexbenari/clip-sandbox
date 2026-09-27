@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -364,7 +363,6 @@ public:
             else if (command == "play-at") PlayAt(request_id, request.metadata);
             else if (command == "pause") Pause(request_id);
             else if (command == "stop") Stop(request_id);
-            else if (command == "rate") Rate(request_id, request.metadata);
             else if (command == "seek") Seek(request_id, request.metadata);
             else if (command == "frame-ack") FrameAck(request_id, request.metadata);
             else if (command == "status") Status(request_id, command);
@@ -518,19 +516,6 @@ private:
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
         frames_->SetDisplaySize(display_width, display_height);
-        if (std::abs(api_.get_rate(player_) - desired_rate_) > 0.001f) {
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-            auto state = api_.get_state(player_);
-            while (state != libvlc_Playing && state != libvlc_Paused &&
-                   std::chrono::steady_clock::now() < deadline) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                state = api_.get_state(player_);
-            }
-            if ((state != libvlc_Playing && state != libvlc_Paused) ||
-                api_.set_rate(player_, desired_rate_) != 0) {
-                throw std::runtime_error("playback did not become ready for the selected rate");
-            }
-        }
     }
 
     void Pause(const std::string& request_id) {
@@ -558,20 +543,6 @@ private:
             }
         }
         Status(request_id, "stop");
-    }
-
-    void Rate(const std::string& request_id, const nlohmann::json& request) {
-        RequirePlayer();
-        const auto rate = Required<float>(request, "rate");
-        if (rate < 0.25f || rate > 4.0f) {
-            throw std::invalid_argument("playback rate is unsupported");
-        }
-        desired_rate_ = rate;
-        const auto state = api_.get_state(player_);
-        if ((state == libvlc_Playing || state == libvlc_Paused) && api_.set_rate(player_, rate) != 0) {
-            throw std::invalid_argument("playback rate is unsupported");
-        }
-        Status(request_id, "rate");
     }
 
     void Seek(const std::string& request_id, const nlohmann::json& request) {
@@ -619,7 +590,6 @@ private:
             {"sourceGeneration", source_generation_}, {"frameGeneration", 0},
             {"timeUs", player_ ? std::to_string(api_.get_time(player_)) : "0"},
             {"lengthUs", player_ ? std::to_string(api_.get_length(player_)) : "0"},
-            {"rate", desired_rate_},
         });
     }
 
@@ -646,7 +616,6 @@ private:
         api_.release_player(player_);
         player_ = nullptr;
         frames_.reset();
-        desired_rate_ = 1.0f;
         desired_muted_ = true;
     }
 
@@ -670,7 +639,6 @@ private:
     std::uint64_t source_generation_ = 0;
     bool watching_time_ = false;
     bool desired_muted_ = true;
-    float desired_rate_ = 1.0f;
     libvlc_media_player_cbs player_callbacks_{};
     libvlc_media_player_watch_time_cbs time_callbacks_{};
 };

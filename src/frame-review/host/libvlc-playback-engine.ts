@@ -7,7 +7,6 @@ export interface IPlaybackStatus {
   readonly sourceGeneration: number;
   readonly timestampUs: bigint;
   readonly lengthUs: bigint | null;
-  readonly rate: number;
 }
 
 export interface IHostPlaybackFrame {
@@ -34,7 +33,6 @@ export interface IReviewPlaybackEngine {
   play(): Promise<void>;
   playAt(timestampUs: bigint): Promise<void>;
   pause(): Promise<void>;
-  setRate(rate: number): Promise<void>;
   seek(timestampUs: bigint): Promise<void>;
   status(): Promise<IPlaybackStatus>;
   shutdown(): Promise<void>;
@@ -71,13 +69,6 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
   }
 
   async pause(): Promise<void> { await this.client.request('pause'); }
-
-  async setRate(rate: number): Promise<void> {
-    if (!Number.isFinite(rate) || rate < 0.25 || rate > 4) {
-      throw new BackendError('invalid-request', 'Playback rate must be between 0.25 and 4.', true);
-    }
-    await this.client.request('rate', { rate });
-  }
 
   async seek(timestampUs: bigint): Promise<void> {
     if (timestampUs < 0n) throw new BackendError('invalid-request', 'Playback time must not be negative.', true);
@@ -119,8 +110,6 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
   private parseStatus(message: ITimedProtocolMessage, expectedGeneration: number): IPlaybackStatus {
     const generation = FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceGeneration, 'sourceGeneration');
     if (generation !== expectedGeneration) throw new BackendError('stale-response', 'Playback status is obsolete.', true);
-    const rate = message.metadata.rate === undefined ? 1 : Number(message.metadata.rate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new BackendError('protocol-error', 'Playback rate is invalid.', false);
     return Object.freeze({
       state: String(message.metadata.state),
       sourceGeneration: generation,
@@ -128,7 +117,6 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
         ? 0n : FrameReviewWireValue.decimalBigInt(message.metadata.timeUs, 'timeUs'),
       lengthUs: message.metadata.lengthUs === undefined
         ? null : FrameReviewWireValue.decimalBigInt(message.metadata.lengthUs, 'lengthUs'),
-      rate,
     });
   }
 

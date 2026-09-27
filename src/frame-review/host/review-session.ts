@@ -89,7 +89,6 @@ export class ReviewSession {
   }
 
   async pause(): Promise<void> { this.requireOpen(); await this.options.playback.pause(); }
-  async setRate(rate: number): Promise<void> { this.requireOpen(); await this.options.playback.setRate(rate); }
 
   async seekPlayback(timestampUs: bigint): Promise<void> {
     this.requireOpen();
@@ -175,7 +174,6 @@ export class ReviewSession {
           maxHeight: this.options.previewBounds.maxHeight,
         });
         await this.options.playback.seek(playbackStatus.timestampUs);
-        await this.options.playback.setRate(playbackStatus.rate);
       }
       if (wasPlaying) await this.options.playback.play();
       if (this.disposed) return;
@@ -223,7 +221,6 @@ export class ReviewSession {
       maxHeight: this.options.previewBounds.maxHeight,
     });
     await this.options.playback.seek(playbackStatus.timestampUs);
-    await this.options.playback.setRate(playbackStatus.rate);
     if (wasPlaying) await this.options.playback.play();
   }
 

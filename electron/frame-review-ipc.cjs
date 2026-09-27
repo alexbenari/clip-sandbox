@@ -9,7 +9,7 @@ const CHANNELS = Object.freeze({
 });
 
 const COMMANDS = new Set([
-  'state', 'play', 'pause', 'set-rate', 'seek-playback', 'enter-scrub', 'scrub-to-frame',
+  'state', 'play', 'pause', 'seek-playback', 'enter-scrub', 'scrub-to-frame',
   'step-adjacent', 'press-adjacent', 'release-adjacent', 'capture-current-point',
 ]);
 
@@ -113,7 +113,6 @@ class FrameReviewIpcBoundary {
       case 'state': return session.state();
       case 'play': return session.play();
       case 'pause': return session.pause();
-      case 'set-rate': return session.setRate(this.finite(args.rate, 'rate'));
       case 'seek-playback': return session.seekPlayback(this.decimalBigInt(args.timestampUs, 'timestampUs'));
       case 'enter-scrub': return session.enterFrameScrub();
       case 'scrub-to-frame': return session.scrubToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
@@ -185,11 +184,6 @@ class FrameReviewIpcBoundary {
 
   nonnegativeInteger(value, label) {
     if (!Number.isSafeInteger(value) || value < 0) throw this.invalid(`${label} must not be negative.`);
-    return value;
-  }
-
-  finite(value, label) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) throw this.invalid(`${label} must be finite.`);
     return value;
   }
 

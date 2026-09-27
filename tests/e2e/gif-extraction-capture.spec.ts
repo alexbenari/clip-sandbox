@@ -73,8 +73,7 @@ test('captures exact and inexact ranges without interrupting playback', async ()
     const currentTime = page.locator('.frame-review-progress-row [data-time="current"]');
     const initialPlaybackTime = await currentTime.textContent();
     await expect.poll(() => currentTime.textContent(), { timeout: 10_000 }).not.toBe(initialPlaybackTime);
-    const playbackRate = page.getByLabel('Playback speed');
-    await playbackRate.selectOption('4');
+    await expect(page.getByLabel('Playback speed')).toHaveCount(0);
     await page.keyboard.press('ArrowRight');
     await expect(play).toHaveAttribute('aria-label', 'Play');
     await expect(page.locator('.frame-review-identity')).toContainText('Frame');
@@ -96,7 +95,6 @@ test('captures exact and inexact ranges without interrupting playback', async ()
     const resumedPlaybackTime = await currentTime.textContent();
     await expect.poll(() => currentTime.textContent(), { timeout: 10_000 }).not.toBe(resumedPlaybackTime);
     expect(timeMilliseconds(await currentTime.textContent())).toBeGreaterThanOrEqual(scrubbedTime);
-    await playbackRate.selectOption('1');
     await expect(page.locator('.frame-review-error')).toBeEmpty();
     await page.keyboard.press('q');
     const markedStartTime = await currentTime.textContent();

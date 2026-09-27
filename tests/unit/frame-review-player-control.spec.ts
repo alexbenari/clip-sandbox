@@ -62,7 +62,6 @@ function session(initialState = state('exact-ready')): {
   state: ReturnType<typeof vi.fn>;
   play: ReturnType<typeof vi.fn>;
   pause: ReturnType<typeof vi.fn>;
-  setRate: ReturnType<typeof vi.fn>;
   seekPlayback: ReturnType<typeof vi.fn>;
   enterFrameScrub: ReturnType<typeof vi.fn>;
   scrubToFrame: ReturnType<typeof vi.fn>;
@@ -75,7 +74,7 @@ function session(initialState = state('exact-ready')): {
     id: 'session_12345678',
     state: vi.fn(() => initialState),
     play: vi.fn(async () => undefined), pause: vi.fn(async () => undefined),
-    setRate: vi.fn(async () => undefined), seekPlayback: vi.fn(async () => undefined),
+    seekPlayback: vi.fn(async () => undefined),
     enterFrameScrub: vi.fn(async () => exactFrame(12, 1)),
     scrubToFrame: vi.fn(async (frameIndex: number) => exactFrame(frameIndex, frameIndex)),
     stepAdjacent: vi.fn(async (direction: -1 | 1) => exactFrame(12 + direction, 2)),
@@ -87,7 +86,7 @@ function session(initialState = state('exact-ready')): {
   return {
     value, emit: (event) => listener?.(event), state: value.state as ReturnType<typeof vi.fn>,
     play: value.play as ReturnType<typeof vi.fn>, pause: value.pause as ReturnType<typeof vi.fn>,
-    setRate: value.setRate as ReturnType<typeof vi.fn>, seekPlayback: value.seekPlayback as ReturnType<typeof vi.fn>,
+    seekPlayback: value.seekPlayback as ReturnType<typeof vi.fn>,
     enterFrameScrub: value.enterFrameScrub as ReturnType<typeof vi.fn>, scrubToFrame: value.scrubToFrame as ReturnType<typeof vi.fn>,
     pressAdjacent: value.pressAdjacent as ReturnType<typeof vi.fn>, releaseAdjacent: value.releaseAdjacent as ReturnType<typeof vi.fn>,
     dispose: value.dispose as ReturnType<typeof vi.fn>,
@@ -116,6 +115,7 @@ describe('FrameReviewPlayerControl', () => {
     expect(firstHost.contains(root)).toBe(false);
     expect(secondHost.contains(root)).toBe(true);
     expect(root.querySelectorAll('input[type="range"]').length).toBe(1);
+    expect(root.querySelector('[aria-label="Playback speed"]')).toBeNull();
   });
 
   it('keeps ordinary transport usable before exact readiness while disabling exact stepping and capture', async () => {

@@ -59,7 +59,6 @@ export interface IFrameReviewSession {
   state(): IFrameReviewState;
   play(): Promise<void>;
   pause(): Promise<void>;
-  setRate(rate: number): Promise<void>;
   seekPlayback(timestampUs: bigint): Promise<void>;
   enterFrameScrub(): Promise<IExactDisplayFrame>;
   scrubToFrame(frameIndex: number): Promise<IExactDisplayFrame>;

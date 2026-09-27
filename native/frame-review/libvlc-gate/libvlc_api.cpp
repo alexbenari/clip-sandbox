@@ -18,8 +18,6 @@ LibVlcApi::LibVlcApi(const std::wstring& dll_path) : module_(LoadLibraryW(dll_pa
     get_time = load<decltype(get_time)>("libvlc_media_player_get_time");
     get_length = load<decltype(get_length)>("libvlc_media_player_get_length");
     set_time = load<decltype(set_time)>("libvlc_media_player_set_time");
-    get_rate = load<decltype(get_rate)>("libvlc_media_player_get_rate");
-    set_rate = load<decltype(set_rate)>("libvlc_media_player_set_rate");
     next_frame = load<decltype(next_frame)>("libvlc_media_player_next_frame");
     previous_frame = load<decltype(previous_frame)>("libvlc_media_player_previous_frame");
     watch_time = load<decltype(watch_time)>("libvlc_media_player_watch_time");
