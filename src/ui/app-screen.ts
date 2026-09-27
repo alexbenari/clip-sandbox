@@ -13,7 +13,6 @@ export interface IAppPanelContent {
 export interface IAppScreenPanelContribution {
   readonly panelId: string;
   readonly content: IAppPanelContent;
-  readonly entryBehavior?: 'preserve' | 'expand-once';
 }
 
 export interface IAppScreen {
@@ -24,6 +23,7 @@ export interface IAppScreen {
   readonly commands: HTMLElement | null;
   readonly shortcuts: readonly IShortcutDescriptor[];
   readonly panelContributions: readonly IAppScreenPanelContribution[];
+  readonly initiallyFoldedPanelIds?: readonly string[];
   onActivate?(): void;
   onDeactivate?(): void;
   focusInitial(): void;

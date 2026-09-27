@@ -15,6 +15,7 @@ export class SettingsScreen implements IAppScreen {
   readonly label = 'Settings';
   readonly selectorStatus = 'fixed' as const;
   readonly panelContributions: readonly IAppScreenPanelContribution[] = Object.freeze([]);
+  readonly initiallyFoldedPanelIds = ['clips', 'pipelines'] as const;
   readonly commands = null;
   readonly shortcuts = [];
   readonly root: HTMLElement;

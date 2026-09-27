@@ -1,4 +1,4 @@
-import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
+import type { IAppScreen } from './app-screen.js';
 import { FoldablePanelController } from './foldable-panel-controller.js';
 
 type ShellPanel = {
@@ -32,11 +32,12 @@ export class ApplicationShellController {
   private readonly panels = new Map<string, {
     readonly shell: ShellPanel;
     readonly controller: FoldablePanelController;
-    readonly consumedExpansionRequests: WeakSet<IAppScreenPanelContribution>;
   }>();
+  private readonly panelStates = new Map<string, Map<string, boolean>>();
   private activated = false;
   private destroyed = false;
   private motionPending = false;
+  private applyingPanelState = false;
   private readonly onSelectionChange = (): void => { this.activate(this.elements.selector.value); };
 
   constructor(private readonly elements: ShellElements) {
@@ -60,7 +61,6 @@ export class ApplicationShellController {
           onChange: duration => this.prepareWorkspaceResize(duration),
           onSettled: () => this.settleWorkspaceResize(),
         }),
-        consumedExpansionRequests: new WeakSet(),
       });
     }
     for (const screen of elements.screens) {
@@ -109,7 +109,7 @@ export class ApplicationShellController {
   }
 
   private settleWorkspaceResize(): void {
-    if (!this.motionPending || [...this.panels.values()].some(panel => panel.controller.moving)) return;
+    if (!this.motionPending || this.applyingPanelState || [...this.panels.values()].some(panel => panel.controller.moving)) return;
     this.motionPending = false;
     if (this.elements.workspace) this.elements.workspace.dataset.moving = 'false';
     this.elements.commandHost.style.transition = '';
@@ -125,23 +125,39 @@ export class ApplicationShellController {
       incoming.focusInitial();
       return;
     }
-    if (this.activated) this.current.onDeactivate?.();
+    if (this.activated) {
+      this.panelStates.set(this.current.id, new Map([...this.panels].map(([panelId, panel]) => [panelId, panel.controller.folded])));
+      this.current.onDeactivate?.();
+    }
     for (const screen of this.screens.values()) {
       screen.root.hidden = screen !== incoming;
       screen.root.inert = screen !== incoming;
     }
     this.elements.commandHost.replaceChildren(...(incoming.commands ? [incoming.commands] : []));
     this.elements.commandHost.hidden = incoming.commands === null;
+    this.current = incoming;
     this.mountPanelContributions(incoming);
+    this.applyingPanelState = true;
+    try {
+      for (const [panelId, panel] of this.panels) {
+        const folded = this.panelStates.get(incoming.id)?.get(panelId)
+          ?? incoming.initiallyFoldedPanelIds?.includes(panelId)
+          ?? false;
+        panel.controller.setFolded(folded);
+      }
+    } finally {
+      this.applyingPanelState = false;
+    }
     this.syncSelector(incoming);
     this.elements.selector.value = incoming.id;
-    this.current = incoming;
     this.activated = true;
     incoming.onActivate?.();
     incoming.focusInitial();
     this.elements.onScreenChange?.(incoming);
-    if (this.motionPending) this.prepareWorkspaceResize(0);
-    else this.elements.onBoundsSettled?.(incoming);
+    if (this.motionPending) {
+      this.prepareWorkspaceResize(0);
+      this.settleWorkspaceResize();
+    } else this.elements.onBoundsSettled?.(incoming);
   }
 
   destroy(): void {
@@ -171,11 +187,6 @@ export class ApplicationShellController {
       const contribution = contributions.get(panelId);
       if (contribution) contribution.content.mount(panel.shell.contributionHost);
       else panel.shell.contributionHost.replaceChildren(...(panel.shell.fallbackContent ? [panel.shell.fallbackContent] : []));
-      if (contribution?.entryBehavior === 'expand-once'
-        && !panel.consumedExpansionRequests.has(contribution)) {
-        panel.consumedExpansionRequests.add(contribution);
-        panel.controller.expand();
-      }
     }
   }
 

@@ -23,6 +23,8 @@ for (const nativeFrame of [false, true]) {
       await expect.poll(() => page.locator('#appScreenSelector').inputValue()).toBe('gif-extraction');
       await expect(page.locator('#appScreenSelector')).toHaveAccessibleName('Workspace');
       await page.locator('#appScreenSelector').selectOption('collection');
+      await page.locator('#revealClips').click();
+      await expect(page.locator('#workspaceRow')).toHaveAttribute('data-moving', 'false');
       expect(await page.locator('#globalAppBar button:visible').evaluateAll(nodes => nodes.map(node => node.id))).toEqual(['activityIndicatorBtn', 'keyboardMapBtn', 'settingsBtn']);
       await expect(page.locator('#activityIndicatorBtn')).toHaveAccessibleName('Activity and Errors: Ready');
       expect((await readOverlay()).visible).toBe(process.platform === 'win32' && !nativeFrame);

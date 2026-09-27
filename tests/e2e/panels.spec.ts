@@ -14,6 +14,7 @@ test('panels reclaim width continuously, reverse, and preserve the working grid'
   try {
     const page = await app.firstWindow();
     await page.locator('#appScreenSelector').selectOption('collection');
+    await page.locator('#revealClips').click();
     // Use content dimensions so native frame height cannot move this fixture away from a column boundary.
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1100, 900));
     await page.evaluate(async folder => { await (window as any).clipSandboxDesktop.__testSetNextFolderPath(folder); }, clips);
@@ -76,7 +77,7 @@ test('panels reclaim width continuously, reverse, and preserve the working grid'
     expect(await page.evaluate(() => (window as any).panelVideos.every((video: Element, index: number) => video === document.querySelectorAll('#grid video')[index]))).toBe(true);
     await expect(page.locator('#grid .thumb.selected')).toHaveCount(1);
     await page.locator('#settingsBtn').click();
-    await page.locator('#foldClips').click();
+    await expect(page.locator('#revealClips')).toBeVisible();
     await expect(page.locator('#workspaceRow')).toHaveAttribute('data-moving', 'false');
     await page.locator('#revealClips').click();
     await expect(page.locator('#workspaceRow')).toHaveAttribute('data-moving', 'false');

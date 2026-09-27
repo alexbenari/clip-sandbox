@@ -130,30 +130,55 @@ describe('application shell screen ownership', () => {
     expect(f.settings.onActivate).toHaveBeenCalledOnce();
   });
 
-  it('supports the fixed GIF Extraction caller and preserves the Clips fold state', () => {
+  it('applies screen defaults and remembers manual changes separately for each screen', () => {
     const f = fixture();
     const clips = panelFixture('clips');
+    const pipelines = panelFixture('pipelines');
     const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);
+    workspace.workspace.append(pipelines.root);
     const sharedRanges = panelContentFixture();
-    const extraction = { ...f.extraction, panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
-    const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips], screens: [f.collection, f.settings, extraction, f.refine] });
+    const collection = { ...f.collection, initiallyFoldedPanelIds: ['clips'] } satisfies IAppScreen;
+    const settings = { ...f.settings, initiallyFoldedPanelIds: ['clips', 'pipelines'] } satisfies IAppScreen;
+    const extraction = { ...f.extraction, initiallyFoldedPanelIds: ['pipelines'], panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
+    const refine = { ...f.refine, initiallyFoldedPanelIds: ['pipelines'], panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
+    const settled = vi.fn();
+    const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips, pipelines], screens: [collection, settings, extraction, refine], initialScreenId: extraction.id, onBoundsSettled: settled });
+    const folded = () => [clips.root, pipelines.root].map(root => root.classList.contains('folded'));
 
-    clips.foldButton.click();
-    shell.activate(extraction.id);
-
-    expect(clips.root.classList.contains('folded')).toBe(true);
-    expect(sharedRanges.mount).toHaveBeenCalledWith(clips.contributionHost);
+    expect(folded()).toEqual([false, true]);
     expect(clips.contributionHost.firstElementChild).toBe(sharedRanges.root);
-    expect(Array.from(f.selector.options).map(option => option.value)).toEqual(['Collection', 'Settings', 'Extraction']);
+    shell.activate(refine.id);
+    expect(folded()).toEqual([false, true]);
+    clips.foldButton.click();
+    pipelines.revealButton.click();
+    expect(folded()).toEqual([true, false]);
+
+    shell.activate(collection.id);
+    expect(folded()).toEqual([true, false]);
+    expect(clips.contributionHost.firstElementChild).toBe(clips.fallbackContent);
+    clips.revealButton.click();
+    settled.mockClear();
+    shell.activate(settings.id);
+    expect(folded()).toEqual([true, true]);
+    expect(settled).toHaveBeenCalledOnce();
+    expect(settled).toHaveBeenCalledWith(settings);
+    shell.activate(extraction.id);
+    expect(folded()).toEqual([false, true]);
+    shell.activate(refine.id);
+    expect(folded()).toEqual([true, false]);
+    shell.activate(collection.id);
+    expect(folded()).toEqual([false, false]);
+    expect(clips.contributionHost.firstElementChild).toBe(clips.fallbackContent);
+    shell.destroy();
   });
 
-  it('supports contextual Refine Gif with deterministic lifecycle, a temporary label, and one-time Clips expansion', () => {
+  it('supports contextual Refine Gif with deterministic lifecycle and a temporary label', () => {
     const f = fixture();
     const clips = panelFixture('clips');
     const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);
     const sharedRanges = panelContentFixture();
     const extraction = { ...f.extraction, panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
-    const refine = { ...f.refine, panelContributions: [{ panelId: 'clips', content: sharedRanges, entryBehavior: 'expand-once' as const }] } satisfies IAppScreen;
+    const refine = { ...f.refine, panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
     const order: string[] = [];
     extraction.onDeactivate = vi.fn(() => order.push('extraction:deactivate'));
     refine.onActivate = vi.fn(() => order.push('refine:activate'));
@@ -186,6 +211,28 @@ describe('application shell screen ownership', () => {
     expect(clips.root.classList.contains('folded')).toBe(true);
     shell.activate(f.collection.id);
     expect(Array.from(f.selector.options).map(option => option.value)).toEqual(['Collection', 'Settings', 'Extraction']);
+  });
+
+  it('opens undeclared panels on first activation, then restores their session state', () => {
+    const f = fixture();
+    const clips = panelFixture('clips');
+    const pipelines = panelFixture('pipelines');
+    const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);
+    workspace.workspace.append(pipelines.root);
+    const settings = { ...f.settings, initiallyFoldedPanelIds: ['clips'] } satisfies IAppScreen;
+    const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips, pipelines], screens: [settings, f.collection] });
+
+    expect(clips.root.classList.contains('folded')).toBe(true);
+    expect(pipelines.root.classList.contains('folded')).toBe(false);
+    shell.activate(f.collection.id);
+    expect(clips.root.classList.contains('folded')).toBe(false);
+    expect(pipelines.root.classList.contains('folded')).toBe(false);
+    clips.foldButton.click();
+    shell.activate(settings.id);
+    shell.activate(f.collection.id);
+    expect(clips.root.classList.contains('folded')).toBe(true);
+    expect(pipelines.root.classList.contains('folded')).toBe(false);
+    shell.destroy();
   });
 
   it('settles rapid requests with matching commands, selector and focus', () => {

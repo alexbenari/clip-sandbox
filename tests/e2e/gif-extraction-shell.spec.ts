@@ -18,6 +18,8 @@ test('GIF Extraction is fixed with one shared player while Refine Gif remains co
 
     await page.locator('#appScreenSelector').selectOption('gif-extraction');
     await expect(page.locator('#gifExtractionScreen')).toBeVisible();
+    await expect(page.locator('#clipsPanel')).not.toHaveClass(/folded/);
+    await expect(page.locator('#pipelinesPanel')).toHaveClass(/folded/);
     await expect(page.getByRole('button', { name: 'Open movie...' })).toBeFocused();
     await expect(page.locator('#screenCommandHost')).toContainText('No movie open');
     await expect(page.locator('#clipsPanelHost')).toContainText('No captured ranges yet');
@@ -36,6 +38,8 @@ test('GIF Extraction is fixed with one shared player while Refine Gif remains co
     });
     await page.locator('#appScreenSelector').selectOption('refine-gif');
     await expect(page.locator('#refineGifScreen')).toBeVisible();
+    await expect(page.locator('#clipsPanel')).not.toHaveClass(/folded/);
+    await expect(page.locator('#pipelinesPanel')).toHaveClass(/folded/);
     await expect(page.getByRole('button', { name: 'Back to GIF Extraction' })).toBeFocused();
     expect(await page.evaluate(() => Reflect.get(window, '__gifPlayerRoot') === document.querySelector('.frame-review-player'))).toBe(true);
     await expect(page.locator('#mainScreenHost input[type="range"]')).toHaveCount(1);
@@ -53,11 +57,25 @@ test('GIF Extraction is fixed with one shared player while Refine Gif remains co
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: 'test-results/gif-extraction-shell-820-clips-folded.png' });
 
+    await page.locator('#appScreenSelector').selectOption('collection');
+    await page.locator('#appScreenSelector').selectOption('gif-extraction');
+    await expect(page.locator('#clipsPanel')).toHaveClass(/folded/);
     await page.locator('#revealClips').click();
     await expect(page.locator('#workspaceRow')).toHaveAttribute('data-moving', 'false');
     await page.locator('#appScreenSelector').selectOption('collection');
+    await expect(page.locator('#clipsPanel')).toHaveClass(/folded/);
+    await expect(page.locator('#pipelinesPanel')).not.toHaveClass(/folded/);
     await expect(page.locator('#clipsPanelHost')).toContainText('No Clips tools for this screen');
+    await page.locator('#revealClips').click();
+    await page.locator('#appScreenSelector').selectOption('settings');
+    await expect(page.locator('#clipsPanel')).toHaveClass(/folded/);
+    await expect(page.locator('#pipelinesPanel')).toHaveClass(/folded/);
+    await page.locator('#appScreenSelector').selectOption('collection');
+    await expect(page.locator('#clipsPanel')).not.toHaveClass(/folded/);
+    await expect(page.locator('#pipelinesPanel')).not.toHaveClass(/folded/);
     await page.locator('#appScreenSelector').selectOption('gif-extraction');
+    await expect(page.locator('#clipsPanel')).not.toHaveClass(/folded/);
+    await expect(page.locator('#pipelinesPanel')).toHaveClass(/folded/);
     await expect(page.locator('.frame-review-player input[type="range"]')).toHaveCount(1);
   } finally {
     await app.close();

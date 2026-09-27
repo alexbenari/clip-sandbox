@@ -29,6 +29,7 @@ export class GifExtractionScreen implements IAppScreen {
   readonly commands: HTMLElement;
   readonly shortcuts = GIF_EXTRACTION_SHORTCUTS;
   readonly panelContributions: readonly IAppScreenPanelContribution[];
+  readonly initiallyFoldedPanelIds = ['pipelines'] as const;
   private readonly playerHost: HTMLElement;
   private readonly openMovie: HTMLButtonElement;
   private readonly sourceName: HTMLElement;
@@ -103,7 +104,7 @@ export class GifExtractionScreen implements IAppScreen {
     this.bind();
     this.unsubscribeSession = options.session?.subscribe(snapshot => this.render(snapshot)) ?? null;
     this.panelContributions = options.rangesPanel
-      ? Object.freeze([Object.freeze({ panelId: 'clips', content: options.rangesPanel, entryBehavior: 'preserve' as const })])
+      ? Object.freeze([Object.freeze({ panelId: 'clips', content: options.rangesPanel })])
       : Object.freeze([]);
   }
 
