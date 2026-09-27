@@ -2,7 +2,7 @@ import type { IExactFrameEndpoint } from '../domain/capture-endpoint.js';
 import { CaptureEndpointValue, type CaptureEndpoint } from '../domain/capture-endpoint.js';
 import type {
   CapturedRangeId,
-  INeedsExactFramesRange,
+  CapturedRange,
   IReadyToExtractRange,
 } from '../domain/captured-range.js';
 import type { FrameReviewDisplayFrame } from '../frame-review/frame-review-api.js';
@@ -20,7 +20,7 @@ export interface IRefineGifSessionSnapshot {
   readonly rangeId: CapturedRangeId;
   readonly sourceGeneration: number;
   readonly status: 'editing' | 'committed' | 'invalidated';
-  readonly original: INeedsExactFramesRange;
+  readonly original: CapturedRange;
   readonly start: CaptureEndpoint;
   readonly end: CaptureEndpoint;
   readonly focusedEndpoint: RefineGifEndpoint;
@@ -41,7 +41,7 @@ export interface IRefineGifCommitRequest {
 }
 
 export type RefineGifCommitResult =
-  | Readonly<{ kind: 'committed'; range: IReadyToExtractRange }>
+  | Readonly<{ kind: 'committed'; range: IReadyToExtractRange; message: string }>
   | Readonly<{ kind: 'rejected'; message: string }>;
 
 export interface IRefineGifSessionOwner {
@@ -63,11 +63,12 @@ export class RefineGifSession {
 
   constructor(
     private readonly owner: IRefineGifSessionOwner,
-    private readonly original: INeedsExactFramesRange,
+    private readonly original: CapturedRange,
   ) {
     this.start = original.start;
     this.end = original.end;
-    this.focusedEndpoint = original.start.kind === 'playback-timestamp' ? 'start' : 'end';
+    this.focusedEndpoint = original.start.kind === 'playback-timestamp' || original.end.kind === 'exact-frame'
+      ? 'start' : 'end';
   }
 
   get snapshot(): IRefineGifSessionSnapshot {
@@ -120,7 +121,7 @@ export class RefineGifSession {
     });
     if (result.kind === 'rejected') return this.reject(result.message);
     this.status = 'committed';
-    this.message = 'Exact range locked';
+    this.message = result.message;
     this.owner.refinementChanged(this);
     return result;
   }

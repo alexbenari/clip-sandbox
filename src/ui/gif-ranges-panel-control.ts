@@ -17,7 +17,6 @@ export class GifRangesPanelControl implements IAppPanelContent {
   private readonly document: Document;
   private readonly unsubscribe: () => void;
   private readonly clickListener = (event: Event): void => this.onClick(event);
-  private readonly doubleClickListener = (event: MouseEvent): void => this.onDoubleClick(event);
   private readonly keydownListener = (event: KeyboardEvent): void => this.onKeyDown(event);
   private latestSnapshot: IGifExtractionSessionSnapshot | null = null;
   private mode: Readonly<{ kind: 'all' }> | Readonly<{
@@ -32,7 +31,6 @@ export class GifRangesPanelControl implements IAppPanelContent {
   ) {
     this.document = options.document ?? document;
     this.root.addEventListener('click', this.clickListener);
-    this.root.addEventListener('dblclick', this.doubleClickListener);
     this.root.addEventListener('keydown', this.keydownListener);
     this.unsubscribe = session.subscribe(snapshot => this.render(snapshot));
   }
@@ -44,7 +42,6 @@ export class GifRangesPanelControl implements IAppPanelContent {
   destroy(): void {
     this.unsubscribe();
     this.root.removeEventListener('click', this.clickListener);
-    this.root.removeEventListener('dblclick', this.doubleClickListener);
     this.root.removeEventListener('keydown', this.keydownListener);
     this.root.replaceChildren();
   }
@@ -179,17 +176,15 @@ export class GifRangesPanelControl implements IAppPanelContent {
     const body = this.document.createElement('div');
     body.className = 'gif-range-body';
     body.append(this.renderRangeDetails(range.start, range.end));
-    if (range.kind === 'needs-exact-frames') {
-      const actions = this.document.createElement('div');
-      actions.className = 'gif-range-actions';
-      const refine = this.document.createElement('button');
-      refine.type = 'button';
-      refine.dataset.refineRange = range.id;
-      refine.textContent = 'Refine';
-      refine.setAttribute('aria-label', `Refine range ${number}`);
-      actions.append(refine);
-      body.append(actions);
-    } else {
+    const actions = this.document.createElement('div');
+    actions.className = 'gif-range-actions';
+    const refine = this.document.createElement('button');
+    refine.type = 'button';
+    refine.dataset.refineRange = range.id;
+    refine.textContent = 'Refine';
+    refine.setAttribute('aria-label', `Refine range ${number}`);
+    actions.append(refine);
+    if (range.kind === 'ready-to-extract') {
       if (extractionState.kind !== 'pending') {
         const extraction = this.document.createElement('p');
         extraction.className = `gif-range-extraction is-${extractionState.kind}`;
@@ -198,8 +193,6 @@ export class GifRangesPanelControl implements IAppPanelContent {
         body.append(extraction);
       }
       if (extractionState.kind !== 'completed') {
-        const actions = this.document.createElement('div');
-        actions.className = 'gif-range-actions';
         const action = this.document.createElement('button');
         action.type = 'button';
         if (extractionState.kind === 'publication-failed') {
@@ -212,9 +205,9 @@ export class GifRangesPanelControl implements IAppPanelContent {
         }
         action.disabled = extractionState.kind === 'extracting' || extractionState.kind === 'publishing';
         actions.append(action);
-        body.append(actions);
       }
     }
+    body.append(actions);
     card.append(body);
     return card;
   }
@@ -299,17 +292,10 @@ export class GifRangesPanelControl implements IAppPanelContent {
       return;
     }
     const card = target.closest<HTMLElement>('[data-range-id]');
-    if (card?.dataset.rangeId) this.session.selectRange(card.dataset.rangeId as CapturedRangeId);
-  }
-
-  private onDoubleClick(event: MouseEvent): void {
-    const target = event.target;
-    if (!(target instanceof Element) || target.closest('button')) return;
-    const card = target.closest<HTMLElement>('[data-range-id][data-range-kind="needs-exact-frames"]');
     if (!card?.dataset.rangeId) return;
     const rangeId = card.dataset.rangeId as CapturedRangeId;
     this.session.selectRange(rangeId);
-    this.options.onRefine?.(rangeId);
+    if (event instanceof MouseEvent && event.detail >= 2) this.options.onRefine?.(rangeId);
   }
 
   private onKeyDown(event: KeyboardEvent): void {

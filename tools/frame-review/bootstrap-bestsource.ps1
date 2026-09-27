@@ -187,6 +187,8 @@ if (-not (Test-Path -LiteralPath $libp2pMesonDestination) -or
 
 $meson = Get-ChildItem (Join-Path $vcpkgSource 'downloads\tools') -Recurse -Filter meson.py -File |
     Select-Object -First 1 -ExpandProperty FullName
+& $vcpkgExe fetch ninja "--downloads-root=$(Join-Path $vcpkgSource 'downloads')" --disable-metrics | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Failed to acquire the pinned vcpkg Ninja tool.' }
 $ninja = Get-ChildItem (Join-Path $vcpkgSource 'downloads\tools') -Recurse -Filter ninja.exe -File |
     Select-Object -First 1 -ExpandProperty FullName
 $pkgConfig = Get-ChildItem (Join-Path $vcpkgSource 'downloads\tools\msys2') -Recurse -Filter pkg-config.exe -File |

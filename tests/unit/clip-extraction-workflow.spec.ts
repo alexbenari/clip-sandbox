@@ -25,6 +25,41 @@ function fakes() {
 }
 
 describe('ClipExtractionWorkflow', () => {
+  it('resets completed revisions without deleting the earlier media and blocks unresolved publication', async () => {
+    const fakesForWorkflow = fakes();
+    const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
+    const request = { sourceHandle: 'source_opaque_0001', sourceGeneration: 1, range: range('range-1', 10), collectionName: 'Sample Movie' };
+    await workflow.extractOne(request);
+    const earlierMedia = workflow.state('range-1');
+    expect(earlierMedia).toMatchObject({ kind: 'completed', media: { filename: 'range-1.mp4' } });
+    expect(workflow.revisionBlock('range-1')).toBeNull();
+    workflow.resetForRevision('range-1');
+    expect(workflow.state('range-1')).toEqual({ kind: 'pending' });
+    expect(fakesForWorkflow.extractor.extract).toHaveBeenCalledOnce();
+
+    fakesForWorkflow.destination.publishCreatedMedia.mockRejectedValueOnce(new Error('save failed'));
+    await workflow.extractOne({ ...request, range: range('range-1', 12) });
+    expect(workflow.state('range-1')).toMatchObject({ kind: 'publication-failed' });
+    expect(workflow.revisionBlock('range-1')).toContain('Retry');
+    expect(() => workflow.resetForRevision('range-1')).toThrow('Retry');
+    expect(workflow.state('range-1')).toMatchObject({ kind: 'publication-failed' });
+  });
+
+  it('blocks revision while a batch has a snapshot of pending work', async () => {
+    const fakesForWorkflow = fakes();
+    let releaseOpen!: () => void;
+    fakesForWorkflow.destination.open.mockImplementationOnce(() => new Promise(resolve => {
+      releaseOpen = () => resolve({ destinationHandle: 'destination_opaque_0001', collectionFilename: 'Sample Movie.txt' });
+    }));
+    const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
+    const run = workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
+      ranges: [range('range-1', 10), range('range-2', 20)], collectionName: 'Sample Movie' });
+    expect(workflow.state('range-2')).toEqual({ kind: 'pending' });
+    expect(workflow.revisionBlock('range-2')).toContain('Wait');
+    releaseOpen();
+    await run;
+    expect(workflow.revisionBlock('range-2')).toBeNull();
+  });
   it('snapshots exact eligible ranges at batch start and processes them sequentially', async () => {
     const fakesForWorkflow = fakes();
     const eligible = [range('range-1', 10), range('range-2', 20)];

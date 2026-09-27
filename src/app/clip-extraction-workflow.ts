@@ -46,6 +46,22 @@ export class ClipExtractionWorkflow {
     return this.states.get(rangeId) ?? Object.freeze({ kind: 'pending' });
   }
 
+  revisionBlock(rangeId: string): string | null {
+    if (this.running) return 'Wait for the current extraction batch to finish before locking changed frames.';
+    const state = this.state(rangeId);
+    if (state.kind === 'publication-failed') return 'Retry the failed collection save before changing this range.';
+    if (state.kind === 'publishing' || state.kind === 'extracting') {
+      return 'Wait for this extraction or collection save to finish before locking changed frames.';
+    }
+    return null;
+  }
+
+  resetForRevision(rangeId: string): void {
+    const block = this.revisionBlock(rangeId);
+    if (block) throw new Error(block);
+    this.setState(rangeId, { kind: 'pending' });
+  }
+
   async extractOne(request: IExtractOneRequest): Promise<void> {
     await this.run(request, [request.range]);
   }

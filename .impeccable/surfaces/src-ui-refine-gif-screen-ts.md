@@ -9,11 +9,11 @@ Scope: Refine Gif contextual Operate screen; same Windows desktop workflow and s
 
 ## Direction contract
 
-THESIS: Turn one approximate capture into a trustworthy exact range without leaving the movie context; refuse a separate editor timeline or modal.
+THESIS: Review or resolve one captured range against exact frames without leaving the movie context; keep saved-clip editing in its separate future flow.
 
 OWN-WORLD: Inherit the Screening Room Workbench: booth-black media field, rail-navy controls, screen-silver text, quiet slate support, and projector-blue only for current focus and action.
 
-STORY: The user opens an inexact range, resolves Start then End against displayed canonical frames, locks once, sees the queue update, and continues or returns.
+STORY: The user opens an inexact or exact captured range by Refine or double-click, sets either endpoint against displayed canonical frames, locks once, sees the same queue entry update, and explicitly extracts a changed revision when desired. An earlier extracted clip remains saved.
 
 FIRST VIEWPORT: One dominant shared player above a compact two-endpoint workbench; Back and range identity live in the command bar, while the open Clips panel keeps queue context and selection visible.
 

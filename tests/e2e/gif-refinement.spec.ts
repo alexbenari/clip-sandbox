@@ -133,3 +133,101 @@ test('refines inexact ranges through the contextual screen and preserves queue c
     await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
   }
 });
+
+test('double-click refines an exact capture in place and preserves its earlier extracted clip', async () => {
+  test.setTimeout(180_000);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-gif-refine-exact-'));
+  const profile = path.join(directory, 'profile');
+  const pipelines = path.join(directory, 'pipelines');
+  const destination = path.join(pipelines, 'extraction-tmp');
+  await fs.mkdir(profile, { recursive: true });
+  await fs.mkdir(pipelines, { recursive: true });
+  await fs.writeFile(path.join(profile, 'app-settings.json'), `${JSON.stringify({
+    version: 1, pipelinesRootPath: pipelines, singleClipAudioDefault: false,
+  })}\n`, 'utf8');
+  const env = { ...process.env, CLIP_SANDBOX_E2E: '1' };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const app = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], cwd: project, env });
+
+  try {
+    const page = await app.firstWindow();
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1280, 800));
+    await page.locator('#appScreenSelector').selectOption('gif-extraction');
+    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), movie);
+    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await seekFrame(page, '8');
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 8');
+    await page.keyboard.press('q');
+    await seekFrame(page, '23');
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 23');
+    await page.keyboard.press('w');
+    await page.keyboard.press('a');
+    const card = page.locator('.gif-range-card[data-range-id="range-1"]');
+    await expect(card).toHaveClass(/is-exact/);
+    await expect(card.getByRole('button', { name: 'Refine range 1' })).toBeVisible();
+
+    await card.locator('.gif-range-details').dblclick();
+    await expect(page.locator('#refineGifScreen')).toBeVisible();
+    await expect(page.locator('[data-refine-start-value]')).toContainText('Frame 8');
+    await expect(page.locator('[data-refine-end-value]')).toContainText('Frame 23');
+    await fs.mkdir(reviewDirectory, { recursive: true });
+    await page.screenshot({ path: path.join(reviewDirectory, 'refine-exact-1280.png'), fullPage: true });
+    await page.getByRole('button', { name: 'Back to GIF Extraction' }).click();
+    await expect(card).toContainText('frame 8 – frame 23');
+    await expect(page.locator('.gif-range-card')).toHaveCount(1);
+
+    await card.locator('.gif-range-details').dblclick();
+    await seekFrame(page, '10');
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 10');
+    await page.keyboard.press('q');
+    await page.keyboard.press('a');
+    await expect(page.locator('[data-refine-start-value]')).toContainText('Frame 10');
+    await expect(page.locator('.gif-range-card')).toHaveCount(1);
+    await expect(card).toHaveClass(/is-exact/);
+    await page.getByRole('button', { name: 'Back to GIF Extraction' }).click();
+    await card.getByRole('button', { name: 'Extract', exact: true }).click();
+    await expect(card.locator('.gif-range-extraction')).toContainText('Extracted as cfr-audio-001.mp4', { timeout: 90_000 });
+    expect(existsSync(path.join(destination, 'cfr-audio-001.mp4'))).toBe(true);
+
+    await card.locator('.gif-range-details').dblclick();
+    await expect(page.locator('[data-refine-start-value]')).toContainText('Frame 10');
+    await page.keyboard.press('a');
+    await expect(page.locator('#refineGifScreen .gif-workflow-local-status')).toContainText('Range unchanged');
+    await expect(page.locator('[data-command="extract-current"]')).toBeDisabled();
+    await page.getByRole('button', { name: 'Back to GIF Extraction' }).click();
+    await expect(card.locator('.gif-range-extraction')).toContainText('cfr-audio-001.mp4');
+
+    await card.locator('.gif-range-details').dblclick();
+    await page.locator('[data-command="set-end"]').click();
+    await seekFrame(page, '25');
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 25');
+    await page.keyboard.press('w');
+    await page.keyboard.press('a');
+    await expect(page.locator('#refineGifScreen .gif-workflow-local-status')).toContainText('earlier clip remains saved');
+    await expect(page.locator('[data-command="extract-current"]')).toBeEnabled();
+    await expect(page.locator('.gif-range-card')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Back to GIF Extraction' }).click();
+    await expect(card.getByRole('button', { name: 'Extract', exact: true })).toBeEnabled();
+    expect(existsSync(path.join(destination, 'cfr-audio-001.mp4'))).toBe(true);
+    await card.getByRole('button', { name: 'Extract', exact: true }).click();
+    await expect(card.locator('.gif-range-extraction')).toContainText('Extracted as cfr-audio-002.mp4', { timeout: 90_000 });
+    expect(existsSync(path.join(destination, 'cfr-audio-001.mp4'))).toBe(true);
+    expect(existsSync(path.join(destination, 'cfr-audio-002.mp4'))).toBe(true);
+    expect(await fs.readFile(path.join(destination, 'cfr-audio.txt'), 'utf8'))
+      .toBe('cfr-audio-001.mp4\ncfr-audio-002.mp4\n');
+
+    await seekFrame(page, '30');
+    await page.keyboard.press('q');
+    await seekFrame(page, '35');
+    await page.keyboard.press('w');
+    await page.keyboard.press('a');
+    await expect(page.locator('.gif-range-card')).toHaveCount(2);
+    await card.locator('.gif-range-details').dblclick();
+    await expect(page.locator('#refineGifScreen')).toBeVisible();
+    await expect(page.locator('[data-refine-range-title]')).toContainText('Range 1');
+  } finally {
+    await app.close().catch(() => undefined);
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});

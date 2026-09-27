@@ -74,7 +74,7 @@ export class RefineGifScreen implements IAppScreen {
         <strong data-refine-command-title>Refine Gif</strong>
         <span>No range selected</span>
       </div>
-      <span class="gif-workflow-command-status" role="status">Waiting for an inexact range</span>`;
+      <span class="gif-workflow-command-status" role="status">Waiting for a captured range</span>`;
 
     this.root = doc.createElement('section');
     this.root.id = 'refineGifScreen';
@@ -84,7 +84,7 @@ export class RefineGifScreen implements IAppScreen {
       <div class="gif-workflow-player-host"></div>
       <section class="gif-refinement-workbench" aria-label="Exact endpoint refinement" hidden>
         <div class="gif-refinement-heading">
-          <div><h1>Resolve exact frames</h1><p data-refine-range-title></p></div>
+          <div><h1>Refine captured range</h1><p data-refine-range-title></p></div>
           <span class="gif-refinement-mode">Frame-by-frame</span>
         </div>
         <div class="gif-refinement-endpoints">
@@ -108,7 +108,7 @@ export class RefineGifScreen implements IAppScreen {
       </section>
       <div class="gif-workflow-empty-copy">
         <h1>No range selected</h1>
-        <p>Choose an inexact range from GIF Extraction to replace its timestamps with exact frames.</p>
+        <p>Choose a captured range from GIF Extraction to review its start and end against exact frames.</p>
       </div>`;
 
     this.back = this.required(this.commands.querySelector('[data-command="back"]'), HTMLButtonElement, 'back command');
@@ -149,7 +149,7 @@ export class RefineGifScreen implements IAppScreen {
   onActivate(): void {
     this.active = true;
     this.lastSeekKey = null;
-    this.options.player.mount(this.playerHost, 'Select an inexact range to refine');
+    this.options.player.mount(this.playerHost, 'Select a captured range to refine');
     this.options.player.attachSession(this.options.session?.reviewSession ?? null);
     this.options.keyboard.activate(this.keyboardTarget);
     const refinement = this.snapshot?.refinement;
@@ -235,7 +235,7 @@ export class RefineGifScreen implements IAppScreen {
     this.emptyCopy.hidden = refinement !== null;
     if (!refinement) {
       this.commandTitle.textContent = 'Refine Gif';
-      this.commandStatus.textContent = 'Waiting for an inexact range';
+      this.commandStatus.textContent = 'Waiting for a captured range';
       return;
     }
     this.commandTitle.textContent = `Refine Gif · Range ${this.rangeNumber(refinement.rangeId)}`;

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { GifExtractionSession, type IThumbnailCacheService } from '../../src/app/gif-extraction-session.js';
 import { ThumbnailOpaqueId } from '../../src/app/thumbnail-cache-service.js';
+import type { IClipExtractionService } from '../../src/frame-review/clip-extraction-api.js';
 import type {
   FrameReviewDisplayFrame,
   IFrameReviewService,
@@ -77,7 +78,7 @@ function thumbnailService(): IThumbnailCacheService {
   };
 }
 
-async function openSession(thumbnails = thumbnailService()): Promise<{
+async function openSession(thumbnails = thumbnailService(), extractionService?: IClipExtractionService): Promise<{
   session: GifExtractionSession;
   service: IFrameReviewService;
   thumbnails: IThumbnailCacheService;
@@ -89,9 +90,24 @@ async function openSession(thumbnails = thumbnailService()): Promise<{
     })),
     open: vi.fn(async () => reviewSession()),
   };
-  const session = new GifExtractionSession(service, thumbnails);
+  const session = new GifExtractionSession(service, thumbnails, { extractionService });
   expect(await session.openMovie()).toBe('opened');
   return { session, service, thumbnails };
+}
+
+function extractionService(): IClipExtractionService {
+  let mediaSequence = 0;
+  return {
+    openExtractionDestination: vi.fn(async () => ({
+      destinationHandle: 'destination_12345678', folderPath: 'C:\\extraction-tmp', entries: [],
+    })),
+    extract: vi.fn(async () => {
+      mediaSequence += 1;
+      return { kind: 'created-media' as const, mediaHandle: `media_1234567${mediaSequence}`,
+        filename: `Feature-${String(mediaSequence).padStart(3, '0')}.mp4` };
+    }),
+    saveCollection: vi.fn(async () => undefined),
+  };
 }
 
 function lockTimestampRange(session: GifExtractionSession, startUs = 100_000n, endUs = 300_000n) {
@@ -102,7 +118,81 @@ function lockTimestampRange(session: GifExtractionSession, startUs = 100_000n, e
   return locked.range;
 }
 
+function lockExactRange(session: GifExtractionSession, startFrame = 10, endFrame = 30) {
+  session.markStart(displayedCapture('exact', BigInt(startFrame * 10_000), startFrame));
+  session.markEnd(displayedCapture('exact', BigInt(endFrame * 10_000), endFrame));
+  const locked = session.lockRange();
+  if (locked.kind !== 'locked') throw new Error(locked.kind === 'rejected' ? locked.message : 'Range did not lock.');
+  return locked.range;
+}
+
 describe('RefineGifSession', () => {
+  it('opens an exact capture, discards staged edits on Back, then replaces the same panel entry on Lock', async () => {
+    const { session } = await openSession();
+    const first = lockExactRange(session);
+    const second = lockExactRange(session, 40, 50);
+    const begin = session.beginRefinement(first.id);
+    if (begin.kind !== 'started') throw new Error(begin.message);
+    expect(begin.session.snapshot).toMatchObject({ focusedEndpoint: 'start', canCommit: true });
+    begin.session.markStart(displayedCapture('exact', 120_000n, 12));
+    session.abandonRefinement();
+    expect(session.snapshot.ranges[0]?.start).toMatchObject({ identity: { frameIndex: 10 } });
+
+    const again = session.beginRefinement(first.id);
+    if (again.kind !== 'started') throw new Error(again.message);
+    again.session.markStart(displayedCapture('exact', 120_000n, 12));
+    expect(again.session.commit()).toMatchObject({ kind: 'committed', range: { id: first.id } });
+    expect(session.snapshot.ranges.map(range => range.id)).toEqual([first.id, second.id]);
+    expect(session.snapshot.ranges[0]?.start).toMatchObject({ identity: { frameIndex: 12 } });
+  });
+
+  it('preserves an unchanged completed extraction and makes a changed exact revision extractable again', async () => {
+    const extraction = extractionService();
+    const { session } = await openSession(thumbnailService(), extraction);
+    const captured = lockExactRange(session);
+    await session.extractRange(captured.id);
+    expect(session.snapshot.ranges[0]?.extraction).toMatchObject({ kind: 'completed',
+      media: { filename: 'Feature-001.mp4' } });
+
+    const unchanged = session.beginRefinement(captured.id);
+    if (unchanged.kind !== 'started') throw new Error(unchanged.message);
+    expect(unchanged.session.commit()).toMatchObject({ kind: 'committed', message: expect.stringContaining('unchanged') });
+    expect(session.canExtractRange(captured.id)).toBe(false);
+    expect(extraction.extract).toHaveBeenCalledOnce();
+
+    const revised = session.beginRefinement(captured.id);
+    if (revised.kind !== 'started') throw new Error(revised.message);
+    revised.session.markEnd(displayedCapture('exact', 320_000n, 32));
+    revised.session.markEnd(displayedCapture('exact', 320_000n, 32));
+    expect(revised.session.commit()).toMatchObject({ kind: 'committed',
+      message: expect.stringContaining('earlier clip remains saved') });
+    expect(session.snapshot.ranges).toHaveLength(1);
+    expect(session.snapshot.ranges[0]?.extraction).toEqual({ kind: 'pending' });
+    expect(session.canExtractRange(captured.id)).toBe(true);
+    expect(extraction.extract).toHaveBeenCalledOnce();
+    await session.extractRange(captured.id);
+    expect(extraction.extract).toHaveBeenCalledTimes(2);
+    expect(session.snapshot.ranges[0]?.extraction).toMatchObject({ kind: 'completed',
+      media: { filename: 'Feature-002.mp4' } });
+  });
+
+  it('keeps a failed publication attached to its encoded range until retry', async () => {
+    const extraction = extractionService();
+    vi.mocked(extraction.saveCollection).mockRejectedValueOnce(new Error('disk busy'));
+    const { session } = await openSession(thumbnailService(), extraction);
+    const captured = lockExactRange(session);
+    await session.extractRange(captured.id);
+    expect(session.snapshot.ranges[0]?.extraction).toMatchObject({ kind: 'publication-failed' });
+    const refine = session.beginRefinement(captured.id);
+    if (refine.kind !== 'started') throw new Error(refine.message);
+    refine.session.markEnd(displayedCapture('exact', 320_000n, 32));
+    refine.session.markEnd(displayedCapture('exact', 320_000n, 32));
+    expect(refine.session.commit()).toMatchObject({ kind: 'rejected', message: expect.stringContaining('Retry') });
+    expect(session.snapshot.ranges[0]?.end).toMatchObject({ identity: { frameIndex: 30 } });
+    await session.retryExtractionPublication(captured.id);
+    expect(refine.session.commit()).toMatchObject({ kind: 'committed' });
+    expect(session.canExtractRange(captured.id)).toBe(true);
+  });
   it('stages exact endpoints one at a time and atomically preserves range identity and order', async () => {
     const { session, thumbnails } = await openSession();
     const first = lockTimestampRange(session);

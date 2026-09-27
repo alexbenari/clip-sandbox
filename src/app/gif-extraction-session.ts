@@ -5,7 +5,7 @@ import type {
 } from '../frame-review/frame-review-api.js';
 import type { IFrameReviewState } from '../frame-review/model/frame-review-state.js';
 import { CaptureEndpointValue, type CaptureEndpoint } from '../domain/capture-endpoint.js';
-import type { CapturedRange, CapturedRangeId } from '../domain/captured-range.js';
+import { CapturedRangeValue, type CapturedRange, type CapturedRangeId } from '../domain/captured-range.js';
 import type { IReadyToExtractRange } from '../domain/captured-range.js';
 import type { IClipExtractionService } from '../frame-review/clip-extraction-api.js';
 import { ClipExtractor } from '../business-logic/clip-extractor.js';
@@ -197,6 +197,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
 
   selectRange(rangeId: CapturedRangeId): void {
     if (!this.rangeModel?.snapshot.ranges.some(range => range.id === rangeId)) return;
+    if (this.selectedRangeId === rangeId) return;
     this.selectedRangeId = rangeId;
     this.publish();
   }
@@ -242,15 +243,17 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
 
   beginRefinement(rangeId: CapturedRangeId): BeginRefinementResult {
     const range = this.rangeModel?.snapshot.ranges.find(candidate => candidate.id === rangeId);
-    if (!range || range.kind !== 'needs-exact-frames') {
-      return this.rejectRefinement('Choose a range that needs exact frames.');
+    if (!range) {
+      return this.rejectRefinement('Choose a captured range to refine.');
     }
     if (!this.reviewState?.captureEnabled || range.sourceGeneration !== this.sourceGeneration) {
       return this.rejectRefinement('Exact frame review is not ready for this range.');
     }
     this.activeRefinement = new RefineGifSession(this, range);
     this.selectedRangeId = rangeId;
-    this.message = 'Refine the approximate endpoint against exact frames.';
+    this.message = range.kind === 'needs-exact-frames'
+      ? 'Refine the approximate endpoint against exact frames.'
+      : 'Review and adjust exact frames, then lock the range.';
     this.publish();
     return Object.freeze({ kind: 'started', session: this.activeRefinement });
   }
@@ -297,17 +300,32 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     if (!current) {
       return Object.freeze({ kind: 'rejected', message: 'The range was removed before this refinement was locked.' });
     }
-    if (current.kind !== 'needs-exact-frames') {
-      return Object.freeze({ kind: 'rejected', message: 'This range no longer needs refinement.' });
+    if (current !== request.session.snapshot.original) {
+      return Object.freeze({ kind: 'rejected', message: 'This range changed before the refinement was locked.' });
     }
+    const changed = !CapturedRangeValue.hasExactFrames(current, request.start, request.end);
+    const block = changed ? this.extractionWorkflow?.revisionBlock(request.rangeId) : null;
+    if (block) return Object.freeze({ kind: 'rejected', message: block });
+    if (!changed && current.kind === 'ready-to-extract') {
+      this.selectedRangeId = request.rangeId;
+      this.message = 'Range unchanged; previous extraction status is preserved.';
+      return Object.freeze({ kind: 'committed', range: current, message: this.message });
+    }
+    const previousExtraction = this.extractionWorkflow?.state(request.rangeId);
     const replacement = this.rangeModel?.replaceRangeWithExactEndpoints(request.rangeId, request.start, request.end);
     if (!replacement || replacement.kind !== 'ready-to-extract') {
       return Object.freeze({ kind: 'rejected', message: 'The exact range could not be locked.' });
     }
-    if (request.startThumbnail) this.captureThumbnails.replaceRange(request.rangeId, request.startThumbnail);
+    this.extractionWorkflow?.resetForRevision(request.rangeId);
+    if (request.startThumbnail && (current.start.kind !== 'exact-frame'
+      || current.start.identity.frameIndex !== request.start.identity.frameIndex)) {
+      this.captureThumbnails.replaceRange(request.rangeId, request.startThumbnail);
+    }
     this.selectedRangeId = request.rangeId;
-    this.message = 'Exact range locked';
-    return Object.freeze({ kind: 'committed', range: replacement });
+    this.message = previousExtraction?.kind === 'completed'
+      ? 'Revised range locked. The earlier clip remains saved; extract again to create a new clip.'
+      : 'Exact range locked';
+    return Object.freeze({ kind: 'committed', range: replacement, message: this.message });
   }
 
   nextInexactRangeId(afterRangeId: CapturedRangeId): CapturedRangeId | null {

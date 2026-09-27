@@ -94,10 +94,17 @@ describe('GifRangesPanelControl', () => {
     control.showNeedsRefinement(inexact.id);
 
     expect(root.querySelectorAll('.gif-range-card')).toHaveLength(1);
-    root.querySelector<HTMLElement>('[data-range-id="range_1"]')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    root.querySelector<HTMLElement>('[data-range-id="range_1"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
     root.querySelector<HTMLButtonElement>('[data-refine-range="range_1"]')?.click();
     expect(onRefine).toHaveBeenNthCalledWith(1, inexact.id);
     expect(onRefine).toHaveBeenNthCalledWith(2, inexact.id);
+
+    control.showAll();
+    root.querySelector<HTMLElement>('[data-range-id="range_2"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
+    root.querySelector<HTMLButtonElement>('[data-refine-range="range_2"]')?.click();
+    expect(onRefine).toHaveBeenNthCalledWith(3, exact.id);
+    expect(onRefine).toHaveBeenNthCalledWith(4, exact.id);
+    control.showNeedsRefinement(inexact.id);
 
     publish({
       lifecycle: 'open', source: null, reviewState: null, capture: null,
