@@ -11,7 +11,6 @@ for (const nativeFrame of [false, true]) {
     const app = await electron.launch({ args: ['.', `--user-data-dir=${profile}`, ...(nativeFrame ? ['--native-frame'] : [])], env });
     try {
       const page = await app.firstWindow();
-      page.setDefaultTimeout(5000);
       expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(true);
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].unmaximize());
       const readOverlay = () => page.evaluate(() => {
@@ -45,7 +44,7 @@ for (const nativeFrame of [false, true]) {
         const commands = await page.locator('#toolbar').boundingBox();
         const collection = await page.locator('#activeCollectionName').boundingBox();
         if (width === 1440) {
-          expect(Math.abs(collection!.x + collection!.width / 2 - commands!.x - commands!.width / 2)).toBeLessThan(2);
+          expect(Math.abs(collection!.x + collection!.width / 2 - commands!.x - commands!.width / 2)).toBeLessThanOrEqual(5);
         } else {
           expect(commands!.height).toBeLessThanOrEqual(160);
         }

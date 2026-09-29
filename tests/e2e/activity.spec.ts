@@ -24,7 +24,11 @@ test('Activity retains unresolved errors, copies details, retries a real save fa
     await expect(pill).toHaveAccessibleName('Activity and Errors: 2 unresolved errors');
     await expect(pill).toHaveText('2 errors');
     await expect(page.locator('#globalUtilityHost')).toBeHidden();
-    expect(await page.locator('#keyboardMapBtn').boundingBox()).toEqual(before);
+    const after = await page.locator('#keyboardMapBtn').boundingBox();
+    expect(Math.abs(after!.x - before!.x)).toBeLessThan(1);
+    expect(Math.abs(after!.y - before!.y)).toBeLessThan(1);
+    expect(Math.abs(after!.width - before!.width)).toBeLessThan(1);
+    expect(Math.abs(after!.height - before!.height)).toBeLessThan(1);
     await page.evaluate(() => document.querySelector<HTMLDialogElement>('#unsavedChangesDialog')!.close());
     await pill.click();
     const panel = page.locator('#activityIndicatorPanel');

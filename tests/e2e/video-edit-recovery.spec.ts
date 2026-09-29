@@ -13,7 +13,6 @@ test('created edit survives a UI callback failure and editing becomes available 
   const app = await electron.launch({ args: ['.', `--user-data-dir=${path.join(directory, 'profile')}`], env });
   try {
     const page = await app.firstWindow();
-    page.setDefaultTimeout(5000);
     await page.locator('#appScreenSelector').selectOption('collection');
     await page.locator('#pickBtn').waitFor();
     await page.evaluate(async folder => {

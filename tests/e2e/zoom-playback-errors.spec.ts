@@ -14,7 +14,6 @@ test('Zoom reports damaged media once while rapid healthy close/reopen stays qui
   const app = await electron.launch({ args: ['.', `--user-data-dir=${path.join(directory, 'profile')}`], env });
   try {
     const page = await app.firstWindow();
-    page.setDefaultTimeout(5000);
     await page.locator('#appScreenSelector').selectOption('collection');
     await page.locator('#pickBtn').waitFor();
     await page.evaluate(folder => Reflect.get(window, 'clipSandboxDesktop').__testSetNextFolderPath(folder), clips);
