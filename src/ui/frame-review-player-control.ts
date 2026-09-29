@@ -3,6 +3,7 @@ import type {
   FrameReviewCapturePoint,
   FrameReviewDisplayFrame,
   FrameReviewEvent,
+  IExactDisplayFrame,
   IFrameReviewSession,
 } from '../frame-review/frame-review-api.js';
 import type { IFrameReviewState } from '../frame-review/model/frame-review-state.js';
@@ -55,6 +56,7 @@ export class FrameReviewPlayerControl {
   private progressInteractionActive = false;
   private busy = false;
   private busyMessage = '';
+  private initialFrameRequested = false;
   private destroyed = false;
 
   constructor(options: FrameReviewPlayerControlOptions = {}) {
@@ -131,11 +133,16 @@ export class FrameReviewPlayerControl {
     this.progressInteractionActive = false;
     this.busy = false;
     this.busyMessage = '';
+    this.initialFrameRequested = false;
+    this.progress.value = '0';
+    this.currentTime.textContent = '00:00:00.000';
+    this.duration.textContent = '00:00:00.000';
     this.frameRenderer.clear(this.canvas);
     this.session = session;
     this.reviewState = session?.state() ?? null;
     if (session) this.unsubscribe = session.subscribe(event => this.onSessionEvent(event));
     this.renderState();
+    if (session) void this.showInitialFrame(session);
   }
 
   capturePoint(): FrameReviewCapturePoint | null {
@@ -172,6 +179,19 @@ export class FrameReviewPlayerControl {
   }
 
   async enterExactScrubAt(timestampUs: bigint): Promise<IFrameReviewDisplayedCapture | null> {
+    return this.enterExactScrub(async session => {
+      await session.seekPlayback(timestampUs);
+      return session.enterFrameScrub();
+    });
+  }
+
+  async enterExactScrubAtFrame(frameIndex: number): Promise<IFrameReviewDisplayedCapture | null> {
+    return this.enterExactScrub(session => session.scrubToFrame(frameIndex));
+  }
+
+  private async enterExactScrub(
+    resolveFrame: (session: IFrameReviewSession) => Promise<IExactDisplayFrame>,
+  ): Promise<IFrameReviewDisplayedCapture | null> {
     const session = this.session;
     if (!session || !this.reviewState?.captureEnabled || this.busy || this.destroyed) return null;
     this.busy = true;
@@ -180,9 +200,7 @@ export class FrameReviewPlayerControl {
     this.clearError();
     this.renderState();
     try {
-      await session.seekPlayback(timestampUs);
-      if (this.session !== session || this.destroyed) return null;
-      const frame = await session.enterFrameScrub();
+      const frame = await resolveFrame(session);
       if (this.session !== session || this.destroyed) return null;
       await this.requestDisplay(frame);
       if (this.session !== session || this.destroyed) return null;
@@ -359,6 +377,7 @@ export class FrameReviewPlayerControl {
       }
       this.reviewState = event.state;
       this.renderState();
+      if (event.state.captureEnabled && this.session) void this.showInitialFrame(this.session);
       return;
     }
     if (event.type === 'display-frame') {
@@ -394,6 +413,20 @@ export class FrameReviewPlayerControl {
     });
     this.pendingDisplay = Object.freeze({ key, promise });
     await promise;
+  }
+
+  private async showInitialFrame(session: IFrameReviewSession): Promise<void> {
+    if (this.initialFrameRequested || !this.reviewState?.captureEnabled || this.playing || this.busy
+      || this.scrubbingExact || this.progressInteractionActive || this.displayedFrame || this.pendingDisplay) return;
+    this.initialFrameRequested = true;
+    try {
+      const frame = await session.thumbnailFrame(0);
+      if (this.session !== session || this.destroyed || this.playing || this.busy || this.scrubbingExact
+        || this.progressInteractionActive || this.displayedFrame || this.pendingDisplay) return;
+      await this.requestDisplay(frame);
+    } catch (error) {
+      if (this.session === session && !this.destroyed && !this.displayedFrame) this.showError(error);
+    }
   }
 
   private invalidatePendingDisplay(): void {
@@ -465,6 +498,7 @@ export class FrameReviewPlayerControl {
       ? `Frame ${this.displayedFrame.identity.frameIndex.toLocaleString()}`
       : attached ? 'Playback time' : 'Frame unavailable';
     this.emptyState.hidden = this.displayedFrame !== null;
+    if (attached) this.emptyState.textContent = 'Preparing Movie...';
     this.busyState.hidden = !this.busy;
     this.busyState.textContent = this.busy ? this.busyMessage : '';
   }

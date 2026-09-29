@@ -9,6 +9,8 @@ const { createVideoEditRuntime } = require('./video-edit-runtime.cjs');
 const { AppSettingsStore } = require('./app-settings-store.cjs');
 const { registerFrameReviewIpc } = require('./frame-review-ipc.cjs');
 const { registerClipExtractionIpc } = require('./clip-extraction-ipc.cjs');
+const { ClipCapturesStore } = require('./clip-captures-store.cjs');
+const { registerClipCapturesIpc } = require('./clip-captures-ipc.cjs');
 const { createClipExtractionRuntime } = require('./clip-extraction-runtime.cjs');
 const { NativeProductLocator } = require('./native-product-locator.cjs');
 const { ThumbnailCacheRuntime } = require('./thumbnail-cache-runtime.cjs');
@@ -102,6 +104,7 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     processEnvironment: nativeEnvironment,
   });
   const settingsStore = new AppSettingsStore(app.getPath('userData'));
+  const clipCapturesStore = new ClipCapturesStore(app.getPath('userData'));
   const clipExtractionRuntime = createClipExtractionRuntime({
     getSettings: () => settingsStore.load(),
     resolveFfmpeg: () => nativeProducts.ffmpeg(),
@@ -255,7 +258,14 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     runtime: clipExtractionRuntime,
     hostForEvent: frameReviewRuntime.hostForEvent,
   });
-  return { dispose: () => clipExtractionRuntime.dispose() };
+  registerClipCapturesIpc({
+    ipcMain,
+    store: clipCapturesStore,
+    hostForEvent: frameReviewRuntime.hostForEvent,
+  });
+  return { dispose: async () => {
+    await Promise.allSettled([clipExtractionRuntime.dispose(), clipCapturesStore.flush()]);
+  } };
 }
 
 async function createFrameReviewRuntime(nativeProducts) {

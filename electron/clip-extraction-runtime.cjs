@@ -3,6 +3,7 @@ const { constants: { COPYFILE_EXCL } } = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
+const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
 
 const COLLECTION_NAME = /^[^<>:"/\\|?*\u0000]{1,180}$/;
 const OPAQUE_ID = /^[a-zA-Z0-9_-]{8,128}$/;
@@ -109,6 +110,7 @@ class ClipExtractionRuntime {
     verifyMedia = defaultVerifyMedia,
     environment = process.env,
     randomId = () => randomBytes(18).toString('base64url'),
+    provenance = new Mp4Provenance(),
   } = {}) {
     if (typeof getSettings !== 'function' || typeof resolveFfmpeg !== 'function' || typeof resolveFfprobe !== 'function') {
       throw new Error('Clip-extraction runtime dependencies are invalid.');
@@ -122,6 +124,7 @@ class ClipExtractionRuntime {
     this.verifyMedia = verifyMedia;
     this.environment = environment;
     this.randomId = randomId;
+    this.provenance = provenance;
     this.destinations = new Map();
     this.operations = new Map();
     this.collectionQueues = new Map();
@@ -182,44 +185,20 @@ class ClipExtractionRuntime {
       const boundary = await this.probeFrameTimes(
         ffprobe, source.sourcePath, source.selectedStream, request.startFrameIndex, request.endFrameIndex,
         { runCommand: this.runCommand, signal, environment: this.environment });
-      const startSeconds = (Number(boundary.startUs) / 1_000_000).toFixed(6);
-      const endSeconds = (Number(boundary.endUs) / 1_000_000).toFixed(6);
-      const videoResult = await this.runCommand(ffmpeg, [
-        '-hide_banner', '-nostdin', '-y', '-noautorotate', '-i', source.sourcePath,
-        '-map', `0:${source.selectedStream}`,
-        '-vf', `select='between(n,${request.startFrameIndex},${request.endFrameIndex})',setpts=PTS-STARTPTS`,
-        '-fps_mode', 'passthrough', '-an', '-c:v', 'libx264', '-crf', '16', '-maxrate', '48M', '-bufsize', '96M', '-preset', 'ultrafast',
-        '-pix_fmt', 'yuv420p', videoPath,
-      ], { cwd: workspace, signal, env: this.environment });
+      const videoResult = await this.encodeVideo({ ffmpeg, source, request, workspace, videoPath, signal });
       if (!videoResult.ok) return errorResult(videoResult.code, 'The selected frames could not be encoded.');
-      const muxResult = await this.runCommand(ffmpeg, [
-        '-hide_banner', '-nostdin', '-y', '-copyts', '-i', videoPath, '-i', source.sourcePath,
-        '-map', '0:v:0', '-map', '1:a:0?', '-filter:a', `atrim=start=${startSeconds}:end=${endSeconds},asetpts=PTS-STARTPTS`,
-        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', mediaPath,
-      ], { cwd: workspace, signal, env: this.environment });
-      if (!muxResult.ok) return errorResult(muxResult.code, 'The extracted media could not be finalized.');
-      await this.verifyMedia(ffprobe, mediaPath, {
-        runCommand: this.runCommand, signal, environment: this.environment,
+      const finalization = await this.finalizeMedia({
+        host, request, source, ffmpeg, ffprobe, workspace, videoPath, mediaPath, boundary, signal,
       });
-      let sequence = 1;
-      let filename;
-      while (true) {
-        filename = `${request.collectionName}-${String(sequence).padStart(3, '0')}.mp4`;
-        try {
-          await this.fs.copyFile(mediaPath, path.join(target.folderPath, filename), COPYFILE_EXCL);
-          break;
-        } catch (error) {
-          if (error?.code !== 'EEXIST') throw error;
-          sequence += 1;
-        }
-      }
-      const stat = await this.fs.stat(path.join(target.folderPath, filename));
+      if (!finalization.ok) return finalization;
+      const { filename, stat } = await this.publishMedia(target, request.collectionName, mediaPath);
       return {
         ok: true,
         result: {
           mediaHandle: `media_${this.randomId()}`,
           filename,
           entry: publicEntry(filename, stat, 'video/mp4'),
+          warning: finalization.warning,
         },
       };
     } catch (error) {
@@ -233,6 +212,98 @@ class ClipExtractionRuntime {
         });
       }
     }
+  }
+
+  async encodeVideo({ ffmpeg, source, request, workspace, videoPath, signal }) {
+    return this.runCommand(ffmpeg, [
+      '-hide_banner', '-nostdin', '-y', '-noautorotate', '-i', source.sourcePath,
+      '-map', `0:${source.selectedStream}`,
+      '-vf', `select='between(n,${request.startFrameIndex},${request.endFrameIndex})',setpts=PTS-STARTPTS`,
+      '-fps_mode', 'passthrough', '-an', '-c:v', 'libx264', '-crf', '16', '-maxrate', '48M', '-bufsize', '96M', '-preset', 'ultrafast',
+      '-pix_fmt', 'yuv420p', videoPath,
+    ], { cwd: workspace, signal, env: this.environment });
+  }
+
+  async prepareProvenance(host, request, source) {
+    if (!request.reviewSessionId) return { ok: true, serializedProvenance: null, warning: undefined };
+    let endpoints;
+    try {
+      endpoints = await host.extractionFrameIdentities(
+        request.reviewSessionId, request.sourceHandle, request.startFrameIndex, request.endFrameIndex,
+        source.identity);
+    } catch {
+      return errorResult('invalid-source', 'Exact frame identity could not be verified for extraction.');
+    }
+    const [start, end] = endpoints;
+    if (start.frameIndex !== request.startFrameIndex || end.frameIndex !== request.endFrameIndex
+      || start.originalFrameIndex !== request.startFrameIndex
+      || end.originalFrameIndex !== request.endFrameIndex) {
+      return errorResult('invalid-source', 'Exact frame ordinals changed before extraction.');
+    }
+    try {
+      return { ok: true, serializedProvenance: this.provenance.create(source, start, end), warning: undefined };
+    } catch {
+      return {
+        ok: true, serializedProvenance: null,
+        warning: 'Clip saved without source metadata; the metadata record was unavailable.',
+      };
+    }
+  }
+
+  async finalizeMedia({ host, request, source, ffmpeg, ffprobe, workspace, videoPath, mediaPath, boundary, signal }) {
+    const provenance = await this.prepareProvenance(host, request, source);
+    if (!provenance.ok) return provenance;
+    let { serializedProvenance, warning } = provenance;
+    const startSeconds = (Number(boundary.startUs) / 1_000_000).toFixed(6);
+    const endSeconds = (Number(boundary.endUs) / 1_000_000).toFixed(6);
+    const muxBase = [
+      '-hide_banner', '-nostdin', '-y', '-copyts', '-i', videoPath, '-i', source.sourcePath,
+      '-map', '0:v:0', '-map', '1:a:0?', '-filter:a', `atrim=start=${startSeconds}:end=${endSeconds},asetpts=PTS-STARTPTS`,
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+    ];
+    let muxResult = await this.runCommand(ffmpeg, [
+      ...muxBase,
+      ...(serializedProvenance ? this.provenance.muxArguments(serializedProvenance) : ['-movflags', '+faststart']),
+      mediaPath,
+    ], { cwd: workspace, signal, env: this.environment });
+    if (!muxResult.ok && serializedProvenance && !signal.aborted) {
+      warning = 'Clip saved without source metadata; the metadata writer failed.';
+      serializedProvenance = null;
+      muxResult = await this.runCommand(ffmpeg, [
+        ...muxBase, '-movflags', '+faststart', mediaPath,
+      ], { cwd: workspace, signal, env: this.environment });
+    }
+    if (!muxResult.ok) return errorResult(muxResult.code, 'The extracted media could not be finalized.');
+    await this.verifyMedia(ffprobe, mediaPath, {
+      runCommand: this.runCommand, signal, environment: this.environment,
+    });
+    if (serializedProvenance) {
+      try {
+        const readBack = await this.provenance.readBack(
+          ffprobe, mediaPath, this.runCommand, this.environment, signal);
+        if (readBack !== serializedProvenance) throw new Error('Clip provenance readback differs from the written record.');
+      } catch {
+        warning = 'Clip saved, but its source metadata could not be verified.';
+      }
+    }
+    return { ok: true, warning };
+  }
+
+  async publishMedia(target, collectionName, mediaPath) {
+    let sequence = 1;
+    let filename;
+    while (true) {
+      filename = `${collectionName}-${String(sequence).padStart(3, '0')}.mp4`;
+      try {
+        await this.fs.copyFile(mediaPath, path.join(target.folderPath, filename), COPYFILE_EXCL);
+        break;
+      } catch (error) {
+        if (error?.code !== 'EEXIST') throw error;
+        sequence += 1;
+      }
+    }
+    const stat = await this.fs.stat(path.join(target.folderPath, filename));
+    return { filename, stat };
   }
 
   extract(ownerId, host, request = {}) {

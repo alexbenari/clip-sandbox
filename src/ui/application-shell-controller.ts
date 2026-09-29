@@ -140,9 +140,11 @@ export class ApplicationShellController {
     this.applyingPanelState = true;
     try {
       for (const [panelId, panel] of this.panels) {
-        const folded = this.panelStates.get(incoming.id)?.get(panelId)
-          ?? incoming.initiallyFoldedPanelIds?.includes(panelId)
-          ?? false;
+        const folded = incoming.openPanelIdsOnEntry?.includes(panelId)
+          ? false
+          : this.panelStates.get(incoming.id)?.get(panelId)
+            ?? incoming.initiallyFoldedPanelIds?.includes(panelId)
+            ?? false;
         panel.controller.setFolded(folded);
       }
     } finally {
@@ -169,6 +171,9 @@ export class ApplicationShellController {
   }
 
   private validateScreen(screen: IAppScreen, availablePanelIds: ReadonlySet<string>): void {
+    for (const panelId of screen.openPanelIdsOnEntry ?? []) {
+      if (!availablePanelIds.has(panelId)) throw new Error(`Unknown panel to open on screen entry: ${panelId}`);
+    }
     const contributionIds = new Set<string>();
     for (const contribution of screen.panelContributions) {
       if (!availablePanelIds.has(contribution.panelId)) {

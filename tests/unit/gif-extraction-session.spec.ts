@@ -11,6 +11,7 @@ import { FrameReviewState } from '../../src/frame-review/model/frame-review-stat
 import { GifExtractionSession, type IThumbnailCacheService } from '../../src/app/gif-extraction-session.js';
 import type { IFrameReviewDisplayedCapture } from '../../src/ui/frame-review-player-control.js';
 import { ThumbnailOpaqueId } from '../../src/app/thumbnail-cache-service.js';
+import type { IClipCapturesStoreService } from '../../src/app/clip-captures-store-service.js';
 
 const identity = Object.freeze({
   frameIndex: 5, originalFrameIndex: 5, pts: 5_000n, duration: 1_000n,
@@ -66,6 +67,115 @@ function thumbnailService(): IThumbnailCacheService {
 }
 
 describe('GifExtractionSession', () => {
+  it('reports capture loading while checking the last saved movie', async () => {
+    let finishLast: (value: null) => void = () => undefined;
+    const pendingLast = new Promise<null>(resolve => { finishLast = resolve; });
+    const captureStore: IClipCapturesStoreService = {
+      last: vi.fn(() => pendingLast), attach: vi.fn(), save: vi.fn(),
+    };
+    const service: IFrameReviewService = { chooseSource: vi.fn(), open: vi.fn() };
+    const session = new GifExtractionSession(service, thumbnailService(), { captureStore });
+
+    const reopening = session.reopenLastMovie();
+    expect(session.snapshot.capturesLoading).toBe(true);
+    finishLast(null);
+    await reopening;
+    expect(session.snapshot.capturesLoading).toBe(false);
+  });
+
+  it('keeps capture loading visible until the selected movie queue attaches', async () => {
+    const fingerprint = {
+      fingerprintVersion: 1 as const, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '100',
+      sourceDurationUs: '1000000', signatureProfileVersion: 'sampled-packets-3m-3m-3x1m-v1',
+      selectedStream: 0, streamMetadataDigest: 'b'.repeat(64),
+    };
+    let finishAttach: (value: { kind: 'attached'; movieRef: string; fingerprint: typeof fingerprint;
+      data: { schemaVersion: 1; nextRangeSequence: number; ranges: [] } }) => void = () => undefined;
+    const pendingAttach = new Promise<Parameters<typeof finishAttach>[0]>(resolve => { finishAttach = resolve; });
+    const captureStore: IClipCapturesStoreService = {
+      last: vi.fn(), attach: vi.fn(() => pendingAttach), save: vi.fn(),
+    };
+    const service: IFrameReviewService = {
+      chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
+      open: vi.fn(async () => reviewSession()),
+    };
+    const session = new GifExtractionSession(service, thumbnailService(), { captureStore });
+
+    expect(await session.openMovie()).toBe('opened');
+    expect(session.snapshot.capturesLoading).toBe(true);
+    const loaded = new Promise<void>(resolve => {
+      const unsubscribe = session.subscribe(snapshot => {
+        if (snapshot.source?.name === 'Movie.mp4' && !snapshot.capturesLoading) {
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+    finishAttach({ kind: 'attached', movieRef: 'capture_12345678', fingerprint,
+      data: { schemaVersion: 1, nextRangeSequence: 1, ranges: [] } });
+    await loaded;
+    expect(session.snapshot.capturesLoading).toBe(false);
+  });
+
+  it('stops reporting capture loading when exact preparation fails', async () => {
+    let publishReview: (event: FrameReviewEvent) => void = () => undefined;
+    const review = {
+      ...reviewSession(),
+      state: () => FrameReviewState.create('indexing', 1),
+      subscribe: vi.fn((listener: (event: FrameReviewEvent) => void) => {
+        publishReview = listener;
+        return () => undefined;
+      }),
+    } as unknown as IFrameReviewSession;
+    const captureStore: IClipCapturesStoreService = {
+      last: vi.fn(), attach: vi.fn(), save: vi.fn(),
+    };
+    const service: IFrameReviewService = {
+      chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
+      open: vi.fn(async () => review),
+    };
+    const session = new GifExtractionSession(service, thumbnailService(), { captureStore });
+
+    await session.openMovie();
+    expect(session.snapshot.capturesLoading).toBe(true);
+    publishReview({ type: 'state', state: FrameReviewState.create('failed', 1, { message: 'Index unavailable' }) });
+    expect(session.snapshot.capturesLoading).toBe(false);
+  });
+
+  it('keeps captures visible and disabled when the last movie has changed', async () => {
+    const fingerprint = {
+      fingerprintVersion: 1 as const, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '100',
+      sourceDurationUs: '1000000', signatureProfileVersion: 'sampled-packets-3m-3m-3x1m-v1',
+      selectedStream: 0, streamMetadataDigest: 'b'.repeat(64),
+    };
+    const data = { schemaVersion: 1 as const, nextRangeSequence: 2, ranges: [{
+      id: 'range-1',
+      start: { kind: 'exact-frame', frameIndex: 2, frameInfoHash: '0000000000000002', reviewTimeUs: '20000' },
+      end: { kind: 'exact-frame', frameIndex: 4, frameInfoHash: '0000000000000004', reviewTimeUs: '40000' },
+    }] };
+    const selection = { name: 'Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') };
+    const captureStore: IClipCapturesStoreService = {
+      last: vi.fn(async () => ({ kind: 'available' as const, selection, expectedFingerprint: fingerprint })),
+      attach: vi.fn(async () => ({ kind: 'stale' as const, movieRef: 'capture_12345678', data })),
+      save: vi.fn(async () => undefined),
+    };
+    const service: IFrameReviewService = {
+      chooseSource: vi.fn(), open: vi.fn(async () => reviewSession()),
+    };
+    const session = new GifExtractionSession(service, thumbnailService(), { captureStore });
+
+    await session.reopenLastMovie();
+    await vi.waitFor(() => expect(session.snapshot.ranges).toHaveLength(1));
+    expect(session.snapshot.ranges[0]).toMatchObject({ kind: 'saved-exact-range', validation: 'stale' });
+    expect(session.snapshot.captureAvailable).toBe(false);
+    expect(session.canExtractRange(session.snapshot.ranges[0]!.id)).toBe(false);
+    expect(session.beginRefinement(session.snapshot.ranges[0]!.id).kind).toBe('rejected');
+    expect(session.canRemoveRange(session.snapshot.ranges[0]!.id)).toBe(true);
+    expect(session.removeRange(session.snapshot.ranges[0]!.id)).toBe(true);
+    expect(session.snapshot.ranges).toHaveLength(0);
+    expect(captureStore.save).toHaveBeenCalledOnce();
+  });
+
   it('announces cache reuse when the opened review is already exact-ready', async () => {
     const service: IFrameReviewService = {
       chooseSource: vi.fn(async () => ({ name: 'Sample Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
@@ -150,24 +260,34 @@ describe('GifExtractionSession', () => {
     expect(session.reviewSession).toBe(review);
   });
 
-  it('keeps the current source and ranges when replacement is declined', async () => {
-    const review = reviewSession();
+  it('switches movies with locked captures because they belong to the original movie', async () => {
+    const first = reviewSession();
+    const second = reviewSession();
+    let finishOpening: (review: IFrameReviewSession) => void = () => undefined;
+    const candidate = new Promise<IFrameReviewSession>(resolve => { finishOpening = resolve; });
     const chooseSource = vi.fn()
       .mockResolvedValueOnce({ name: 'First.mp4', sourceHandle: 'source_12345678' })
       .mockResolvedValueOnce({ name: 'Second.mp4', sourceHandle: 'source_87654321' });
-    const service: IFrameReviewService = { chooseSource, open: vi.fn(async () => review) };
+    const service: IFrameReviewService = { chooseSource, open: vi.fn().mockResolvedValueOnce(first).mockReturnValueOnce(candidate) };
     const session = new GifExtractionSession(service, thumbnailService());
     await session.openMovie();
     session.markStart(displayedCapture('timestamp', 10n));
     session.markEnd(displayedCapture('timestamp', 20n));
     session.lockRange();
 
-    const result = await session.openMovie(async () => false);
-
-    expect(result).toBe('kept-current');
+    const opening = session.openMovie();
+    await vi.waitFor(() => expect(session.snapshot.lifecycle).toBe('opening'));
     expect(session.snapshot.source?.name).toBe('First.mp4');
     expect(session.snapshot.ranges).toHaveLength(1);
-    expect(service.open).toHaveBeenCalledTimes(1);
+    expect(session.snapshot.capturesLoading).toBe(false);
+    expect(session.snapshot.captureAvailable).toBe(false);
+    finishOpening(second);
+    const result = await opening;
+
+    expect(result).toBe('opened');
+    expect(session.snapshot.source?.name).toBe('Second.mp4');
+    expect(session.snapshot.ranges).toHaveLength(0);
+    expect(service.open).toHaveBeenCalledTimes(2);
   });
 
   it('disposes the previous lease and thumbnails only after a confirmed replacement opens', async () => {
@@ -187,7 +307,7 @@ describe('GifExtractionSession', () => {
     session.lockRange();
     await vi.waitFor(() => expect(session.snapshot.ranges[0]?.thumbnail.kind).toBe('ready'));
 
-    expect(await session.openMovie(async () => true)).toBe('opened');
+    expect(await session.openMovie()).toBe('opened');
 
     expect(first.dispose).toHaveBeenCalledOnce();
     expect(thumbnails.delete).toHaveBeenCalledWith('thumbnail_00000001');

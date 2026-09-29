@@ -24,6 +24,8 @@ export interface IExactFrameOpenRequest {
 
 export interface IExactFrameReader {
   open(request: IExactFrameOpenRequest): Promise<number>;
+  identity(frameIndex: number): Promise<ISourceFrameIdentity>;
+  thumbnail(frameIndex: number): Promise<IHostExactFrame>;
   exact(frameIndex: number): Promise<IHostExactFrame>;
   atTime(timestampUs: bigint): Promise<IHostExactFrame>;
   scrub(frameIndex: number): Promise<IHostExactFrame>;
@@ -52,6 +54,13 @@ export class BestSourceFrameReader implements IExactFrameReader {
   }
 
   exact(frameIndex: number): Promise<IHostExactFrame> { return this.frame('exact', { frameIndex }); }
+  thumbnail(frameIndex: number): Promise<IHostExactFrame> { return this.frame('thumbnail', { frameIndex }); }
+  async identity(frameIndex: number): Promise<ISourceFrameIdentity> {
+    const generation = this.sourceGeneration;
+    const response = await this.client.request('identity', { frameIndex });
+    this.assertGeneration(response, generation);
+    return SourceFrameIdentity.fromWire(response.metadata.identity);
+  }
   scrub(frameIndex: number): Promise<IHostExactFrame> { return this.frame('scrub', { frameIndex }); }
   atTime(timestampUs: bigint): Promise<IHostExactFrame> { return this.frame('time', { timeUs: timestampUs.toString() }); }
   stepAdjacent(direction: -1 | 1): Promise<IHostExactFrame> { return this.frame('step', { direction }); }

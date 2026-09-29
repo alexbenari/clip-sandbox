@@ -45,6 +45,7 @@ class ClipExtractionIpcBoundary {
         collectionName: payload?.collectionName,
         startFrameIndex: payload?.startFrameIndex,
         endFrameIndex: payload?.endFrameIndex,
+        reviewSessionId: payload?.reviewSessionId,
       });
       return this.envelope(operationId, result);
     } catch (error) {

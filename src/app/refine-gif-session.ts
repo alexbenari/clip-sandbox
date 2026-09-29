@@ -67,8 +67,7 @@ export class RefineGifSession {
   ) {
     this.start = original.start;
     this.end = original.end;
-    this.focusedEndpoint = original.start.kind === 'playback-timestamp' || original.end.kind === 'exact-frame'
-      ? 'start' : 'end';
+    this.focusedEndpoint = 'start';
   }
 
   get snapshot(): IRefineGifSessionSnapshot {
@@ -139,12 +138,9 @@ export class RefineGifSession {
   ): RefineGifTransition {
     const problem = this.editingProblem();
     if (problem) return this.reject(problem);
-    if (this.focusedEndpoint !== endpoint) {
-      this.focusEndpoint(endpoint);
-      return Object.freeze({ kind: 'focused', endpoint, seekTimeUs: this.snapshot.seekTimeUs });
-    }
     const exact = this.owner.exactEndpointFromDisplayedCapture(capture);
     if (!exact) return this.reject('Display an exact frame before setting this endpoint.');
+    this.focusedEndpoint = endpoint;
     if (endpoint === 'start') {
       this.start = exact;
       this.startThumbnail = capture?.thumbnail ?? null;

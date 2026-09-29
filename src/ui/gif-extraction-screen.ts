@@ -35,16 +35,10 @@ export class GifExtractionScreen implements IAppScreen {
   private readonly sourceName: HTMLElement;
   private readonly commandStatus: HTMLElement;
   private readonly emptyCopy: HTMLElement;
-  private readonly localStatus: HTMLElement;
   private readonly markStartButton: HTMLButtonElement;
   private readonly markEndButton: HTMLButtonElement;
   private readonly lockButton: HTMLButtonElement;
-  private readonly replacementDialog: HTMLDialogElement;
-  private readonly replacementMovieName: HTMLElement;
-  private readonly confirmReplacementButton: HTMLButtonElement;
-  private readonly cancelReplacementButton: HTMLButtonElement;
   private readonly unsubscribeSession: (() => void) | null;
-  private replacementResolution: ((discard: boolean) => void) | null = null;
   private active = false;
   private destroyed = false;
 
@@ -75,32 +69,16 @@ export class GifExtractionScreen implements IAppScreen {
       <div class="gif-workflow-empty-copy">
         <h1>Choose a movie to begin</h1>
         <p>Review one source, mark several moments, then extract the exact ranges together.</p>
-      </div>
-      <p class="gif-workflow-local-status" role="status" aria-live="polite">Capture becomes available after exact frame preparation.</p>
-      <dialog class="gif-source-replacement-dialog" aria-labelledby="gif-source-replacement-title">
-        <form method="dialog">
-          <h2 id="gif-source-replacement-title">Open another movie?</h2>
-          <p>Your current ranges will be discarded before <strong data-next-movie></strong> is shown.</p>
-          <div class="dialog-actions">
-            <button type="button" data-command="cancel-replacement">Keep current movie</button>
-            <button type="button" class="btn-primary" data-command="confirm-replacement">Discard ranges and open</button>
-          </div>
-        </form>
-      </dialog>`;
+      </div>`;
 
     this.openMovie = this.required(this.commands.querySelector('[data-command="open-movie"]'), HTMLButtonElement, 'open-movie command');
     this.sourceName = this.required(this.commands.querySelector('.gif-workflow-source span'), HTMLElement, 'source name');
     this.commandStatus = this.required(this.commands.querySelector('.gif-workflow-command-status'), HTMLElement, 'command status');
     this.playerHost = this.required(this.root.querySelector('.gif-workflow-player-host'), HTMLElement, 'player host');
     this.emptyCopy = this.required(this.root.querySelector('.gif-workflow-empty-copy'), HTMLElement, 'empty copy');
-    this.localStatus = this.required(this.root.querySelector('.gif-workflow-local-status'), HTMLElement, 'local status');
     this.markStartButton = this.required(this.root.querySelector('[data-command="mark-start"]'), HTMLButtonElement, 'mark-start command');
     this.markEndButton = this.required(this.root.querySelector('[data-command="mark-end"]'), HTMLButtonElement, 'mark-end command');
     this.lockButton = this.required(this.root.querySelector('[data-command="lock-range"]'), HTMLButtonElement, 'lock-range command');
-    this.replacementDialog = this.required(this.root.querySelector('.gif-source-replacement-dialog'), HTMLDialogElement, 'source replacement dialog');
-    this.replacementMovieName = this.required(this.root.querySelector('[data-next-movie]'), HTMLElement, 'replacement movie name');
-    this.confirmReplacementButton = this.required(this.root.querySelector('[data-command="confirm-replacement"]'), HTMLButtonElement, 'confirm replacement command');
-    this.cancelReplacementButton = this.required(this.root.querySelector('[data-command="cancel-replacement"]'), HTMLButtonElement, 'cancel replacement command');
     this.bind();
     this.unsubscribeSession = options.session?.subscribe(snapshot => this.render(snapshot)) ?? null;
     this.panelContributions = options.rangesPanel
@@ -110,6 +88,7 @@ export class GifExtractionScreen implements IAppScreen {
 
   onActivate(): void {
     this.active = true;
+    void this.options.session?.reopenLastMovie();
     this.options.player.mount(this.playerHost);
     this.attachCurrentSession();
     this.options.keyboard.activate({
@@ -137,7 +116,6 @@ export class GifExtractionScreen implements IAppScreen {
     if (this.destroyed) return;
     this.destroyed = true;
     this.unsubscribeSession?.();
-    this.resolveReplacement(false);
   }
 
   private bind(): void {
@@ -145,23 +123,17 @@ export class GifExtractionScreen implements IAppScreen {
     this.markStartButton.addEventListener('click', () => this.markStart());
     this.markEndButton.addEventListener('click', () => this.markEnd());
     this.lockButton.addEventListener('click', () => this.lockRange());
-    this.confirmReplacementButton.addEventListener('click', () => this.resolveReplacement(true));
-    this.cancelReplacementButton.addEventListener('click', () => this.resolveReplacement(false));
-    this.replacementDialog.addEventListener('cancel', event => {
-      event.preventDefault();
-      this.resolveReplacement(false);
-    });
   }
 
   private async requestOpenMovie(): Promise<void> {
     const session = this.options.session;
     if (!session) {
-      this.localStatus.textContent = 'Movie opening is currently unavailable.';
+      this.commandStatus.textContent = 'Movie opening is currently unavailable.';
       return;
     }
     this.openMovie.disabled = true;
     try {
-      await session.openMovie(name => this.confirmSourceReplacement(name));
+      await session.openMovie();
       this.attachCurrentSession();
     } finally {
       this.openMovie.disabled = false;
@@ -177,7 +149,15 @@ export class GifExtractionScreen implements IAppScreen {
   }
 
   private lockRange(): void {
-    this.options.session?.lockRange();
+    const session = this.options.session;
+    if (!session) return;
+    const draft = session.snapshot.capture?.capture;
+    if (draft?.kind === 'draft'
+      && (draft.start?.kind === 'saved-exact-frame' || draft.end?.kind === 'saved-exact-frame')) {
+      void session.prepareSavedDraft().then(ready => { if (ready) session.lockRange(); });
+    } else {
+      session.lockRange();
+    }
   }
 
   private extractCurrent(): void {
@@ -198,9 +178,15 @@ export class GifExtractionScreen implements IAppScreen {
   private render(snapshot: IGifExtractionSessionSnapshot): void {
     this.sourceName.textContent = snapshot.source?.name ?? 'No movie open';
     this.commandStatus.textContent = this.statusText(snapshot);
-    this.localStatus.textContent = snapshot.message ?? this.statusText(snapshot);
     this.emptyCopy.hidden = snapshot.source !== null;
-    const captureReady = snapshot.reviewState?.captureEnabled === true;
+    const emptyHeading = this.emptyCopy.querySelector('h1');
+    const emptyDescription = this.emptyCopy.querySelector('p');
+    if (emptyHeading) emptyHeading.textContent = snapshot.lifecycle === 'opening' || snapshot.capturesLoading
+      ? 'Opening movie' : 'Choose a movie to begin';
+    if (emptyDescription) emptyDescription.textContent = snapshot.lifecycle === 'opening' || snapshot.capturesLoading
+      ? 'Playback will be available when the movie opens. Saved captures will then appear in the Clips panel.'
+      : 'Review one source, mark several moments, then extract the exact ranges together.';
+    const captureReady = snapshot.captureAvailable ?? snapshot.reviewState?.captureEnabled === true;
     this.markStartButton.disabled = !captureReady;
     this.markEndButton.disabled = !captureReady;
     const draft = snapshot.capture?.capture;
@@ -215,25 +201,6 @@ export class GifExtractionScreen implements IAppScreen {
     if (!snapshot.source) return 'Waiting for a movie';
     if (snapshot.reviewState?.captureEnabled) return 'Exact capture ready';
     return snapshot.reviewState?.message ?? 'Preparing exact frames';
-  }
-
-  private confirmSourceReplacement(nextMovieName: string): Promise<boolean> {
-    this.resolveReplacement(false);
-    this.replacementMovieName.textContent = nextMovieName;
-    if (typeof this.replacementDialog.showModal === 'function') this.replacementDialog.showModal();
-    else this.replacementDialog.setAttribute('open', '');
-    return new Promise(resolve => {
-      this.replacementResolution = resolve;
-      this.cancelReplacementButton.focus();
-    });
-  }
-
-  private resolveReplacement(discard: boolean): void {
-    const resolve = this.replacementResolution;
-    this.replacementResolution = null;
-    if (this.replacementDialog.open && typeof this.replacementDialog.close === 'function') this.replacementDialog.close();
-    else this.replacementDialog.removeAttribute('open');
-    resolve?.(discard);
   }
 
   private required<T extends Element>(value: Element | null, constructor: { new (...args: never[]): T }, label: string): T {

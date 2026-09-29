@@ -2,6 +2,7 @@ import {
   CaptureEndpointValue,
   type CaptureEndpoint,
   type IExactFrameEndpoint,
+  type ISavedExactFrameEndpoint,
 } from './capture-endpoint.js';
 
 declare const capturedRangeIdBrand: unique symbol;
@@ -25,7 +26,13 @@ export interface IReadyToExtractRange extends ICapturedRangeBase {
   readonly end: IExactFrameEndpoint;
 }
 
-export type CapturedRange = INeedsExactFramesRange | IReadyToExtractRange;
+export interface ISavedExactRange extends ICapturedRangeBase {
+  readonly kind: 'saved-exact-range';
+  readonly start: ISavedExactFrameEndpoint;
+  readonly end: ISavedExactFrameEndpoint;
+}
+
+export type CapturedRange = INeedsExactFramesRange | IReadyToExtractRange | ISavedExactRange;
 
 export class CapturedRangeValue {
   static hasExactFrames(range: CapturedRange, start: IExactFrameEndpoint, end: IExactFrameEndpoint): boolean {
@@ -52,6 +59,10 @@ export class CapturedRangeValue {
       return Object.freeze({
         kind: 'ready-to-extract', id, sourceGeneration: start.sourceGeneration, start, end,
       });
+    }
+    if (start.kind === 'saved-exact-frame' && end.kind === 'saved-exact-frame') {
+      if (end.frameIndex < start.frameIndex) throw new Error('The end must not precede the start.');
+      return Object.freeze({ kind: 'saved-exact-range', id, sourceGeneration: start.sourceGeneration, start, end });
     }
     if (CaptureEndpointValue.positionUs(end) < CaptureEndpointValue.positionUs(start)) {
       throw new Error('The end must not precede the start.');

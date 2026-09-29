@@ -1,6 +1,8 @@
 import type { AdjacentDirection } from '../adjacent-step-scheduler.js';
 import { AdjacentStepScheduler } from '../adjacent-step-scheduler.js';
 import type { FrameReviewCapturePoint } from '../frame-review-api.js';
+import type { ISourceFrameIdentity } from '../model/source-frame-identity.js';
+import { SourceFingerprint, type ISourceFingerprint } from '../model/source-fingerprint.js';
 import { BackendError } from '../model/backend-error.js';
 import { FrameReviewState, type IFrameReviewState } from '../model/frame-review-state.js';
 import { ScrubRequestScheduler } from '../scrub-request-scheduler.js';
@@ -37,9 +39,11 @@ export class ReviewSession {
   private playbackDurationUs: bigint | null = null;
   private currentExactFrame: IHostExactFrame | null = null;
   private preparationPromise: Promise<void> = Promise.resolve();
+  private playbackTurn: Promise<void> = Promise.resolve();
   private proxyActivationPromise: Promise<void> | null = null;
   private proxyActivationError: unknown = null;
   private exactReady = false;
+  private preparedFingerprint: ISourceFingerprint | null = null;
   private opened = false;
   private disposed = false;
   private disposalPromise: Promise<void> | null = null;
@@ -79,21 +83,33 @@ export class ReviewSession {
 
   state(): IFrameReviewState { return this.currentState; }
 
+  captureContext(): Readonly<{ sourcePath: string; fingerprint: ISourceFingerprint }> | null {
+    return this.preparedFingerprint
+      ? Object.freeze({ sourcePath: this.options.sourcePath, fingerprint: this.preparedFingerprint }) : null;
+  }
+
   async whenPrepared(): Promise<void> { await this.preparationPromise; }
 
   async play(): Promise<void> {
     this.requireOpen();
-    if (this.currentExactFrame) await this.options.playback.playAt(this.currentExactFrame.reviewTimeUs);
-    else await this.options.playback.play();
-    this.currentExactFrame = null;
+    await this.withPlayback(async () => {
+      if (this.currentExactFrame) await this.options.playback.playAt(this.currentExactFrame.reviewTimeUs);
+      else await this.options.playback.play();
+      this.currentExactFrame = null;
+    });
   }
 
-  async pause(): Promise<void> { this.requireOpen(); await this.options.playback.pause(); }
+  async pause(): Promise<void> {
+    this.requireOpen();
+    await this.withPlayback(() => this.options.playback.pause());
+  }
 
   async seekPlayback(timestampUs: bigint): Promise<void> {
     this.requireOpen();
-    await this.options.playback.seek(timestampUs);
-    this.currentExactFrame = null;
+    await this.withPlayback(async () => {
+      await this.options.playback.seek(timestampUs);
+      this.currentExactFrame = null;
+    });
   }
 
   async enterFrameScrub(): Promise<IHostExactFrame> {
@@ -134,6 +150,22 @@ export class ReviewSession {
     return Object.freeze({ kind: 'playback-timestamp', timestampUs: status.timestampUs });
   }
 
+  async frameIdentity(frameIndex: number): Promise<ISourceFrameIdentity> {
+    this.requireExactReady();
+    if (!Number.isSafeInteger(frameIndex) || frameIndex < 0) {
+      throw new BackendError('invalid-request', 'Frame ordinal is invalid.', true);
+    }
+    return this.options.exact.identity(frameIndex);
+  }
+
+  async thumbnailFrame(frameIndex: number): Promise<IHostExactFrame> {
+    this.requireExactReady();
+    if (!Number.isSafeInteger(frameIndex) || frameIndex < 0) {
+      throw new BackendError('invalid-request', 'Thumbnail frame ordinal is invalid.', true);
+    }
+    return this.options.exact.thumbnail(frameIndex);
+  }
+
   dispose(): Promise<void> {
     if (this.disposalPromise) return this.disposalPromise;
     this.disposed = true;
@@ -142,7 +174,7 @@ export class ReviewSession {
     this.adjacentScheduler.setSourceGeneration(2);
     this.options.playback.setFrameListener(undefined);
     this.disposalPromise = Promise.allSettled([
-      this.options.playback.shutdown(),
+      this.playbackTurn.then(() => this.options.playback.shutdown()),
       this.options.exact.shutdown(),
     ]).then(() => { this.publishState('closed'); });
     return this.disposalPromise;
@@ -158,26 +190,30 @@ export class ReviewSession {
       if (this.disposed) return;
       await this.proxyActivationPromise;
       if (this.proxyActivationError) throw this.proxyActivationError;
-      const playbackStatus = await this.options.playback.status();
-      const wasPlaying = playbackStatus.state === 'playing';
-      if (wasPlaying) await this.options.playback.pause();
       await this.options.exact.open({
         canonicalSourcePath: prepared.canonicalSourcePath,
         canonicalIndexPath: prepared.canonicalIndexPath,
         maxWidth: this.options.previewBounds.maxWidth,
         maxHeight: this.options.previewBounds.maxHeight,
       });
+      if (this.disposed) return;
       if (!this.proxyActivationPromise) {
-        await this.options.playback.open(prepared.proxyPath, {
-          muted: false,
-          maxWidth: this.options.previewBounds.maxWidth,
-          maxHeight: this.options.previewBounds.maxHeight,
+        await this.withPlayback(async () => {
+          const playbackStatus = await this.options.playback.status();
+          const wasPlaying = playbackStatus.state === 'playing';
+          if (wasPlaying) await this.options.playback.pause();
+          await this.options.playback.open(prepared.proxyPath, {
+            muted: false,
+            maxWidth: this.options.previewBounds.maxWidth,
+            maxHeight: this.options.previewBounds.maxHeight,
+          });
+          await this.options.playback.seek(playbackStatus.timestampUs);
+          if (wasPlaying) await this.options.playback.play();
         });
-        await this.options.playback.seek(playbackStatus.timestampUs);
       }
-      if (wasPlaying) await this.options.playback.play();
       if (this.disposed) return;
       this.exactReady = true;
+      this.preparedFingerprint = SourceFingerprint.fromInspection(prepared.identity);
       this.publishState('exact-ready', {
         preparedReview: Object.freeze({
           cacheKey: prepared.cacheKey,
@@ -212,16 +248,24 @@ export class ReviewSession {
   }
 
   private async activateProxy(proxy: IPlaybackProxyEntry): Promise<void> {
-    const playbackStatus = await this.options.playback.status();
-    const wasPlaying = playbackStatus.state === 'playing';
-    if (wasPlaying) await this.options.playback.pause();
-    await this.options.playback.open(proxy.proxyPath, {
-      muted: false,
-      maxWidth: this.options.previewBounds.maxWidth,
-      maxHeight: this.options.previewBounds.maxHeight,
+    await this.withPlayback(async () => {
+      const playbackStatus = await this.options.playback.status();
+      const wasPlaying = playbackStatus.state === 'playing';
+      if (wasPlaying) await this.options.playback.pause();
+      await this.options.playback.open(proxy.proxyPath, {
+        muted: false,
+        maxWidth: this.options.previewBounds.maxWidth,
+        maxHeight: this.options.previewBounds.maxHeight,
+      });
+      await this.options.playback.seek(playbackStatus.timestampUs);
+      if (wasPlaying) await this.options.playback.play();
     });
-    await this.options.playback.seek(playbackStatus.timestampUs);
-    if (wasPlaying) await this.options.playback.play();
+  }
+
+  private withPlayback<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.playbackTurn.then(operation);
+    this.playbackTurn = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   private publishState(

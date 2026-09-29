@@ -96,6 +96,10 @@ public:
             else if (command == "close") Close(request_id);
             else if (command == "exact" || command == "scrub") Frame(request_id, command,
                 required<std::int64_t>(request.metadata, "frameIndex"), 0);
+            else if (command == "identity") GetIndexedFrameIdentity(request_id,
+                required<std::int64_t>(request.metadata, "frameIndex"));
+            else if (command == "thumbnail") GetFrameContentsForThumbnail(request_id,
+                required<std::int64_t>(request.metadata, "frameIndex"));
             else if (command == "time") Frame(request_id, command,
                 FrameAtTime(required<std::string>(request.metadata, "timeUs")), 0);
             else if (command == "step") Frame(request_id, command, 0,
@@ -253,6 +257,68 @@ private:
             }},
         };
         frame_bridge::write_message(std::cout, metadata, converted.pixels.data(), converted.pixels.size());
+    }
+
+    void GetIndexedFrameIdentity(const std::string& request_id, std::int64_t frame_index) const {
+        if (!source_) throw std::logic_error("no prepared source is open");
+        const auto& source = IdentitySource();
+        const auto& properties = source.GetVideoProperties();
+        if (frame_index < 0 || frame_index >= properties.NumFrames) {
+            throw std::out_of_range("frame identity ordinal is unavailable");
+        }
+        const auto& info = source.GetFrameInfo(frame_index);
+        frame_bridge::write_message(std::cout, {
+            {"type", "frame-identity"}, {"requestId", request_id}, {"command", "identity"},
+            {"sourceGeneration", source_generation_}, {"frameGeneration", frame_generation_},
+            {"identity", {
+                {"frameIndex", frame_index},
+                {"originalFrameIndex", source.GetOriginalFrameNumber(frame_index)},
+                {"pts", std::to_string(info.PTS)},
+                {"duration", std::to_string(FrameDuration(source, frame_index))},
+                {"timebaseNumerator", std::to_string(properties.TimeBase.Num)},
+                {"timebaseDenominator", std::to_string(properties.TimeBase.Den)},
+                {"frameInfoPts", std::to_string(info.PTS)},
+                {"frameInfoHash", frame_hash(info.Hash)},
+            }},
+        });
+    }
+
+    void GetFrameContentsForThumbnail(const std::string& request_id, std::int64_t frame_index) {
+        if (!source_) throw std::logic_error("no prepared source is open");
+        if (frame_index < 0 || frame_index >= source_->GetVideoProperties().NumFrames) {
+            throw std::out_of_range("thumbnail frame ordinal is unavailable");
+        }
+        std::unique_ptr<BestVideoFrame> frame(source_->GetFrame(frame_index, false));
+        if (!frame || !frame->GetAVFrame()) throw std::runtime_error("BestSource returned no thumbnail frame");
+        auto converted = convert_rgba(*frame, maximum_preview_width_, maximum_preview_height_);
+        const auto& identity_source = IdentitySource();
+        const auto& identity_properties = identity_source.GetVideoProperties();
+        const auto& info = identity_source.GetFrameInfo(frame_index);
+        const auto& review_properties = source_->GetVideoProperties();
+        const auto& review_info = source_->GetFrameInfo(frame_index);
+        frame_bridge::write_message(std::cout, {
+            {"type", "frame"}, {"requestId", request_id}, {"command", "thumbnail"},
+            {"sourceGeneration", source_generation_}, {"frameGeneration", ++frame_generation_},
+            {"width", converted.width}, {"height", converted.height}, {"stride", converted.stride},
+            {"sourceWidth", frame->GetAVFrame()->width}, {"sourceHeight", frame->GetAVFrame()->height},
+            {"pixelFormat", "RGBA8888"}, {"payloadBytes", converted.pixels.size()},
+            {"identity", {
+                {"frameIndex", frame_index},
+                {"originalFrameIndex", identity_source.GetOriginalFrameNumber(frame_index)},
+                {"pts", std::to_string(info.PTS)},
+                {"duration", std::to_string(FrameDuration(identity_source, frame_index))},
+                {"timebaseNumerator", std::to_string(identity_properties.TimeBase.Num)},
+                {"timebaseDenominator", std::to_string(identity_properties.TimeBase.Den)},
+                {"frameInfoPts", std::to_string(info.PTS)},
+                {"frameInfoHash", frame_hash(info.Hash)},
+            }},
+            {"reviewTime", {
+                {"pts", std::to_string(review_info.PTS)},
+                {"duration", std::to_string(FrameDuration(*source_, frame_index))},
+                {"timebaseNumerator", std::to_string(review_properties.TimeBase.Num)},
+                {"timebaseDenominator", std::to_string(review_properties.TimeBase.Den)},
+            }},
+        }, converted.pixels.data(), converted.pixels.size());
     }
 
     std::int64_t FrameAtTime(const std::string& value) const {

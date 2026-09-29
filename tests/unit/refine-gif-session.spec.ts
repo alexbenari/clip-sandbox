@@ -127,6 +127,36 @@ function lockExactRange(session: GifExtractionSession, startFrame = 10, endFrame
 }
 
 describe('RefineGifSession', () => {
+  it('leaves the other captures available when the active refinement is removed', async () => {
+    const { session } = await openSession();
+    const first = lockExactRange(session, 10, 20);
+    const second = lockExactRange(session, 30, 40);
+    expect(session.beginRefinement(first.id).kind).toBe('started');
+
+    expect(session.removeRange(first.id)).toBe(true);
+
+    expect(session.snapshot.refinement).toBeNull();
+    expect(session.snapshot.ranges.map(range => range.id)).toEqual([second.id]);
+    expect(session.beginRefinement(second.id).kind).toBe('started');
+  });
+
+  it('replaces an unfinished refinement when another capture is selected', async () => {
+    const { session } = await openSession();
+    const first = lockExactRange(session, 10, 20);
+    const second = lockExactRange(session, 30, 40);
+    const firstRefinement = session.beginRefinement(first.id);
+    if (firstRefinement.kind !== 'started') throw new Error(firstRefinement.message);
+    firstRefinement.session.markStart(displayedCapture('exact', 120_000n, 12));
+
+    const replacement = session.beginRefinement(second.id);
+
+    expect(replacement).toMatchObject({ kind: 'started' });
+    expect(session.snapshot.refinement?.rangeId).toBe(second.id);
+    expect(session.snapshot.ranges.map(range => range.id)).toEqual([first.id, second.id]);
+    expect(session.snapshot.ranges[0]?.start).toMatchObject({ identity: { frameIndex: 10 } });
+    expect(firstRefinement.session.commit()).toMatchObject({ kind: 'rejected' });
+  });
+
   it('opens an exact capture, discards staged edits on Back, then replaces the same panel entry on Lock', async () => {
     const { session } = await openSession();
     const first = lockExactRange(session);
@@ -205,9 +235,9 @@ describe('RefineGifSession', () => {
     expect(begin.session.snapshot).toMatchObject({ focusedEndpoint: 'start', canCommit: false });
 
     expect(begin.session.markEnd(displayedCapture('exact', 300_000n, 30))).toMatchObject({
-      kind: 'focused', endpoint: 'end', seekTimeUs: 300_000n,
+      kind: 'staged', endpoint: 'end',
     });
-    expect(begin.session.snapshot.end.kind).toBe('playback-timestamp');
+    expect(begin.session.snapshot.end.kind).toBe('exact-frame');
     begin.session.markStart(displayedCapture('exact', 120_000n, 12));
     begin.session.markStart(displayedCapture('exact', 120_000n, 12));
     begin.session.markEnd(displayedCapture('exact', 320_000n, 32));
@@ -254,7 +284,7 @@ describe('RefineGifSession', () => {
     const begin = session.beginRefinement(mixed.range.id);
     if (begin.kind !== 'started') throw new Error(begin.message);
 
-    expect(begin.session.snapshot).toMatchObject({ focusedEndpoint: 'end', seekTimeUs: 300_000n });
+    expect(begin.session.snapshot).toMatchObject({ focusedEndpoint: 'start', seekTimeUs: 100_000n });
     begin.session.markEnd(displayedCapture('exact', 300_000n, 30));
     expect(begin.session.commit()).toMatchObject({ kind: 'committed' });
     expect(begin.session.snapshot.nextInexactRangeId).toBe(next.id);
@@ -275,7 +305,7 @@ describe('RefineGifSession', () => {
       name: 'Replacement.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_987654321'),
     });
     vi.mocked(service.open).mockResolvedValueOnce(reviewSession(2));
-    expect(await session.openMovie(async () => true)).toBe('opened');
+    expect(await session.openMovie()).toBe('opened');
     expect(stale.session.commit()).toMatchObject({ kind: 'rejected', message: expect.stringContaining('source changed') });
   });
 });

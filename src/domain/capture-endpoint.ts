@@ -13,7 +13,15 @@ export interface IPlaybackTimestampEndpoint {
   readonly sourceGeneration: number;
 }
 
-export type CaptureEndpoint = IExactFrameEndpoint | IPlaybackTimestampEndpoint;
+export interface ISavedExactFrameEndpoint {
+  readonly kind: 'saved-exact-frame';
+  readonly frameIndex: number;
+  readonly frameInfoHash: string;
+  readonly reviewTimeUs: bigint;
+  readonly sourceGeneration: number;
+}
+
+export type CaptureEndpoint = IExactFrameEndpoint | IPlaybackTimestampEndpoint | ISavedExactFrameEndpoint;
 
 export class CaptureEndpointValue {
   static exact(
@@ -35,8 +43,17 @@ export class CaptureEndpointValue {
     return Object.freeze({ kind: 'playback-timestamp', timestampUs, sourceGeneration });
   }
 
+  static savedExact(frameIndex: number, frameInfoHash: string, reviewTimeUs: bigint, sourceGeneration: number): ISavedExactFrameEndpoint {
+    this.assertGeneration(sourceGeneration);
+    this.assertTimestamp(reviewTimeUs, 'Saved exact-frame review time');
+    if (!Number.isSafeInteger(frameIndex) || frameIndex < 0 || !/^[a-f0-9]{16}$/.test(frameInfoHash)) {
+      throw new Error('Saved exact-frame identity is invalid.');
+    }
+    return Object.freeze({ kind: 'saved-exact-frame', frameIndex, frameInfoHash, reviewTimeUs, sourceGeneration });
+  }
+
   static positionUs(endpoint: CaptureEndpoint): bigint {
-    return endpoint.kind === 'exact-frame' ? endpoint.reviewTimeUs : endpoint.timestampUs;
+    return endpoint.kind === 'playback-timestamp' ? endpoint.timestampUs : endpoint.reviewTimeUs;
   }
 
   private static assertGeneration(sourceGeneration: number): void {

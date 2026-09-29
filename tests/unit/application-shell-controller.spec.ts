@@ -178,7 +178,7 @@ describe('application shell screen ownership', () => {
     const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);
     const sharedRanges = panelContentFixture();
     const extraction = { ...f.extraction, panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
-    const refine = { ...f.refine, panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
+    const refine = { ...f.refine, openPanelIdsOnEntry: ['clips'], panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
     const order: string[] = [];
     extraction.onDeactivate = vi.fn(() => order.push('extraction:deactivate'));
     refine.onActivate = vi.fn(() => order.push('refine:activate'));
@@ -208,7 +208,7 @@ describe('application shell screen ownership', () => {
     clips.foldButton.click();
     shell.activate(extraction.id);
     shell.activate(refine.id);
-    expect(clips.root.classList.contains('folded')).toBe(true);
+    expect(clips.root.classList.contains('folded')).toBe(false);
     shell.activate(f.collection.id);
     expect(Array.from(f.selector.options).map(option => option.value)).toEqual(['Collection', 'Settings', 'Extraction']);
   });

@@ -27,11 +27,35 @@ function snapshot(ready: boolean): IGifExtractionSessionSnapshot {
     ranges: Object.freeze([]),
     selectedRangeId: null,
     refinement: null,
+    capturesLoading: false,
     message: ready ? 'Exact capture ready' : 'Building exact frame index',
   });
 }
 
 describe('GifExtractionScreen', () => {
+  it('explains when playback will become available during saved movie reopening', () => {
+    let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
+    const session = {
+      reviewSession: null,
+      subscribe: vi.fn((listener: (value: IGifExtractionSessionSnapshot) => void) => {
+        publish = listener;
+        listener({ ...snapshot(false), lifecycle: 'empty', source: null, capturesLoading: true });
+        return vi.fn();
+      }),
+      reopenLastMovie: vi.fn(async () => undefined),
+    };
+    const player = new FrameReviewPlayerControl({ document,
+      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const screen = new GifExtractionScreen({ player, keyboard: new GifWorkflowKeyboardController(),
+      session: session as never, document });
+
+    expect(screen.root.querySelector('.gif-workflow-empty-copy')?.textContent)
+      .toContain('Playback will be available when the movie opens.');
+    publish({ ...snapshot(false), lifecycle: 'empty', source: null, capturesLoading: false });
+    expect(screen.root.querySelector('.gif-workflow-empty-copy')?.textContent)
+      .toContain('Choose a movie to begin');
+  });
+
   it('enables Q/W only after exact preparation and routes keyboard capture through the displayed frame', () => {
     let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
     const session = {
@@ -42,6 +66,7 @@ describe('GifExtractionScreen', () => {
         return vi.fn();
       }),
       markStart: vi.fn(), markEnd: vi.fn(), lockRange: vi.fn(), openMovie: vi.fn(),
+      reopenLastMovie: vi.fn(async () => undefined),
     };
     const player = new FrameReviewPlayerControl({
       document,
@@ -56,6 +81,7 @@ describe('GifExtractionScreen', () => {
     screen.onActivate();
 
     expect(screen.root.querySelector<HTMLButtonElement>('[data-command="mark-start"]')?.disabled).toBe(true);
+    expect(screen.root.querySelector('.gif-workflow-local-status')).toBeNull();
     publish(snapshot(true));
     expect(screen.commands.textContent).toContain('Feature.mp4');
     expect(screen.root.querySelector<HTMLButtonElement>('[data-command="mark-start"]')?.disabled).toBe(false);

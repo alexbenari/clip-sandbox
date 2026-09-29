@@ -66,6 +66,8 @@ export interface IFrameReviewSession {
   pressAdjacent(direction: AdjacentDirection): Promise<void>;
   releaseAdjacent(direction?: AdjacentDirection): Promise<void>;
   captureCurrentPoint(): Promise<FrameReviewCapturePoint>;
+  frameIdentity(frameIndex: number): Promise<ISourceFrameIdentity>;
+  thumbnailFrame(frameIndex: number): Promise<IExactDisplayFrame>;
   subscribe(listener: (event: FrameReviewEvent) => void): () => void;
   dispose(): Promise<void>;
 }

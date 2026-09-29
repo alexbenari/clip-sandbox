@@ -41,9 +41,9 @@ const prepared: IExactReviewProxyHostResult = Object.freeze({
   durationUs: '4000000', normalizedSourcePath: null, canonicalSourcePath: 'C:/movie.mp4',
   sourcePath: 'C:/movie.mp4', selectedStream: 0,
   identity: Object.freeze({
-    schemaVersion: 1, sourceSampleDigest: 'digest', sourceBytes: '1', sourceDurationUs: '4000000',
+    schemaVersion: 1, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '1', sourceDurationUs: '4000000',
     signatureProfileVersion: 'sample-signature-compact-v1', preparationContractVersion: 'prepared-review-v1',
-    selectedStream: 0, streamMetadataDigest: 'stream', nativeProtocolVersion: 1,
+    selectedStream: 0, streamMetadataDigest: 'b'.repeat(64), nativeProtocolVersion: 1,
     bestSourceVersion: 'bestsource', ffmpegVersion: 'ffmpeg',
     proxyProfileId: 'mpeg4-gop1-q5-960-source-clock-aac-v1',
     frameMapVersion: 'ordinal-identity-v1',
@@ -78,6 +78,8 @@ class ExactFake implements IExactFrameReader {
   shutdownCount = 0;
   async open() { return 4; }
   async exact() { return exactFrame; }
+  async identity() { return exactFrame.identity; }
+  async thumbnail() { return exactFrame; }
   async atTime() { return exactFrame; }
   async scrub() { return exactFrame; }
   async stepAdjacent() { return exactFrame; }
@@ -85,6 +87,25 @@ class ExactFake implements IExactFrameReader {
 }
 
 describe('review session', () => {
+  it('renders a thumbnail without changing playback state or position', async () => {
+    const playback = new PlaybackFake();
+    const exact = new ExactFake();
+    const session = new ReviewSession({
+      id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact,
+      prepare: async () => prepared, emit: vi.fn(),
+    });
+    await session.open();
+    await session.whenPrepared();
+    await session.play();
+    const position = playback.timestampUs;
+
+    expect(await session.thumbnailFrame(2)).toBe(exactFrame);
+    expect(playback.stateValue).toBe('playing');
+    expect(playback.timestampUs).toBe(position);
+    await session.dispose();
+  });
+
   it('keeps playback capture inexact until preparation enables canonical scrub capture', async () => {
     const preparation = deferred<IExactReviewProxyHostResult>();
     const playback = new PlaybackFake();
@@ -159,6 +180,39 @@ describe('review session', () => {
     preparation.resolve(prepared);
     await session.whenPrepared();
     expect(session.state()).toMatchObject({ phase: 'exact-ready', captureEnabled: true });
+  });
+
+  it('applies Play after a proxy switch that began while playback was paused', async () => {
+    const preparation = deferred<IExactReviewProxyHostResult>();
+    const proxyOpened = deferred<void>();
+    const proxyOpening = deferred<void>();
+    const playback = new PlaybackFake();
+    const originalOpen = playback.open.bind(playback);
+    playback.open = async (source, options) => {
+      if (source.includes('early')) {
+        proxyOpening.resolve();
+        await proxyOpened.promise;
+        playback.stateValue = 'paused';
+      }
+      return originalOpen(source, options);
+    };
+    let report: ((update: IReviewPreparationUpdate) => void) | undefined;
+    const session = new ReviewSession({
+      id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      prepare: (_path, emit) => { report = emit; return preparation.promise; }, emit: () => undefined,
+    });
+    await session.open();
+    report?.({ phase: 'proxy-ready', progressPercent: null,
+      proxy: { cacheKey: 'a'.repeat(64), cacheHit: false, proxyPath: 'C:/early/proxy.mkv', normalizedSourcePath: null } });
+    await proxyOpening.promise;
+    const pausing = session.pause();
+    const playing = session.play();
+    proxyOpened.resolve();
+    await Promise.all([pausing, playing]);
+    expect(playback.stateValue).toBe('playing');
+    preparation.resolve(prepared);
+    await session.whenPrepared();
   });
 
   it('resumes playback from the last exact scrub frame instead of the prior playback timestamp', async () => {

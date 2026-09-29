@@ -14,6 +14,7 @@ export type ClipExtractionEntryState =
 
 interface IWorkflowContext {
   readonly sourceHandle: string;
+  readonly reviewSessionId?: string;
   readonly sourceGeneration: number;
   readonly collectionName: string;
 }
@@ -107,6 +108,7 @@ export class ClipExtractionWorkflow {
           media = await this.extractor.extract({
             range,
             sourceHandle: context.sourceHandle,
+            reviewSessionId: context.reviewSessionId,
             currentSourceGeneration: context.sourceGeneration,
             destinationHandle: opened.destinationHandle,
             collectionName: context.collectionName,

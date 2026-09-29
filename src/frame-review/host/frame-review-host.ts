@@ -4,6 +4,8 @@ import path from 'node:path';
 import type { AdjacentDirection } from '../adjacent-step-scheduler.js';
 import { FrameReviewOpaqueId, type FrameReviewCapturePoint } from '../frame-review-api.js';
 import { BackendError } from '../model/backend-error.js';
+import { SourceFingerprint, type ISourceFingerprint } from '../model/source-fingerprint.js';
+import type { ISourceFrameIdentity } from '../model/source-frame-identity.js';
 import { BestSourceFrameIndexer } from './bestsource-frame-indexer.js';
 import { BestSourceFrameReader, type IHostExactFrame } from './bestsource-frame-reader.js';
 import { FfmpegProxyCreator } from './ffmpeg-proxy-creator.js';
@@ -35,6 +37,7 @@ export interface IFrameReviewRuntimeConfiguration {
 export interface IFrameReviewHostSession {
   readonly id: string;
   state(): ReturnType<ReviewSession['state']>;
+  captureContext(): Readonly<{ sourcePath: string; fingerprint: ISourceFingerprint }> | null;
   play(): Promise<void>;
   pause(): Promise<void>;
   seekPlayback(timestampUs: bigint): Promise<void>;
@@ -44,6 +47,8 @@ export interface IFrameReviewHostSession {
   pressAdjacent(direction: AdjacentDirection): Promise<void>;
   releaseAdjacent(direction?: AdjacentDirection): Promise<void>;
   captureCurrentPoint(): Promise<FrameReviewCapturePoint>;
+  frameIdentity(frameIndex: number): Promise<ISourceFrameIdentity>;
+  thumbnailFrame(frameIndex: number): Promise<IHostExactFrame>;
   whenPrepared(): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -162,6 +167,30 @@ export class FrameReviewHost {
     const session = this.sessions.get(sessionId);
     if (!session) throw new BackendError('invalid-request', 'Frame-review session is unknown.', true);
     return session;
+  }
+
+  captureContext(sessionId: string): Readonly<{ sourcePath: string; fingerprint: ISourceFingerprint }> {
+    const context = this.session(sessionId).captureContext();
+    if (!context) throw new BackendError('invalid-state', 'Movie identity is not ready.', true);
+    return context;
+  }
+
+  async extractionFrameIdentities(
+    sessionId: string,
+    sourceHandleValue: string,
+    startFrameIndex: number,
+    endFrameIndex: number,
+    preparedIdentity: Omit<ISourceFingerprint, 'fingerprintVersion'>,
+  ): Promise<readonly [ISourceFrameIdentity, ISourceFrameIdentity]> {
+    const sourceHandle = FrameReviewOpaqueId.sourceHandle(sourceHandleValue);
+    const sourcePath = this.sources.get(sourceHandle);
+    const session = this.session(sessionId);
+    const context = session.captureContext();
+    if (!sourcePath || !context || context.sourcePath !== sourcePath
+      || !SourceFingerprint.same(context.fingerprint, SourceFingerprint.fromInspection(preparedIdentity))) {
+      throw new BackendError('invalid-request', 'Review session does not match the extraction source.', true);
+    }
+    return Promise.all([session.frameIdentity(startFrameIndex), session.frameIdentity(endFrameIndex)]);
   }
 
   async closeSession(id: string): Promise<void> {

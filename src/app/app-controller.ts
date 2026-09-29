@@ -38,6 +38,7 @@ import { GifRangesPanelControl } from '../ui/gif-ranges-panel-control.js';
 import { ElectronFrameReviewService } from '../adapters/electron/electron-frame-review-service.js';
 import { ElectronThumbnailCacheService } from '../adapters/electron/electron-thumbnail-cache-service.js';
 import { ElectronClipExtractionService } from '../adapters/electron/electron-clip-extraction-service.js';
+import { ElectronClipCapturesStoreService } from '../adapters/electron/electron-clip-captures-store-service.js';
 import { GifExtractionSession } from './gif-extraction-session.js';
 import { AppSettingsService } from './app-settings-service.js';
 import { AppSettingsParser, DEFAULT_STARTUP_SCREEN_ID } from './app-settings.js';
@@ -227,16 +228,13 @@ export class AppController {
         });
       };
 
-    readonly runAddToCollection = async (destination: AddToCollectionDestination, { showDialogValidation = false }: { showDialogValidation?: boolean } = {}) => {
-        const pipeline = this.currentPipeline();
-        if (!this.currentClipSequence() || !pipeline) return { ok: false, code: 'missing-context' };
-        const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(gridController.getSelectedClipIds());
-        if (selectedClipNames.length === 0) return { ok: false, code: 'no-selection' };
-
-        let targetCollectionFilename = '';
+    readonly resolveAddDestinationFilename = (
+        destination: AddToCollectionDestination, pipeline: Pipeline, showDialogValidation: boolean,
+      ): { ok: true; filename: string } | { ok: false; code: string } => {
         if (destination.kind === 'existing') {
-          targetCollectionFilename = String(destination.collectionFilename || '').trim();
-        } else if (destination.kind === 'new') {
+          return { ok: true, filename: String(destination.collectionFilename || '').trim() };
+        }
+        if (destination.kind === 'new') {
           const validation = Collection.validateCollectionName(destination.name);
           if (!validation.ok) {
             const validationError = collectionNameValidator.validationErrorText(validation.code);
@@ -255,48 +253,53 @@ export class AppController {
           if (validation.filename === this.activeCollectionFilename()) {
             return { ok: false, code: 'invalid-destination' };
           }
-          targetCollectionFilename = validation.filename;
+          return { ok: true, filename: validation.filename };
         }
+        return { ok: false, code: 'invalid-destination' };
+      };
 
-        const mutation = pipeline.addClipsToCollection({
-          collectionFilename: targetCollectionFilename,
-          clipNames: selectedClipNames,
-        });
-        if (!mutation.ok || mutation.isNoOp) {
-          const result = {
-            ...mutation,
-            saveMode: null,
-          };
-          if (result.ok) {
-            addToCollectionDialogController.close();
-            this.refreshCollectionSelectorView();
-            this.refreshToolbarView();
-            this.showStatus(appText.addedSelectedClipsText(result.destinationName, result.addedCount, result.skippedCount), 4000);
-          }
-          return result;
-        }
-
-        let result: AddToCollectionResult;
+    readonly persistAddedCollection = async (
+        pipeline: Pipeline, mutation: Extract<ReturnType<Pipeline['addClipsToCollection']>, { ok: true }>,
+      ): Promise<AddToCollectionResult> => {
         try {
           const { mode: saveMode } = await this.persistCollection(mutation.collection);
-          result = {
-            ...mutation,
-            saveMode,
-          };
+          return { ...mutation, saveMode };
         } catch (error) {
           if (mutation.previousCollection) {
             pipeline.upsertCollection(mutation.previousCollection);
           } else if (mutation.filename) {
             pipeline.removeCollection(mutation.filename);
           }
-          result = {
-            ok: false,
-            code: 'save-failed',
-            error,
-            destinationName: mutation.destinationName,
-          };
+          return { ok: false, code: 'save-failed', error, destinationName: mutation.destinationName };
+        }
+      };
+
+    readonly showAddToCollectionSuccess = (result: Extract<AddToCollectionResult, { ok: true }>): void => {
+        addToCollectionDialogController.close();
+        this.refreshCollectionSelectorView();
+        this.refreshToolbarView();
+        this.showStatus(appText.addedSelectedClipsText(result.destinationName, result.addedCount, result.skippedCount), 4000);
+      };
+
+    readonly runAddToCollection = async (destination: AddToCollectionDestination, { showDialogValidation = false }: { showDialogValidation?: boolean } = {}) => {
+        const pipeline = this.currentPipeline();
+        if (!this.currentClipSequence() || !pipeline) return { ok: false, code: 'missing-context' };
+        const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(gridController.getSelectedClipIds());
+        if (selectedClipNames.length === 0) return { ok: false, code: 'no-selection' };
+        const target = this.resolveAddDestinationFilename(destination, pipeline, showDialogValidation);
+        if (!target.ok) return target;
+
+        const mutation = pipeline.addClipsToCollection({
+          collectionFilename: target.filename,
+          clipNames: selectedClipNames,
+        });
+        if (!mutation.ok || mutation.isNoOp) {
+          const result = { ...mutation, saveMode: null };
+          if (result.ok) this.showAddToCollectionSuccess(result);
+          return result;
         }
 
+        const result = await this.persistAddedCollection(pipeline, mutation);
         if (!result.ok) {
           const validationError = collectionNameValidator.validationErrorText(String(result.code));
           if (showDialogValidation && validationError) {
@@ -316,10 +319,7 @@ export class AppController {
         }
 
         gridController.invalidateView(this.gridViewCacheKeyForCollection(result.collection));
-        addToCollectionDialogController.close();
-        this.refreshCollectionSelectorView();
-        this.refreshToolbarView();
-        this.showStatus(appText.addedSelectedClipsText(result.destinationName, result.addedCount, result.skippedCount), 4000);
+        this.showAddToCollectionSuccess(result);
         return result;
       };
 
@@ -385,42 +385,10 @@ export class AppController {
         deleteFromDiskDialogController.closeAll();
       };
 
-    readonly confirmDeleteFromDisk = async (): Promise<void> => {
-        const deleteRequest = pendingDeleteRequest;
-        const pipeline = this.currentPipeline();
-        if (!deleteRequest || !this.currentClipSequence() || !pipeline) return;
-        deleteFromDiskDialogController.closeConfirm();
-        pendingDeleteRequest = null;
-
-        const deleteResult = await fileSystem.deleteFiles({
-          folderSession: state.currentFolderSession,
-          filenames: deleteRequest.selectedClipNames,
-        });
-        if (deleteResult.code === 'unavailable') {
-          this.showErrorStatus(appText.deleteFromDiskResultText({
-            deletedCount: 0,
-            failedDeleteCount: deleteRequest.selectedClipNames.length,
-            cleanedSavedCollectionCount: 0,
-            failedCollectionRewriteCount: 0,
-          }));
-          return;
-        }
-
-        const deletedClipNames = deleteResult.results
-          .filter((entry) => entry.ok)
-          .map((entry) => entry.filename);
-        const failedDeletes = deleteResult.results.filter((entry) => !entry.ok);
-        const clipIdByName = new Map(deleteRequest.selectedClipNames.map((name, index) => [name, deleteRequest.selectedClipIds[index]]));
-        const deletedClipIds = deletedClipNames.flatMap((name) => {
-          const clipId = clipIdByName.get(name);
-          return clipId ? [clipId] : [];
-        });
-
-        let changedCollections: RemovedCollectionChange[] = [];
-        if (deletedClipNames.length > 0) {
-          changedCollections = pipeline.removeVideos(deletedClipNames).changedCollections;
-        }
-
+    readonly removeVideosAndRewriteCollections = async (pipeline: Pipeline, deletedClipNames: string[]) => {
+        const changedCollections: RemovedCollectionChange[] = deletedClipNames.length > 0
+          ? pipeline.removeVideos(deletedClipNames).changedCollections
+          : [];
         const failedCollectionRewrites: Array<{ filename: string; collectionName: string; error: unknown }> = [];
         let cleanedSavedCollectionCount = 0;
         for (const entry of changedCollections) {
@@ -436,8 +404,30 @@ export class AppController {
             });
           }
         }
+        return { targetedSavedCollectionCount: changedCollections.length, cleanedSavedCollectionCount, failedCollectionRewrites };
+      };
 
-        const result = {
+    readonly deleteSelectedFilesAndUpdatePipeline = async (deleteRequest: DeleteRequest, pipeline: Pipeline) => {
+        const deleteResult = await fileSystem.deleteFiles({
+          folderSession: state.currentFolderSession,
+          filenames: deleteRequest.selectedClipNames,
+        });
+        if (deleteResult.code === 'unavailable') return null;
+
+        const deletedClipNames = deleteResult.results
+          .filter((entry) => entry.ok)
+          .map((entry) => entry.filename);
+        const failedDeletes = deleteResult.results.filter((entry) => !entry.ok);
+        const clipIdByName = new Map(deleteRequest.selectedClipNames.map((name, index) => [name, deleteRequest.selectedClipIds[index]]));
+        const deletedClipIds = deletedClipNames.flatMap((name) => {
+          const clipId = clipIdByName.get(name);
+          return clipId ? [clipId] : [];
+        });
+
+        const collectionChanges = await this.removeVideosAndRewriteCollections(pipeline, deletedClipNames);
+        const { cleanedSavedCollectionCount, failedCollectionRewrites } = collectionChanges;
+
+        return {
           ok: deletedClipNames.length > 0 && failedDeletes.length === 0 && failedCollectionRewrites.length === 0,
           code: deletedClipNames.length === 0
             ? 'delete-failed'
@@ -447,10 +437,27 @@ export class AppController {
           deletedClipIds,
           deletedClipNames,
           failedDeletes,
-          targetedSavedCollectionCount: changedCollections.length,
-          cleanedSavedCollectionCount,
-          failedCollectionRewrites,
+          ...collectionChanges,
         };
+      };
+
+    readonly confirmDeleteFromDisk = async (): Promise<void> => {
+        const deleteRequest = pendingDeleteRequest;
+        const pipeline = this.currentPipeline();
+        if (!deleteRequest || !this.currentClipSequence() || !pipeline) return;
+        deleteFromDiskDialogController.closeConfirm();
+        pendingDeleteRequest = null;
+
+        const result = await this.deleteSelectedFilesAndUpdatePipeline(deleteRequest, pipeline);
+        if (!result) {
+          this.showErrorStatus(appText.deleteFromDiskResultText({
+            deletedCount: 0,
+            failedDeleteCount: deleteRequest.selectedClipNames.length,
+            cleanedSavedCollectionCount: 0,
+            failedCollectionRewriteCount: 0,
+          }));
+          return;
+        }
 
         if (result.deletedClipIds.length > 0) {
           gridController.invalidateAllViews();
@@ -1563,15 +1570,18 @@ this.initialized = true;
   let gifRangesPanelControl: GifRangesPanelControl | undefined;
   let refineGifScreen: RefineGifScreen;
   let shell: ApplicationShellController;
+  let refineSelectionRevision = 0;
   try {
     gifExtractionSession = new GifExtractionSession(
       new ElectronFrameReviewService(window),
       new ElectronThumbnailCacheService({ window }),
       {
         extractionService: new ElectronClipExtractionService(window),
+        captureStore: new ElectronClipCapturesStoreService(window),
         onCollectionPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
         onProgress: workflows.showProgressStatus,
         onSuccess: workflows.showStatus,
+        onWarning: message => workflows.showStatus(message, 5000),
         onError: (message, error) => {
           workflows.showErrorStatus(message);
           if (error !== undefined) void diagnostics.logRuntimeError(message, error);
@@ -1581,11 +1591,14 @@ this.initialized = true;
     if (gifRangesPanel) {
       gifRangesPanelControl = new GifRangesPanelControl(gifRangesPanel, gifExtractionSession, {
         document,
-        onRefine: rangeId => {
+        onRefine: rangeId => { void (async () => {
+          const revision = ++refineSelectionRevision;
+          if (!await gifExtractionSession?.prepareSavedRange(rangeId)) return;
+          if (revision !== refineSelectionRevision) return;
           const result = gifExtractionSession?.beginRefinement(rangeId);
           if (result?.kind === 'started') shell.activate(refineGifScreen.id);
           else if (result?.kind === 'rejected') workflows.showErrorStatus(result.message);
-        },
+        })(); },
       });
     }
   } catch (error) {

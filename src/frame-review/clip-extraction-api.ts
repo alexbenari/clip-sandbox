@@ -20,6 +20,7 @@ export interface IExactClipExtractionRequest {
   readonly collectionName: string;
   readonly startFrameIndex: number;
   readonly endFrameIndex: number;
+  readonly reviewSessionId?: string;
 }
 
 export interface ICreatedExtractionMedia {
@@ -29,6 +30,7 @@ export interface ICreatedExtractionMedia {
   readonly type?: string;
   readonly size?: number;
   readonly lastModifiedMs?: number;
+  readonly warning?: string;
 }
 
 export interface IClipExtractionService {

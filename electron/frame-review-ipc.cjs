@@ -11,6 +11,7 @@ const CHANNELS = Object.freeze({
 const COMMANDS = new Set([
   'state', 'play', 'pause', 'seek-playback', 'enter-scrub', 'scrub-to-frame',
   'step-adjacent', 'press-adjacent', 'release-adjacent', 'capture-current-point',
+  'frame-identity', 'thumbnail-frame',
 ]);
 
 class FrameReviewIpcBoundary {
@@ -121,6 +122,8 @@ class FrameReviewIpcBoundary {
       case 'release-adjacent': return session.releaseAdjacent(
         args.direction === undefined ? undefined : this.direction(args.direction));
       case 'capture-current-point': return session.captureCurrentPoint();
+      case 'frame-identity': return session.frameIdentity(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      case 'thumbnail-frame': return session.thumbnailFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
       default: throw this.invalid('Unknown frame-review command.');
     }
   }

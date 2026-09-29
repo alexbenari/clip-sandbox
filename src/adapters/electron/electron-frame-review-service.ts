@@ -14,6 +14,7 @@ import { BackendError, type BackendErrorCategory } from '../../frame-review/mode
 import type { IFrameReviewState } from '../../frame-review/model/frame-review-state.js';
 import { PreparedReviewMetadata } from '../../frame-review/model/prepared-review.js';
 import { FrameReviewWireValue, SourceFrameIdentity } from '../../frame-review/model/source-frame-identity.js';
+import type { ISourceFrameIdentity } from '../../frame-review/model/source-frame-identity.js';
 
 interface IWireResponse {
   readonly ok?: boolean;
@@ -136,6 +137,14 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
       });
     }
     throw new BackendError('protocol-error', 'Frame-review capture point is invalid.', false);
+  }
+
+  async frameIdentity(frameIndex: number): Promise<ISourceFrameIdentity> {
+    return SourceFrameIdentity.fromWire(await this.command('frame-identity', { frameIndex }));
+  }
+
+  thumbnailFrame(frameIndex: number): Promise<IExactDisplayFrame> {
+    return this.exactCommand('thumbnail-frame', { frameIndex });
   }
 
   subscribe(listener: (event: FrameReviewEvent) => void): () => void {

@@ -65,6 +65,7 @@ function session(initialState = state('exact-ready')): {
   seekPlayback: ReturnType<typeof vi.fn>;
   enterFrameScrub: ReturnType<typeof vi.fn>;
   scrubToFrame: ReturnType<typeof vi.fn>;
+  thumbnailFrame: ReturnType<typeof vi.fn>;
   pressAdjacent: ReturnType<typeof vi.fn>;
   releaseAdjacent: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
@@ -77,6 +78,7 @@ function session(initialState = state('exact-ready')): {
     seekPlayback: vi.fn(async () => undefined),
     enterFrameScrub: vi.fn(async () => exactFrame(12, 1)),
     scrubToFrame: vi.fn(async (frameIndex: number) => exactFrame(frameIndex, frameIndex)),
+    thumbnailFrame: vi.fn(async (frameIndex: number) => exactFrame(frameIndex, frameIndex)),
     stepAdjacent: vi.fn(async (direction: -1 | 1) => exactFrame(12 + direction, 2)),
     pressAdjacent: vi.fn(async () => undefined), releaseAdjacent: vi.fn(async () => undefined),
     captureCurrentPoint: vi.fn(async (): Promise<FrameReviewCapturePoint> => ({ kind: 'exact-frame', identity: exactIdentity })),
@@ -87,6 +89,7 @@ function session(initialState = state('exact-ready')): {
     value, emit: (event) => listener?.(event), state: value.state as ReturnType<typeof vi.fn>,
     play: value.play as ReturnType<typeof vi.fn>, pause: value.pause as ReturnType<typeof vi.fn>,
     seekPlayback: value.seekPlayback as ReturnType<typeof vi.fn>,
+    thumbnailFrame: value.thumbnailFrame as ReturnType<typeof vi.fn>,
     enterFrameScrub: value.enterFrameScrub as ReturnType<typeof vi.fn>, scrubToFrame: value.scrubToFrame as ReturnType<typeof vi.fn>,
     pressAdjacent: value.pressAdjacent as ReturnType<typeof vi.fn>, releaseAdjacent: value.releaseAdjacent as ReturnType<typeof vi.fn>,
     dispose: value.dispose as ReturnType<typeof vi.fn>,
@@ -99,6 +102,36 @@ function frameEvent(frame: FrameReviewDisplayFrame): FrameReviewEvent {
 
 describe('FrameReviewPlayerControl', () => {
   afterEach(() => { document.body.replaceChildren(); });
+
+  it('shows the first frame when an already prepared movie attaches without a playback frame event', async () => {
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const review = session();
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
+
+    control.attachSession(review.value);
+
+    await vi.waitFor(() => expect(control.root.querySelector('.frame-review-empty')?.hasAttribute('hidden')).toBe(true));
+    expect(review.thumbnailFrame).toHaveBeenCalledWith(0);
+    expect(control.root.querySelector('.frame-review-identity')?.textContent).toBe('Frame 0');
+  });
+
+  it('does not replace playing video with a late initial-frame preview', async () => {
+    const initial = deferred<FrameReviewDisplayFrame>();
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const review = session();
+    review.thumbnailFrame.mockReturnValue(initial.promise);
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
+    control.attachSession(review.value);
+
+    await control.togglePlayback();
+    initial.resolve(exactFrame(0, 1));
+    await initial.promise;
+    review.emit(frameEvent(playbackFrame(1_000_000n, 2)));
+
+    await vi.waitFor(() => expect(control.root.querySelector('[data-time="current"]')?.textContent)
+      .toBe('00:00:01.000'));
+    expect(control.root.querySelector('.frame-review-identity')?.textContent).toBe('Playback time');
+  });
 
   it('owns one root and one movie-position range, and reparents the same root between hosts', () => {
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
@@ -118,6 +151,21 @@ describe('FrameReviewPlayerControl', () => {
     expect(root.querySelector('[aria-label="Playback speed"]')).toBeNull();
   });
 
+  it('resets position and elapsed time when a different movie session attaches', async () => {
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
+    const first = session(state('playback-ready', false));
+    control.attachSession(first.value);
+    first.emit(frameEvent(playbackFrame(2_000_000n, 1)));
+    await vi.waitFor(() => expect(control.root.querySelector('[data-time="current"]')?.textContent).toBe('00:00:02.000'));
+
+    control.attachSession(session(state('playback-ready', false)).value);
+
+    expect(control.root.querySelector<HTMLInputElement>('input[type="range"]')?.value).toBe('0');
+    expect(control.root.querySelector('[data-time="current"]')?.textContent).toBe('00:00:00.000');
+    expect(control.root.querySelector('.frame-review-empty')?.textContent).toBe('Preparing Movie...');
+  });
+
   it('keeps ordinary transport usable before exact readiness while disabling exact stepping and capture', async () => {
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const review = session(state('playback-ready', false));
@@ -133,6 +181,19 @@ describe('FrameReviewPlayerControl', () => {
     expect(control.root.querySelector('[data-command="play-pause"]')?.getAttribute('aria-label')).toBe('Pause');
     expect(control.root.querySelector('[data-icon="play"]')?.hasAttribute('hidden')).toBe(true);
     expect(control.root.querySelector('[data-icon="pause"]')?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('enters an exact saved frame by ordinal without seeking by timestamp', async () => {
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const review = session();
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
+    control.attachSession(review.value);
+
+    const capture = await control.enterExactScrubAtFrame(24);
+
+    expect(review.scrubToFrame).toHaveBeenCalledWith(24);
+    expect(review.seekPlayback).not.toHaveBeenCalled();
+    expect(capture?.point).toMatchObject({ kind: 'exact-frame', identity: { frameIndex: 24 } });
   });
 
   it('returns a synchronous point from the displayed frame and rejects older async render completion', async () => {

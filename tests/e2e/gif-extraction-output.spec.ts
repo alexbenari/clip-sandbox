@@ -97,10 +97,214 @@ test('extract current and Extract All publish original-source clips to extractio
       expect.objectContaining({ codec_type: 'video', width: 320, height: 180, pix_fmt: 'yuv420p' }),
       expect.objectContaining({ codec_type: 'audio' }),
     ]));
+    const tags = JSON.parse(execFileSync(products.ffprobe(), [
+      '-v', 'error', '-show_entries', 'format_tags', '-of', 'json', output,
+    ], { encoding: 'utf8', windowsHide: true, env: products.environment() }));
+    const provenance = JSON.parse(tags.format.tags['clip-sandbox.prov.v1']);
+    expect(provenance).toMatchObject({
+      provenanceVersion: 1,
+      sourceMovie: { displayName: 'cfr-audio.mkv', fingerprint: { fingerprintVersion: 1 } },
+      sourceFrameRange: { start: { frameIndex: 8 }, end: { frameIndex: 23 }, endInclusive: true },
+    });
     await page.screenshot({ path: path.join(reviewDirectory, 'ms7-extraction-1280.png') });
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(900, 700));
     await expect(page.locator('[data-extract-all]')).toBeVisible();
     await page.screenshot({ path: path.join(reviewDirectory, 'ms7-extraction-900.png') });
+  } finally {
+    await app.close().catch(() => undefined);
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test('locked captures return after movie and app switches', async () => {
+  test.setTimeout(180_000);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-capture-restore-'));
+  const profile = path.join(directory, 'profile');
+  const pipelines = path.join(directory, 'pipelines');
+  const otherMovie = path.join(project, 'tests', 'fixtures', 'gif-extraction', 'generated', 'no-audio.mkv');
+  await fs.mkdir(profile, { recursive: true });
+  await fs.writeFile(path.join(profile, 'app-settings.json'), `${JSON.stringify({
+    version: 1, pipelinesRootPath: pipelines, singleClipAudioDefault: false,
+  })}\n`, 'utf8');
+  const env = { ...process.env, CLIP_SANDBOX_E2E: '1' };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const openApp = () => electron.launch({ args: ['.', `--user-data-dir=${profile}`], cwd: project, env });
+  let app = await openApp();
+  try {
+    let page = await app.firstWindow();
+    await page.locator('#appScreenSelector').selectOption('gif-extraction');
+    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), movie);
+    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    const progress = page.locator('.frame-review-progress-row input');
+    await lockExactRange(page, progress, 3, 5);
+    await lockExactRange(page, progress, 7, 9);
+    await expect(page.locator('[data-range-id]')).toHaveCount(2);
+    await progress.evaluate(input => {
+      input.value = '12';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 12');
+    await page.keyboard.press('q');
+    await progress.evaluate(input => {
+      input.value = '13';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 13');
+    await page.keyboard.press('w');
+    await expect(page.locator('.gif-range-card.is-draft')).toHaveCount(1);
+    await page.locator('#appScreenSelector').selectOption('collection');
+    await page.locator('#appScreenSelector').selectOption('gif-extraction');
+    await expect(page.locator('[data-range-id]')).toHaveCount(2);
+
+    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), otherMovie);
+    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await expect(page.locator('.gif-workflow-source span')).toHaveText('no-audio.mkv');
+    await expect(progress).toHaveValue('0');
+    await expect(page.locator('.frame-review-progress-row [data-time="current"]')).toHaveText('00:00:00.000');
+    await expect(page.locator('.gif-source-replacement-dialog')).toHaveCount(0);
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await expect(page.locator('[data-range-id]')).toHaveCount(0);
+    await lockExactRange(page, progress, 2, 4);
+    await expect(page.locator('[data-range-id]')).toHaveCount(1);
+
+    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), movie);
+    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await expect(page.locator('[data-range-id]')).toHaveCount(2);
+    await expect(page.locator('[data-range-id="range-1"]')).toContainText('frame 3');
+    await expect(page.locator('[data-range-id="range-2"]')).toContainText('frame 7');
+    await expect(page.locator('.gif-range-card.is-draft')).toContainText('frame 12');
+    await app.close();
+
+    app = await openApp();
+    page = await app.firstWindow();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await expect(page.locator('[data-range-id]')).toHaveCount(2);
+    await expect(page.locator('.gif-range-card.is-draft')).toContainText('frame 12');
+    await expect(page.locator('[data-range-id="range-1"] [data-extract-range]')).toBeEnabled();
+    await expect(page.locator('[data-range-id="range-1"] .gif-range-thumbnail img')).toBeVisible();
+    await page.locator('.frame-review-transport [data-command="play-pause"]').click();
+    await expect(page.locator('.frame-review-empty')).toBeHidden({ timeout: 10_000 });
+    await expect(page.locator('.frame-review-progress-row [data-time="current"]')).not.toHaveText('00:00:00.000');
+    const records = (await fs.readdir(path.join(profile, 'clip-captures'))).filter(name => name.endsWith('.json'));
+    expect(records).toHaveLength(3);
+    await page.locator('[data-range-id="range-1"] [data-extract-range]').click();
+    await expect(page.locator('[data-range-id="range-1"] .gif-range-extraction'))
+      .toContainText('Extracted as cfr-audio-001.mp4', { timeout: 90_000 });
+    await app.close();
+
+    app = await openApp();
+    page = await app.firstWindow();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await expect(page.locator('[data-range-id="range-1"]')).toHaveCount(0);
+    await expect(page.locator('[data-range-id="range-2"]')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Remove capture 1' }).click();
+    await expect(page.locator('[data-range-id="range-2"]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Lock range' }).click();
+    await expect(page.locator('[data-range-id="range-3"]')).toContainText('frame 12');
+    await app.close();
+
+    app = await openApp();
+    page = await app.firstWindow();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await expect(page.locator('[data-range-id="range-2"]')).toHaveCount(0);
+    await expect(page.locator('[data-range-id="range-3"]')).toContainText('frame 12');
+    await page.locator('.frame-review-progress-row input').evaluate(input => {
+      input.value = '14';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 14');
+    await page.keyboard.press('q');
+    await expect(page.locator('.gif-range-card.is-draft')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Remove current draft capture' }).click();
+    await expect(page.locator('.gif-range-card.is-draft')).toHaveCount(0);
+    await app.close();
+
+    app = await openApp();
+    page = await app.firstWindow();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await expect(page.locator('.gif-range-card.is-draft')).toHaveCount(0);
+    await expect(page.locator('[data-range-id="range-3"]')).toContainText('frame 12');
+  } finally {
+    await app.close().catch(() => undefined);
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test('a missing movie leaves saved captures visible until the original is reopened', async () => {
+  test.setTimeout(180_000);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-capture-missing-'));
+  const profile = path.join(directory, 'profile');
+  const source = path.join(directory, 'source.mkv');
+  const moved = path.join(directory, 'moved.mkv');
+  await fs.mkdir(profile, { recursive: true });
+  await fs.copyFile(movie, source);
+  const env = { ...process.env, CLIP_SANDBOX_E2E: '1' };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const openApp = () => electron.launch({ args: ['.', `--user-data-dir=${profile}`], cwd: project, env });
+  let app = await openApp();
+  try {
+    let page = await app.firstWindow();
+    await page.locator('#appScreenSelector').selectOption('gif-extraction');
+    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), source);
+    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await lockExactRange(page, page.locator('.frame-review-progress-row input'), 3, 5);
+    await expect(page.locator('[data-range-id]')).toHaveCount(1);
+    await app.close();
+    await fs.rename(source, moved);
+
+    app = await openApp();
+    page = await app.firstWindow();
+    await expect(page.locator('[data-range-id]')).toHaveCount(1);
+    await expect(page.locator('[data-range-id="range-1"] [data-extract-range]')).toBeDisabled();
+    await expect(page.locator('[data-range-id="range-1"]')).toContainText('Use Open movie');
+    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), moved);
+    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await expect(page.locator('[data-range-id="range-1"] [data-extract-range]')).toBeEnabled();
+  } finally {
+    await app.close().catch(() => undefined);
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test('a saved capture can be removed when its source movie is unavailable', async () => {
+  test.setTimeout(120_000);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-capture-missing-'));
+  const profile = path.join(directory, 'profile');
+  const source = path.join(directory, 'source.mkv');
+  await fs.mkdir(profile, { recursive: true });
+  await fs.copyFile(movie, source);
+  const env = { ...process.env, CLIP_SANDBOX_E2E: '1' };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const openApp = () => electron.launch({ args: ['.', `--user-data-dir=${profile}`], cwd: project, env });
+  let app = await openApp();
+  try {
+    let page = await app.firstWindow();
+    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), source);
+    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await lockExactRange(page, page.locator('.frame-review-progress-row input'), 3, 5);
+    await expect(page.locator('[data-range-id="range-1"]')).toHaveCount(1);
+    await app.close();
+
+    await fs.rm(source);
+    app = await openApp();
+    page = await app.firstWindow();
+    await expect(page.locator('[data-range-id="range-1"]')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Refine range 1' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Remove capture 1' }).click();
+    await expect(page.locator('[data-range-id]')).toHaveCount(0);
+    await app.close();
+
+    app = await openApp();
+    page = await app.firstWindow();
+    await expect(page.locator('[data-range-id]')).toHaveCount(0);
   } finally {
     await app.close().catch(() => undefined);
     await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);

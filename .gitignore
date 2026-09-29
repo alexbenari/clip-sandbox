@@ -6,7 +6,7 @@ test-results/
 .firecrawl/
 tests/fixtures/gif-extraction/generated/
 tools/frame-review/.deps/
-native-build/frame-review/
+native-build/
 frame-index-cache/
 proxy-cache/
 review-proxy-cache/

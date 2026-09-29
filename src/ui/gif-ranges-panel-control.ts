@@ -19,10 +19,6 @@ export class GifRangesPanelControl implements IAppPanelContent {
   private readonly clickListener = (event: Event): void => this.onClick(event);
   private readonly keydownListener = (event: KeyboardEvent): void => this.onKeyDown(event);
   private latestSnapshot: IGifExtractionSessionSnapshot | null = null;
-  private mode: Readonly<{ kind: 'all' }> | Readonly<{
-    kind: 'needs-refinement';
-    retainedRangeId: CapturedRangeId;
-  }> = Object.freeze({ kind: 'all' });
 
   constructor(
     private readonly root: HTMLElement,
@@ -46,16 +42,6 @@ export class GifRangesPanelControl implements IAppPanelContent {
     this.root.replaceChildren();
   }
 
-  showAll(): void {
-    this.mode = Object.freeze({ kind: 'all' });
-    if (this.latestSnapshot) this.render(this.latestSnapshot);
-  }
-
-  showNeedsRefinement(retainedRangeId: CapturedRangeId): void {
-    this.mode = Object.freeze({ kind: 'needs-refinement', retainedRangeId });
-    if (this.latestSnapshot) this.render(this.latestSnapshot);
-  }
-
   focusRange(rangeId: CapturedRangeId): boolean {
     const card = [...this.root.querySelectorAll<HTMLElement>('[data-range-id]')]
       .find(candidate => candidate.dataset.rangeId === rangeId);
@@ -65,35 +51,53 @@ export class GifRangesPanelControl implements IAppPanelContent {
 
   private render(snapshot: IGifExtractionSessionSnapshot): void {
     this.latestSnapshot = snapshot;
-    const exactCount = snapshot.ranges.filter(range => range.kind === 'ready-to-extract').length;
-    const extractableCount = snapshot.extractionAvailable === true
-      ? snapshot.ranges.filter(range => range.kind === 'ready-to-extract'
-        && ['pending', 'failed', 'cancelled'].includes(range.extraction?.kind ?? 'pending')).length
+    const exactCount = snapshot.ranges.filter(range => range.kind !== 'needs-exact-frames').length;
+    const extractableCount = snapshot.extractionAvailable === true && !snapshot.capturesLoading
+      && snapshot.lifecycle === 'open'
+      ? snapshot.ranges.filter(range => this.session.canExtractRange(range.id)).length
       : 0;
     const completedCount = snapshot.ranges.filter(range => range.extraction?.kind === 'completed').length;
     const attentionCount = snapshot.ranges.filter(range => range.extraction?.kind === 'failed'
       || range.extraction?.kind === 'publication-failed').length;
     const inexactCount = snapshot.ranges.length - exactCount;
-    const visibleRanges = snapshot.ranges
-      .map((range, index) => Object.freeze({ range, number: index + 1 }))
-      .filter(({ range }) => this.mode.kind === 'all'
-        || range.kind === 'needs-exact-frames'
-        || range.id === this.mode.retainedRangeId);
+    const visibleRanges = snapshot.ranges.map((range, index) => Object.freeze({ range, number: index + 1 }));
     const fragment = this.document.createDocumentFragment();
     fragment.append(this.renderHeader(
-      exactCount, inexactCount, extractableCount, completedCount, attentionCount, snapshot.extractionAvailable === true));
-    const hasDraft = this.mode.kind === 'all' && snapshot.capture?.capture.kind === 'draft'
+      exactCount, inexactCount, extractableCount, completedCount, attentionCount,
+      snapshot.extractionAvailable === true && !snapshot.capturesLoading && snapshot.lifecycle === 'open',
+      snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening' || snapshot.capturesLoading));
+    if (snapshot.lifecycle === 'opening' && !snapshot.capturesLoading) {
+      const opening = this.document.createElement('p');
+      opening.className = 'gif-ranges-loading';
+      opening.setAttribute('role', 'status');
+      opening.textContent = snapshot.source
+        ? 'Opening another movie… These captures remain with the current movie.'
+        : 'Opening movie…';
+      fragment.append(opening);
+    }
+    if (snapshot.capturesLoading) {
+      const loading = this.document.createElement('p');
+      loading.className = 'gif-ranges-loading';
+      loading.setAttribute('role', 'status');
+      loading.textContent = snapshot.lifecycle === 'opening'
+        ? 'Opening saved movie… Playback will be available when it opens.'
+        : !snapshot.source
+          ? 'Checking for a saved movie… Playback will be available when it opens.'
+          : snapshot.reviewState?.captureEnabled
+            ? 'Checking for saved captures… You can play the movie during the check.'
+            : 'Preparing movie before checking for saved captures…';
+      fragment.append(loading);
+    }
+    const hasDraft = snapshot.capture?.capture.kind === 'draft'
       && (snapshot.capture.capture.start !== null || snapshot.capture.capture.end !== null);
-    if (!hasDraft && visibleRanges.length === 0) {
+    if (!snapshot.capturesLoading && snapshot.lifecycle !== 'opening' && !hasDraft && visibleRanges.length === 0) {
       const empty = this.document.createElement('p');
       empty.className = 'gif-ranges-empty';
-      empty.textContent = this.mode.kind === 'needs-refinement'
-        ? 'No ranges need exact frames.'
-        : snapshot.source
-          ? 'Mark Start with Q, End with W, then lock the range with A.'
-          : 'No captured ranges yet. Open a movie and lock a range to add it here.';
+      empty.textContent = snapshot.source
+        ? 'Mark Start with Q, End with W, then lock the range with A.'
+        : 'No captured ranges yet. Open a movie and lock a range to add it here.';
       fragment.append(empty);
-    } else {
+    } else if (hasDraft || visibleRanges.length > 0) {
       const list = this.document.createElement('div');
       list.className = 'gif-range-list';
       list.setAttribute('role', 'list');
@@ -115,6 +119,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
     completedCount: number,
     attentionCount: number,
     available: boolean,
+    loading: boolean,
   ): HTMLElement {
     const header = this.document.createElement('header');
     header.className = 'gif-ranges-summary';
@@ -126,7 +131,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
     extract.textContent = extractableCount > 0 ? `Extract All (${extractableCount})` : 'Extract All';
     extract.disabled = !available || extractableCount === 0;
     extract.title = !available
-      ? 'Extraction is unavailable in this host.'
+      ? loading ? 'Wait for the movie and saved captures to open.' : 'Extraction is unavailable in this host.'
       : extractableCount > 0 ? 'Extract every actionable exact range'
         : attentionCount > 0 ? 'Resolve the failed ranges below.'
           : exactCount > 0 && completedCount === exactCount ? 'All exact ranges are already extracted.'
@@ -149,7 +154,11 @@ export class GifRangesPanelControl implements IAppPanelContent {
     card.className = 'gif-range-card is-draft';
     card.setAttribute('role', 'listitem');
     card.setAttribute('aria-label', 'Current range draft');
-    card.append(this.renderThumbnail(thumbnail, null), this.renderLockIcon(false, 'Unlocked range draft'));
+    card.append(
+      this.renderThumbnail(thumbnail, null, { hasStart: start !== null }),
+      this.renderLockIcon(false, 'Unlocked range draft'),
+      this.renderRemoveButton(null, 'Remove current draft capture', !this.session.canRemoveDraft()),
+    );
     const body = this.document.createElement('div');
     body.className = 'gif-range-body';
     body.append(this.renderRangeDetails(start, end));
@@ -169,22 +178,31 @@ export class GifRangesPanelControl implements IAppPanelContent {
       ? 'unlocked range; exact frames required' : 'locked exact range'}`);
     if (selected) card.setAttribute('aria-current', 'true');
     card.append(
-      this.renderThumbnail(range.thumbnail, range.id),
-      this.renderLockIcon(range.kind === 'ready-to-extract', range.kind === 'ready-to-extract'
+      this.renderThumbnail(range.thumbnail, range.id, { unavailable: range.validation === 'stale' }),
+      this.renderLockIcon(range.kind !== 'needs-exact-frames', range.kind !== 'needs-exact-frames'
         ? 'Locked exact range' : 'Unlocked range; exact frames required'),
+      this.renderRemoveButton(range.id, `Remove capture ${number}`, !this.session.canRemoveRange(range.id),
+        extractionState.kind === 'completed' ? 'Remove this capture. The extracted clip stays saved.' : undefined),
     );
     const body = this.document.createElement('div');
     body.className = 'gif-range-body';
     body.append(this.renderRangeDetails(range.start, range.end));
+    if (range.validation === 'stale') {
+      const warning = this.document.createElement('p');
+      warning.className = 'gif-range-extraction is-failed';
+      warning.textContent = 'Saved frames are unavailable. Use Open movie to find the original.';
+      body.append(warning);
+    }
     const actions = this.document.createElement('div');
     actions.className = 'gif-range-actions';
     const refine = this.document.createElement('button');
     refine.type = 'button';
     refine.dataset.refineRange = range.id;
     refine.textContent = 'Refine';
+    refine.disabled = range.validation === 'stale' || this.latestSnapshot?.lifecycle !== 'open';
     refine.setAttribute('aria-label', `Refine range ${number}`);
     actions.append(refine);
-    if (range.kind === 'ready-to-extract') {
+    if (range.kind !== 'needs-exact-frames') {
       if (extractionState.kind !== 'pending') {
         const extraction = this.document.createElement('p');
         extraction.className = `gif-range-extraction is-${extractionState.kind}`;
@@ -203,7 +221,8 @@ export class GifRangesPanelControl implements IAppPanelContent {
           action.textContent = extractionState.kind === 'failed' || extractionState.kind === 'cancelled'
             ? 'Retry extraction' : 'Extract';
         }
-        action.disabled = extractionState.kind === 'extracting' || extractionState.kind === 'publishing';
+        action.disabled = range.validation === 'stale' || this.latestSnapshot?.lifecycle !== 'open'
+          || extractionState.kind === 'extracting' || extractionState.kind === 'publishing';
         actions.append(action);
       }
     }
@@ -238,7 +257,29 @@ export class GifRangesPanelControl implements IAppPanelContent {
     return icon;
   }
 
-  private renderThumbnail(state: GifThumbnailState, rangeId: CapturedRangeId | null): HTMLElement {
+  private renderRemoveButton(
+    rangeId: CapturedRangeId | null,
+    label: string,
+    disabled: boolean,
+    enabledTitle = 'Remove this capture',
+  ): HTMLButtonElement {
+    const button = this.document.createElement('button');
+    button.type = 'button';
+    button.className = 'gif-range-remove';
+    if (rangeId === null) button.dataset.removeDraft = 'true';
+    else button.dataset.removeRange = rangeId;
+    button.setAttribute('aria-label', label);
+    button.title = disabled ? 'Wait until captures are loaded and extraction has finished.' : enabledTitle;
+    button.disabled = disabled;
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    return button;
+  }
+
+  private renderThumbnail(
+    state: GifThumbnailState,
+    rangeId: CapturedRangeId | null,
+    options: Readonly<{ unavailable?: boolean; hasStart?: boolean }> = {},
+  ): HTMLElement {
     const frame = this.document.createElement('div');
     frame.className = 'gif-range-thumbnail';
     if (state.kind === 'ready') {
@@ -254,10 +295,10 @@ export class GifRangesPanelControl implements IAppPanelContent {
       retry.type = 'button';
       retry.dataset.retryThumbnail = rangeId ?? '';
       retry.textContent = 'Retry thumbnail';
-      retry.disabled = rangeId === null;
+      retry.disabled = rangeId === null || options.unavailable === true;
       frame.append(retry);
     } else {
-      frame.textContent = 'Start not set';
+      frame.textContent = options.hasStart ? 'Preview unavailable' : 'Start not set';
     }
     return frame;
   }
@@ -265,6 +306,15 @@ export class GifRangesPanelControl implements IAppPanelContent {
   private onClick(event: Event): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    if (target.closest('[data-remove-draft]')) {
+      this.session.removeDraft();
+      return;
+    }
+    const remove = target.closest<HTMLElement>('[data-remove-range]');
+    if (remove?.dataset.removeRange) {
+      this.session.removeRange(remove.dataset.removeRange as CapturedRangeId);
+      return;
+    }
     if (target.closest('[data-extract-all]')) {
       void this.session.extractAll();
       return;
@@ -310,9 +360,9 @@ export class GifRangesPanelControl implements IAppPanelContent {
 
   private endpointText(endpoint: CaptureEndpoint | null): string {
     if (!endpoint) return '—';
-    return endpoint.kind === 'exact-frame'
-      ? `frame ${endpoint.identity.frameIndex.toLocaleString()}`
-      : this.timeText(endpoint.timestampUs);
+    if (endpoint.kind === 'exact-frame') return `frame ${endpoint.identity.frameIndex.toLocaleString()}`;
+    if (endpoint.kind === 'saved-exact-frame') return `frame ${endpoint.frameIndex.toLocaleString()}`;
+    return this.timeText(endpoint.timestampUs);
   }
 
   private durationText(start: CaptureEndpoint, end: CaptureEndpoint): string {

@@ -57,6 +57,7 @@ function extractionSnapshot(refinement: IRefineGifSessionSnapshot): IGifExtracti
     selectedRangeId: refinement.rangeId,
     refinement,
     message: refinement.message,
+    capturesLoading: false,
   });
 }
 
@@ -79,15 +80,22 @@ describe('RefineGifScreen', () => {
       abandonRefinement: vi.fn(() => currentRefinement.rangeId),
       beginRefinement: vi.fn(),
     };
-    const rangesPanel = {
-      mount: vi.fn(), showNeedsRefinement: vi.fn(), showAll: vi.fn(), focusRange: vi.fn(),
-    };
+    const rangesPanel = { mount: vi.fn(), focusRange: vi.fn() };
     const player = new FrameReviewPlayerControl({
       document,
       frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() },
     });
     vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
-    vi.spyOn(player, 'enterExactScrubAt').mockResolvedValue(null);
+    let finishInitialSeek: (capture: null) => void = () => undefined;
+    const initialSeek = new Promise<null>(resolve => { finishInitialSeek = resolve; });
+    let secondSeekStarted: () => void = () => undefined;
+    const secondSeek = new Promise<void>(resolve => { secondSeekStarted = resolve; });
+    vi.spyOn(player, 'enterExactScrubAt').mockImplementation(timestamp => {
+      if (timestamp === 100_000n) return initialSeek;
+      secondSeekStarted();
+      return Promise.resolve(null);
+    });
+    vi.spyOn(player, 'enterExactScrubAtFrame').mockResolvedValue(null);
     const displayed = { point: { kind: 'exact-frame', identity: identity(10) } } as never;
     vi.spyOn(player, 'displayedCapture').mockReturnValue(displayed);
     const keyboard = new GifWorkflowKeyboardController();
@@ -105,11 +113,18 @@ describe('RefineGifScreen', () => {
     document.body.append(screen.commands, screen.root);
     screen.onActivate();
     expect(screen.commands.textContent).toContain('Refine Gif · Range 1');
-    expect(screen.root.querySelector('[data-command="set-start"]')?.textContent).toContain('Set exact start');
-    expect(screen.root.querySelector('[data-command="set-end"]')?.textContent).toContain('Set exact end');
+    expect(screen.root.querySelector('[data-command="jump-start"]')?.textContent).toContain('Jump to start');
+    expect(screen.root.querySelector('[data-command="jump-end"]')?.textContent).toContain('Jump to end');
 
     expect(player.enterExactScrubAt).toHaveBeenCalledWith(100_000n);
-    expect(rangesPanel.showNeedsRefinement).toHaveBeenCalledWith('range-1');
+    screen.root.querySelector<HTMLButtonElement>('[data-command="jump-end"]')?.click();
+    expect(refinement.focus).toHaveBeenCalledWith('end');
+    currentRefinement = Object.freeze({ ...currentRefinement, focusedEndpoint: 'end', seekRevision: 2 });
+    publish(extractionSnapshot(currentRefinement));
+    expect(player.enterExactScrubAt).toHaveBeenCalledTimes(1);
+    finishInitialSeek(null);
+    await secondSeek;
+    expect(player.enterExactScrubAt).toHaveBeenCalledWith(300_000n);
     keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'q', cancelable: true }));
     keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'w', cancelable: true }));
     keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'a', cancelable: true }));
@@ -128,7 +143,6 @@ describe('RefineGifScreen', () => {
 
     screen.commands.querySelector<HTMLButtonElement>('[data-command="back"]')?.click();
     expect(session.abandonRefinement).toHaveBeenCalled();
-    expect(rangesPanel.showAll).toHaveBeenCalled();
     expect(onBack).toHaveBeenCalledWith('range-1');
     const panelContribution = screen.panelContributions[0];
     expect(panelContribution?.content).toBe(rangesPanel);

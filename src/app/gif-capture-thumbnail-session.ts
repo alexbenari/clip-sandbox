@@ -24,6 +24,7 @@ type GifCaptureThumbnailSessionOptions = Readonly<{
 
 export class GifCaptureThumbnailSession {
   private readonly rangeThumbnails = new Map<CapturedRangeId, ThumbnailSlot>();
+  private readonly restoredMissing = new Set<CapturedRangeId>();
   private draftThumbnail: ThumbnailSlot | null = null;
   private disposed = false;
 
@@ -37,8 +38,13 @@ export class GifCaptureThumbnailSession {
   }
 
   stateForRange(rangeId: CapturedRangeId): GifThumbnailState {
-    return this.rangeThumbnails.get(rangeId)?.state ?? Object.freeze({ kind: 'empty' });
+    return this.rangeThumbnails.get(rangeId)?.state
+      ?? (this.restoredMissing.has(rangeId)
+        ? Object.freeze({ kind: 'missing', message: 'Thumbnail can be recreated from the movie.' })
+        : Object.freeze({ kind: 'empty' }));
   }
+
+  markRestoredMissing(rangeId: CapturedRangeId): void { this.restoredMissing.add(rangeId); }
 
   replaceDraft(frame: FrameReviewDisplayFrame): void {
     if (this.disposed) return;
@@ -54,8 +60,15 @@ export class GifCaptureThumbnailSession {
     this.draftThumbnail = null;
   }
 
+  removeDraft(): void {
+    const thumbnail = this.draftThumbnail;
+    this.draftThumbnail = null;
+    if (thumbnail) void this.disposeThumbnail(thumbnail);
+  }
+
   replaceRange(rangeId: CapturedRangeId, frame: FrameReviewDisplayFrame): void {
     if (this.disposed) return;
+    this.restoredMissing.delete(rangeId);
     const previous = this.rangeThumbnails.get(rangeId) ?? null;
     const replacement = this.createLoadingSlot(frame);
     this.rangeThumbnails.set(rangeId, replacement);
@@ -73,6 +86,7 @@ export class GifCaptureThumbnailSession {
   }
 
   removeRange(rangeId: CapturedRangeId): void {
+    this.restoredMissing.delete(rangeId);
     const thumbnail = this.rangeThumbnails.get(rangeId);
     this.rangeThumbnails.delete(rangeId);
     if (thumbnail) void this.disposeThumbnail(thumbnail);
@@ -84,6 +98,7 @@ export class GifCaptureThumbnailSession {
     );
     this.draftThumbnail = null;
     this.rangeThumbnails.clear();
+    this.restoredMissing.clear();
     await Promise.allSettled(slots.map(slot => this.disposeThumbnail(slot)));
   }
 

@@ -87,6 +87,11 @@ const desktopApi = {
       });
     },
   },
+  clipCaptures: {
+    last() { return ipcRenderer.invoke('clip-sandbox:clip-captures-last'); },
+    attach(request) { return ipcRenderer.invoke('clip-sandbox:clip-captures-attach', request); },
+    save(request) { return ipcRenderer.invoke('clip-sandbox:clip-captures-save', request); },
+  },
   loadAppSettings() { return ipcRenderer.invoke('clip-sandbox:load-app-settings'); },
   saveAppSettings(settings) { return ipcRenderer.invoke('clip-sandbox:save-app-settings', settings); },
   choosePipelinesRoot() { return ipcRenderer.invoke('clip-sandbox:choose-pipelines-root'); },

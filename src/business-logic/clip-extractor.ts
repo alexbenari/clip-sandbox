@@ -11,6 +11,7 @@ export type { IClipExtractionService } from '../frame-review/clip-extraction-api
 export interface IClipExtractorRequest {
   readonly range: IReadyToExtractRange;
   readonly sourceHandle: string;
+  readonly reviewSessionId?: string;
   readonly currentSourceGeneration: number;
   readonly destinationHandle: string;
   readonly collectionName: string;
@@ -61,6 +62,7 @@ export class ClipExtractor {
       collectionName: collection.name,
       startFrameIndex,
       endFrameIndex,
+      reviewSessionId: request.reviewSessionId,
     });
   }
 }

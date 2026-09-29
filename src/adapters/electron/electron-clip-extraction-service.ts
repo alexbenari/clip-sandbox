@@ -62,6 +62,7 @@ export class ElectronClipExtractionService implements IClipExtractionService {
         type: typeof entry.type === 'string' ? entry.type : 'video/mp4',
         size: this.nonnegativeNumber(entry.size, 'created media size'),
         lastModifiedMs: this.nonnegativeNumber(entry.lastModifiedMs, 'created media modification time'),
+        warning: typeof result.warning === 'string' ? result.warning.slice(0, 1024) : undefined,
       });
     } finally {
       if (this.currentOperationId === operationId) this.currentOperationId = null;

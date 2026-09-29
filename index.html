@@ -474,25 +474,23 @@
     .gif-range-thumbnail img{ width:100%; height:100%; object-fit:cover; }
     .gif-range-thumbnail.is-loading::after{ content:""; width:100%; height:100%; background:linear-gradient(135deg,var(--surface-inset),var(--panel)); }
     .gif-range-thumbnail button{ width:100%; height:100%; padding:4px; border:0; border-radius:0; background:transparent; color:var(--muted); font-size:12px; box-shadow:none; }
-    .gif-range-lock{ position:absolute; top:12px; right:12px; width:28px; height:28px; display:grid; place-items:center; border:1px solid rgba(148,163,184,.3); border-radius:8px; background:rgba(3,6,10,.82); box-shadow:0 3px 10px rgba(0,0,0,.28); }
+    .gif-range-lock{ position:absolute; top:12px; left:12px; width:28px; height:28px; display:grid; place-items:center; border:1px solid rgba(148,163,184,.3); border-radius:8px; background:rgba(3,6,10,.82); box-shadow:0 3px 10px rgba(0,0,0,.28); }
     .gif-range-lock.is-locked{ color:var(--success); }
     .gif-range-lock.is-unlocked{ color:var(--accent); }
     .gif-range-lock svg{ width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .gif-range-remove{ position:absolute; top:12px; right:12px; width:28px; height:28px; min-height:0; padding:0; display:grid; place-items:center; border:1px solid rgba(148,163,184,.3); border-radius:8px; background:rgba(3,6,10,.82); color:var(--muted); box-shadow:0 3px 10px rgba(0,0,0,.28); }
+    .gif-range-remove:hover:not(:disabled),.gif-range-remove:focus-visible{ color:var(--fg); border-color:var(--fg); }
+    .gif-range-remove svg{ width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; }
     .gif-range-body{ min-width:0; display:grid; grid-template-columns:minmax(0,1fr); gap:6px; }
     .gif-range-details{ min-width:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 6px; color:var(--fg); font:12px ui-monospace, Consolas, monospace; font-variant-numeric:tabular-nums; }
     .gif-range-details span:last-child{ color:var(--muted); }
-    .gif-range-actions{ display:flex; justify-content:flex-end; }
+    .gif-range-actions{ display:flex; justify-content:flex-end; gap:4px; }
     .gif-range-actions button{ min-height:28px; padding:5px 8px; font-size:12px; box-shadow:none; }
     .gif-range-extraction{ grid-column:1 / -1; margin:0; color:var(--muted); font-size:12px; line-height:1.35; }
     .gif-range-extraction.is-completed{ color:var(--accent); }
     .gif-range-extraction.is-failed,.gif-range-extraction.is-publication-failed{ color:var(--danger); }
-    .gif-source-replacement-dialog{ width:min(480px,calc(100vw - 32px)); padding:0; border:1px solid var(--line); border-radius:14px; background:var(--panel); color:var(--fg); box-shadow:var(--shadow-utility); }
-    .gif-source-replacement-dialog::backdrop{ background:rgba(2,6,12,.72); }
-    .gif-source-replacement-dialog form{ padding:20px; }
-    .gif-source-replacement-dialog h2{ margin:0 0 8px; font-size:18px; }
-    .gif-source-replacement-dialog p{ margin:0; color:var(--muted); font-size:13px; line-height:1.5; }
-    .gif-source-replacement-dialog .dialog-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
     .gif-ranges-empty{ margin:18px 2px; color:var(--muted); font-size:13px; line-height:1.55; }
+    .gif-ranges-loading{ margin:18px 2px; color:var(--fg); font-size:13px; line-height:1.55; }
     .fs-active #globalAppBar, .fs-active #screenCommandHost, .fs-active .side-panel, .fs-active #globalUtilityHost{ display:none; }
     .fs-active .toolbar{ display:none; }
     .fs-active #gridWrap{ height:100vh; padding:14px; display:block; }

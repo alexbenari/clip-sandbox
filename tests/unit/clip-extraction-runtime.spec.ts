@@ -39,6 +39,49 @@ describe('shared native product locator', () => {
 });
 
 describe('clip extraction runtime', () => {
+  it('publishes media with a warning when provenance muxing fails', async () => {
+    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
+    const fs = {
+      mkdir: vi.fn(async () => undefined), readdir: vi.fn(async () => []),
+      mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
+      rm: vi.fn(async () => undefined), copyFile: vi.fn(async () => undefined),
+      stat: vi.fn(async () => ({ isFile: () => true, size: 100, mtimeMs: 123 })),
+    };
+    const runCommand = vi.fn(async (_command: string, args: string[]) => ({
+      ok: !args.includes('clip-sandbox.prov.v1=record'),
+      code: args.includes('clip-sandbox.prov.v1=record') ? 'process-failed' : 'completed',
+    }));
+    const provenance = {
+      create: vi.fn(() => 'record'),
+      muxArguments: vi.fn(() => ['-movflags', '+faststart+use_metadata_tags', '-metadata', 'clip-sandbox.prov.v1=record']),
+      readBack: vi.fn(),
+    };
+    const runtime = createClipExtractionRuntime({
+      fs,
+      getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
+      resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'),
+      probeFrameTimes: vi.fn(async () => ({ startUs: 0n, endUs: 100_000n })),
+      verifyMedia: vi.fn(async () => undefined), runCommand, provenance,
+      randomId: vi.fn(() => 'opaque12345678'),
+    });
+    const destination = await runtime.openDestination(7);
+    const result = await runtime.extract(7, {
+      prepareExtractionSource: vi.fn(async () => ({ sourcePath: 'D:\\movies\\Movie.mp4', selectedStream: 0, identity: {} })),
+      extractionFrameIdentities: vi.fn(async () => [
+        { frameIndex: 2, originalFrameIndex: 2 }, { frameIndex: 4, originalFrameIndex: 4 },
+      ]),
+    }, {
+      operationId: 'extract_12345678', destinationHandle: destination.result.destinationHandle,
+      sourceHandle: 'source_12345678', reviewSessionId: 'session_12345678', sourceGeneration: 1,
+      collectionName: 'Movie', startFrameIndex: 2, endFrameIndex: 4,
+    });
+
+    expect(result).toMatchObject({ ok: true, result: { filename: 'Movie-001.mp4', warning: expect.stringContaining('metadata writer failed') } });
+    expect(runCommand).toHaveBeenCalledTimes(3);
+    expect(provenance.readBack).not.toHaveBeenCalled();
+    expect(fs.copyFile).toHaveBeenCalledOnce();
+  });
+
   it('aborts active media work and removes its temporary workspace during disposal', async () => {
     const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     let commandSignal: AbortSignal | undefined;

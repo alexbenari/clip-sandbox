@@ -24,6 +24,7 @@ export interface IAppScreen {
   readonly shortcuts: readonly IShortcutDescriptor[];
   readonly panelContributions: readonly IAppScreenPanelContribution[];
   readonly initiallyFoldedPanelIds?: readonly string[];
+  readonly openPanelIdsOnEntry?: readonly string[];
   onActivate?(): void;
   onDeactivate?(): void;
   focusInitial(): void;

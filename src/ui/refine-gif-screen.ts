@@ -13,8 +13,8 @@ const REFINE_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
   { description: 'Play or pause', sequences: [['Space']] },
   { description: 'Step backward one frame; hold to accelerate', sequences: [['Left']] },
   { description: 'Step forward one frame; hold to accelerate', sequences: [['Right']] },
-  { description: 'Set or review exact start', sequences: [['Q']] },
-  { description: 'Set or review exact end', sequences: [['W']] },
+  { description: 'Set exact start at the displayed frame', sequences: [['Q']] },
+  { description: 'Set exact end at the displayed frame', sequences: [['W']] },
   { description: 'Lock the exact replacement', sequences: [['A']] },
   { description: 'Extract the current exact range', sequences: [['E']] },
 ]);
@@ -38,6 +38,7 @@ export class RefineGifScreen implements IAppScreen {
   readonly shortcuts = REFINE_SHORTCUTS;
   readonly panelContributions: readonly IAppScreenPanelContribution[];
   readonly initiallyFoldedPanelIds = ['pipelines'] as const;
+  readonly openPanelIdsOnEntry: readonly string[];
   private readonly playerHost: HTMLElement;
   private readonly back: HTMLButtonElement;
   private readonly sourceName: HTMLElement;
@@ -50,8 +51,8 @@ export class RefineGifScreen implements IAppScreen {
   private readonly endValue: HTMLElement;
   private readonly startApproximation: HTMLElement;
   private readonly endApproximation: HTMLElement;
-  private readonly setStart: HTMLButtonElement;
-  private readonly setEnd: HTMLButtonElement;
+  private readonly jumpStart: HTMLButtonElement;
+  private readonly jumpEnd: HTMLButtonElement;
   private readonly lock: HTMLButtonElement;
   private readonly extract: HTMLButtonElement;
   private readonly next: HTMLButtonElement;
@@ -63,6 +64,8 @@ export class RefineGifScreen implements IAppScreen {
   private destroyed = false;
   private lastSeekKey: string | null = null;
   private seekGeneration = 0;
+  private pendingSeek: IRefineGifSessionSnapshot | null = null;
+  private seeking = false;
 
   constructor(private readonly options: RefineGifScreenOptions) {
     const doc = options.document ?? document;
@@ -89,13 +92,13 @@ export class RefineGifScreen implements IAppScreen {
           <span class="gif-refinement-mode">Frame-by-frame</span>
         </div>
         <div class="gif-refinement-endpoints">
-          <button type="button" class="gif-refinement-endpoint" data-command="set-start">
-            <span class="gif-refinement-endpoint-label">Set exact start <kbd>Q</kbd></span>
+          <button type="button" class="gif-refinement-endpoint" data-command="jump-start">
+            <span class="gif-refinement-endpoint-label">Jump to start</span>
             <strong data-refine-start-value>Needs exact frame</strong>
             <small data-refine-start-approximation></small>
           </button>
-          <button type="button" class="gif-refinement-endpoint" data-command="set-end">
-            <span class="gif-refinement-endpoint-label">Set exact end <kbd>W</kbd></span>
+          <button type="button" class="gif-refinement-endpoint" data-command="jump-end">
+            <span class="gif-refinement-endpoint-label">Jump to end</span>
             <strong data-refine-end-value>Needs exact frame</strong>
             <small data-refine-end-approximation></small>
           </button>
@@ -124,8 +127,8 @@ export class RefineGifScreen implements IAppScreen {
     this.endValue = this.required(this.root.querySelector('[data-refine-end-value]'), HTMLElement, 'end value');
     this.startApproximation = this.required(this.root.querySelector('[data-refine-start-approximation]'), HTMLElement, 'start approximation');
     this.endApproximation = this.required(this.root.querySelector('[data-refine-end-approximation]'), HTMLElement, 'end approximation');
-    this.setStart = this.required(this.root.querySelector('[data-command="set-start"]'), HTMLButtonElement, 'set-start command');
-    this.setEnd = this.required(this.root.querySelector('[data-command="set-end"]'), HTMLButtonElement, 'set-end command');
+    this.jumpStart = this.required(this.root.querySelector('[data-command="jump-start"]'), HTMLButtonElement, 'jump-start command');
+    this.jumpEnd = this.required(this.root.querySelector('[data-command="jump-end"]'), HTMLButtonElement, 'jump-end command');
     this.lock = this.required(this.root.querySelector('[data-command="lock-refinement"]'), HTMLButtonElement, 'lock command');
     this.extract = this.required(this.root.querySelector('[data-command="extract-current"]'), HTMLButtonElement, 'extract command');
     this.next = this.required(this.root.querySelector('[data-command="next-inexact"]'), HTMLButtonElement, 'next command');
@@ -145,6 +148,7 @@ export class RefineGifScreen implements IAppScreen {
     this.panelContributions = options.rangesPanel
       ? Object.freeze([Object.freeze({ panelId: 'clips', content: options.rangesPanel })])
       : Object.freeze([]);
+    this.openPanelIdsOnEntry = options.rangesPanel ? Object.freeze(['clips']) : Object.freeze([]);
   }
 
   onActivate(): void {
@@ -154,18 +158,15 @@ export class RefineGifScreen implements IAppScreen {
     this.options.player.attachSession(this.options.session?.reviewSession ?? null);
     this.options.keyboard.activate(this.keyboardTarget);
     const refinement = this.snapshot?.refinement;
-    if (refinement) {
-      this.options.rangesPanel?.showNeedsRefinement(refinement.rangeId);
-      this.requestExactPosition(refinement);
-    }
+    if (refinement) this.requestExactPosition(refinement);
   }
 
   onDeactivate(): void {
     this.active = false;
     this.seekGeneration += 1;
+    this.pendingSeek = null;
     this.options.keyboard.deactivate();
     this.options.session?.abandonRefinement();
-    this.options.rangesPanel?.showAll();
   }
 
   focusInitial(): void {
@@ -180,8 +181,8 @@ export class RefineGifScreen implements IAppScreen {
 
   private bind(): void {
     this.back.addEventListener('click', () => this.backToExtraction());
-    this.setStart.addEventListener('click', () => this.markEndpoint('start'));
-    this.setEnd.addEventListener('click', () => this.markEndpoint('end'));
+    this.jumpStart.addEventListener('click', () => this.focusEndpoint('start'));
+    this.jumpEnd.addEventListener('click', () => this.focusEndpoint('end'));
     this.lock.addEventListener('click', () => this.commit());
     this.extract.addEventListener('click', () => this.extractCurrent());
     this.next.addEventListener('click', () => this.openNext());
@@ -193,6 +194,10 @@ export class RefineGifScreen implements IAppScreen {
     const capture = this.options.player.displayedCapture();
     if (endpoint === 'start') refinement.markStart(capture);
     else refinement.markEnd(capture);
+  }
+
+  private focusEndpoint(endpoint: RefineGifEndpoint): void {
+    this.options.session?.refinementSession?.focus(endpoint);
   }
 
   private commit(): void {
@@ -217,14 +222,12 @@ export class RefineGifScreen implements IAppScreen {
     const nextRangeId = this.snapshot?.refinement?.nextInexactRangeId ?? null;
     if (!nextRangeId) return;
     this.lastSeekKey = null;
-    const result = this.options.session?.beginRefinement(nextRangeId);
-    if (result?.kind === 'started') this.options.rangesPanel?.showNeedsRefinement(nextRangeId);
+    this.options.session?.beginRefinement(nextRangeId);
   }
 
   private backToExtraction(): void {
     const rangeId = this.snapshot?.refinement?.rangeId ?? null;
     this.options.session?.abandonRefinement();
-    this.options.rangesPanel?.showAll();
     this.options.onBack(rangeId);
   }
 
@@ -235,6 +238,9 @@ export class RefineGifScreen implements IAppScreen {
     this.workbench.hidden = refinement === null;
     this.emptyCopy.hidden = refinement !== null;
     if (!refinement) {
+      this.pendingSeek = null;
+      this.seekGeneration += 1;
+      this.lastSeekKey = null;
       this.commandTitle.textContent = 'Refine Gif';
       this.commandStatus.textContent = 'Waiting for a captured range';
       return;
@@ -247,8 +253,8 @@ export class RefineGifScreen implements IAppScreen {
     this.renderEndpoint('start', refinement);
     this.renderEndpoint('end', refinement);
     const editing = refinement.status === 'editing';
-    this.setStart.disabled = !editing;
-    this.setEnd.disabled = !editing;
+    this.jumpStart.disabled = !editing;
+    this.jumpEnd.disabled = !editing;
     this.lock.disabled = !editing || !refinement.canCommit;
     this.extract.disabled = !this.canExtractCurrent();
     this.extract.title = this.extract.disabled
@@ -256,16 +262,13 @@ export class RefineGifScreen implements IAppScreen {
       : 'Extract this exact range';
     this.next.disabled = refinement.status !== 'committed' || refinement.nextInexactRangeId === null;
     this.localStatus.textContent = refinement.message ?? this.instruction(refinement);
-    if (this.active) {
-      this.options.rangesPanel?.showNeedsRefinement(refinement.rangeId);
-      this.requestExactPosition(refinement);
-    }
+    if (this.active) this.requestExactPosition(refinement);
   }
 
   private renderEndpoint(endpoint: RefineGifEndpoint, refinement: IRefineGifSessionSnapshot): void {
     const value = endpoint === 'start' ? refinement.start : refinement.end;
     const original = endpoint === 'start' ? refinement.original.start : refinement.original.end;
-    const button = endpoint === 'start' ? this.setStart : this.setEnd;
+    const button = endpoint === 'start' ? this.jumpStart : this.jumpEnd;
     const output = endpoint === 'start' ? this.startValue : this.endValue;
     const approximation = endpoint === 'start' ? this.startApproximation : this.endApproximation;
     button.classList.toggle('is-active', refinement.status === 'editing' && refinement.focusedEndpoint === endpoint);
@@ -275,7 +278,8 @@ export class RefineGifScreen implements IAppScreen {
       : 'Needs exact frame';
     approximation.textContent = original.kind === 'playback-timestamp'
       ? `Approx. ${this.timeText(original.timestampUs)}`
-      : `Captured at frame ${original.identity.frameIndex.toLocaleString()}`;
+      : `Captured at frame ${(original.kind === 'exact-frame'
+        ? original.identity.frameIndex : original.frameIndex).toLocaleString()}`;
   }
 
   private requestExactPosition(refinement: IRefineGifSessionSnapshot): void {
@@ -283,11 +287,31 @@ export class RefineGifScreen implements IAppScreen {
     const key = `${refinement.rangeId}:${refinement.seekRevision}`;
     if (this.lastSeekKey === key) return;
     this.lastSeekKey = key;
-    const generation = ++this.seekGeneration;
-    void this.options.player.enterExactScrubAt(refinement.seekTimeUs).then(capture => {
-      if (!this.active || generation !== this.seekGeneration || capture !== null) return;
-      this.localStatus.textContent = 'The exact frame could not be displayed. Try the progress bar or arrow keys.';
-    });
+    this.seekGeneration += 1;
+    this.pendingSeek = refinement;
+    if (!this.seeking) void this.drainSeeks();
+  }
+
+  private async drainSeeks(): Promise<void> {
+    this.seeking = true;
+    try {
+      while (this.active && this.pendingSeek) {
+        const refinement = this.pendingSeek;
+        this.pendingSeek = null;
+        const generation = this.seekGeneration;
+        const target = refinement.focusedEndpoint === 'start' ? refinement.start : refinement.end;
+        const capture = target.kind === 'exact-frame'
+          ? await this.options.player.enterExactScrubAtFrame(target.identity.frameIndex)
+          : target.kind === 'saved-exact-frame'
+            ? await this.options.player.enterExactScrubAtFrame(target.frameIndex)
+            : await this.options.player.enterExactScrubAt(target.timestampUs);
+        if (this.active && generation === this.seekGeneration && capture === null) {
+          this.localStatus.textContent = 'The exact frame could not be displayed. Try the progress bar or arrow keys.';
+        }
+      }
+    } finally {
+      this.seeking = false;
+    }
   }
 
   private instruction(refinement: IRefineGifSessionSnapshot): string {

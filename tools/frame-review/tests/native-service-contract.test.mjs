@@ -120,6 +120,18 @@ test.before(async () => {
   assert.equal(generated.status, 0, generated.stderr);
 });
 
+test('compact movie fingerprint stays bound to the named sampling profile', () => {
+  const signature = spawnSync(path.join(buildRoot, 'bin', 'media_sample_signature.exe'), [
+    fixturePath, '--compact',
+  ], { env: processEnvironment(), encoding: 'utf8', windowsHide: true });
+  assert.equal(signature.status, 0, signature.stderr);
+  const result = JSON.parse(signature.stdout);
+  assert.equal(result.profileVersion, 'sampled-packets-3m-3m-3x1m-v1');
+  assert.equal(result.streamMetadataDigest, 'ed87d15c8300cfe50e5606169249e7f73078329eddfa61c43b259e8e0b5bd2a9');
+  assert.equal(result.sampleDigest, '513928ee99976290bdb114e61d8f58ec618342def6d3557410fe30e96cb48726');
+  assert.deepEqual(result.ranges, [{ startUs: 0, endUs: 1_000_000 }]);
+});
+
 test('BestSource service provides exact frames, cache reuse, and bounded errors', async () => {
   const messages = await runService(
     path.join(buildRoot, 'bin', 'bestsource_media_service.exe'),
@@ -135,6 +147,8 @@ test('BestSource service provides exact frames, cache reuse, and bounded errors'
       },
       { requestId: 'first', command: 'exact', frameIndex: 0 },
       { requestId: 'cached', command: 'exact', frameIndex: 0 },
+      { requestId: 'thumbnail', command: 'thumbnail', frameIndex: 4 },
+      { requestId: 'next', command: 'step', direction: 1 },
       { requestId: 'outside', command: 'exact', frameIndex: 9999 },
       { requestId: 'unknown', command: 'not-a-command' },
       { requestId: 'shutdown', command: 'shutdown' },
@@ -147,6 +161,9 @@ test('BestSource service provides exact frames, cache reuse, and bounded errors'
   assert.equal(byRequest.get('first').metadata.identity.frameIndex, 0);
   assert.equal(byRequest.get('first').payload.length, 64 * 48 * 4);
   assert.equal(byRequest.get('cached').metadata.access.cacheHit, true);
+  assert.equal(byRequest.get('thumbnail').metadata.identity.frameIndex, 4);
+  assert.equal(byRequest.get('thumbnail').payload.length, 64 * 48 * 4);
+  assert.equal(byRequest.get('next').metadata.identity.frameIndex, 1);
   assert.equal(byRequest.get('outside').metadata.error.category, 'frame-boundary');
   assert.equal(byRequest.get('unknown').metadata.error.category, 'invalid-request');
 });

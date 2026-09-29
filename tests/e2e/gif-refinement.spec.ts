@@ -29,20 +29,19 @@ async function seekFrame(page, value: string): Promise<void> {
 async function captureInexactRange(page, start: string, end: string): Promise<void> {
   const play = page.locator('.frame-review-transport [data-command="play-pause"]');
   const progress = page.locator('.frame-review-progress-row input');
-  const status = page.locator('#gifExtractionScreen .gif-workflow-local-status');
   await expect(play).toBeEnabled();
   if (await play.getAttribute('aria-label') === 'Play') await play.click();
   await seekFrame(page, start);
   await expect.poll(() => progress.inputValue(), { timeout: 10_000 }).not.toBe(start);
   await page.keyboard.press('q');
-  await expect(status).toHaveText('Start marked');
+  await expect(page.locator('.gif-range-card.is-draft')).toHaveCount(1);
   await seekFrame(page, end);
   await expect.poll(() => progress.inputValue(), { timeout: 10_000 }).not.toBe(end);
   await page.keyboard.press('w');
-  await expect(status).toHaveText('End marked');
+  await expect(page.locator('.gif-range-card.is-draft .gif-range-details')).toContainText('–');
   await expect(page.locator('[data-command="lock-range"]')).toBeEnabled();
   await page.keyboard.press('a');
-  await expect(status).toHaveText('Range locked');
+  await expect(page.locator('.gif-range-card.is-draft')).toHaveCount(0);
 }
 
 test('refines inexact ranges through the contextual screen and preserves queue context', async () => {
@@ -79,9 +78,19 @@ test('refines inexact ranges through the contextual screen and preserves queue c
     await expect(page.locator('#refineGifScreen')).toBeVisible();
     await expect(page.locator('.gif-refinement-workbench')).toBeVisible();
     await expect(page.locator('#clipsPanelHost')).toContainText('2 need frames');
+    await expect(page.locator('#clipsPanel')).not.toHaveClass(/folded/);
+    await expect(page.locator('.gif-range-card')).toHaveCount(2);
     await expect(page.locator('.frame-review-transport [data-command="play-pause"]')).toHaveAttribute('aria-label', 'Play');
     await expect(page.locator('.frame-review-identity')).toContainText('Frame');
-    await expect(page.locator('[data-command="set-start"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-command="jump-start"]')).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('q');
+    await expect(page.locator('[data-refine-start-value]')).toContainText('Frame');
+    await page.locator(`.gif-range-card[data-range-id="${secondRangeId}"]`).getByRole('button', { name: 'Refine range 2' }).click();
+    await expect(page.locator('[data-refine-range-title]')).toContainText('Range 2');
+    await expect(page.locator('.gif-range-card')).toHaveCount(2);
+    await page.locator(`.gif-range-card[data-range-id="${firstRangeId}"]`).getByRole('button', { name: 'Refine range 1' }).click();
+    await expect(page.locator('[data-refine-range-title]')).toContainText('Range 1');
+    await expect(page.locator('[data-refine-start-value]')).toHaveText('Needs exact frame');
     await fs.mkdir(reviewDirectory, { recursive: true });
     await page.screenshot({ path: path.join(reviewDirectory, 'ms6-refine-1280.png'), fullPage: true });
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(900, 700));
@@ -128,7 +137,7 @@ test('refines inexact ranges through the contextual screen and preserves queue c
     await expect(page.locator('[data-refine-range-title]')).toContainText('Range 2');
     await expect(page.locator(`.gif-range-card[data-range-id="${secondRangeId}"]`)).toHaveClass(/is-inexact/);
     await expect(page.locator('.frame-review-identity')).toContainText('Frame');
-    await expect(page.locator('[data-command="set-start"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-command="jump-start"]')).toHaveAttribute('aria-pressed', 'true');
 
     await page.getByRole('button', { name: 'Back to GIF Extraction' }).click();
     await expect(page.locator('#gifExtractionScreen')).toBeVisible();
@@ -179,6 +188,10 @@ test('double-click refines an exact capture in place and preserves its earlier e
     await expect(page.locator('#refineGifScreen')).toBeVisible();
     await expect(page.locator('[data-refine-start-value]')).toContainText('Frame 8');
     await expect(page.locator('[data-refine-end-value]')).toContainText('Frame 23');
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 8');
+    await page.locator('[data-command="jump-end"]').click();
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 23');
+    await expect(page.locator('[data-refine-end-value]')).toContainText('Frame 23');
     await fs.mkdir(reviewDirectory, { recursive: true });
     await page.screenshot({ path: path.join(reviewDirectory, 'refine-exact-1280.png'), fullPage: true });
     await page.getByRole('button', { name: 'Back to GIF Extraction' }).click();
@@ -207,7 +220,8 @@ test('double-click refines an exact capture in place and preserves its earlier e
     await expect(card.locator('.gif-range-extraction')).toContainText('cfr-audio-001.mp4');
 
     await card.locator('.gif-range-details').dblclick();
-    await page.locator('[data-command="set-end"]').click();
+    await page.locator('[data-command="jump-end"]').click();
+    await expect(page.locator('.frame-review-identity')).toContainText('Frame 23');
     await seekFrame(page, '25');
     await expect(page.locator('.frame-review-identity')).toContainText('Frame 25');
     await page.keyboard.press('w');
