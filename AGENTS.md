@@ -6,9 +6,11 @@ Use this flow when the user explicitly wants to plan a new feature together.
 
 1. Get up to speed on the user's feature description by reading the agent documentation in the Agent Documentation section first, then inspecting only the relevant code paths it points to.
 2. Refine the spec with the user.
-3. Once the spec is agreed, create `docs/specs/[feature-name]-spec.md` and ask the user to sign it off.
-4. After spec sign-off, create `docs/plans/[feature-name]-exec-plan.md` using `PLANS.md` as the source of truth, then ask the user to sign it off.
+3. Once the spec is agreed, create `docs/specs/[feature-name]-spec.md`, run the project-local `plan-review` skill on it, and ask the user to sign it off.
+4. After spec sign-off, create `docs/plans/[feature-name]-exec-plan.md` using `PLANS.md` as the source of truth, run `plan-review` on it, then ask the user to sign it off.
 5. Implement the feature after the execution plan is signed off.
+
+Specs follow the "Writing for the reader" rules in `PLANS.md`. Run `plan-review` again after any substantial revision of a spec or plan, and include its report in the sign-off request. If `plan-review` is unavailable, skip the review and say so in the sign-off request.
 
 If the user explicitly waives part of this flow for the current task, follow the user's instruction.
 
@@ -82,6 +84,23 @@ Before rejecting a UI component or expanding investigation because a test fails:
 4. Keep defects and uncertainty recorded without automatically blocking progress. A successful manual session does not prove absence of a bug, just as a synthetic failure does not prove poor usability.
 
 User-perceivable effects include keyboard and assistive-technology access, focus, playback continuity and data outcomes, not only visual appearance. This principle does not waive explicit correctness, accessibility or data-integrity requirements; it makes the relationship between a test and those requirements explicit.
+
+## Token-efficient execution
+
+Reduce token use by reusing evidence and limiting exploratory work, never by
+weakening the agreed behavior, code quality, or verification.
+
+- Reuse fixtures, probes, and result formats across milestones when they still
+  exercise the production path. Verify fixture identity, state what change would
+  invalidate reused evidence, and rerun only if that change has happened since
+  the last run's results.
+- Do not repeat an expensive measurement when later work has not changed the
+  behavior it measures.
+- Preserve complete evidence and exit codes in log files, and record their
+  location in the plan's `Progress` section. Report concise pass counts,
+  decisions, and failure excerpts during work.
+- Reject an optimization that trades away confidence, coverage, correctness, or
+  a user-visible requirement.
 
 ## Cost-aware subagent delegation
 
