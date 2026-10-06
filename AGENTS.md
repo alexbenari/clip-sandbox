@@ -163,3 +163,10 @@ Match multiline input syntax to the active shell. Do not use Bash heredocs in
 PowerShell; use PowerShell here-strings instead. More generally, verify that
 shell features and quoting syntax are valid for the current shell before
 running extraction or text-processing commands.
+
+## File edits
+
+Edit files with the harness's edit tool (`apply_patch` in Codex, `Edit` in
+Claude Code), which fails when the expected text is not found. If an edit must
+be scripted, assert the expected number of matches and fail on mismatch; never
+use a replacement that succeeds silently when nothing matched.
