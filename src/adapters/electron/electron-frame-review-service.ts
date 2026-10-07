@@ -117,6 +117,15 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
   play(): Promise<void> { return this.voidCommand('play'); }
   pause(): Promise<void> { return this.voidCommand('pause'); }
   seekPlayback(timestampUs: bigint): Promise<void> { return this.voidCommand('seek-playback', { timestampUs: timestampUs.toString() }); }
+  startExactPreview(range: Readonly<{ startFrameIndex: number; endFrameIndex: number }>): Promise<void> {
+    return this.voidCommand('start-exact-preview', range);
+  }
+  pauseExactPreview(): Promise<IExactDisplayFrame> { return this.exactCommand('pause-exact-preview'); }
+  resumeExactPreview(frameIndex: number): Promise<void> { return this.voidCommand('resume-exact-preview', { frameIndex }); }
+  async stopExactPreview(): Promise<IExactDisplayFrame | null> {
+    const result = await this.command('stop-exact-preview');
+    return result === null ? null : this.parseFrame(result, 'exact-frame') as IExactDisplayFrame;
+  }
   enterFrameScrub(): Promise<IExactDisplayFrame> { return this.exactCommand('enter-scrub'); }
   scrubToFrame(frameIndex: number): Promise<IExactDisplayFrame> { return this.exactCommand('scrub-to-frame', { frameIndex }); }
   stepAdjacent(direction: -1 | 1): Promise<IExactDisplayFrame> { return this.exactCommand('step-adjacent', { direction }); }
@@ -183,6 +192,8 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
       event = Object.freeze({ type: 'state', state: this.currentState });
     } else if (wire.type === 'display-frame') {
       event = Object.freeze({ type: 'display-frame', frame: this.parseFrame(wire.frame) });
+    } else if (wire.type === 'playback-ended') {
+      event = Object.freeze({ type: 'playback-ended' });
     } else if (wire.type === 'error') {
       event = Object.freeze({
         type: 'error',
@@ -207,6 +218,11 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
     if (width < 1 || height < 1 || !(frame.pixels instanceof Uint8Array) || frame.pixels.byteLength !== width * height * 4) {
       throw new BackendError('protocol-error', 'Display-frame pixel payload is invalid.', false);
     }
+    const ackRoundTripMs = frame.previousAckRoundTripMs === null || frame.previousAckRoundTripMs === undefined
+      ? null : Number(frame.previousAckRoundTripMs);
+    if (ackRoundTripMs !== null && (!Number.isFinite(ackRoundTripMs) || ackRoundTripMs < 0)) {
+      throw new BackendError('protocol-error', 'Playback acknowledgement timing is invalid.', false);
+    }
     const common = {
       sourceGeneration: FrameReviewWireValue.nonnegativeInteger(frame.sourceGeneration, 'sourceGeneration'),
       frameGeneration: FrameReviewWireValue.nonnegativeInteger(frame.frameGeneration, 'frameGeneration'),
@@ -227,6 +243,9 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
         ...common,
         kind: 'playback-frame',
         playbackTimestampUs: FrameReviewWireValue.decimalBigInt(frame.playbackTimestampUs, 'playbackTimestampUs'),
+        droppedBeforeWrite: frame.droppedBeforeWrite === undefined ? undefined
+          : FrameReviewWireValue.nonnegativeInteger(frame.droppedBeforeWrite, 'droppedBeforeWrite'),
+        previousAckRoundTripMs: ackRoundTripMs,
       });
   }
 

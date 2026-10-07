@@ -71,8 +71,16 @@ const desktopApi = {
     delete(id) { return ipcRenderer.invoke('clip-sandbox:thumbnail-delete', id); },
   },
   clipExtraction: {
-    openDestination() {
-      return invokeClipExtraction('clip-sandbox:clip-extraction-open-destination', 'destination', {});
+    subscribeProgress(listener) {
+      if (typeof listener !== 'function') throw new TypeError('Extraction progress listener must be a function.');
+      const handler = (_event, payload) => listener(payload);
+      ipcRenderer.on('clip-sandbox:clip-extraction-progress', handler);
+      return () => ipcRenderer.removeListener('clip-sandbox:clip-extraction-progress', handler);
+    },
+    openDestination(request) {
+      return invokeClipExtraction('clip-sandbox:clip-extraction-open-destination', 'destination', {
+        folderPath: request?.folderPath,
+      });
     },
     extract(request) {
       return invokeClipExtraction(
@@ -91,6 +99,10 @@ const desktopApi = {
     last() { return ipcRenderer.invoke('clip-sandbox:clip-captures-last'); },
     attach(request) { return ipcRenderer.invoke('clip-sandbox:clip-captures-attach', request); },
     save(request) { return ipcRenderer.invoke('clip-sandbox:clip-captures-save', request); },
+  },
+  collectionRefine: {
+    inspect(request) { return ipcRenderer.invoke('clip-sandbox:collection-refine-inspect', request); },
+    resolve(request) { return ipcRenderer.invoke('clip-sandbox:collection-refine-resolve', request); },
   },
   loadAppSettings() { return ipcRenderer.invoke('clip-sandbox:load-app-settings'); },
   saveAppSettings(settings) { return ipcRenderer.invoke('clip-sandbox:save-app-settings', settings); },

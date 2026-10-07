@@ -9,7 +9,14 @@ export interface IGifWorkflowPlayerCommands {
 export interface IGifWorkflowCaptureCommands {
   markStart(): void;
   markEnd(): void;
+  jumpStart(): void;
+  jumpEnd(): void;
+  startLoop(): void;
   lockRange(): void;
+  canMark?(): boolean;
+  canJump?(): boolean;
+  canLoop?(): boolean;
+  canLock?(): boolean;
   extractCurrent?(): void;
   canExtractCurrent?(): boolean;
 }
@@ -68,9 +75,12 @@ export class GifWorkflowKeyboardController {
   private commandForKey(key: string): (() => void) | null {
     if (!this.target) return null;
     if (key === ' ') return () => this.target?.player.togglePlayback();
-    if (key === 'q' && this.target.capture) return () => this.target?.capture?.markStart();
-    if (key === 'w' && this.target.capture) return () => this.target?.capture?.markEnd();
-    if (key === 'a' && this.target.capture) return () => this.target?.capture?.lockRange();
+    if (key === 'q' && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markStart();
+    if (key === 'w' && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markEnd();
+    if (key === 'a' && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpStart();
+    if (key === 's' && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpEnd();
+    if (key === 'z' && this.target.capture?.canLoop?.() === true) return () => this.target?.capture?.startLoop();
+    if (key === 'x' && this.target.capture?.canLock?.() === true) return () => this.target?.capture?.lockRange();
     if (key === 'e' && this.target.capture?.extractCurrent
       && this.target.capture.canExtractCurrent?.() === true) {
       return () => this.target?.capture?.extractCurrent?.();

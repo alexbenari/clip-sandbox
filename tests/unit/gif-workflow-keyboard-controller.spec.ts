@@ -8,7 +8,9 @@ function player() {
 
 function capture(withExtract = false) {
   return {
-    markStart: vi.fn(), markEnd: vi.fn(), lockRange: vi.fn(),
+    markStart: vi.fn(), markEnd: vi.fn(), jumpStart: vi.fn(), jumpEnd: vi.fn(),
+    startLoop: vi.fn(), lockRange: vi.fn(), canJump: vi.fn(() => true),
+    canLoop: vi.fn(() => true), canLock: vi.fn(() => true),
     ...(withExtract ? { extractCurrent: vi.fn(), canExtractCurrent: vi.fn(() => true) } : {}),
   };
 }
@@ -30,10 +32,16 @@ describe('GifWorkflowKeyboardController', () => {
     controller.handleKeyDown(event('q'));
     controller.handleKeyDown(event('w'));
     controller.handleKeyDown(event('a'));
+    controller.handleKeyDown(event('s'));
+    controller.handleKeyDown(event('z'));
+    controller.handleKeyDown(event('x'));
     controller.handleKeyDown(event('e'));
     expect(transport.togglePlayback).toHaveBeenCalledOnce();
     expect(commands.markStart).toHaveBeenCalledOnce();
     expect(commands.markEnd).toHaveBeenCalledOnce();
+    expect(commands.jumpStart).toHaveBeenCalledOnce();
+    expect(commands.jumpEnd).toHaveBeenCalledOnce();
+    expect(commands.startLoop).toHaveBeenCalledOnce();
     expect(commands.lockRange).toHaveBeenCalledOnce();
     expect(commands.extractCurrent).toHaveBeenCalledOnce();
 

@@ -9,7 +9,10 @@ export const GIF_EXTRACTION_SHORTCUTS: readonly IShortcutDescriptor[] = Object.f
   { description: 'Step forward one frame; hold to accelerate', sequences: [['Right']] },
   { description: 'Set or replace range start', sequences: [['Q']] },
   { description: 'Set or replace range end', sequences: [['W']] },
-  { description: 'Lock the current range', sequences: [['A']] },
+  { description: 'Jump to exact start', sequences: [['A']] },
+  { description: 'Jump to exact end', sequences: [['S']] },
+  { description: 'Loop the exact range', sequences: [['Z']] },
+  { description: 'Lock the current range', sequences: [['X']] },
   { description: 'Extract the selected exact range', sequences: [['E']] },
 ]);
 
@@ -38,7 +41,15 @@ export class GifExtractionScreen implements IAppScreen {
   private readonly markStartButton: HTMLButtonElement;
   private readonly markEndButton: HTMLButtonElement;
   private readonly lockButton: HTMLButtonElement;
+  private readonly jumpStartButton: HTMLButtonElement;
+  private readonly jumpEndButton: HTMLButtonElement;
+  private readonly loopButton: HTMLButtonElement;
   private readonly unsubscribeSession: (() => void) | null;
+  private readonly unsubscribeTransport: () => void;
+  private snapshot: IGifExtractionSessionSnapshot | null = null;
+  private previewRevision: number | null = null;
+  private pendingPreviewStop: Promise<unknown> = Promise.resolve();
+  private previewOperation = 0;
   private active = false;
   private destroyed = false;
 
@@ -64,7 +75,10 @@ export class GifExtractionScreen implements IAppScreen {
       <div class="gif-capture-controls" aria-label="Range capture controls">
         <button type="button" data-command="mark-start" disabled><span>Start</span><kbd>Q</kbd></button>
         <button type="button" data-command="mark-end" disabled><span>End</span><kbd>W</kbd></button>
-        <button type="button" class="gif-lock-range" data-command="lock-range" disabled><span>Lock range</span><kbd>A</kbd></button>
+        <button type="button" data-command="jump-start" disabled><span>Jump to Start</span><kbd>A</kbd></button>
+        <button type="button" data-command="jump-end" disabled><span>Jump to End</span><kbd>S</kbd></button>
+        <button type="button" data-command="loop-range" disabled><span>Loop preview</span><kbd>Z</kbd></button>
+        <button type="button" class="gif-lock-range" data-command="lock-range" disabled><span>Lock range</span><kbd>X</kbd></button>
       </div>
       <div class="gif-workflow-empty-copy">
         <h1>Choose a movie to begin</h1>
@@ -79,8 +93,12 @@ export class GifExtractionScreen implements IAppScreen {
     this.markStartButton = this.required(this.root.querySelector('[data-command="mark-start"]'), HTMLButtonElement, 'mark-start command');
     this.markEndButton = this.required(this.root.querySelector('[data-command="mark-end"]'), HTMLButtonElement, 'mark-end command');
     this.lockButton = this.required(this.root.querySelector('[data-command="lock-range"]'), HTMLButtonElement, 'lock-range command');
+    this.jumpStartButton = this.required(this.root.querySelector('[data-command="jump-start"]'), HTMLButtonElement, 'jump-start command');
+    this.jumpEndButton = this.required(this.root.querySelector('[data-command="jump-end"]'), HTMLButtonElement, 'jump-end command');
+    this.loopButton = this.required(this.root.querySelector('[data-command="loop-range"]'), HTMLButtonElement, 'loop-range command');
     this.bind();
     this.unsubscribeSession = options.session?.subscribe(snapshot => this.render(snapshot)) ?? null;
+    this.unsubscribeTransport = options.player.subscribeTransport(() => { if (this.snapshot) this.render(this.snapshot); });
     this.panelContributions = options.rangesPanel
       ? Object.freeze([Object.freeze({ panelId: 'clips', content: options.rangesPanel })])
       : Object.freeze([]);
@@ -96,7 +114,14 @@ export class GifExtractionScreen implements IAppScreen {
       capture: {
         markStart: () => this.markStart(),
         markEnd: () => this.markEnd(),
+        jumpStart: () => this.jump('start'),
+        jumpEnd: () => this.jump('end'),
+        startLoop: () => { void this.startLoop(); },
         lockRange: () => this.lockRange(),
+        canMark: () => this.options.player.exactPreviewPhase() !== 'running',
+        canJump: () => this.canJump(),
+        canLoop: () => this.canLoop(),
+        canLock: () => this.canLock(),
         extractCurrent: () => this.extractCurrent(),
         canExtractCurrent: () => this.canExtractCurrent(),
       },
@@ -106,6 +131,10 @@ export class GifExtractionScreen implements IAppScreen {
   onDeactivate(): void {
     this.active = false;
     this.options.keyboard.deactivate();
+    this.previewOperation += 1;
+    if (this.options.player.exactPreviewPhase() !== 'inactive') {
+      this.pendingPreviewStop = this.options.player.stopExactPreview().catch(() => null);
+    }
   }
 
   focusInitial(): void {
@@ -116,6 +145,7 @@ export class GifExtractionScreen implements IAppScreen {
     if (this.destroyed) return;
     this.destroyed = true;
     this.unsubscribeSession?.();
+    this.unsubscribeTransport();
   }
 
   private bind(): void {
@@ -123,6 +153,9 @@ export class GifExtractionScreen implements IAppScreen {
     this.markStartButton.addEventListener('click', () => this.markStart());
     this.markEndButton.addEventListener('click', () => this.markEnd());
     this.lockButton.addEventListener('click', () => this.lockRange());
+    this.jumpStartButton.addEventListener('click', () => this.jump('start'));
+    this.jumpEndButton.addEventListener('click', () => this.jump('end'));
+    this.loopButton.addEventListener('click', () => { void this.startLoop(); });
   }
 
   private async requestOpenMovie(): Promise<void> {
@@ -141,22 +174,76 @@ export class GifExtractionScreen implements IAppScreen {
   }
 
   private markStart(): void {
+    if (this.options.player.exactPreviewPhase() === 'running') return;
     this.options.session?.markStart(this.options.player.displayedCapture());
   }
 
   private markEnd(): void {
+    if (this.options.player.exactPreviewPhase() === 'running') return;
     this.options.session?.markEnd(this.options.player.displayedCapture());
   }
 
   private lockRange(): void {
+    void this.lockRangeAsync();
+  }
+
+  private async lockRangeAsync(): Promise<void> {
     const session = this.options.session;
-    if (!session) return;
+    if (!session || !this.canLock()) return;
+    const revision = session.snapshot.previewRevision;
+    const generation = session.snapshot.capture?.sourceGeneration;
+    if (this.options.player.exactPreviewPhase() !== 'inactive') {
+      try { await this.options.player.stopExactPreview(); }
+      catch (error) {
+        this.commandStatus.textContent = error instanceof Error ? error.message : 'Playback recovery failed.';
+      }
+    }
+    if (session.snapshot.previewRevision !== revision || session.snapshot.capture?.sourceGeneration !== generation) return;
     const draft = session.snapshot.capture?.capture;
     if (draft?.kind === 'draft'
       && (draft.start?.kind === 'saved-exact-frame' || draft.end?.kind === 'saved-exact-frame')) {
-      void session.prepareSavedDraft().then(ready => { if (ready) session.lockRange(); });
-    } else {
-      session.lockRange();
+      try { if (!await session.prepareSavedDraft()) return; }
+      catch (error) {
+        this.commandStatus.textContent = error instanceof Error ? error.message : 'Saved frames could not be checked.';
+        return;
+      }
+    }
+    if (session.snapshot.previewRevision !== revision || session.snapshot.capture?.sourceGeneration !== generation
+      || session.snapshot.capture?.capture.kind !== 'draft') return;
+    session.lockRange();
+  }
+
+  private canLock(): boolean {
+    const snapshot = this.snapshot;
+    const draft = snapshot?.capture?.capture;
+    return snapshot?.captureAvailable === true && draft?.kind === 'draft' && !!draft.start && !!draft.end;
+  }
+
+  private canJump(): boolean { return this.snapshot?.previewTarget !== null && this.snapshot?.previewTarget !== undefined; }
+
+  private canLoop(): boolean {
+    const target = this.snapshot?.previewTarget;
+    return !!target && target.startFrameIndex < target.endFrameIndex
+      && !this.options.player.ordinaryPlaybackRunning()
+      && (this.options.player.exactScrubActive() || this.options.player.exactPreviewPhase() === 'running');
+  }
+
+  private jump(endpoint: 'start' | 'end'): void {
+    const target = this.snapshot?.previewTarget;
+    if (!target) return;
+    void this.options.player.enterExactScrubAtFrame(endpoint === 'start' ? target.startFrameIndex : target.endFrameIndex);
+  }
+
+  private async startLoop(): Promise<void> {
+    const target = this.snapshot?.previewTarget;
+    if (!target || !this.canLoop()) return;
+    const operation = ++this.previewOperation;
+    await this.pendingPreviewStop;
+    if (operation !== this.previewOperation || this.options.session?.snapshot.previewRevision !== target.revision) return;
+    try {
+      await this.options.player.startExactPreview(target);
+    } catch (error) {
+      this.commandStatus.textContent = error instanceof Error ? error.message : 'Loop preview could not start.';
     }
   }
 
@@ -166,6 +253,7 @@ export class GifExtractionScreen implements IAppScreen {
   }
 
   private canExtractCurrent(): boolean {
+    if (this.options.player.exactPreviewPhase() === 'running') return false;
     const session = this.options.session;
     const rangeId = session?.snapshot.selectedRangeId;
     return !!rangeId && session?.canExtractRange(rangeId) === true;
@@ -176,6 +264,14 @@ export class GifExtractionScreen implements IAppScreen {
   }
 
   private render(snapshot: IGifExtractionSessionSnapshot): void {
+    this.snapshot = snapshot;
+    if (this.previewRevision !== null && snapshot.previewRevision !== this.previewRevision) {
+      this.previewOperation += 1;
+      if (this.options.player.exactPreviewPhase() !== 'inactive') {
+        this.pendingPreviewStop = this.options.player.stopExactPreview().catch(() => null);
+      }
+    }
+    this.previewRevision = snapshot.previewRevision;
     this.sourceName.textContent = snapshot.source?.name ?? 'No movie open';
     this.commandStatus.textContent = this.statusText(snapshot);
     this.emptyCopy.hidden = snapshot.source !== null;
@@ -187,10 +283,21 @@ export class GifExtractionScreen implements IAppScreen {
       ? 'Playback will be available when the movie opens. Saved captures will then appear in the Clips panel.'
       : 'Review one source, mark several moments, then extract the exact ranges together.';
     const captureReady = snapshot.captureAvailable ?? snapshot.reviewState?.captureEnabled === true;
-    this.markStartButton.disabled = !captureReady;
-    this.markEndButton.disabled = !captureReady;
+    this.markStartButton.disabled = !captureReady || this.options.player.exactPreviewPhase() === 'running';
+    this.markEndButton.disabled = !captureReady || this.options.player.exactPreviewPhase() === 'running';
+    const markTitle = this.options.player.exactPreviewPhase() === 'running'
+      ? 'Pause the loop with Space before changing a capture endpoint.' : 'Capture the displayed frame';
+    this.markStartButton.title = markTitle;
+    this.markEndButton.title = markTitle;
     const draft = snapshot.capture?.capture;
     this.lockButton.disabled = !captureReady || draft?.kind !== 'draft' || !draft.start || !draft.end;
+    this.lockButton.title = this.lockButton.disabled
+      ? 'Set both endpoints of an unlocked draft to lock it.' : 'Lock the current draft';
+    this.jumpStartButton.disabled = !this.canJump();
+    this.jumpEndButton.disabled = !this.canJump();
+    this.loopButton.disabled = !this.canLoop();
+    this.loopButton.title = this.loopButton.disabled
+      ? 'Select a two-frame or longer exact range and enter frame scrub to loop.' : 'Loop the exact range';
     this.openMovie.disabled = snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening';
     this.attachCurrentSession();
   }
@@ -199,6 +306,11 @@ export class GifExtractionScreen implements IAppScreen {
     if (snapshot.lifecycle === 'choosing') return 'Choose a movie';
     if (snapshot.lifecycle === 'opening') return 'Opening movie';
     if (!snapshot.source) return 'Waiting for a movie';
+    const target = snapshot.previewTarget;
+    if (target && this.options.player.exactPreviewPhase() !== 'inactive') {
+      const label = target.kind === 'draft' ? 'draft' : target.kind === 'refinement' ? 'staged range' : 'locked range';
+      return `${this.options.player.exactPreviewPhase() === 'running' ? 'Looping' : 'Paused'} ${label} · frames ${target.startFrameIndex}–${target.endFrameIndex}`;
+    }
     if (snapshot.reviewState?.captureEnabled) return 'Exact capture ready';
     return snapshot.reviewState?.message ?? 'Preparing exact frames';
   }

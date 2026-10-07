@@ -69,6 +69,14 @@
 - A class may own multiple closely related behaviors if they change together and reinforce one responsibility.
 - Follow framework conventions unless there is a strong reason not to. Local design preferences should not fight the platform without a clear payoff.
 
+## Test reliability
+
+- Do not assert private DOM structure, incidental call counts, exact pixel measurements, animation frames, or timestamps unless the requirement guarantees them. Assert observable behavior and relationships; use a justified tolerance for approximate values.
+- Do not use fixed sleeps or assume a background operation finishes within a particular interval. Wait for an observable completion condition with a bounded timeout; control clocks, animations, and external responses in tests that need exact timing.
+- Do not let tests depend on execution order, shared user data, random input, live services, or machine-specific state. Give each test explicit fixtures and isolated state, and clean up what it creates.
+- Do not combine several slow or failure-prone operations in one end-to-end test under a single timeout. Keep each scenario focused; cover detailed rules in unit or integration tests and reserve end-to-end tests for essential user workflows.
+- Do not weaken assertions or only raise timeouts to make a flaky test pass. Check whether the failure reveals a product bug, then make the setup and observation deterministic. If real hardware or media timing is essential, run that check separately; if it cannot be made reliable, remove it and record the coverage gap.
+
 ## Code review guidelines
 - First map the application's layers and responsibilities. Verify that they make sense for the app's type and goals.
 - Check whether each class, module, and method has a clear responsibility and whether its behavior is cohesive.

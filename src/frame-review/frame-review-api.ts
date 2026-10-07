@@ -41,6 +41,8 @@ export interface IPlaybackDisplayFrame {
   readonly sourceWidth: number;
   readonly sourceHeight: number;
   readonly pixels: Blob;
+  readonly droppedBeforeWrite?: number;
+  readonly previousAckRoundTripMs?: number | null;
 }
 
 export type FrameReviewDisplayFrame = IExactDisplayFrame | IPlaybackDisplayFrame;
@@ -52,6 +54,7 @@ export type FrameReviewCapturePoint =
 export type FrameReviewEvent =
   | Readonly<{ type: 'state'; state: IFrameReviewState }>
   | Readonly<{ type: 'display-frame'; frame: FrameReviewDisplayFrame }>
+  | Readonly<{ type: 'playback-ended' }>
   | Readonly<{ type: 'error'; category: string; message: string; recoverable: boolean }>;
 
 export interface IFrameReviewSession {
@@ -60,6 +63,10 @@ export interface IFrameReviewSession {
   play(): Promise<void>;
   pause(): Promise<void>;
   seekPlayback(timestampUs: bigint): Promise<void>;
+  startExactPreview(range: Readonly<{ startFrameIndex: number; endFrameIndex: number }>): Promise<void>;
+  pauseExactPreview(): Promise<IExactDisplayFrame>;
+  resumeExactPreview(frameIndex: number): Promise<void>;
+  stopExactPreview(): Promise<IExactDisplayFrame | null>;
   enterFrameScrub(): Promise<IExactDisplayFrame>;
   scrubToFrame(frameIndex: number): Promise<IExactDisplayFrame>;
   stepAdjacent(direction: AdjacentDirection): Promise<IExactDisplayFrame>;

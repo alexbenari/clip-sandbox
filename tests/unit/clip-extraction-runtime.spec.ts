@@ -39,6 +39,120 @@ describe('shared native product locator', () => {
 });
 
 describe('clip extraction runtime', () => {
+  it('declines local seeking for normalized sources and ambiguous indexed timestamps', async () => {
+    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
+    const runtime = createClipExtractionRuntime({
+      getSettings: vi.fn(), resolveFfmpeg: vi.fn(), resolveFfprobe: vi.fn(),
+    });
+    const identity = (frameIndex: number, pts: number) => ({
+      frameIndex, originalFrameIndex: frameIndex, pts: BigInt(pts), duration: 40n,
+      timebaseNumerator: 1n, timebaseDenominator: 1000n,
+    });
+    const host = { extractionFrameTimeline: vi.fn(async () => [identity(10, 1000), identity(11, 1000), identity(12, 1080)]) };
+    const source = { sourcePath: 'D:\\Movie.mp4', canonicalSourcePath: 'D:\\Movie.mp4',
+      normalizedSourcePath: null, frameCount: 100, identity: {} };
+    const request = { reviewSessionId: 'session_12345678', sourceHandle: 'source_12345678',
+      startFrameIndex: 10, endFrameIndex: 11 };
+    expect(await runtime.indexedBoundary(host, { ...source, normalizedSourcePath: 'D:\\normalized.mp4' },
+      request, new AbortController().signal)).toBeNull();
+    expect(host.extractionFrameTimeline).not.toHaveBeenCalled();
+    expect(await runtime.indexedBoundary(host, source, request, new AbortController().signal)).toBeNull();
+  });
+  it('uses indexed source times to extract a late exact range without a whole-source probe', async () => {
+    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
+    const fs = {
+      mkdir: vi.fn(async () => undefined), readdir: vi.fn(async () => []),
+      mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
+      rm: vi.fn(async () => undefined), copyFile: vi.fn(async () => undefined),
+      stat: vi.fn(async () => ({ isFile: () => true, size: 100, mtimeMs: 123 })),
+    };
+    const runCommand = vi.fn(async (_command: string, args: string[]) => ({
+      ok: true, code: 'completed',
+      stderr: args.includes('showinfo') || args.some(value => value.includes('showinfo'))
+        ? '[Parsed_showinfo_1] config in time_base: 1/1000\n'
+          + '[Parsed_showinfo_1] n: 0 pts: 55000 pts_time:55\n'
+          + '[Parsed_showinfo_1] n: 1 pts: 55040 pts_time:55.04\n'
+          + '[Parsed_showinfo_1] n: 2 pts: 55080 pts_time:55.08\n'
+        : '',
+    }));
+    const probeFrameTimes = vi.fn(async () => { throw new Error('whole-source probe used'); });
+    const runtime = createClipExtractionRuntime({
+      fs, getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
+      resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'),
+      probeFrameTimes, verifyMedia: vi.fn(async () => undefined), runCommand,
+      randomId: vi.fn(() => 'opaque12345678'),
+    });
+    const destination = await runtime.openDestination(7);
+    const identity = (frameIndex: number, pts: number) => ({
+      frameIndex, originalFrameIndex: frameIndex, pts: BigInt(pts), duration: 40n,
+      timebaseNumerator: 1n, timebaseDenominator: 1000n,
+    });
+    const result = await runtime.extract(7, {
+      prepareExtractionSource: vi.fn(async () => ({
+        sourcePath: 'D:\\movies\\Movie.mp4', canonicalSourcePath: 'D:\\movies\\Movie.mp4',
+        normalizedSourcePath: null, frameCount: 100000, selectedStream: 0, identity: {},
+      })),
+      extractionFrameTimeline: vi.fn(async () => [identity(10, 55000), identity(11, 55040), identity(12, 55080)]),
+      extractionFrameIdentities: vi.fn(async () => [identity(10, 55000), identity(11, 55040)]),
+    }, {
+      operationId: 'extract_12345678', destinationHandle: destination.result.destinationHandle,
+      sourceHandle: 'source_12345678', reviewSessionId: 'session_12345678', sourceGeneration: 1,
+      collectionName: 'Movie', startFrameIndex: 10, endFrameIndex: 11,
+    });
+
+    expect(result).toMatchObject({ ok: true, result: { filename: 'Movie-001.mp4' } });
+    expect(probeFrameTimes).not.toHaveBeenCalled();
+    expect(runCommand.mock.calls[0][1]).toContain('50.000000');
+    expect(runCommand.mock.calls[0][1]).toContain("select='gte(pts,55000)*lt(pts,55080)',showinfo,setpts=PTS-STARTPTS");
+  });
+
+  it('discards a failed local media candidate before the exact fallback publishes', async () => {
+    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
+    const fs = {
+      mkdir: vi.fn(async () => undefined), readdir: vi.fn(async () => []),
+      mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
+      rm: vi.fn(async () => undefined), copyFile: vi.fn(async () => undefined),
+      stat: vi.fn(async () => ({ isFile: () => true, size: 100, mtimeMs: 123 })),
+    };
+    const runCommand = vi.fn(async (_command: string, args: string[]) => ({
+      ok: true, code: 'completed',
+      stderr: args.some(value => value.includes('showinfo'))
+        ? '[Parsed_showinfo_1] config in time_base: 1/1000\n'
+          + '[Parsed_showinfo_1] n: 0 pts: 55000 pts_time:55\n'
+          + '[Parsed_showinfo_1] n: 1 pts: 55040 pts_time:55.04\n' : '',
+    }));
+    const probeFrameTimes = vi.fn(async () => ({ startUs: 55_000_000n, endUs: 55_080_000n }));
+    const runtime = createClipExtractionRuntime({
+      fs, getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
+      resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'),
+      probeFrameTimes, runCommand, randomId: vi.fn(() => 'opaque12345678'),
+    });
+    runtime.finalizeMedia = vi.fn().mockResolvedValueOnce({ ok: false, code: 'unverified-media' })
+      .mockResolvedValueOnce({ ok: true });
+    const identity = (frameIndex: number, pts: number) => ({
+      frameIndex, originalFrameIndex: frameIndex, pts: BigInt(pts), duration: 40n,
+      timebaseNumerator: 1n, timebaseDenominator: 1000n,
+    });
+    const destination = await runtime.openDestination(7);
+    const result = await runtime.extract(7, {
+      prepareExtractionSource: vi.fn(async () => ({
+        sourcePath: 'D:\\Movie.mp4', canonicalSourcePath: 'D:\\Movie.mp4',
+        normalizedSourcePath: null, frameCount: 100, selectedStream: 0, identity: {},
+      })),
+      extractionFrameTimeline: vi.fn(async () => [identity(10, 55000), identity(11, 55040), identity(12, 55080)]),
+    }, {
+      operationId: 'extract_12345678', destinationHandle: destination.result.destinationHandle,
+      sourceHandle: 'source_12345678', reviewSessionId: 'session_12345678', sourceGeneration: 1,
+      collectionName: 'Movie', startFrameIndex: 10, endFrameIndex: 11,
+    });
+    expect(result).toMatchObject({ ok: true });
+    expect(probeFrameTimes).toHaveBeenCalledOnce();
+    expect(runCommand).toHaveBeenCalledTimes(2);
+    expect(fs.rm).toHaveBeenCalledWith(expect.stringMatching(/video\.mp4$/), { force: true });
+    expect(fs.rm).toHaveBeenCalledWith(expect.stringMatching(/media\.mp4$/), { force: true });
+    expect(fs.copyFile).toHaveBeenCalledOnce();
+  });
+
   it('publishes media with a warning when provenance muxing fails', async () => {
     const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const fs = {
@@ -225,6 +339,8 @@ describe('clip extraction runtime', () => {
 
     const videoArguments = runCommand.mock.calls[0][1];
     expect(videoArguments).toContain("select='between(n,10,20)',setpts=PTS-STARTPTS");
+    expect(videoArguments).toContain('-frames:v');
+    expect(videoArguments).toContain('11');
     expect(videoArguments).toContain('libx264');
     expect(videoArguments).toContain('yuv420p');
     expect(videoArguments).toContain('-crf');

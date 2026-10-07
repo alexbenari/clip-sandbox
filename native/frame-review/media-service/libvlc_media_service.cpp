@@ -36,9 +36,12 @@ private:
 class PlaybackFrames {
 public:
     PlaybackFrames(ProtocolWriter& writer, std::uint64_t source_generation,
-                   unsigned maximum_width, unsigned maximum_height)
+                   unsigned maximum_width, unsigned maximum_height,
+                   decltype(&libvlc_clock) clock,
+                   decltype(&libvlc_media_player_time_point_interpolate) interpolate)
         : writer_(writer), source_generation_(source_generation),
           maximum_width_(maximum_width), maximum_height_(maximum_height),
+          clock_(clock), interpolate_(interpolate),
           worker_([this] { OutputLoop(); }) {}
 
     ~PlaybackFrames() {
@@ -111,7 +114,7 @@ public:
         auto& state = *static_cast<PlaybackFrames*>(opaque);
         auto* slot = static_cast<Buffer*>(picture);
         std::lock_guard<std::mutex> lock(state.mutex_);
-        if (state.seeking_ || state.output_suppressed_) {
+        if (state.output_suppressed_) {
             slot->in_use = false;
             ++state.dropped_frames_;
             state.condition_.notify_all();
@@ -122,7 +125,7 @@ public:
             ++state.dropped_frames_;
         }
         slot->sequence = ++state.frame_generation_;
-        slot->time_us = state.latest_time_us_;
+        slot->time_us = state.InterpolatedTimeLocked(state.clock_());
         state.pending_ = slot;
         state.condition_.notify_all();
     }
@@ -131,19 +134,33 @@ public:
         if (!point) return;
         auto& state = *static_cast<PlaybackFrames*>(opaque);
         std::lock_guard<std::mutex> lock(state.mutex_);
+        state.latest_point_ = *point;
+        state.has_time_point_ = true;
+        state.ResumeTimerPointLocked();
         state.latest_time_us_ = point->ts_us;
     }
 
-    static void OnPaused(void*, libvlc_time_t) {}
+    static void OnPaused(void* opaque, libvlc_time_t system_date_us) {
+        auto& state = *static_cast<PlaybackFrames*>(opaque);
+        std::lock_guard<std::mutex> lock(state.mutex_);
+        if (!state.has_time_point_ || system_date_us <= 0) return;
+        state.latest_time_us_ = state.InterpolatedTimeLocked(system_date_us);
+        state.latest_point_.ts_us = state.latest_time_us_;
+        state.latest_point_.system_date_us = INT64_MAX;
+    }
     static void OnSeek(void* opaque, const libvlc_media_player_time_point_t* point) {
         auto& state = *static_cast<PlaybackFrames*>(opaque);
         {
             std::lock_guard<std::mutex> lock(state.mutex_);
             if (point) {
                 state.seeking_ = true;
+                state.latest_point_ = *point;
+                state.has_time_point_ = true;
+                state.ResumeTimerPointLocked();
                 state.latest_time_us_ = point->ts_us;
             } else {
                 state.seeking_ = false;
+                state.ResumeTimerPointLocked();
                 state.completed_seek_generation_ = state.requested_seek_generation_;
             }
         }
@@ -155,8 +172,20 @@ public:
         {
             std::lock_guard<std::mutex> lock(frames.mutex_);
             frames.state_ = state;
+            frames.ResumeTimerPointLocked();
+            if (state == libvlc_Playing) {
+                frames.explicit_stop_ = false;
+                frames.ended_pending_ = false;
+            }
+            if (state == libvlc_Stopped && !frames.explicit_stop_) frames.ended_pending_ = true;
         }
         frames.condition_.notify_all();
+    }
+
+    void SuppressEndedEvent() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        explicit_stop_ = true;
+        ended_pending_ = false;
     }
 
     bool WaitForState(libvlc_state_t state, std::chrono::milliseconds timeout) {
@@ -167,6 +196,11 @@ public:
     std::uint64_t WrittenFrameGeneration() {
         std::lock_guard<std::mutex> lock(mutex_);
         return written_frame_generation_;
+    }
+
+    std::int64_t CurrentTimeUs() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return InterpolatedTimeLocked(clock_());
     }
 
     bool WaitForWrittenFrameAfter(std::uint64_t generation, std::chrono::milliseconds timeout) {
@@ -258,6 +292,7 @@ private:
     void OutputLoop() {
         while (true) {
             Buffer* frame = nullptr;
+            bool emit_end = false;
             unsigned width = 0;
             unsigned height = 0;
             unsigned stride = 0;
@@ -267,20 +302,31 @@ private:
             {
                 std::unique_lock<std::mutex> lock(mutex_);
                 condition_.wait(lock, [&] {
-                    return stopping_ || (pending_ != nullptr && awaiting_ack_generation_ == 0 &&
-                                          display_width_ > 0 && display_height_ > 0);
+                    return stopping_ || (awaiting_ack_generation_ == 0 &&
+                        (ended_pending_ || (pending_ != nullptr && display_width_ > 0 && display_height_ > 0)));
                 });
                 if (stopping_) return;
-                frame = pending_;
-                pending_ = nullptr;
-                awaiting_ack_generation_ = frame->sequence;
-                writing_frame_ = true;
-                width = display_width_;
-                height = display_height_;
-                stride = stride_;
-                source_width = source_display_width_;
-                source_height = source_display_height_;
-                dropped = dropped_frames_;
+                if (ended_pending_ && (pending_ == nullptr || display_width_ == 0 || display_height_ == 0)) {
+                    ended_pending_ = false;
+                    emit_end = true;
+                }
+                if (!emit_end) {
+                    frame = pending_;
+                    pending_ = nullptr;
+                    awaiting_ack_generation_ = frame->sequence;
+                    writing_frame_ = true;
+                    width = display_width_;
+                    height = display_height_;
+                    stride = stride_;
+                    source_width = source_display_width_;
+                    source_height = source_display_height_;
+                    dropped = dropped_frames_;
+                }
+            }
+            if (emit_end) {
+                try { writer_.Write({{"type", "playback-ended"}, {"sourceGeneration", source_generation_}}); }
+                catch (...) { std::lock_guard<std::mutex> lock(mutex_); stopping_ = true; }
+                continue;
             }
             try {
                 writer_.Write({
@@ -328,14 +374,37 @@ private:
     std::uint64_t awaiting_ack_generation_ = 0;
     std::uint64_t dropped_frames_ = 0;
     std::int64_t latest_time_us_ = -1;
+    libvlc_media_player_time_point_t latest_point_{};
+    bool has_time_point_ = false;
+    decltype(&libvlc_clock) clock_;
+    decltype(&libvlc_media_player_time_point_interpolate) interpolate_;
     std::uint64_t requested_seek_generation_ = 0;
     std::uint64_t completed_seek_generation_ = 0;
     bool seeking_ = false;
     bool output_suppressed_ = false;
     bool writing_frame_ = false;
     bool stopping_ = false;
+    bool explicit_stop_ = false;
+    bool ended_pending_ = false;
     libvlc_state_t state_ = libvlc_NothingSpecial;
     std::thread worker_;
+
+    void ResumeTimerPointLocked() {
+        if (state_ == libvlc_Playing && has_time_point_
+            && latest_point_.system_date_us == INT64_MAX) {
+            latest_point_.system_date_us = clock_();
+            if (latest_point_.rate <= 0) latest_point_.rate = 1.0;
+        }
+    }
+
+    std::int64_t InterpolatedTimeLocked(libvlc_time_t system_date_us) const {
+        if (!has_time_point_) return latest_time_us_;
+        libvlc_time_t interpolated = -1;
+        double position = 0;
+        if (interpolate_(&latest_point_, system_date_us, &interpolated, &position) == 0)
+            return interpolated;
+        return latest_time_us_;
+    }
 };
 
 class LibVlcService {
@@ -364,6 +433,8 @@ public:
             else if (command == "pause") Pause(request_id);
             else if (command == "stop") Stop(request_id);
             else if (command == "seek") Seek(request_id, request.metadata);
+            else if (command == "arm-ab-loop") ArmAbLoop(request_id, request.metadata);
+            else if (command == "reset-ab-loop") ResetAbLoop(request_id);
             else if (command == "frame-ack") FrameAck(request_id, request.metadata);
             else if (command == "status") Status(request_id, command);
             else if (command == "shutdown") {
@@ -406,7 +477,8 @@ private:
             throw std::invalid_argument("preview bounds must be between 1 and 16384 pixels");
         }
         frames_ = std::make_unique<PlaybackFrames>(
-            writer_, source_generation_, maximum_width, maximum_height);
+            writer_, source_generation_, maximum_width, maximum_height,
+            api_.clock, api_.interpolate_time_point);
         player_callbacks_ = {};
         player_callbacks_.version = 0;
         player_callbacks_.on_state_changed = &PlaybackFrames::OnState;
@@ -536,6 +608,7 @@ private:
 
     void Stop(const std::string& request_id) {
         RequirePlayer();
+        frames_->SuppressEndedEvent();
         if (api_.get_state(player_) != libvlc_Stopped) {
             api_.stop_async(player_);
             if (!frames_->WaitForState(libvlc_Stopped, std::chrono::seconds(5))) {
@@ -551,26 +624,53 @@ private:
         std::size_t consumed = 0;
         const auto time_us = std::stoll(value, &consumed);
         if (consumed != value.size() || time_us < 0) throw std::invalid_argument("invalid playback seek time");
-        const auto state = api_.get_state(player_);
-        if (state != libvlc_Playing && state != libvlc_Paused) {
-            frames_->SetOutputSuppressed(true);
-            try {
+        frames_->SetOutputSuppressed(true);
+        try {
+            const auto state = api_.get_state(player_);
+            if (state != libvlc_Playing && state != libvlc_Paused) {
                 StartPlayback();
                 PausePlayer();
-            } catch (...) {
-                frames_->SetOutputSuppressed(false);
-                throw;
             }
+            const auto generation = frames_->BeginSeek();
+            if (api_.set_time(player_, time_us, false) != 0) {
+                throw std::runtime_error("libvlc_media_player_set_time failed");
+            }
+            if (!frames_->WaitForSeek(generation, std::chrono::seconds(5))) {
+                throw std::runtime_error("timed out waiting for LibVLC seek completion");
+            }
+        } catch (...) {
             frames_->SetOutputSuppressed(false);
+            throw;
         }
-        const auto generation = frames_->BeginSeek();
-        if (api_.set_time(player_, time_us, false) != 0) {
-            throw std::runtime_error("libvlc_media_player_set_time failed");
-        }
-        if (!frames_->WaitForSeek(generation, std::chrono::seconds(5))) {
-            throw std::runtime_error("timed out waiting for LibVLC seek completion");
-        }
+        frames_->SetOutputSuppressed(false);
         Status(request_id, "seek");
+    }
+
+    void ArmAbLoop(const std::string& request_id, const nlohmann::json& request) {
+        RequirePlayer();
+        const auto a_time = ParseNonnegativeTime(request, "aTimeUs");
+        const auto b_time = ParseNonnegativeTime(request, "bTimeUs");
+        if (a_time >= b_time) throw std::invalid_argument("A-B loop times are unordered");
+        if (api_.set_abloop_time(player_, a_time, b_time) != 0) {
+            throw std::runtime_error("libvlc_media_player_set_abloop_time failed");
+        }
+        Status(request_id, "arm-ab-loop");
+    }
+
+    void ResetAbLoop(const std::string& request_id) {
+        RequirePlayer();
+        if (api_.reset_abloop(player_) != 0) {
+            throw std::runtime_error("libvlc_media_player_reset_abloop failed");
+        }
+        Status(request_id, "reset-ab-loop");
+    }
+
+    static std::int64_t ParseNonnegativeTime(const nlohmann::json& request, const char* field) {
+        const auto value = Required<std::string>(request, field);
+        std::size_t consumed = 0;
+        const auto parsed = std::stoll(value, &consumed);
+        if (consumed != value.size() || parsed < 0) throw std::invalid_argument("invalid A-B loop time");
+        return parsed;
     }
 
     void FrameAck(const std::string& request_id, const nlohmann::json& request) {
@@ -584,11 +684,13 @@ private:
         const auto* state = command == "open" && player_
             ? "playback-ready"
             : player_ ? StateName(api_.get_state(player_)) : "closed";
+        const auto interpolated_time = player_ ? frames_->CurrentTimeUs() : 0;
+        const auto time_us = player_ && interpolated_time < 0 ? api_.get_time(player_) : interpolated_time;
         writer_.Write({
             {"type", "status"}, {"requestId", request_id}, {"command", command},
             {"state", state},
             {"sourceGeneration", source_generation_}, {"frameGeneration", 0},
-            {"timeUs", player_ ? std::to_string(api_.get_time(player_)) : "0"},
+            {"timeUs", std::to_string(time_us)},
             {"lengthUs", player_ ? std::to_string(api_.get_length(player_)) : "0"},
         });
     }
@@ -607,6 +709,7 @@ private:
 
     void ClosePlayer() {
         if (!player_) return;
+        frames_->SuppressEndedEvent();
         if (api_.get_state(player_) != libvlc_Stopped) {
             api_.stop_async(player_);
             frames_->WaitForState(libvlc_Stopped, std::chrono::seconds(5));

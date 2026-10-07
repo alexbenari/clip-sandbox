@@ -361,7 +361,7 @@ void emit_prepared_access(BestVideoSource& source, PreparedVideoSession& session
 
 int run_probe(const std::filesystem::path& movie, const std::filesystem::path& cache_path,
                const std::vector<std::int64_t>& requested_frames, bool cancel, bool suite,
-               bool hash_diagnostics, bool held_step) {
+               bool hash_diagnostics, bool held_step, bool timeline) {
     std::map<std::string, std::string> lavf_options;
     int last_percent = -1;
     int progress_delay_ms = 0;
@@ -423,6 +423,17 @@ int run_probe(const std::filesystem::path& movie, const std::filesystem::path& c
 
     if (hash_diagnostics) {
         emit_hash_diagnostics(source, properties.NumFrames);
+        std::cout << "{\"type\":\"complete\",\"peakWorkingSetBytes\":"
+                  << peak_working_set_bytes() << "}\n";
+        return 0;
+    }
+
+    if (timeline) {
+        for (std::int64_t frame = 0; frame < properties.NumFrames; ++frame) {
+            const auto& info = source.GetFrameInfo(frame);
+            std::cout << "{\"type\":\"frame-time\",\"frameIndex\":" << frame
+                      << ",\"pts\":\"" << info.PTS << "\"}\n";
+        }
         std::cout << "{\"type\":\"complete\",\"peakWorkingSetBytes\":"
                   << peak_working_set_bytes() << "}\n";
         return 0;
@@ -509,7 +520,7 @@ int run_probe(const std::filesystem::path& movie, const std::filesystem::path& c
 
 int wmain(int argc, wchar_t** argv) {
     if (argc < 4 || argc > 5) {
-        std::cerr << "usage: bestsource_gate <probe|suite|cancel|hash-diagnostics|held-step> <movie> <cache-base> [frame-list]\n";
+        std::cerr << "usage: bestsource_gate <probe|suite|cancel|hash-diagnostics|held-step|timeline> <movie> <cache-base> [frame-list]\n";
         return 2;
     }
 
@@ -520,12 +531,12 @@ int wmain(int argc, wchar_t** argv) {
         if (const char* debug = std::getenv("BESTSOURCE_GATE_DEBUG")) {
             SetBSDebugOutput(std::string(debug) != "0");
         }
-        if (mode != L"probe" && mode != L"suite" && mode != L"cancel" && mode != L"hash-diagnostics" && mode != L"held-step") {
+        if (mode != L"probe" && mode != L"suite" && mode != L"cancel" && mode != L"hash-diagnostics" && mode != L"held-step" && mode != L"timeline") {
             throw std::runtime_error("unknown mode");
         }
         return run_probe(movie, cache_path, argc == 5 ? parse_frames(argv[4]) : std::vector<std::int64_t>{},
                          mode == L"cancel", mode == L"suite", mode == L"hash-diagnostics",
-                         mode == L"held-step");
+                         mode == L"held-step", mode == L"timeline");
     } catch (const std::exception& error) {
         std::cout << "{\"type\":\"error\",\"mode\":"
                   << frame_review::JsonString(frame_review::Utf8Text(mode).value()).serialized()

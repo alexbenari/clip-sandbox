@@ -4,11 +4,78 @@ import type { IGifExtractionSessionSnapshot } from '../../../src/app/gif-extract
 import { GifRangesPanelControl } from '../../../src/ui/gif-ranges-panel-control.js';
 
 describe('GifRangesPanelControl', () => {
+  it('shows batch progress and keeps Cancel keyboard focus through updates', () => {
+    let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
+    const snapshot: IGifExtractionSessionSnapshot = {
+      lifecycle: 'open', source: null, reviewState: null, capture: null,
+      draftThumbnail: { kind: 'empty' }, selectedRangeId: null, refinement: null,
+      capturesLoading: false, extractionAvailable: true, message: null, ranges: [],
+      previewTarget: null, previewRevision: 0,
+      extractionBatch: { currentRangeId: 'range-2', currentPosition: 2, total: 3, completed: 1,
+        cancelling: false, usingExactFallback: false,
+        progress: { stage: 'encoding-video', encodedFrames: 18, totalFrames: 39 } },
+    };
+    const session = { subscribe(listener: (value: IGifExtractionSessionSnapshot) => void) {
+      publish = listener; listener(snapshot); return vi.fn();
+    }, cancelExtraction: vi.fn(async () => undefined) };
+    const root = document.createElement('section');
+    document.body.append(root);
+    const control = new GifRangesPanelControl(root, session as never, { document });
+    expect(root.querySelector('[role="status"]')?.textContent)
+      .toContain('Clip 2 of 3 · Encoding video · 18 of 39 frames · 1 completed');
+    const cancel = root.querySelector<HTMLButtonElement>('[data-cancel-extraction]')!;
+    cancel.focus();
+    publish({ ...snapshot, extractionBatch: { ...snapshot.extractionBatch!,
+      usingExactFallback: true, progress: { stage: 'adding-audio' } } });
+    expect(root.querySelector('[role="status"]')?.textContent).toContain('Adding audio (slower exact method)');
+    expect(document.activeElement?.hasAttribute('data-cancel-extraction')).toBe(true);
+    root.querySelector<HTMLButtonElement>('[data-cancel-extraction]')!.click();
+    expect(session.cancelExtraction).toHaveBeenCalledOnce();
+    control.destroy();
+    root.remove();
+  });
+  it('updates extraction availability without replacing a focused range card', () => {
+    const exact = (frameIndex: number) => ({ kind: 'exact-frame' as const,
+      identity: { frameIndex, originalFrameIndex: frameIndex, pts: BigInt(frameIndex), duration: 1n,
+        timebaseNumerator: 1n, timebaseDenominator: 24n, frameInfoPts: BigInt(frameIndex), frameInfoHash: 'hash' },
+      reviewTimeUs: BigInt(frameIndex), sourceGeneration: 1 });
+    const range = { id: 'range-1' as never, kind: 'ready-to-extract' as const, sourceGeneration: 1,
+      start: exact(2), end: exact(5), thumbnail: { kind: 'empty' as const } };
+    const snapshot = { lifecycle: 'open' as const, source: null, reviewState: null, capture: null,
+      draftThumbnail: { kind: 'empty' as const }, selectedRangeId: range.id, refinement: null,
+      capturesLoading: false, extractionAvailable: true, message: null, ranges: [range],
+      previewTarget: null, previewRevision: 0 };
+    const session = { subscribe(listener: (value: IGifExtractionSessionSnapshot) => void) {
+      listener(snapshot as never); return vi.fn();
+    }, canExtractRange: vi.fn(() => true), canRemoveRange: vi.fn(() => true) };
+    let transportChanged = () => undefined;
+    let running = false;
+    const player = { subscribeTransport(listener: () => void) { transportChanged = listener; return vi.fn(); },
+      exactPreviewPhase: () => running ? 'running' : 'inactive' };
+    const root = document.createElement('section');
+    document.body.append(root);
+    const control = new GifRangesPanelControl(root, session as never, { document, player: player as never });
+    const card = root.querySelector<HTMLElement>('[data-range-id="range-1"]')!;
+    const extract = card.querySelector<HTMLButtonElement>('[data-extract-range]')!;
+    card.focus();
+    running = true;
+    transportChanged();
+    expect(root.querySelector('[data-range-id="range-1"]')).toBe(card);
+    expect(document.activeElement).toBe(card);
+    expect(extract.disabled).toBe(true);
+    running = false;
+    transportChanged();
+    expect(extract.disabled).toBe(false);
+    control.destroy();
+    root.remove();
+  });
+
   it('shows capture loading before the restored queue replaces the empty panel', () => {
     let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
     const base = {
       lifecycle: 'empty' as const, source: null, reviewState: null, capture: null,
       draftThumbnail: { kind: 'empty' as const }, selectedRangeId: null, refinement: null,
+      previewTarget: null, previewRevision: 0,
       message: null, ranges: [],
     };
     const session = {
@@ -52,6 +119,7 @@ describe('GifRangesPanelControl', () => {
     const snapshot: IGifExtractionSessionSnapshot = {
       lifecycle: 'open', source: null, reviewState: null, capture: null,
       draftThumbnail: { kind: 'empty' }, selectedRangeId: null, refinement: null, capturesLoading: false, message: null,
+      previewTarget: null, previewRevision: 0,
       ranges: [{
         id: 'range_1' as never,
         kind: 'needs-exact-frames',
@@ -67,6 +135,7 @@ describe('GifRangesPanelControl', () => {
         return vi.fn();
       }),
       retryThumbnail: vi.fn(), selectRange: vi.fn(), canRemoveRange: vi.fn(() => true), removeRange: vi.fn(() => true),
+      canExtractRange: vi.fn(() => true),
     };
     const root = document.createElement('section');
     new GifRangesPanelControl(root, session as never, { document });
@@ -114,11 +183,13 @@ describe('GifRangesPanelControl', () => {
         listener({
           lifecycle: 'open', source: null, reviewState: null, capture: null,
           draftThumbnail: { kind: 'empty' }, selectedRangeId: inexact.id, refinement: null,
+          previewTarget: null, previewRevision: 0,
           capturesLoading: false, message: null, ranges: [inexact, exact] as never,
         });
         return vi.fn();
       }),
       retryThumbnail: vi.fn(), selectRange: vi.fn(), canRemoveRange: vi.fn(() => true), removeRange: vi.fn(() => true),
+      canExtractRange: vi.fn(() => true),
     };
     const onRefine = vi.fn();
     const root = document.createElement('section');
@@ -145,6 +216,7 @@ describe('GifRangesPanelControl', () => {
     publish({
       lifecycle: 'open', source: null, reviewState: null, capture: null,
       draftThumbnail: { kind: 'empty' }, selectedRangeId: inexact.id, refinement: null,
+      previewTarget: null, previewRevision: 0,
       capturesLoading: false, message: null, ranges: [{ ...exact, id: inexact.id }, exact] as never,
     });
     expect(root.querySelectorAll('.gif-range-card')).toHaveLength(2);
@@ -170,6 +242,7 @@ describe('GifRangesPanelControl', () => {
         listener({
           lifecycle: 'open', source: null, reviewState: null, capture: null,
           draftThumbnail: { kind: 'empty' }, selectedRangeId: exact.id, refinement: null,
+          previewTarget: null, previewRevision: 0,
           capturesLoading: false, message: null, extractionAvailable: true, ranges: [exact] as never,
         });
         return vi.fn();

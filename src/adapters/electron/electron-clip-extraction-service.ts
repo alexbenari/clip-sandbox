@@ -2,6 +2,7 @@ import type {
   IClipExtractionService,
   ICreatedExtractionMedia,
   IExactClipExtractionRequest,
+  IClipExtractionProgress,
   IExtractionDestinationEntry,
   IExtractionDestinationSnapshot,
 } from '../../frame-review/clip-extraction-api.js';
@@ -14,7 +15,8 @@ interface IWireResponse {
 }
 
 interface IElectronClipExtractionApi {
-  openDestination(): Promise<IWireResponse>;
+  subscribeProgress(listener: (value: unknown) => void): () => void;
+  openDestination(request?: Readonly<{ folderPath: string }>): Promise<IWireResponse>;
   extract(request: unknown): Promise<IWireResponse>;
   saveCollection(request: unknown): Promise<IWireResponse>;
   cancel(extractionOperationId: string): Promise<IWireResponse>;
@@ -31,15 +33,16 @@ export class ElectronClipExtractionService implements IClipExtractionService {
 
   constructor(win: ClipExtractionWindow = window) {
     const api = win.clipSandboxDesktop?.clipExtraction;
-    if (!api || typeof api.openDestination !== 'function' || typeof api.extract !== 'function'
+    if (!api || typeof api.subscribeProgress !== 'function'
+      || typeof api.openDestination !== 'function' || typeof api.extract !== 'function'
       || typeof api.saveCollection !== 'function' || typeof api.cancel !== 'function') {
       throw new Error('Electron clip-extraction API is unavailable.');
     }
     this.api = api;
   }
 
-  async openExtractionDestination(): Promise<IExtractionDestinationSnapshot> {
-    const result = this.record(this.response(await this.api.openDestination()), 'extraction destination');
+  async openExtractionDestination(request?: Readonly<{ folderPath: string }>): Promise<IExtractionDestinationSnapshot> {
+    const result = this.record(this.response(await this.api.openDestination(request)), 'extraction destination');
     const destinationHandle = this.opaqueId(result.destinationHandle, 'destination');
     const folderPath = this.absolutePath(result.folderPath);
     if (!Array.isArray(result.entries)) throw new Error('The extraction destination entries are invalid.');
@@ -47,9 +50,26 @@ export class ElectronClipExtractionService implements IClipExtractionService {
     return Object.freeze({ destinationHandle, folderPath, entries: Object.freeze(entries) });
   }
 
-  async extract(request: IExactClipExtractionRequest): Promise<ICreatedExtractionMedia> {
+  async extract(request: IExactClipExtractionRequest,
+    onProgress?: (progress: IClipExtractionProgress) => void): Promise<ICreatedExtractionMedia> {
     const operationId = this.nextOperationId();
     this.currentOperationId = operationId;
+    const unsubscribe = this.api.subscribeProgress(value => {
+      if (this.currentOperationId !== operationId || !onProgress) return;
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+      const event = value as Record<string, unknown>;
+      if (event.operationId !== operationId) return;
+      const stages = ['checking-source', 'encoding-video', 'adding-audio', 'saving-media', 'exact-fallback'];
+      if (typeof event.stage !== 'string' || !stages.includes(event.stage)) return;
+      const encodedFrames = event.encodedFrames;
+      const totalFrames = event.totalFrames;
+      if (encodedFrames !== undefined && (!Number.isSafeInteger(encodedFrames) || Number(encodedFrames) < 0)) return;
+      if (totalFrames !== undefined && (!Number.isSafeInteger(totalFrames) || Number(totalFrames) < 1)) return;
+      if (encodedFrames !== undefined && totalFrames !== undefined && Number(encodedFrames) > Number(totalFrames)) return;
+      onProgress(Object.freeze({ stage: event.stage as IClipExtractionProgress['stage'],
+        encodedFrames: encodedFrames === undefined ? undefined : Number(encodedFrames),
+        totalFrames: totalFrames === undefined ? undefined : Number(totalFrames) }));
+    });
     try {
       const result = this.record(this.response(await this.api.extract({ operationId, ...request })), 'created media');
       const entry = this.record(result.entry, 'created media entry');
@@ -65,6 +85,7 @@ export class ElectronClipExtractionService implements IClipExtractionService {
         warning: typeof result.warning === 'string' ? result.warning.slice(0, 1024) : undefined,
       });
     } finally {
+      unsubscribe();
       if (this.currentOperationId === operationId) this.currentOperationId = null;
     }
   }

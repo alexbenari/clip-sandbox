@@ -37,6 +37,7 @@ function refinementSnapshot(
     focusedEndpoint: 'start',
     seekTimeUs: 100_000n,
     seekRevision: 1,
+    stagedRevision: 0,
     canCommit: exact,
     nextInexactRangeId: exact ? 'range-2' as never : null,
     message: exact ? 'Exact range locked' : null,
@@ -58,11 +59,40 @@ function extractionSnapshot(refinement: IRefineGifSessionSnapshot): IGifExtracti
     refinement,
     message: refinement.message,
     capturesLoading: false,
+    previewTarget: null,
+    previewRevision: 0,
   });
 }
 
 describe('RefineGifScreen', () => {
-  it('enters exact review, routes Q/W/A, enables exact-only E, and preserves contextual continuation', async () => {
+  it('shows source lookup on the Refine screen before the review session opens', () => {
+    const session = {
+      reviewSession: {} as never,
+      subscribe: (listener: (snapshot: IGifExtractionSessionSnapshot) => void) => {
+        listener(Object.freeze({ ...extractionSnapshot(refinementSnapshot('committed')), refinement: null }));
+        return vi.fn();
+      },
+      abandonRefinement: vi.fn(),
+    };
+    const player = new FrameReviewPlayerControl({ document,
+      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const attach = vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
+    const screen = new RefineGifScreen({ id: 'collection-refine', singleRange: true,
+      player, keyboard: new GifWorkflowKeyboardController(), session: session as never,
+      onBack: vi.fn(), document });
+    document.body.append(screen.commands, screen.root);
+    screen.showPreparation('Finding the original movie…');
+    screen.onActivate();
+    expect(attach).toHaveBeenCalledWith(null);
+    expect(screen.commands.textContent).toContain('Finding the original movie');
+    expect(screen.root.textContent).toContain('Finding the original movie');
+    screen.showPreparation('Preparing exact frames…');
+    expect(screen.commands.textContent).toContain('Preparing exact frames');
+    screen.showPreparation(null);
+    expect(attach).toHaveBeenLastCalledWith(session.reviewSession);
+  });
+
+  it('enters exact review, routes Q/W/X, enables exact-only E, and preserves contextual continuation', async () => {
     let currentRefinement = refinementSnapshot();
     let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
     const refinement = {
@@ -71,6 +101,7 @@ describe('RefineGifScreen', () => {
     };
     const session = {
       reviewSession: {} as never,
+      get snapshot() { return extractionSnapshot(currentRefinement); },
       get refinementSession() { return refinement; },
       subscribe: vi.fn((listener: (snapshot: IGifExtractionSessionSnapshot) => void) => {
         publish = listener;
@@ -127,9 +158,14 @@ describe('RefineGifScreen', () => {
     expect(player.enterExactScrubAt).toHaveBeenCalledWith(300_000n);
     keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'q', cancelable: true }));
     keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'w', cancelable: true }));
-    keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'a', cancelable: true }));
+    keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'x', cancelable: true }));
     expect(refinement.markStart).toHaveBeenCalledWith(displayed);
     expect(refinement.markEnd).toHaveBeenCalledWith(displayed);
+    expect(refinement.commit).not.toHaveBeenCalled();
+    currentRefinement = Object.freeze({ ...refinementSnapshot('committed'), status: 'editing', canCommit: true });
+    publish(extractionSnapshot(currentRefinement));
+    keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'x', cancelable: true }));
+    await Promise.resolve();
     expect(refinement.commit).toHaveBeenCalledOnce();
     keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'e', cancelable: true }));
     expect(onExtractCurrent).not.toHaveBeenCalled();

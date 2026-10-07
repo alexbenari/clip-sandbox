@@ -39,6 +39,8 @@ import { ElectronFrameReviewService } from '../adapters/electron/electron-frame-
 import { ElectronThumbnailCacheService } from '../adapters/electron/electron-thumbnail-cache-service.js';
 import { ElectronClipExtractionService } from '../adapters/electron/electron-clip-extraction-service.js';
 import { ElectronClipCapturesStoreService } from '../adapters/electron/electron-clip-captures-store-service.js';
+import { ElectronCollectionClipRefinementService } from '../adapters/electron/electron-collection-clip-refinement-service.js';
+import type { ICollectionClipRefinementRequest } from './collection-clip-refinement.js';
 import { GifExtractionSession } from './gif-extraction-session.js';
 import { AppSettingsService } from './app-settings-service.js';
 import { AppSettingsParser, DEFAULT_STARTUP_SCREEN_ID } from './app-settings.js';
@@ -130,6 +132,9 @@ export class AppController {
 
   init(): void {
   if (this.initialized) return;
+    let startCollectionRefinement: ((request: ICollectionClipRefinementRequest, collectionFilename: string) => Promise<void>) | null = null;
+    let gridMenuRevision = 0;
+    let selectionRevision = 0;
     class AppWorkflows {
     readonly showStatus = (msg: string, timeout = 2500): void => {
         activityIndicatorControl.show(msg, timeout);
@@ -455,7 +460,11 @@ export class AppController {
             failedDeleteCount: deleteRequest.selectedClipNames.length,
             cleanedSavedCollectionCount: 0,
             failedCollectionRewriteCount: 0,
-          }));
+          }), {
+            affected: deleteRequest.selectedClipNames.join(', '),
+            recovery: 'Open the folder again before retrying the deletion.',
+            technicalDetails: 'Disk access is unavailable for the current folder session.',
+          });
           return;
         }
 
@@ -481,7 +490,16 @@ export class AppController {
           failedCollectionRewriteCount: result.failedCollectionRewrites.length,
         });
         if (result.failedDeletes.length > 0 || result.failedCollectionRewrites.length > 0 || result.deletedClipIds.length === 0) {
-          this.showErrorStatus(deleteStatusText);
+          const failedDeleteDetails = result.failedDeletes.map(({ filename, error }) =>
+            `${filename}: ${error instanceof Error ? error.message : String(error || 'Delete failed')}`);
+          const failedRewriteDetails = result.failedCollectionRewrites.map(({ collectionName, filename, error }) =>
+            `${collectionName} (${filename}): ${error instanceof Error ? error.message : String(error || 'Collection update failed')}`);
+          this.showErrorStatus(deleteStatusText, {
+            affected: [...result.failedDeletes.map(({ filename }) => filename),
+              ...result.failedCollectionRewrites.map(({ collectionName }) => collectionName)].join(', '),
+            recovery: 'Close any player using the clip, then try deleting it again.',
+            technicalDetails: [...failedDeleteDetails, ...failedRewriteDetails].join('\n') || 'No file was deleted.',
+          });
           return;
         }
         this.showStatus(deleteStatusText, 4500);
@@ -701,6 +719,47 @@ export class AppController {
         });
       };
 
+      readonly switchSelectionFromDisk = async (collectionFilename: string | null): Promise<void> => {
+        const revision = ++selectionRevision;
+        const folderSession = state.currentFolderSession;
+        const pipeline = this.currentPipeline();
+        if (!pipeline) return;
+        if (!fileSystem.canMutateDisk(folderSession)) {
+          await this.reloadSelection({
+            pipeline,
+            collection: collectionFilename ? pipeline?.getCollectionByFilename(collectionFilename) : null,
+          });
+          return;
+        }
+        try {
+          const selection = await fileSystem.refreshFolder(folderSession);
+          if (revision !== selectionRevision || state.currentFolderSession !== folderSession
+            || this.currentPipeline() !== pipeline || pipelineSession.hasDirtyClipSequenceChanges) return;
+          const refreshed = await pipelineFactory.buildPipeline({
+            folderName: selection.folderName,
+            files: selection.files,
+            validator,
+            logInvalidDescription: result => diagnostics.logInvalidDescription(result, selection.folderSession),
+          });
+          if (revision !== selectionRevision || state.currentFolderSession !== folderSession
+            || this.currentPipeline() !== pipeline || pipelineSession.hasDirtyClipSequenceChanges) return;
+          pipeline.setVideoFiles(refreshed.pipeline.videoFiles());
+          pipeline.setCollections(refreshed.pipeline.collections());
+          await this.reloadSelection({
+            pipeline,
+            collection: collectionFilename ? pipeline.getCollectionByFilename(collectionFilename) : null,
+            folderSession: selection.folderSession,
+          });
+        } catch (error) {
+          if (revision !== selectionRevision || state.currentFolderSession !== folderSession) return;
+          this.showErrorStatus('The folder could not be refreshed.', {
+            affected: collectionFilename || 'Folder view',
+            recovery: 'Check that the folder is accessible, then switch views again.',
+            technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
+          });
+        }
+      };
+
     readonly onPickFolder = async (): Promise<void> => {
         if (pipelineSession.hasDirtyClipSequenceChanges) {
           state.setPendingSelectionAction({ type: 'browse-folder' });
@@ -740,13 +799,12 @@ export class AppController {
           if (!saveFirst) {
             gridController.invalidateView(this.activeGridViewCacheKey());
             gridController.retagActiveView(null);
+            await this.reloadSelection({
+              pipeline: this.currentPipeline(),
+              collection: this.activeCollection(),
+            });
           }
-          await this.reloadSelection({
-            pipeline: this.currentPipeline(),
-            collection: nextPendingAction.collectionFilename
-              ? this.currentPipeline()?.getCollectionByFilename(nextPendingAction.collectionFilename)
-              : null,
-          });
+          await this.switchSelectionFromDisk(nextPendingAction.collectionFilename);
           return;
         }
         this.refreshCollectionSelectorView();
@@ -975,12 +1033,31 @@ export class AppController {
         });
       };
 
-    readonly openGridContextMenu = (point: ContextMenuPoint): void => {
+    readonly openGridContextMenu = async (point: ContextMenuPoint, clipId: string | null): Promise<void> => {
+        const revision = ++gridMenuRevision;
+        const clip = pipelineSession.resolveClip(clipId);
+        const collectionFilename = this.activeCollectionFilename();
+        const folderSession = state.currentFolderSession;
+        const request = clip && fileSystem.canMutateDisk(folderSession)
+          ? { folderPath: folderSession.folderPath, filename: clip.name } : null;
+        let canRefine = false;
+        if (request && collectionRefinementService) {
+          try { canRefine = await collectionRefinementService.inspect(request); }
+          catch { canRefine = false; }
+        }
+        if (revision !== gridMenuRevision || collectionFilename !== this.activeCollectionFilename()
+          || state.currentFolderSession !== folderSession || shell.activeScreen !== collectionScreen
+          || (clipId && pipelineSession.resolveClip(clipId) !== clip)) return;
         const hasSelection = gridController.getSelectedClipIds().length > 0;
         gridContextMenuControl.open({
           point,
           hasSelection,
           hasPipeline: !!this.currentPipeline(),
+          hasClip: request !== null,
+          canRefine,
+          onRefine: () => {
+            if (request && startCollectionRefinement) void startCollectionRefinement(request, collectionFilename);
+          },
           targetCollections: AddToCollectionDialogController.buildChoices({
             pipeline: this.currentPipeline(),
             activeCollectionFilename: this.activeCollectionFilename(),
@@ -1122,6 +1199,11 @@ this.initialized = true;
     },
   });
   const fileSystem = new ElectronFileSystemService({ win: window });
+  let collectionRefinementService: ElectronCollectionClipRefinementService | null = null;
+  try { collectionRefinementService = new ElectronCollectionClipRefinementService(window); }
+  catch (error) {
+    if (!(error instanceof Error) || error.message !== 'Electron collection refinement API is unavailable.') throw error;
+  }
   const clipEditor = new ClipEditor({
     runtimeEditingService: fileSystem,
     videoEditCatalog,
@@ -1205,12 +1287,7 @@ this.initialized = true;
         workflows.openUnsavedDialog();
         return;
       }
-      void workflows.reloadSelection({
-        pipeline,
-        collection: selectedCollectionFilename
-          ? pipeline.getCollectionByFilename(selectedCollectionFilename)
-          : null,
-      });
+      void workflows.switchSelectionFromDisk(selectedCollectionFilename);
     },
   });
   const mainToolbarControl = new MainToolbarControl({
@@ -1475,9 +1552,9 @@ this.initialized = true;
       workflows.refreshToolbarView();
       workflows.showStatus(appText.removedClipsText(removedClipIds.length));
     },
-    onContextMenu: ({ point }) => {
+    onContextMenu: ({ point, clipId }) => {
       if (zoomOverlay.isOpen() || workflows.isFullscreen()) return;
-      workflows.openGridContextMenu(point);
+      void workflows.openGridContextMenu(point, clipId);
     },
   });
 
@@ -1567,10 +1644,14 @@ this.initialized = true;
   const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
   const gifRangesPanel = AppControllerSupport.optionalElement('gifRangesPanel') ?? undefined;
   let gifExtractionSession: GifExtractionSession | undefined;
+  let collectionRefinementSession: GifExtractionSession | undefined;
   let gifRangesPanelControl: GifRangesPanelControl | undefined;
+  let collectionRangesPanelControl: GifRangesPanelControl | undefined;
   let refineGifScreen: RefineGifScreen;
+  let collectionRefineScreen: RefineGifScreen;
   let shell: ApplicationShellController;
   let refineSelectionRevision = 0;
+  let collectionRefineRevision = 0;
   try {
     gifExtractionSession = new GifExtractionSession(
       new ElectronFrameReviewService(window),
@@ -1578,7 +1659,7 @@ this.initialized = true;
       {
         extractionService: new ElectronClipExtractionService(window),
         captureStore: new ElectronClipCapturesStoreService(window),
-        onCollectionPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
+        onPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
         onProgress: workflows.showProgressStatus,
         onSuccess: workflows.showStatus,
         onWarning: message => workflows.showStatus(message, 5000),
@@ -1588,9 +1669,38 @@ this.initialized = true;
         },
       },
     );
+    if (collectionRefinementService) {
+      collectionRefinementSession = new GifExtractionSession(
+        new ElectronFrameReviewService(window),
+        new ElectronThumbnailCacheService({ window }),
+        {
+          extractionService: new ElectronClipExtractionService(window),
+          onPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
+          onProgress: workflows.showProgressStatus,
+          onSuccess: workflows.showStatus,
+          onWarning: message => workflows.showStatus(message, 5000),
+          onError: (message, error) => {
+            workflows.showErrorStatus(message);
+            if (error !== undefined) void diagnostics.logRuntimeError(message, error);
+          },
+        },
+      );
+      if (gifRangesPanel) {
+        const collectionRangesPanel = document.createElement('section');
+        collectionRangesPanel.setAttribute('aria-label', 'Refined collection clip');
+        collectionRangesPanelControl = new GifRangesPanelControl(collectionRangesPanel, collectionRefinementSession, {
+          document, player: frameReviewPlayer,
+          onRefine: rangeId => {
+            const started = collectionRefinementSession?.beginRefinement(rangeId);
+            if (started?.kind === 'rejected') workflows.showErrorStatus(started.message);
+          },
+        });
+      }
+    }
     if (gifRangesPanel) {
       gifRangesPanelControl = new GifRangesPanelControl(gifRangesPanel, gifExtractionSession, {
         document,
+        player: frameReviewPlayer,
         onRefine: rangeId => { void (async () => {
           const revision = ++refineSelectionRevision;
           if (!await gifExtractionSession?.prepareSavedRange(rangeId)) return;
@@ -1628,6 +1738,70 @@ this.initialized = true;
     },
     document,
   });
+  collectionRefineScreen = new RefineGifScreen({
+    id: 'collection-refine',
+    label: 'Refine Clip',
+    returnLabel: 'Back to Collection',
+    singleRange: true,
+    player: frameReviewPlayer,
+    keyboard: gifWorkflowKeyboard,
+    session: collectionRefinementSession,
+    rangesPanel: collectionRangesPanelControl,
+    onBack: () => {
+      shell.activate(collectionScreen.id);
+      if (shell.activeScreen === collectionScreen) {
+        collectionRefineRevision += 1;
+        collectionRefineScreen.showPreparation(null);
+      }
+    },
+    document,
+  });
+  startCollectionRefinement = async (request, collectionFilename) => {
+    const session = collectionRefinementSession;
+    const service = collectionRefinementService;
+    if (!session || !service) return;
+    const revision = ++collectionRefineRevision;
+    try {
+      if (pipelineSession.hasDirtyClipSequenceChanges) {
+        workflows.showErrorStatus('Save or discard the current changes before refining a clip.');
+        return;
+      }
+      session.setExtractionDestination(collectionFilename
+        ? { kind: 'collection', folderPath: request.folderPath, collectionFilename }
+        : { kind: 'folder', folderPath: request.folderPath });
+      collectionRefineScreen.showPreparation(`Finding the original movie for ${request.filename}…`);
+      shell.activate(collectionRefineScreen.id);
+      const resolved = await service.resolve(request);
+      if (revision !== collectionRefineRevision || shell.activeScreen !== collectionRefineScreen) return;
+      if (resolved.kind === 'cancelled') {
+        shell.activate(collectionScreen.id);
+        collectionRefineScreen.showPreparation(null);
+        return;
+      }
+      if (request.folderPath !== (fileSystem.canMutateDisk(state.currentFolderSession)
+        ? state.currentFolderSession.folderPath : null)
+        || collectionFilename !== workflows.activeCollectionFilename()) return;
+      collectionRefineScreen.showPreparation('Opening the original movie…');
+      await session.openCollectionSource(resolved.source);
+      if (revision !== collectionRefineRevision || shell.activeScreen !== collectionRefineScreen) return;
+      collectionRefineScreen.showPreparation('Preparing exact frames and checking the clip range…');
+      const started = await session.importCollectionRange(resolved.range);
+      if (revision !== collectionRefineRevision || shell.activeScreen !== collectionRefineScreen) {
+        session.abandonRefinement();
+        return;
+      }
+      if (started.kind === 'rejected') {
+        collectionRefineScreen.showPreparation(started.message, false);
+        workflows.showErrorStatus(started.message);
+      } else collectionRefineScreen.showPreparation(null);
+    } catch (error) {
+      if (revision !== collectionRefineRevision || shell.activeScreen !== collectionRefineScreen) return;
+      const message = error instanceof Error ? error.message : 'The clip could not be opened for refinement.';
+      collectionRefineScreen.showPreparation(message, false);
+      workflows.showErrorStatus(message);
+      void diagnostics.logRuntimeError(message, error);
+    }
+  };
   const panels = ['pipelines', 'clips'].flatMap(name => {
     const root = AppControllerSupport.optionalElement(`${name}Panel`);
     const contributionHost = AppControllerSupport.optionalElement(name === 'pipelines' ? 'pipelinesPanelMount' : `${name}PanelHost`);
@@ -1649,7 +1823,12 @@ this.initialized = true;
     selector: AppControllerSupport.requiredElement<HTMLSelectElement>('appScreenSelector'),
     selectorHost: AppControllerSupport.requiredElement('appScreenSwitcher'),
     initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
-    screens: [gifExtractionScreen, collectionScreen, refineGifScreen, settingsScreen],
+    screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
+    canLeaveScreen: current => {
+      if (current !== collectionRefineScreen || !collectionRefinementSession?.snapshot.extractionBatch) return true;
+      workflows.showProgressStatus('Wait for the collection clip to finish saving, or cancel extraction before leaving Refine.');
+      return false;
+    },
     onScreenChange: screen => keyboardMap?.render(screen),
     workspace: AppControllerSupport.optionalElement('workspaceRow') ?? undefined,
     center: AppControllerSupport.optionalElement('centralWorkspace') ?? undefined,
@@ -1691,12 +1870,16 @@ this.initialized = true;
       workspaceResize.disconnect();
       shell.destroy();
     },
-    disposeWorkflow: () => gifExtractionSession?.dispose() ?? Promise.resolve(),
+    disposeWorkflow: async () => {
+      await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
+    },
     destroyControls: () => {
       gridController.destroy();
       gifExtractionScreen.destroy();
       refineGifScreen.destroy();
+      collectionRefineScreen.destroy();
       gifRangesPanelControl?.destroy();
+      collectionRangesPanelControl?.destroy();
       frameReviewPlayer.destroy();
       utilities?.destroy();
       activityIndicatorControl.destroy();

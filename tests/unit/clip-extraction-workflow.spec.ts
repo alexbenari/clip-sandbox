@@ -2,6 +2,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ClipExtractionWorkflow } from '../../src/app/clip-extraction-workflow.js';
+import { ClipExtractor } from '../../src/business-logic/clip-extractor.js';
+import { Collection } from '../../src/domain/collection.js';
 
 type Range = { id: string; kind: 'ready-to-extract'; sourceGeneration: number; start: { kind: 'exact-frame'; identity: { frameIndex: number } }; end: { kind: 'exact-frame'; identity: { frameIndex: number } } };
 
@@ -17,7 +19,7 @@ function fakes() {
   return {
     extractor: { extract: vi.fn(async ({ range: current }: { range: Range }) => ({ kind: 'created-media', mediaHandle: `media-${current.id}`, filename: `${current.id}.mp4` })) },
     destination: {
-      open: vi.fn(async () => ({ destinationHandle: 'destination_opaque_0001', collectionFilename: 'Sample Movie.txt' })),
+      open: vi.fn(async () => ({ destinationHandle: 'destination_opaque_0001', collectionFilename: 'Sample Movie.txt', collection: Collection.fromFilename({ filename: 'Sample Movie.txt' }) })),
       publishCreatedMedia: vi.fn(async () => undefined),
       retryPublication: vi.fn(async () => undefined),
     },
@@ -25,6 +27,23 @@ function fakes() {
 }
 
 describe('ClipExtractionWorkflow', () => {
+  it('extracts a movie whose filename leaves whitespace after extension removal into the opened collection', async () => {
+    const extractionService = {
+      extract: vi.fn(async () => ({ kind: 'created-media', mediaHandle: 'media_opaque_0001', filename: 'Sample Movie-001.mp4' })),
+    };
+    const destination = fakes().destination;
+    const workflow = new ClipExtractionWorkflow(new ClipExtractor(extractionService), destination);
+
+    await workflow.extractOne({
+      sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
+      range: range('range-1', 10), collectionName: 'Sample Movie ',
+    });
+
+    expect(extractionService.extract).toHaveBeenCalledWith(
+      expect.objectContaining({ collectionName: 'Sample Movie' }), expect.any(Function));
+    expect(workflow.state('range-1')).toMatchObject({ kind: 'completed' });
+  });
+
   it('resets completed revisions without deleting the earlier media and blocks unresolved publication', async () => {
     const fakesForWorkflow = fakes();
     const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
@@ -49,13 +68,16 @@ describe('ClipExtractionWorkflow', () => {
     const fakesForWorkflow = fakes();
     let releaseOpen!: () => void;
     fakesForWorkflow.destination.open.mockImplementationOnce(() => new Promise(resolve => {
-      releaseOpen = () => resolve({ destinationHandle: 'destination_opaque_0001', collectionFilename: 'Sample Movie.txt' });
+      releaseOpen = () => resolve({ destinationHandle: 'destination_opaque_0001', collectionFilename: 'Sample Movie.txt', collection: Collection.fromFilename({ filename: 'Sample Movie.txt' }) });
     }));
     const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
     const run = workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
       ranges: [range('range-1', 10), range('range-2', 20)], collectionName: 'Sample Movie' });
     expect(workflow.state('range-2')).toEqual({ kind: 'pending' });
     expect(workflow.revisionBlock('range-2')).toContain('Wait');
+    await expect(workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
+      ranges: [range('range-2', 20)], collectionName: 'Sample Movie' })).rejects.toThrow('already running');
+    expect(workflow.batchProgress?.total).toBe(2);
     releaseOpen();
     await run;
     expect(workflow.revisionBlock('range-2')).toBeNull();
@@ -112,7 +134,7 @@ describe('ClipExtractionWorkflow', () => {
     expect(workflow.state('range-1')).toMatchObject({ kind: 'completed' });
   });
 
-  it('cancels the current extraction and leaves pending entries actionable', async () => {
+  it('finishes publication when cancellation races with completed media', async () => {
     const fakesForWorkflow = fakes();
     let releaseCurrent!: () => void;
     fakesForWorkflow.extractor.extract.mockImplementationOnce(() => new Promise(resolve => { releaseCurrent = () => resolve({ kind: 'created-media', mediaHandle: 'media-1', filename: 'range-1.mp4' }); }));
@@ -124,7 +146,13 @@ describe('ClipExtractionWorkflow', () => {
     releaseCurrent();
     await run;
 
-    expect(workflow.state('range-1')).toMatchObject({ kind: 'cancelled' });
+    expect(workflow.state('range-1')).toMatchObject({ kind: 'completed' });
     expect(workflow.state('range-2')).toMatchObject({ kind: 'pending' });
+    expect(fakesForWorkflow.destination.publishCreatedMedia).toHaveBeenCalledOnce();
+    expect(workflow.wasCancelled).toBe(true);
+    await workflow.extractOne({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
+      range: range('range-2', 20), collectionName: 'Sample Movie' });
+    expect(workflow.wasCancelled).toBe(false);
+    expect(workflow.state('range-2')).toMatchObject({ kind: 'completed' });
   });
 });

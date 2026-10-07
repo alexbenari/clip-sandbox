@@ -4,6 +4,7 @@ import type {
   IClipExtractionService,
   ICreatedExtractionMedia,
   IExactClipExtractionRequest,
+  IClipExtractionProgress,
 } from '../frame-review/clip-extraction-api.js';
 
 export type { IClipExtractionService } from '../frame-review/clip-extraction-api.js';
@@ -20,9 +21,11 @@ export interface IClipExtractorRequest {
 export class ClipExtractor {
   constructor(private readonly service: IClipExtractionService) {}
 
-  async extract(request: IClipExtractorRequest): Promise<ICreatedExtractionMedia> {
+  async extract(request: IClipExtractorRequest, onProgress?: (progress: IClipExtractionProgress) => void): Promise<ICreatedExtractionMedia> {
     const wire = this.validate(request);
-    return await this.service.extract(wire);
+    return onProgress
+      ? await this.service.extract(wire, onProgress)
+      : await this.service.extract(wire);
   }
 
   cancelCurrent(): Promise<void> {
@@ -62,7 +65,7 @@ export class ClipExtractor {
       collectionName: collection.name,
       startFrameIndex,
       endFrameIndex,
-      reviewSessionId: request.reviewSessionId,
+      ...(request.reviewSessionId ? { reviewSessionId: request.reviewSessionId } : {}),
     });
   }
 }

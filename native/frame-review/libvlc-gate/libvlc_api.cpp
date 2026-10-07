@@ -18,10 +18,14 @@ LibVlcApi::LibVlcApi(const std::wstring& dll_path) : module_(LoadLibraryW(dll_pa
     get_time = load<decltype(get_time)>("libvlc_media_player_get_time");
     get_length = load<decltype(get_length)>("libvlc_media_player_get_length");
     set_time = load<decltype(set_time)>("libvlc_media_player_set_time");
+    set_abloop_time = load<decltype(set_abloop_time)>("libvlc_media_player_set_abloop_time");
+    reset_abloop = load<decltype(reset_abloop)>("libvlc_media_player_reset_abloop");
     next_frame = load<decltype(next_frame)>("libvlc_media_player_next_frame");
     previous_frame = load<decltype(previous_frame)>("libvlc_media_player_previous_frame");
     watch_time = load<decltype(watch_time)>("libvlc_media_player_watch_time");
     unwatch_time = load<decltype(unwatch_time)>("libvlc_media_player_unwatch_time");
+    clock = load<decltype(clock)>("libvlc_clock");
+    interpolate_time_point = load<decltype(interpolate_time_point)>("libvlc_media_player_time_point_interpolate");
     set_video_callbacks = load<decltype(set_video_callbacks)>("libvlc_video_set_callbacks");
     set_format_callbacks = load<decltype(set_format_callbacks)>("libvlc_video_set_format_callbacks");
     get_video_size = load<decltype(get_video_size)>("libvlc_video_get_size");

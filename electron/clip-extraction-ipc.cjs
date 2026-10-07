@@ -3,16 +3,18 @@ const CHANNELS = Object.freeze({
   extract: 'clip-sandbox:clip-extraction-extract',
   saveCollection: 'clip-sandbox:clip-extraction-save-collection',
   cancel: 'clip-sandbox:clip-extraction-cancel',
+  progress: 'clip-sandbox:clip-extraction-progress',
 });
 
 class ClipExtractionIpcBoundary {
-  constructor({ ipcMain, runtime, hostForEvent }) {
+  constructor({ ipcMain, runtime, hostForEvent, folderAccess }) {
     if (!ipcMain?.handle || !runtime || typeof hostForEvent !== 'function') {
       throw new Error('Clip-extraction IPC dependencies are invalid.');
     }
     this.ipcMain = ipcMain;
     this.runtime = runtime;
     this.hostForEvent = hostForEvent;
+    this.folderAccess = folderAccess;
   }
 
   register() {
@@ -20,14 +22,17 @@ class ClipExtractionIpcBoundary {
     this.ipcMain.handle(CHANNELS.extract, (event, payload) => this.extract(event, payload));
     this.ipcMain.handle(CHANNELS.saveCollection, (event, payload) => this.saveCollection(event, payload));
     this.ipcMain.handle(CHANNELS.cancel, (event, payload) => this.cancel(event, payload));
-    return () => Object.values(CHANNELS).forEach(channel => this.ipcMain.removeHandler(channel));
+    return () => [CHANNELS.open, CHANNELS.extract, CHANNELS.saveCollection, CHANNELS.cancel]
+      .forEach(channel => this.ipcMain.removeHandler(channel));
   }
 
   async open(event, payload) {
     let operationId = 'invalid-operation';
     try {
       operationId = this.operationId(payload?.operationId, 'destination');
-      return this.envelope(operationId, await this.runtime.openDestination(event.sender.id));
+      const folderPath = payload?.folderPath === undefined ? undefined
+        : this.folderAccess.requireKnownPath(event.sender, payload.folderPath);
+      return this.envelope(operationId, await this.runtime.openDestination(event.sender.id, folderPath));
     } catch (error) {
       return this.failure(operationId, error);
     }
@@ -46,6 +51,14 @@ class ClipExtractionIpcBoundary {
         startFrameIndex: payload?.startFrameIndex,
         endFrameIndex: payload?.endFrameIndex,
         reviewSessionId: payload?.reviewSessionId,
+      }, progress => {
+        try {
+          if (!event.sender.isDestroyed?.()) event.sender.send(CHANNELS.progress, { operationId, ...progress });
+        } catch (error) {
+          console.warn('[clip-extraction] progress-delivery-failed', {
+            kind: error instanceof Error ? error.name : 'unknown',
+          });
+        }
       });
       return this.envelope(operationId, result);
     } catch (error) {

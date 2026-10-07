@@ -10,10 +10,23 @@ import type { IExactFrameReader, IHostExactFrame } from './bestsource-frame-read
 import type { IHostPlaybackFrame, IReviewPlaybackEngine } from './libvlc-playback-engine.js';
 import type { IExactReviewProxyHostResult, IReviewPreparationUpdate } from './review-preparation-service.js';
 import type { IPlaybackProxyEntry } from './playback-proxy-cache.js';
+import { ProxyPlaybackClock, type IProxyLoopTimes } from './proxy-playback-clock.js';
+
+export interface IExactPreviewRange {
+  readonly startFrameIndex: number;
+  readonly endFrameIndex: number;
+}
+
+type ExactPreview = Readonly<{
+  range: IExactPreviewRange;
+  times: IProxyLoopTimes;
+  phase: 'running' | 'paused';
+}>;
 
 export type HostFrameReviewEvent =
   | Readonly<{ type: 'state'; state: IFrameReviewState }>
   | Readonly<{ type: 'display-frame'; frame: IHostExactFrame | IHostPlaybackFrame }>
+  | Readonly<{ type: 'playback-ended' }>
   | Readonly<{ type: 'error'; category: string; message: string; recoverable: boolean }>;
 
 export interface IReviewSessionOptions {
@@ -44,6 +57,13 @@ export class ReviewSession {
   private proxyActivationError: unknown = null;
   private exactReady = false;
   private preparedFingerprint: ISourceFingerprint | null = null;
+  private proxyClock: ProxyPlaybackClock | null = null;
+  private loopUnavailableReason: string | null = null;
+  private preparedProxyPath: string | null = null;
+  private preview: ExactPreview | null = null;
+  private previewEpoch = 0;
+  private abLoopArmed = false;
+  private playbackDisabled = false;
   private opened = false;
   private disposed = false;
   private disposalPromise: Promise<void> | null = null;
@@ -54,7 +74,10 @@ export class ReviewSession {
     this.adjacentScheduler = new AdjacentStepScheduler(
       { stepAdjacent: (direction) => options.exact.stepAdjacent(direction) },
       (frame) => this.rememberFrame(frame),
-      (error) => this.emitError(error),
+      (error) => {
+        if (error instanceof BackendError && error.category === 'frame-boundary') return;
+        this.emitError(error);
+      },
     );
     this.adjacentScheduler.setSourceGeneration(1);
     options.playback.setFrameListener((frame) => {
@@ -63,6 +86,11 @@ export class ReviewSession {
         type: 'display-frame',
         frame: Object.freeze({ ...frame, sourceGeneration: 1 }),
       }));
+    });
+    options.playback.setEndedListener(() => {
+      if (!this.disposed && this.preview?.phase !== 'running') {
+        options.emit(Object.freeze({ type: 'playback-ended' }));
+      }
     });
   }
 
@@ -92,8 +120,15 @@ export class ReviewSession {
 
   async play(): Promise<void> {
     this.requireOpen();
+    if (this.playbackDisabled) throw new BackendError('invalid-state', 'Playback needs a new review session.', true);
+    if (this.preview?.phase === 'running') throw new BackendError('invalid-state', 'Loop preview is running.', true);
+    this.preview = null;
     await this.withPlayback(async () => {
-      if (this.currentExactFrame) await this.options.playback.playAt(this.currentExactFrame.reviewTimeUs);
+      if (this.currentExactFrame) {
+        const time = this.proxyClock?.at(this.currentExactFrame.identity.frameIndex)
+          ?? this.currentExactFrame.reviewTimeUs;
+        await this.options.playback.playAt(time);
+      }
       else await this.options.playback.play();
       this.currentExactFrame = null;
     });
@@ -101,11 +136,13 @@ export class ReviewSession {
 
   async pause(): Promise<void> {
     this.requireOpen();
+    if (this.preview?.phase === 'running') { await this.pauseExactPreview(); return; }
     await this.withPlayback(() => this.options.playback.pause());
   }
 
   async seekPlayback(timestampUs: bigint): Promise<void> {
     this.requireOpen();
+    await this.stopPreviewRule();
     await this.withPlayback(async () => {
       await this.options.playback.seek(timestampUs);
       this.currentExactFrame = null;
@@ -114,6 +151,7 @@ export class ReviewSession {
 
   async enterFrameScrub(): Promise<IHostExactFrame> {
     this.requireExactReady();
+    if (this.preview?.phase === 'running') return this.pauseExactPreview();
     await this.options.playback.pause();
     const status = await this.options.playback.status();
     return this.rememberFrame(await this.options.exact.atTime(status.timestampUs));
@@ -121,19 +159,26 @@ export class ReviewSession {
 
   async scrubToFrame(frameIndex: number): Promise<IHostExactFrame> {
     this.requireExactReady();
-    await this.options.playback.pause();
-    return this.rememberFrame(await this.scrubScheduler.submit(frameIndex));
+    if (this.preview?.phase === 'running') await this.pauseExactPreview();
+    if (!this.playbackDisabled) await this.options.playback.pause();
+    const frame = this.rememberFrame(await this.scrubScheduler.submit(frameIndex));
+    this.retainPreviewIfInRange(frame.identity.frameIndex);
+    return frame;
   }
 
   async stepAdjacent(direction: AdjacentDirection): Promise<IHostExactFrame> {
     this.requireExactReady();
-    await this.options.playback.pause();
-    return this.rememberFrame(await this.options.exact.stepAdjacent(direction));
+    if (this.preview?.phase === 'running') await this.pauseExactPreview();
+    if (!this.playbackDisabled) await this.options.playback.pause();
+    const frame = this.rememberFrame(await this.options.exact.stepAdjacent(direction));
+    this.retainPreviewIfInRange(frame.identity.frameIndex);
+    return frame;
   }
 
   async pressAdjacent(direction: AdjacentDirection): Promise<void> {
     this.requireExactReady();
-    await this.options.playback.pause();
+    if (this.preview?.phase === 'running') await this.pauseExactPreview();
+    if (!this.playbackDisabled) await this.options.playback.pause();
     this.adjacentScheduler.press(direction);
   }
 
@@ -166,13 +211,76 @@ export class ReviewSession {
     return this.options.exact.thumbnail(frameIndex);
   }
 
+  async startExactPreview(range: IExactPreviewRange): Promise<void> {
+    this.requireExactReady();
+    if (this.playbackDisabled) throw new BackendError('invalid-state', 'Playback needs a new review session.', true);
+    const clock = this.requireProxyClock();
+    const times = clock.loop(range.startFrameIndex, range.endFrameIndex);
+    const epoch = ++this.previewEpoch;
+    await this.withPlayback(() => this.activateExactPreview(range, times, range.startFrameIndex, epoch));
+  }
+
+  async pauseExactPreview(): Promise<IHostExactFrame> {
+    this.requireExactReady();
+    const preview = this.preview;
+    if (!preview || preview.phase !== 'running') {
+      throw new BackendError('invalid-state', 'Loop preview is not running.', true);
+    }
+    ++this.previewEpoch;
+    return this.withPlayback(async () => {
+      await this.options.playback.pause();
+      const status = await this.options.playback.status();
+      const clock = this.requireProxyClock();
+      const ordinal = Math.max(preview.range.startFrameIndex,
+        Math.min(preview.range.endFrameIndex, clock.atOrBefore(status.timestampUs)));
+      const frame = this.rememberFrame(await this.options.exact.scrub(ordinal));
+      try {
+        await this.options.playback.resetAbLoop();
+        this.abLoopArmed = false;
+        this.preview = Object.freeze({ ...preview, phase: 'paused' });
+      } catch (error) {
+        this.preview = null;
+        await this.recoverPlaybackAt(ordinal);
+        throw error;
+      }
+      return frame;
+    });
+  }
+
+  async resumeExactPreview(frameIndex: number): Promise<void> {
+    this.requireExactReady();
+    const preview = this.preview;
+    if (!preview || preview.phase !== 'paused' || frameIndex < preview.range.startFrameIndex
+      || frameIndex > preview.range.endFrameIndex || this.currentExactFrame?.identity.frameIndex !== frameIndex) {
+      throw new BackendError('invalid-state', 'The paused loop target has changed.', true);
+    }
+    const epoch = ++this.previewEpoch;
+    await this.withPlayback(() => this.activateExactPreview(preview.range, preview.times, frameIndex, epoch));
+  }
+
+  async stopExactPreview(): Promise<IHostExactFrame | null> {
+    this.requireExactReady();
+    if (this.preview?.phase === 'running') {
+      const frame = await this.pauseExactPreview();
+      this.preview = null;
+      return frame;
+    }
+    this.preview = null;
+    ++this.previewEpoch;
+    if (this.abLoopArmed) await this.withPlayback(() => this.clearArmedLoop(this.currentExactFrame?.identity.frameIndex ?? 0));
+    return this.currentExactFrame;
+  }
+
   dispose(): Promise<void> {
     if (this.disposalPromise) return this.disposalPromise;
     this.disposed = true;
+    ++this.previewEpoch;
+    this.preview = null;
     this.abortController.abort();
     this.scrubScheduler.invalidate();
     this.adjacentScheduler.setSourceGeneration(2);
     this.options.playback.setFrameListener(undefined);
+    this.options.playback.setEndedListener(undefined);
     this.disposalPromise = Promise.allSettled([
       this.playbackTurn.then(() => this.options.playback.shutdown()),
       this.options.exact.shutdown(),
@@ -213,6 +321,15 @@ export class ReviewSession {
       }
       if (this.disposed) return;
       this.exactReady = true;
+      this.preparedProxyPath = prepared.proxyPath;
+      this.loopUnavailableReason = prepared.proxyTimelineError;
+      if (prepared.proxyTimeline) {
+        try { this.proxyClock = new ProxyPlaybackClock(prepared.proxyTimeline); }
+        catch (error) {
+          this.proxyClock = null;
+          this.loopUnavailableReason = error instanceof Error ? error.message : 'Loop timeline is unavailable.';
+        }
+      }
       this.preparedFingerprint = SourceFingerprint.fromInspection(prepared.identity);
       this.publishState('exact-ready', {
         preparedReview: Object.freeze({
@@ -236,6 +353,86 @@ export class ReviewSession {
     this.currentExactFrame = frame;
     this.options.emit(Object.freeze({ type: 'display-frame', frame }));
     return frame;
+  }
+
+  private requireProxyClock(): ProxyPlaybackClock {
+    if (!this.proxyClock) throw new BackendError('invalid-state',
+      this.loopUnavailableReason ?? 'Loop timeline is unavailable.', true);
+    return this.proxyClock;
+  }
+
+  private async activateExactPreview(
+    range: IExactPreviewRange, times: IProxyLoopTimes, frameIndex: number, epoch: number,
+  ): Promise<void> {
+    if (epoch !== this.previewEpoch || this.disposed) return;
+    try {
+      if (this.preview?.phase === 'running') await this.options.playback.pause();
+      if (this.abLoopArmed) {
+        await this.options.playback.resetAbLoop();
+        this.abLoopArmed = false;
+      }
+      if (epoch !== this.previewEpoch || this.disposed) return;
+      await this.options.playback.armAbLoop(times.startUs, times.bUs);
+      this.abLoopArmed = true;
+      if (epoch !== this.previewEpoch || this.disposed) return;
+      await this.options.playback.seek(this.requireProxyClock().at(frameIndex));
+      if (epoch !== this.previewEpoch || this.disposed) return;
+      this.currentExactFrame = null;
+      this.preview = Object.freeze({ range: Object.freeze({ ...range }), times, phase: 'running' });
+      await this.options.playback.play();
+    } catch (error) {
+      this.preview = null;
+      await this.clearArmedLoop(frameIndex);
+      throw error;
+    } finally {
+      if ((epoch !== this.previewEpoch || this.disposed) && this.abLoopArmed) {
+        this.preview = null;
+        await this.clearArmedLoop(frameIndex);
+      }
+    }
+  }
+
+  private async clearArmedLoop(frameIndex: number): Promise<void> {
+    try {
+      await this.options.playback.pause();
+      await this.options.playback.resetAbLoop();
+      this.abLoopArmed = false;
+    } catch {
+      await this.recoverPlaybackAt(frameIndex);
+    }
+  }
+
+  private retainPreviewIfInRange(frameIndex: number): void {
+    if (this.preview?.phase === 'paused' && (frameIndex < this.preview.range.startFrameIndex
+      || frameIndex > this.preview.range.endFrameIndex)) this.preview = null;
+  }
+
+  private async stopPreviewRule(): Promise<void> {
+    if (!this.preview && !this.abLoopArmed) return;
+    ++this.previewEpoch;
+    const wasRunning = this.preview?.phase === 'running';
+    this.preview = null;
+    await this.withPlayback(async () => {
+      if (wasRunning) await this.options.playback.pause();
+      await this.clearArmedLoop(this.currentExactFrame?.identity.frameIndex ?? 0);
+    });
+  }
+
+  private async recoverPlaybackAt(frameIndex: number): Promise<void> {
+    const proxyPath = this.preparedProxyPath;
+    if (!proxyPath) { this.playbackDisabled = true; return; }
+    try {
+      await this.options.playback.open(proxyPath, {
+        muted: false,
+        maxWidth: this.options.previewBounds.maxWidth,
+        maxHeight: this.options.previewBounds.maxHeight,
+      });
+      this.abLoopArmed = false;
+      await this.options.playback.seek(this.requireProxyClock().at(frameIndex));
+      await this.options.playback.pause();
+    } catch {
+      this.playbackDisabled = true;
+    }
   }
 
   private reportPreparation(update: IReviewPreparationUpdate): void {

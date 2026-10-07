@@ -26,6 +26,7 @@ export interface IRefineGifSessionSnapshot {
   readonly focusedEndpoint: RefineGifEndpoint;
   readonly seekTimeUs: bigint;
   readonly seekRevision: number;
+  readonly stagedRevision: number;
   readonly canCommit: boolean;
   readonly nextInexactRangeId: CapturedRangeId | null;
   readonly message: string | null;
@@ -59,6 +60,7 @@ export class RefineGifSession {
   private status: IRefineGifSessionSnapshot['status'] = 'editing';
   private message: string | null = null;
   private seekRevision = 1;
+  private stagedRevision = 0;
   private startThumbnail: FrameReviewDisplayFrame | null = null;
 
   constructor(
@@ -81,6 +83,7 @@ export class RefineGifSession {
       focusedEndpoint: this.focusedEndpoint,
       seekTimeUs: CaptureEndpointValue.positionUs(this.focusedValue()),
       seekRevision: this.seekRevision,
+      stagedRevision: this.stagedRevision,
       canCommit: this.commitProblem() === null,
       nextInexactRangeId: this.status === 'committed'
         ? this.owner.nextInexactRangeId(this.original.id)
@@ -147,6 +150,7 @@ export class RefineGifSession {
     } else {
       this.end = exact;
     }
+    this.stagedRevision += 1;
     this.message = `Exact ${endpoint} staged`;
     if (endpoint === 'start' && this.end.kind === 'playback-timestamp') this.focusEndpoint('end');
     else this.owner.refinementChanged(this);

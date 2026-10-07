@@ -7,15 +7,18 @@ import type {
   IGifExtractionSessionSnapshot,
 } from '../app/gif-extraction-session.js';
 import type { IAppPanelContent } from './app-screen.js';
+import type { FrameReviewPlayerControl } from './frame-review-player-control.js';
 
 type GifRangesPanelControlOptions = {
   readonly document?: Document;
   readonly onRefine?: (rangeId: CapturedRangeId) => void;
+  readonly player?: FrameReviewPlayerControl;
 };
 
 export class GifRangesPanelControl implements IAppPanelContent {
   private readonly document: Document;
   private readonly unsubscribe: () => void;
+  private readonly unsubscribeTransport: () => void;
   private readonly clickListener = (event: Event): void => this.onClick(event);
   private readonly keydownListener = (event: KeyboardEvent): void => this.onKeyDown(event);
   private latestSnapshot: IGifExtractionSessionSnapshot | null = null;
@@ -29,6 +32,8 @@ export class GifRangesPanelControl implements IAppPanelContent {
     this.root.addEventListener('click', this.clickListener);
     this.root.addEventListener('keydown', this.keydownListener);
     this.unsubscribe = session.subscribe(snapshot => this.render(snapshot));
+    this.unsubscribeTransport = options.player?.subscribeTransport(() => this.refreshExtractAvailability())
+      ?? (() => undefined);
   }
 
   mount(host: HTMLElement): void {
@@ -37,6 +42,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
 
   destroy(): void {
     this.unsubscribe();
+    this.unsubscribeTransport();
     this.root.removeEventListener('click', this.clickListener);
     this.root.removeEventListener('keydown', this.keydownListener);
     this.root.replaceChildren();
@@ -50,6 +56,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
   }
 
   private render(snapshot: IGifExtractionSessionSnapshot): void {
+    const cancelFocused = this.document.activeElement?.hasAttribute('data-cancel-extraction') === true;
     this.latestSnapshot = snapshot;
     const exactCount = snapshot.ranges.filter(range => range.kind !== 'needs-exact-frames').length;
     const extractableCount = snapshot.extractionAvailable === true && !snapshot.capturesLoading
@@ -65,7 +72,8 @@ export class GifRangesPanelControl implements IAppPanelContent {
     fragment.append(this.renderHeader(
       exactCount, inexactCount, extractableCount, completedCount, attentionCount,
       snapshot.extractionAvailable === true && !snapshot.capturesLoading && snapshot.lifecycle === 'open',
-      snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening' || snapshot.capturesLoading));
+      snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening' || snapshot.capturesLoading,
+      snapshot.extractionBatch ?? null));
     if (snapshot.lifecycle === 'opening' && !snapshot.capturesLoading) {
       const opening = this.document.createElement('p');
       opening.className = 'gif-ranges-loading';
@@ -94,7 +102,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
       const empty = this.document.createElement('p');
       empty.className = 'gif-ranges-empty';
       empty.textContent = snapshot.source
-        ? 'Mark Start with Q, End with W, then lock the range with A.'
+        ? 'Mark Start with Q, End with W, then lock the range with X.'
         : 'No captured ranges yet. Open a movie and lock a range to add it here.';
       fragment.append(empty);
     } else if (hasDraft || visibleRanges.length > 0) {
@@ -110,6 +118,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
       fragment.append(list);
     }
     this.root.replaceChildren(fragment);
+    if (cancelFocused) this.root.querySelector<HTMLButtonElement>('[data-cancel-extraction]')?.focus();
   }
 
   private renderHeader(
@@ -120,6 +129,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
     attentionCount: number,
     available: boolean,
     loading: boolean,
+    batch: IGifExtractionSessionSnapshot['extractionBatch'],
   ): HTMLElement {
     const header = this.document.createElement('header');
     header.className = 'gif-ranges-summary';
@@ -129,7 +139,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
     extract.type = 'button';
     extract.dataset.extractAll = 'true';
     extract.textContent = extractableCount > 0 ? `Extract All (${extractableCount})` : 'Extract All';
-    extract.disabled = !available || extractableCount === 0;
+    extract.disabled = !available || extractableCount === 0 || this.loopRunning() || batch !== null;
     extract.title = !available
       ? loading ? 'Wait for the movie and saved captures to open.' : 'Extraction is unavailable in this host.'
       : extractableCount > 0 ? 'Extract every actionable exact range'
@@ -142,6 +152,28 @@ export class GifRangesPanelControl implements IAppPanelContent {
     hint.className = 'sr-only';
     hint.textContent = extract.title;
     header.append(copy, extract, hint);
+    if (batch) {
+      const status = this.document.createElement('p');
+      status.className = 'gif-extraction-batch-status';
+      status.setAttribute('role', 'status');
+      const stage = {
+        'checking-source': 'Checking source', 'encoding-video': 'Encoding video',
+        'adding-audio': 'Adding audio', 'saving-media': 'Saving clip',
+        'exact-fallback': 'Using slower exact method',
+      }[batch.progress.stage];
+      const frames = batch.progress.encodedFrames !== undefined && batch.progress.totalFrames !== undefined
+        ? ` · ${batch.progress.encodedFrames} of ${batch.progress.totalFrames} frames` : '';
+      const method = batch.usingExactFallback && batch.progress.stage !== 'exact-fallback'
+        ? ' (slower exact method)' : '';
+      status.textContent = batch.cancelling ? 'Cancelling after the current work settles…'
+        : `Clip ${batch.currentPosition} of ${batch.total} · ${stage}${method}${frames} · ${batch.completed} completed`;
+      const cancel = this.document.createElement('button');
+      cancel.type = 'button';
+      cancel.dataset.cancelExtraction = 'true';
+      cancel.textContent = 'Cancel';
+      cancel.disabled = batch.cancelling;
+      header.append(status, cancel);
+    }
     return header;
   }
 
@@ -222,7 +254,9 @@ export class GifRangesPanelControl implements IAppPanelContent {
             ? 'Retry extraction' : 'Extract';
         }
         action.disabled = range.validation === 'stale' || this.latestSnapshot?.lifecycle !== 'open'
-          || extractionState.kind === 'extracting' || extractionState.kind === 'publishing';
+          || extractionState.kind === 'extracting' || extractionState.kind === 'publishing'
+          || (action.dataset.extractRange !== undefined && !this.session.canExtractRange(range.id))
+          || (action.dataset.extractRange !== undefined && this.loopRunning());
         actions.append(action);
       }
     }
@@ -306,6 +340,10 @@ export class GifRangesPanelControl implements IAppPanelContent {
   private onClick(event: Event): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    if (target.closest('[data-cancel-extraction]')) {
+      void this.session.cancelExtraction();
+      return;
+    }
     if (target.closest('[data-remove-draft]')) {
       this.session.removeDraft();
       return;
@@ -316,11 +354,13 @@ export class GifRangesPanelControl implements IAppPanelContent {
       return;
     }
     if (target.closest('[data-extract-all]')) {
+      if (this.loopRunning()) return;
       void this.session.extractAll();
       return;
     }
     const extractRange = target.closest<HTMLElement>('[data-extract-range]');
     if (extractRange?.dataset.extractRange) {
+      if (this.loopRunning()) return;
       void this.session.extractRange(extractRange.dataset.extractRange as CapturedRangeId);
       return;
     }
@@ -347,6 +387,22 @@ export class GifRangesPanelControl implements IAppPanelContent {
     this.session.selectRange(rangeId);
     if (event instanceof MouseEvent && event.detail >= 2) this.options.onRefine?.(rangeId);
   }
+
+  private refreshExtractAvailability(): void {
+    const running = this.loopRunning();
+    const all = this.root.querySelector<HTMLButtonElement>('[data-extract-all]');
+    if (all && this.latestSnapshot) {
+      all.disabled = running || this.latestSnapshot.lifecycle !== 'open'
+        || !this.latestSnapshot.extractionAvailable || this.latestSnapshot.capturesLoading
+        || !this.latestSnapshot.ranges.some(range => this.session.canExtractRange(range.id));
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-extract-range]')) {
+      const id = button.dataset.extractRange;
+      if (id) button.disabled = running || !this.session.canExtractRange(id as CapturedRangeId);
+    }
+  }
+
+  private loopRunning(): boolean { return this.options.player?.exactPreviewPhase() === 'running'; }
 
   private onKeyDown(event: KeyboardEvent): void {
     if (event.key !== 'Enter' && event.key !== ' ') return;

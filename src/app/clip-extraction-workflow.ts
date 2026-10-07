@@ -1,5 +1,6 @@
 import type { IReadyToExtractRange } from '../domain/captured-range.js';
 import type { ICreatedExtractionMedia } from '../frame-review/clip-extraction-api.js';
+import type { IClipExtractionProgress } from '../frame-review/clip-extraction-api.js';
 import type { ClipExtractor } from '../business-logic/clip-extractor.js';
 import type { ExtractionDestinationSession } from './extraction-destination-session.js';
 
@@ -31,11 +32,22 @@ type ExtractorPort = Pick<ClipExtractor, 'extract'> & Partial<Pick<ClipExtractor
 type DestinationPort = Pick<ExtractionDestinationSession,
   'open' | 'publishCreatedMedia' | 'retryPublication'>;
 
+export interface IExtractionBatchProgress {
+  readonly currentRangeId: string | null;
+  readonly currentPosition: number;
+  readonly total: number;
+  readonly completed: number;
+  readonly cancelling: boolean;
+  readonly usingExactFallback: boolean;
+  readonly progress: IClipExtractionProgress;
+}
+
 export class ClipExtractionWorkflow {
   private readonly states = new Map<string, ClipExtractionEntryState>();
   private running = false;
   private cancelRequested = false;
   private currentRangeId: string | null = null;
+  private batch: IExtractionBatchProgress | null = null;
 
   constructor(
     private readonly extractor: ExtractorPort,
@@ -46,6 +58,9 @@ export class ClipExtractionWorkflow {
   state(rangeId: string): ClipExtractionEntryState {
     return this.states.get(rangeId) ?? Object.freeze({ kind: 'pending' });
   }
+
+  get batchProgress(): IExtractionBatchProgress | null { return this.batch; }
+  get wasCancelled(): boolean { return this.cancelRequested; }
 
   revisionBlock(rangeId: string): string | null {
     if (this.running) return 'Wait for the current extraction batch to finish before locking changed frames.';
@@ -68,12 +83,15 @@ export class ClipExtractionWorkflow {
   }
 
   async extractAll(request: IExtractAllRequest): Promise<void> {
+    if (this.running) throw new Error('An extraction batch is already running.');
     const eligible = [...request.ranges].filter(range => range.kind === 'ready-to-extract');
     for (const range of eligible) this.setState(range.id, { kind: 'pending' });
     await this.run(request, eligible);
   }
 
   async retryPublication(rangeId: string): Promise<void> {
+    if (this.running) throw new Error('Wait for the current extraction batch to finish.');
+    this.cancelRequested = false;
     const state = this.states.get(rangeId);
     if (state?.kind !== 'publication-failed') throw new Error('This range has no publication to retry.');
     this.setState(rangeId, { kind: 'publishing', media: state.media });
@@ -88,20 +106,31 @@ export class ClipExtractionWorkflow {
   }
 
   async cancel(): Promise<void> {
+    if (!this.running) return;
     this.cancelRequested = true;
-    if (this.currentRangeId) this.setState(this.currentRangeId, { kind: 'cancelled' });
-    await this.extractor.cancelCurrent?.();
+    if (this.batch) this.updateBatch({ ...this.batch, cancelling: true });
+    if (this.currentRangeId && this.state(this.currentRangeId).kind === 'extracting') {
+      try { await this.extractor.cancelCurrent?.(); }
+      catch (error) {
+        const code = (error as { code?: unknown } | null)?.code;
+        console.warn('[clip-extraction] cancel-request-failed', { code: typeof code === 'string' ? code : 'unknown' });
+      }
+    }
   }
 
   private async run(context: IWorkflowContext, ranges: readonly IReadyToExtractRange[]): Promise<void> {
     if (this.running) throw new Error('An extraction batch is already running.');
     this.running = true;
     this.cancelRequested = false;
+    this.updateBatch({ currentRangeId: null, currentPosition: 0, total: ranges.length,
+      completed: 0, cancelling: false, usingExactFallback: false, progress: { stage: 'checking-source' } });
     try {
       const opened = await this.destination.open({ movieName: context.collectionName });
-      for (const range of ranges) {
+      for (const [index, range] of ranges.entries()) {
         if (this.cancelRequested) break;
         this.currentRangeId = range.id;
+        this.updateBatch({ ...this.batch!, currentRangeId: range.id, currentPosition: index + 1,
+          usingExactFallback: false, progress: { stage: 'checking-source' } });
         this.setState(range.id, { kind: 'extracting' });
         let media: ICreatedExtractionMedia;
         try {
@@ -111,21 +140,24 @@ export class ClipExtractionWorkflow {
             reviewSessionId: context.reviewSessionId,
             currentSourceGeneration: context.sourceGeneration,
             destinationHandle: opened.destinationHandle,
-            collectionName: context.collectionName,
+            collectionName: opened.collection.collectionName,
+          }, progress => {
+            if (this.currentRangeId === range.id && this.batch && !this.cancelRequested) {
+              this.updateBatch({ ...this.batch, progress,
+                usingExactFallback: this.batch.usingExactFallback || progress.stage === 'exact-fallback' });
+            }
           });
         } catch (error) {
           if (this.cancelRequested) this.setState(range.id, { kind: 'cancelled' });
           else this.setState(range.id, { kind: 'failed', message: this.message(error) });
           continue;
         }
-        if (this.cancelRequested) {
-          this.setState(range.id, { kind: 'cancelled' });
-          break;
-        }
         this.setState(range.id, { kind: 'publishing', media });
+        if (this.batch) this.updateBatch({ ...this.batch, progress: { stage: 'saving-media' } });
         try {
           await this.destination.publishCreatedMedia(media);
           this.setState(range.id, { kind: 'completed', media });
+          if (this.batch) this.updateBatch({ ...this.batch, completed: this.batch.completed + 1 });
         } catch (error) {
           this.setState(range.id, { kind: 'publication-failed', media, message: this.message(error) });
         }
@@ -133,7 +165,13 @@ export class ClipExtractionWorkflow {
     } finally {
       this.currentRangeId = null;
       this.running = false;
+      this.updateBatch(null);
     }
+  }
+
+  private updateBatch(batch: IExtractionBatchProgress | null): void {
+    this.batch = batch === null ? null : Object.freeze(batch);
+    this.changed();
   }
 
   private setState(rangeId: string, state: ClipExtractionEntryState): void {

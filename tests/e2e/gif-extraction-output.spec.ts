@@ -13,6 +13,73 @@ const movie = path.join(project, 'tests', 'fixtures', 'gif-extraction', 'generat
 test.skip(process.platform !== 'win32' || !existsSync(dependenciesPath) || !existsSync(nativeService) || !existsSync(movie),
   'The explicit frame-review native build and fixture are not available.');
 
+test('extracts a movie with a space before its extension into a valid collection', async () => {
+  test.setTimeout(120_000);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-spaced-movie-'));
+  const profile = path.join(directory, 'profile');
+  const pipelines = path.join(directory, 'pipelines');
+  const source = path.join(directory, 'Sample Movie .mkv');
+  await fs.mkdir(profile, { recursive: true });
+  await fs.copyFile(movie, source);
+  await fs.writeFile(path.join(profile, 'app-settings.json'), `${JSON.stringify({
+    version: 1, pipelinesRootPath: pipelines, singleClipAudioDefault: false,
+  })}\n`, 'utf8');
+  const env = { ...process.env, CLIP_SANDBOX_E2E: '1' };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const app = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], cwd: project, env });
+  try {
+    const page = await app.firstWindow();
+    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), source);
+    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await lockExactRange(page, page.locator('.frame-review-progress-row input'), 3, 5);
+
+    await page.getByRole('button', { name: 'Extract All (1)' }).click();
+
+    await expect(page.locator('[data-range-id="range-1"]')).toContainText('Extracted as Sample Movie-001.mp4', { timeout: 90_000 });
+    const destination = path.join(pipelines, 'extraction-tmp');
+    expect(await fs.readFile(path.join(destination, 'Sample Movie.txt'), 'utf8')).toBe('Sample Movie-001.mp4\n');
+    expect(existsSync(path.join(destination, 'Sample Movie-001.mp4'))).toBe(true);
+  } finally {
+    await app.close().catch(() => undefined);
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test('uses exact fallback when source timestamps needed normalization', async () => {
+  test.setTimeout(120_000);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-normalized-extraction-'));
+  const profile = path.join(directory, 'profile');
+  const pipelines = path.join(directory, 'pipelines');
+  const source = path.join(directory, 'timestamp-repair-source.mkv');
+  await fs.mkdir(profile, { recursive: true });
+  await fs.mkdir(pipelines, { recursive: true });
+  await fs.copyFile(path.join(project, 'tests', 'fixtures', 'gif-extraction', 'generated',
+    'timestamp-repair-source.mkv'), source);
+  await fs.writeFile(path.join(profile, 'app-settings.json'), `${JSON.stringify({
+    version: 1, pipelinesRootPath: pipelines, singleClipAudioDefault: false,
+  })}\n`, 'utf8');
+  const env = { ...process.env, CLIP_SANDBOX_E2E: '1' };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const app = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], cwd: project, env });
+  try {
+    const page = await app.firstWindow();
+    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), source);
+    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
+    await lockExactRange(page, page.locator('.frame-review-progress-row input'), 5, 15);
+    await page.getByRole('button', { name: 'Extract All (1)' }).click();
+    await expect(page.locator('[data-range-id="range-1"]')).toContainText('Extracted as', { timeout: 90_000 });
+    const media = path.join(pipelines, 'extraction-tmp', 'timestamp-repair-source-001.mp4');
+    expect(existsSync(media)).toBe(true);
+    const collection = await fs.readFile(path.join(pipelines, 'extraction-tmp', 'timestamp-repair-source.txt'), 'utf8');
+    expect(collection).toBe('timestamp-repair-source-001.mp4\n');
+  } finally {
+    await app.close().catch(() => undefined);
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
 test('a saved capture can be removed when its source movie is unavailable', async () => {
   test.setTimeout(120_000);
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-capture-missing-'));
@@ -97,7 +164,7 @@ async function lockExactRange(page, progress, startFrame, endFrame) {
   }, endFrame);
   await expect(page.locator('.frame-review-identity')).toContainText(`Frame ${endFrame}`);
   await page.keyboard.press('w');
-  await page.keyboard.press('a');
+  await page.keyboard.press('x');
 }
 
 async function closeAppWithin(app, milliseconds) {

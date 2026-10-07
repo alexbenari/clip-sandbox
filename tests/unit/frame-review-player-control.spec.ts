@@ -183,6 +183,21 @@ describe('FrameReviewPlayerControl', () => {
     expect(control.root.querySelector('[data-icon="pause"]')?.hasAttribute('hidden')).toBe(false);
   });
 
+  it('returns to Play when ordinary playback reaches the end', async () => {
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const review = session();
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
+    control.attachSession(review.value);
+
+    await control.togglePlayback();
+    review.emit({ type: 'playback-ended' });
+
+    expect(control.root.querySelector('[data-command="play-pause"]')?.getAttribute('aria-label')).toBe('Play');
+    await control.togglePlayback();
+    expect(review.play).toHaveBeenCalledTimes(2);
+    expect(review.pause).not.toHaveBeenCalled();
+  });
+
   it('enters an exact saved frame by ordinal without seeking by timestamp', async () => {
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const review = session();
@@ -301,6 +316,26 @@ describe('FrameReviewPlayerControl', () => {
     expect(progress.value).toBe('75000');
     progress.dispatchEvent(new Event('change', { bubbles: true }));
     await vi.waitFor(() => expect(review.seekPlayback).toHaveBeenCalledWith(3_000_000n));
+  });
+
+  it('shows a movie frame while playback dragging pauses before mouse release', async () => {
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const review = session(state('indexing', false));
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
+    control.attachSession(review.value);
+    await control.togglePlayback();
+    review.seekPlayback.mockImplementation(async () => {
+      review.emit(frameEvent(playbackFrame(3_000_000n, 3)));
+    });
+    const progress = control.root.querySelector<HTMLInputElement>('input[type="range"]')!;
+
+    progress.value = '75000';
+    progress.dispatchEvent(new Event('input', { bubbles: true }));
+
+    await vi.waitFor(() => expect(review.seekPlayback).toHaveBeenCalledWith(3_000_000n));
+    await vi.waitFor(() => expect(control.root.querySelector('.frame-review-empty')?.hasAttribute('hidden')).toBe(true));
+    expect(progress.value).toBe('75000');
+    expect(control.root.querySelector('[data-time="current"]')?.textContent).toBe('00:00:03.000');
   });
 
   it('uses the one centered readiness surface for temporary preparation status', () => {

@@ -33,9 +33,15 @@ export interface ICreatedExtractionMedia {
   readonly warning?: string;
 }
 
+export interface IClipExtractionProgress {
+  readonly stage: 'checking-source' | 'encoding-video' | 'adding-audio' | 'saving-media' | 'exact-fallback';
+  readonly encodedFrames?: number;
+  readonly totalFrames?: number;
+}
+
 export interface IClipExtractionService {
-  openExtractionDestination(): Promise<IExtractionDestinationSnapshot>;
-  extract(request: IExactClipExtractionRequest): Promise<ICreatedExtractionMedia>;
+  openExtractionDestination(request?: Readonly<{ folderPath: string }>): Promise<IExtractionDestinationSnapshot>;
+  extract(request: IExactClipExtractionRequest, onProgress?: (progress: IClipExtractionProgress) => void): Promise<ICreatedExtractionMedia>;
   saveCollection(destinationHandle: string, filename: string, text: string): Promise<void>;
   cancelCurrent?(): Promise<void>;
 }

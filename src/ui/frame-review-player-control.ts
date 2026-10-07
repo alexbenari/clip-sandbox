@@ -25,6 +25,14 @@ type FrameReviewPlayerControlOptions = {
   readonly frameRenderer?: IFrameReviewFrameRenderer;
 };
 
+type FrameReviewProbeWindow = Window & {
+  __clipSandboxFrameReviewPaintProbe?: Readonly<{
+    painted: (frame: FrameReviewDisplayFrame, pixels: Uint8ClampedArray, timeMs: number) => void;
+    received?: (frame: FrameReviewDisplayFrame, timeMs: number) => void;
+    replaced?: () => void;
+  }>;
+};
+
 export class FrameReviewPlayerControl {
   readonly root: HTMLElement;
   private readonly canvas: HTMLCanvasElement;
@@ -52,8 +60,14 @@ export class FrameReviewPlayerControl {
   private renderRevision = 0;
   private playing = false;
   private scrubbingExact = false;
+  private previewRange: Readonly<{ startFrameIndex: number; endFrameIndex: number }> | null = null;
+  private previewPhase: 'inactive' | 'running' | 'paused' = 'inactive';
+  private previewOperationRevision = 0;
+  private readonly transportListeners = new Set<() => void>();
+  private lastTransportKey = '';
   private readonly heldStepDirections = new Set<AdjacentDirection>();
   private progressInteractionActive = false;
+  private progressPreviewTimer: ReturnType<typeof setTimeout> | null = null;
   private busy = false;
   private busyMessage = '';
   private initialFrameRequested = false;
@@ -125,10 +139,14 @@ export class FrameReviewPlayerControl {
     if (session === this.session) return;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.cancelProgressPreview();
+    this.previewOperationRevision += 1;
     this.invalidatePendingDisplay();
     this.displayedFrame = null;
     this.playing = false;
     this.scrubbingExact = false;
+    this.previewRange = null;
+    this.previewPhase = 'inactive';
     this.heldStepDirections.clear();
     this.progressInteractionActive = false;
     this.busy = false;
@@ -167,6 +185,17 @@ export class FrameReviewPlayerControl {
     return this.reviewState;
   }
 
+  exactPreviewPhase(): 'inactive' | 'running' | 'paused' { return this.previewPhase; }
+
+  ordinaryPlaybackRunning(): boolean { return this.playing && this.previewPhase === 'inactive'; }
+
+  exactScrubActive(): boolean { return this.scrubbingExact && !this.playing; }
+
+  subscribeTransport(listener: () => void): () => void {
+    this.transportListeners.add(listener);
+    return () => this.transportListeners.delete(listener);
+  }
+
   focusInitial(): boolean {
     if (!this.session || this.destroyed) return false;
     this.root.focus();
@@ -178,15 +207,125 @@ export class FrameReviewPlayerControl {
     await this.changePlayback();
   }
 
+  async startExactPreview(range: Readonly<{ startFrameIndex: number; endFrameIndex: number }>): Promise<void> {
+    const session = this.session;
+    if (!session || !this.reviewState?.captureEnabled || this.destroyed) return;
+    const operation = ++this.previewOperationRevision;
+    this.scrubbingExact = false;
+    this.playing = true;
+    this.previewRange = Object.freeze({ ...range });
+    this.previewPhase = 'running';
+    this.invalidateDisplayedExactFrame();
+    this.renderState();
+    try {
+      await session.startExactPreview(range);
+    } catch (error) {
+      if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return;
+      this.playing = false;
+      this.scrubbingExact = true;
+      this.previewRange = null;
+      this.previewPhase = 'inactive';
+      this.renderState();
+      throw error;
+    }
+    if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return;
+    this.renderState();
+  }
+
+  async pauseExactPreview(): Promise<IFrameReviewDisplayedCapture | null> {
+    const session = this.session;
+    if (!session || this.destroyed) return null;
+    const operation = ++this.previewOperationRevision;
+    let frame: IExactDisplayFrame;
+    try {
+      frame = await session.pauseExactPreview();
+    } catch (error) {
+      if (this.session === session && !this.destroyed && operation === this.previewOperationRevision) {
+        this.playing = false;
+        this.scrubbingExact = true;
+        this.previewRange = null;
+        this.previewPhase = 'inactive';
+        const recovered = await session.stopExactPreview().catch(() => null);
+        if (recovered) await this.requestDisplay(recovered);
+        this.renderState();
+      }
+      throw error;
+    }
+    if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return null;
+    this.playing = false;
+    this.scrubbingExact = true;
+    this.previewPhase = 'paused';
+    await this.requestDisplay(frame);
+    this.renderState();
+    return this.displayedCapture();
+  }
+
+  async resumeExactPreview(frameIndex: number): Promise<void> {
+    const session = this.session;
+    if (!session || this.destroyed) return;
+    const operation = ++this.previewOperationRevision;
+    this.scrubbingExact = false;
+    this.playing = true;
+    this.previewPhase = 'running';
+    this.invalidateDisplayedExactFrame();
+    this.renderState();
+    try {
+      await session.resumeExactPreview(frameIndex);
+    } catch (error) {
+      if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return;
+      this.playing = false;
+      this.scrubbingExact = true;
+      this.previewPhase = 'paused';
+      this.renderState();
+      throw error;
+    }
+    if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return;
+    this.renderState();
+  }
+
+  async stopExactPreview(): Promise<IFrameReviewDisplayedCapture | null> {
+    const session = this.session;
+    if (!session || this.destroyed) return null;
+    const operation = ++this.previewOperationRevision;
+    let frame: IExactDisplayFrame | null;
+    try {
+      frame = await session.stopExactPreview();
+    } catch (error) {
+      if (this.session === session && !this.destroyed && operation === this.previewOperationRevision) {
+        this.playing = false;
+        this.scrubbingExact = true;
+        this.previewRange = null;
+        this.previewPhase = 'inactive';
+        this.renderState();
+      }
+      throw error;
+    }
+    if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return null;
+    this.playing = false;
+    this.scrubbingExact = true;
+    this.previewRange = null;
+    this.previewPhase = 'inactive';
+    if (frame) await this.requestDisplay(frame);
+    this.renderState();
+    return this.displayedCapture();
+  }
+
   async enterExactScrubAt(timestampUs: bigint): Promise<IFrameReviewDisplayedCapture | null> {
-    return this.enterExactScrub(async session => {
+    const capture = await this.enterExactScrub(async session => {
       await session.seekPlayback(timestampUs);
       return session.enterFrameScrub();
     });
+    if (capture) {
+      this.previewRange = null;
+      this.previewPhase = 'inactive';
+    }
+    return capture;
   }
 
   async enterExactScrubAtFrame(frameIndex: number): Promise<IFrameReviewDisplayedCapture | null> {
-    return this.enterExactScrub(session => session.scrubToFrame(frameIndex));
+    const capture = await this.enterExactScrub(session => session.scrubToFrame(frameIndex));
+    if (capture) this.retainPreviewAt(frameIndex);
+    return capture;
   }
 
   private async enterExactScrub(
@@ -240,6 +379,8 @@ export class FrameReviewPlayerControl {
     if (this.destroyed) return;
     if (this.session) void this.session.releaseAdjacent().catch(error => this.showError(error));
     this.destroyed = true;
+    this.cancelProgressPreview();
+    this.previewOperationRevision += 1;
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.renderRevision += 1;
@@ -255,7 +396,10 @@ export class FrameReviewPlayerControl {
     this.progress.addEventListener('input', () => this.previewProgress());
     this.progress.addEventListener('change', () => { void this.commitProgress(); });
     this.progress.addEventListener('pointerdown', () => { this.progressInteractionActive = true; });
-    this.progress.addEventListener('pointercancel', () => { this.progressInteractionActive = false; });
+    this.progress.addEventListener('pointercancel', () => {
+      this.cancelProgressPreview();
+      this.progressInteractionActive = false;
+    });
     this.bindStepButton(this.stepLeft, -1);
     this.bindStepButton(this.stepRight, 1);
   }
@@ -273,6 +417,22 @@ export class FrameReviewPlayerControl {
   private async changePlayback(): Promise<void> {
     const session = this.session;
     if (!session) return;
+    if (this.previewPhase === 'running') {
+      try { await this.pauseExactPreview(); }
+      catch (error) { this.showError(error); }
+      return;
+    }
+    if (this.previewPhase === 'paused') {
+      const frameIndex = this.displayedFrame?.kind === 'exact-frame'
+        ? this.displayedFrame.identity.frameIndex : null;
+      if (frameIndex !== null && this.inPreviewRange(frameIndex)) {
+        try { await this.resumeExactPreview(frameIndex); }
+        catch (error) { this.showError(error); }
+        return;
+      }
+      this.previewRange = null;
+      this.previewPhase = 'inactive';
+    }
     this.busy = true;
     this.busyMessage = this.playing ? 'Pausing playback' : 'Starting playback';
     this.clearError();
@@ -316,6 +476,7 @@ export class FrameReviewPlayerControl {
     this.renderState();
     try {
       await this.requestDisplay(await session.enterFrameScrub());
+      if (this.displayedFrame?.kind === 'exact-frame') this.retainPreviewAt(this.displayedFrame.identity.frameIndex);
       if (this.session === session && !this.destroyed && this.heldStepDirections.has(direction)) {
         await session.pressAdjacent(direction);
       }
@@ -335,17 +496,38 @@ export class FrameReviewPlayerControl {
     this.progressInteractionActive = true;
     this.updateCurrentTimeFromProgress();
     if (!this.playing && this.reviewState?.captureEnabled) void this.scrubToProgressFrame();
+    else {
+      this.cancelProgressPreview();
+      const session = this.session;
+      const timestampUs = this.progressTimestampUs();
+      this.progressPreviewTimer = setTimeout(() => {
+        this.progressPreviewTimer = null;
+        if (this.session !== session || !this.progressInteractionActive || this.destroyed) return;
+        if (this.previewPhase === 'running') {
+          this.previewOperationRevision += 1;
+          this.previewRange = null;
+          this.previewPhase = 'inactive';
+          this.renderState();
+        }
+        void session.seekPlayback(timestampUs).catch(error => {
+          if (this.session === session && !this.destroyed) this.showError(error);
+        });
+      }, 100);
+    }
   }
 
   private async commitProgress(): Promise<void> {
     const session = this.session;
     if (!session) return;
+    this.cancelProgressPreview();
     try {
       if (!this.playing && this.reviewState?.captureEnabled) {
         await this.scrubToProgressFrame();
       } else {
         this.scrubbingExact = false;
         await session.seekPlayback(this.progressTimestampUs());
+        this.previewRange = null;
+        this.previewPhase = 'inactive';
         this.clearError();
       }
     } catch (error) {
@@ -355,6 +537,11 @@ export class FrameReviewPlayerControl {
     }
   }
 
+  private cancelProgressPreview(): void {
+    if (this.progressPreviewTimer !== null) clearTimeout(this.progressPreviewTimer);
+    this.progressPreviewTimer = null;
+  }
+
   private async scrubToProgressFrame(): Promise<void> {
     const session = this.session;
     if (!session) return;
@@ -362,6 +549,7 @@ export class FrameReviewPlayerControl {
     this.scrubbingExact = true;
     try {
       await this.requestDisplay(await session.scrubToFrame(frameIndex));
+      this.retainPreviewAt(frameIndex);
       this.clearError();
     } catch (error) {
       if (!this.isSuperseded(error)) this.showError(error);
@@ -381,8 +569,17 @@ export class FrameReviewPlayerControl {
       return;
     }
     if (event.type === 'display-frame') {
-      if (event.frame.kind === 'playback-frame' && (this.scrubbingExact || this.progressInteractionActive)) return;
+      (window as FrameReviewProbeWindow).__clipSandboxFrameReviewPaintProbe?.received?.(event.frame, performance.now());
+      if (event.frame.kind === 'playback-frame' && this.scrubbingExact) return;
+      if (event.frame.kind === 'exact-frame' && this.previewPhase === 'running') return;
       if (event.frame.sourceGeneration === this.reviewState?.sourceGeneration) void this.requestDisplay(event.frame);
+      return;
+    }
+    if (event.type === 'playback-ended') {
+      if (this.previewPhase === 'inactive') {
+        this.playing = false;
+        this.renderState();
+      }
       return;
     }
     this.showError(event.message);
@@ -396,6 +593,7 @@ export class FrameReviewPlayerControl {
       return;
     }
     this.requestedFrameKey = key;
+    if (this.pendingDisplay) (window as FrameReviewProbeWindow).__clipSandboxFrameReviewPaintProbe?.replaced?.();
     const revision = ++this.renderRevision;
     const session = this.session;
     const promise = this.frameRenderer.render(this.canvas, frame, () => (
@@ -403,6 +601,7 @@ export class FrameReviewPlayerControl {
       )).then(() => {
       if (this.destroyed || this.session !== session || revision !== this.renderRevision) return;
       this.displayedFrame = frame;
+      if (frame.kind === 'exact-frame') this.retainPreviewAt(frame.identity.frameIndex);
       this.emptyState.hidden = true;
       this.updateProgressFromFrame(frame);
       this.renderState();
@@ -440,6 +639,20 @@ export class FrameReviewPlayerControl {
     this.invalidatePendingDisplay();
   }
 
+  private inPreviewRange(frameIndex: number): boolean {
+    return this.previewRange !== null && frameIndex >= this.previewRange.startFrameIndex
+      && frameIndex <= this.previewRange.endFrameIndex;
+  }
+
+  private retainPreviewAt(frameIndex: number): void {
+    if (this.previewPhase === 'inactive') return;
+    if (this.inPreviewRange(frameIndex)) this.previewPhase = 'paused';
+    else {
+      this.previewRange = null;
+      this.previewPhase = 'inactive';
+    }
+  }
+
   private updateProgressFromFrame(frame: FrameReviewDisplayFrame): void {
     if (frame.kind === 'exact-frame') {
       this.progress.value = String(frame.identity.frameIndex);
@@ -447,7 +660,9 @@ export class FrameReviewPlayerControl {
     } else {
       const duration = this.effectiveDuration();
       const ratio = duration > 0n ? Number(frame.playbackTimestampUs) / Number(duration) : 0;
-      this.progress.value = String(Math.round(Number(this.progress.max) * this.clampRatio(ratio)));
+      if (!this.progressInteractionActive) {
+        this.progress.value = String(Math.round(Number(this.progress.max) * this.clampRatio(ratio)));
+      }
       this.currentTime.textContent = this.formatTime(frame.playbackTimestampUs);
     }
   }
@@ -469,6 +684,11 @@ export class FrameReviewPlayerControl {
   }
 
   private renderState(): void {
+    const transportKey = `${this.playing}:${this.scrubbingExact}:${this.previewPhase}:${this.busy}`;
+    if (transportKey !== this.lastTransportKey) {
+      this.lastTransportKey = transportKey;
+      queueMicrotask(() => { if (!this.destroyed) for (const listener of this.transportListeners) listener(); });
+    }
     const attached = this.session !== null;
     const exactReady = this.reviewState?.captureEnabled === true;
     const duration = this.effectiveDuration();
@@ -581,6 +801,7 @@ class CanvasFrameRenderer implements IFrameReviewFrameRenderer {
     canvas.width = frame.width;
     canvas.height = frame.height;
     context.putImageData(new ImageData(bytes, frame.width, frame.height), 0, 0);
+    (window as FrameReviewProbeWindow).__clipSandboxFrameReviewPaintProbe?.painted(frame, bytes, performance.now());
   }
 
   clear(canvas: HTMLCanvasElement): void {

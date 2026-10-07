@@ -16,9 +16,10 @@ import { LibVlcPlaybackEngine } from './libvlc-playback-engine.js';
 import { NativeCommandProcess, NativeProcessClient } from './native-process-client.js';
 import { ExactReviewProxyCache } from './exact-review-proxy-cache.js';
 import { PlaybackProxyCache } from './playback-proxy-cache.js';
+import { ProxyFrameTimelineCache } from './proxy-frame-timeline-cache.js';
 import { ReviewPreparationService } from './review-preparation-service.js';
 import type { IExactReviewProxyHostResult } from './review-preparation-service.js';
-import { ReviewSession, type HostFrameReviewEvent } from './review-session.js';
+import { ReviewSession, type HostFrameReviewEvent, type IExactPreviewRange } from './review-session.js';
 import { SourceInspector } from './source-inspector.js';
 import { SourceNormalizer } from './source-normalizer.js';
 
@@ -41,6 +42,10 @@ export interface IFrameReviewHostSession {
   play(): Promise<void>;
   pause(): Promise<void>;
   seekPlayback(timestampUs: bigint): Promise<void>;
+  startExactPreview(range: IExactPreviewRange): Promise<void>;
+  pauseExactPreview(): Promise<IHostExactFrame>;
+  resumeExactPreview(frameIndex: number): Promise<void>;
+  stopExactPreview(): Promise<IHostExactFrame | null>;
   enterFrameScrub(): Promise<IHostExactFrame>;
   scrubToFrame(frameIndex: number): Promise<IHostExactFrame>;
   stepAdjacent(direction: AdjacentDirection): Promise<IHostExactFrame>;
@@ -66,6 +71,7 @@ export class FrameReviewHost {
   private readonly sessions = new Map<string, ReviewSession>();
   private readonly paths: FrameReviewPaths;
   private readonly preparation: ReviewPreparationService;
+  private readonly inspector: SourceInspector;
   private readonly environment: NodeJS.ProcessEnv;
 
   constructor(private readonly configuration: IFrameReviewRuntimeConfiguration) {
@@ -89,6 +95,7 @@ export class FrameReviewHost {
       ffmpegVersion: configuration.ffmpegVersion,
       environment: this.environment,
     });
+    this.inspector = inspector;
     const indexer = new BestSourceFrameIndexer(
       path.join(configuration.nativeBinaryFolder, 'bestsource_gate.exe'), commandProcess);
     const exactReviewProxyCacheKey = `${this.paths.frameIndexCache}\n${this.paths.exactReviewProxyCache}`;
@@ -102,14 +109,16 @@ export class FrameReviewHost {
       playbackProxyCache = new PlaybackProxyCache(this.paths);
       FrameReviewHost.playbackProxyCaches.set(this.paths.playbackProxyCache, playbackProxyCache);
     }
+    const frameIndexCache = new FrameIndexCache(indexer);
     this.preparation = new ReviewPreparationService({
       inspector,
       normalizer: new SourceNormalizer(configuration.ffmpegExecutable, commandProcess),
-      frameIndexCache: new FrameIndexCache(indexer),
+      frameIndexCache,
       proxyCreator: new FfmpegProxyCreator(configuration.ffmpegExecutable, commandProcess),
       frameMapValidator: new FrameMapValidator(),
       exactReviewProxyCache,
       playbackProxyCache,
+      proxyFrameTimelineCache: new ProxyFrameTimelineCache(frameIndexCache),
     });
   }
 
@@ -120,11 +129,16 @@ export class FrameReviewHost {
     return handle;
   }
 
+  async sourceMatchesFingerprint(sourcePath: string, expected: ISourceFingerprint): Promise<boolean> {
+    const inspected = await this.inspector.inspect(sourcePath);
+    return SourceFingerprint.same(expected, SourceFingerprint.fromInspection(inspected.identity));
+  }
+
   async prepareExtractionSource(sourceHandleValue: string, signal?: AbortSignal): Promise<IExactReviewProxyHostResult> {
     const sourceHandle = FrameReviewOpaqueId.sourceHandle(sourceHandleValue);
     const sourcePath = this.sources.get(sourceHandle);
     if (!sourcePath) throw new BackendError('invalid-request', 'Frame-review source handle is unknown.', true);
-    return this.preparation.prepare(sourcePath, () => undefined, signal);
+    return this.preparation.prepareForExtraction(sourcePath, signal);
   }
 
   async open(request: IFrameReviewHostOpenRequest): Promise<IFrameReviewHostSession> {
@@ -191,6 +205,32 @@ export class FrameReviewHost {
       throw new BackendError('invalid-request', 'Review session does not match the extraction source.', true);
     }
     return Promise.all([session.frameIdentity(startFrameIndex), session.frameIdentity(endFrameIndex)]);
+  }
+
+  async extractionFrameTimeline(
+    sessionId: string,
+    sourceHandleValue: string,
+    startFrameIndex: number,
+    endFrameIndex: number,
+    preparedIdentity: Omit<ISourceFingerprint, 'fingerprintVersion'>,
+  ): Promise<readonly ISourceFrameIdentity[]> {
+    if (!Number.isSafeInteger(startFrameIndex) || !Number.isSafeInteger(endFrameIndex)
+      || startFrameIndex < 0 || endFrameIndex < startFrameIndex || endFrameIndex - startFrameIndex > 5_000) {
+      throw new BackendError('invalid-request', 'Extraction frame window is unavailable.', true);
+    }
+    const sourceHandle = FrameReviewOpaqueId.sourceHandle(sourceHandleValue);
+    const sourcePath = this.sources.get(sourceHandle);
+    const session = this.session(sessionId);
+    const context = session.captureContext();
+    if (!sourcePath || !context || context.sourcePath !== sourcePath
+      || !SourceFingerprint.same(context.fingerprint, SourceFingerprint.fromInspection(preparedIdentity))) {
+      throw new BackendError('invalid-request', 'Review session does not match the extraction source.', true);
+    }
+    const identities: ISourceFrameIdentity[] = [];
+    for (let ordinal = startFrameIndex; ordinal <= endFrameIndex; ordinal += 1) {
+      identities.push(await session.frameIdentity(ordinal));
+    }
+    return Object.freeze(identities);
   }
 
   async closeSession(id: string): Promise<void> {

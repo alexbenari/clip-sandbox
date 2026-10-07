@@ -9,6 +9,7 @@ import type {
 } from '../../../src/frame-review/host/libvlc-playback-engine.js';
 import type { IExactReviewProxyHostResult, IReviewPreparationUpdate } from '../../../src/frame-review/host/review-preparation-service.js';
 import { ReviewSession } from '../../../src/frame-review/host/review-session.js';
+import { BackendError } from '../../../src/frame-review/model/backend-error.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -40,6 +41,7 @@ const prepared: IExactReviewProxyHostResult = Object.freeze({
   manifestPath: 'C:/cache/manifest.json', frameCount: 4, sourceWidth: 64, sourceHeight: 48,
   durationUs: '4000000', normalizedSourcePath: null, canonicalSourcePath: 'C:/movie.mp4',
   sourcePath: 'C:/movie.mp4', selectedStream: 0,
+  proxyTimeline: null, proxyTimelineError: null,
   identity: Object.freeze({
     schemaVersion: 1, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '1', sourceDurationUs: '4000000',
     signatureProfileVersion: 'sample-signature-compact-v1', preparationContractVersion: 'prepared-review-v1',
@@ -53,13 +55,21 @@ const prepared: IExactReviewProxyHostResult = Object.freeze({
 
 class PlaybackFake implements IReviewPlaybackEngine {
   listener: ((frame: IHostPlaybackFrame) => void) | undefined;
+  endedListener: (() => void) | undefined;
   timestampUs = 1_500_000n;
   stateValue = 'paused';
   shutdownCount = 0;
   readonly requestedPlayAtTimes: bigint[] = [];
   readonly openedPaths: string[] = [];
+  readonly loopCalls: string[] = [];
+  failReset = false;
+  failRecovery = false;
   setFrameListener(listener: ((frame: IHostPlaybackFrame) => void) | undefined) { this.listener = listener; }
-  async open(path: string, _options: IPlaybackOpenOptions) { this.openedPaths.push(path); return this.status(); }
+  setEndedListener(listener: (() => void) | undefined) { this.endedListener = listener; }
+  async open(path: string, _options: IPlaybackOpenOptions) {
+    if (this.failRecovery && this.openedPaths.length > 0) throw new Error('reopen failed');
+    this.openedPaths.push(path); return this.status();
+  }
   async play() { this.stateValue = 'playing'; }
   async playAt(timestampUs: bigint) {
     this.requestedPlayAtTimes.push(timestampUs);
@@ -67,7 +77,12 @@ class PlaybackFake implements IReviewPlaybackEngine {
     this.stateValue = 'playing';
   }
   async pause() { this.stateValue = 'paused'; }
-  async seek(timestampUs: bigint) { this.timestampUs = timestampUs; }
+  async seek(timestampUs: bigint) { this.loopCalls.push(`seek:${timestampUs}`); this.timestampUs = timestampUs; }
+  async armAbLoop(aTimeUs: bigint, bTimeUs: bigint) { this.loopCalls.push(`arm:${aTimeUs}:${bTimeUs}`); }
+  async resetAbLoop() {
+    this.loopCalls.push('reset');
+    if (this.failReset) throw new Error('reset failed');
+  }
   async status(): Promise<IPlaybackStatus> {
     return { state: this.stateValue, sourceGeneration: 1, timestampUs: this.timestampUs, lengthUs: 4_000_000n };
   }
@@ -81,12 +96,133 @@ class ExactFake implements IExactFrameReader {
   async identity() { return exactFrame.identity; }
   async thumbnail() { return exactFrame; }
   async atTime() { return exactFrame; }
-  async scrub() { return exactFrame; }
+  async scrub(_frameIndex: number) { return exactFrame; }
   async stepAdjacent() { return exactFrame; }
   async shutdown() { this.shutdownCount += 1; }
 }
 
 describe('review session', () => {
+  const previewPrepared: IExactReviewProxyHostResult = Object.freeze({
+    ...prepared,
+    proxyTimeline: Object.freeze({ cacheKey: prepared.cacheKey,
+      pts: Object.freeze([0n, 1000n, 2000n, 3000n]),
+      timebaseNumerator: 1n, timebaseDenominator: 1000n, durationPts: 4000n }),
+  });
+
+  it('arms the indexed A–B pair before seeking and hands Space to an exact in-range frame', async () => {
+    const playback = new PlaybackFake();
+    const exact = new ExactFake();
+    exact.scrub = async index => Object.freeze({ ...exactFrame,
+      identity: Object.freeze({ ...exactFrame.identity, frameIndex: index }) });
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact,
+      prepare: async () => previewPrepared, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+    await session.startExactPreview({ startFrameIndex: 1, endFrameIndex: 2 });
+    expect(playback.loopCalls.slice(-2)).toEqual(['arm:999999:2500000', 'seek:1000000']);
+    playback.timestampUs = 2_850_000n;
+    const paused = await session.pauseExactPreview();
+    expect(paused.identity.frameIndex).toBe(2);
+    expect(playback.loopCalls.at(-1)).toBe('reset');
+    await session.resumeExactPreview(2);
+    expect(playback.loopCalls.slice(-2)).toEqual(['arm:999999:2500000', 'seek:2000000']);
+    await session.dispose();
+  });
+
+  it('recovers a failed A–B reset by reopening the proxy at the Space ordinal', async () => {
+    const playback = new PlaybackFake();
+    const exact = new ExactFake();
+    exact.scrub = async index => Object.freeze({ ...exactFrame,
+      identity: Object.freeze({ ...exactFrame.identity, frameIndex: index }) });
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact,
+      prepare: async () => previewPrepared, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+    await session.startExactPreview({ startFrameIndex: 1, endFrameIndex: 2 });
+    playback.timestampUs = 2_200_000n;
+    playback.failReset = true;
+    await expect(session.pauseExactPreview()).rejects.toThrow('reset failed');
+    expect(playback.openedPaths.at(-1)).toBe(prepared.proxyPath);
+    expect(playback.timestampUs).toBe(2_000_000n);
+    expect(playback.stateValue).toBe('paused');
+    await session.play();
+    expect(playback.requestedPlayAtTimes.at(-1)).toBe(2_000_000n);
+    await session.dispose();
+  });
+
+  it('keeps exact scrub available when reset and player reopening both fail', async () => {
+    const playback = new PlaybackFake();
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      prepare: async () => previewPrepared, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+    await session.startExactPreview({ startFrameIndex: 1, endFrameIndex: 2 });
+    playback.failReset = true;
+    playback.failRecovery = true;
+    await expect(session.pauseExactPreview()).rejects.toThrow('reset failed');
+    await expect(session.play()).rejects.toMatchObject({ category: 'invalid-state' });
+    await expect(session.scrubToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
+    await session.dispose();
+  });
+
+  it('rejects a one-frame loop without changing the existing player state', async () => {
+    const playback = new PlaybackFake();
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      prepare: async () => previewPrepared, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+    await expect(session.startExactPreview({ startFrameIndex: 2, endFrameIndex: 2 }))
+      .rejects.toMatchObject({ category: 'invalid-request' });
+    expect(playback.loopCalls.some(call => call.startsWith('arm:'))).toBe(false);
+    await session.dispose();
+  });
+
+  it('keeps exact review ready when a proxy has an unsupported loop clock', async () => {
+    const unsupported = Object.freeze({ ...previewPrepared,
+      proxyTimeline: Object.freeze({ ...previewPrepared.proxyTimeline!,
+        pts: Object.freeze([1n, 1001n, 2001n, 3001n]), durationPts: 4001n }) });
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback: new PlaybackFake(), exact: new ExactFake(),
+      prepare: async () => unsupported, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+    expect(session.state()).toMatchObject({ phase: 'exact-ready', captureEnabled: true });
+    await expect(session.startExactPreview({ startFrameIndex: 1, endFrameIndex: 2 }))
+      .rejects.toThrow('unsupported playback-clock origin');
+    await expect(session.scrubToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
+    await session.dispose();
+  });
+
+  it('prevents an obsolete pending loop start from clearing a newer loop', async () => {
+    const playback = new PlaybackFake();
+    const firstArm = deferred<void>();
+    const originalArm = playback.armAbLoop.bind(playback);
+    let armCount = 0;
+    playback.armAbLoop = async (a, b) => {
+      armCount += 1;
+      await originalArm(a, b);
+      if (armCount === 1) await firstArm.promise;
+    };
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      prepare: async () => previewPrepared, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+    const obsolete = session.startExactPreview({ startFrameIndex: 1, endFrameIndex: 2 });
+    await vi.waitFor(() => expect(armCount).toBe(1));
+    await session.stopExactPreview();
+    const current = session.startExactPreview({ startFrameIndex: 0, endFrameIndex: 2 });
+    firstArm.resolve();
+    await Promise.all([obsolete, current]);
+    expect(playback.loopCalls.at(-2)).toBe('arm:0:2500000');
+    expect(playback.stateValue).toBe('playing');
+    await session.stopExactPreview();
+    await session.dispose();
+  });
   it('renders a thumbnail without changing playback state or position', async () => {
     const playback = new PlaybackFake();
     const exact = new ExactFake();
@@ -103,6 +239,25 @@ describe('review session', () => {
     expect(await session.thumbnailFrame(2)).toBe(exactFrame);
     expect(playback.stateValue).toBe('playing');
     expect(playback.timestampUs).toBe(position);
+    await session.dispose();
+  });
+
+  it('does not report an error when held stepping reaches a frame boundary', async () => {
+    const exact = new ExactFake();
+    const step = vi.fn(async () => { throw new BackendError('frame-boundary', 'Source boundary reached.', true); });
+    exact.stepAdjacent = step;
+    const emit = vi.fn();
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback: new PlaybackFake(), exact,
+      prepare: async () => prepared, emit });
+    await session.open();
+    await session.whenPrepared();
+
+    await session.pressAdjacent(-1);
+    await vi.waitFor(() => expect(step).toHaveBeenCalledOnce());
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    expect(emit).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
     await session.dispose();
   });
 

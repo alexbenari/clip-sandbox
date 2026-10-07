@@ -28,6 +28,8 @@ function snapshot(ready: boolean): IGifExtractionSessionSnapshot {
     selectedRangeId: null,
     refinement: null,
     capturesLoading: false,
+    previewTarget: null,
+    previewRevision: 0,
     message: ready ? 'Exact capture ready' : 'Building exact frame index',
   });
 }

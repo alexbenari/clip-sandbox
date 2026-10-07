@@ -26,10 +26,14 @@ public:
     decltype(&libvlc_media_player_get_time) get_time;
     decltype(&libvlc_media_player_get_length) get_length;
     decltype(&libvlc_media_player_set_time) set_time;
+    decltype(&libvlc_media_player_set_abloop_time) set_abloop_time;
+    decltype(&libvlc_media_player_reset_abloop) reset_abloop;
     decltype(&libvlc_media_player_next_frame) next_frame;
     decltype(&libvlc_media_player_previous_frame) previous_frame;
     decltype(&libvlc_media_player_watch_time) watch_time;
     decltype(&libvlc_media_player_unwatch_time) unwatch_time;
+    decltype(&libvlc_clock) clock;
+    decltype(&libvlc_media_player_time_point_interpolate) interpolate_time_point;
     decltype(&libvlc_video_set_callbacks) set_video_callbacks;
     decltype(&libvlc_video_set_format_callbacks) set_format_callbacks;
     decltype(&libvlc_video_get_size) get_video_size;

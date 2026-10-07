@@ -1,12 +1,11 @@
 # Feature Requests
 
 ## Next up
-- captures that were not extracted are saved and reopen in the panel when extracting from the movie
-- Movie edit mode -> more as-you-watch actions and full screen
-- No need for speeds
+- Movie edit mode -> full screen
+- Movie edit mode -> ability to jump ahead: number is #secpnds
+- Review the codebase for mixup of clip/gif terminology and unify if needed
+- Extract all: show progress. X/Y and progress for current clip
 
-## Features
-- Clip metadata: source movie, frame range
 ## Small bugs
 - The message when opening a movie should appear in the same place other messages appear (e.g. frame indexing etc). Maybe we should make it into its own little component displayign msg + progress? 
 - when clicking open folder in Collection screen the file explorer selection should open on the folder defined in settings
@@ -40,6 +39,7 @@
 - The movie is opened in the player control in clip creation mode
 
 ### Design and code quality
+- app-controller.ts redesign. See details in /D:/tmp/dev/clip-sandbox/docs/research/app-controller-init-refactor-handoff.md
 - add `better-result` for error 
 - Code review flow -> put in place [find a good one or add my own instructions]
 -  make error log usable: 

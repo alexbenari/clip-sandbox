@@ -73,6 +73,19 @@ describe.runIf(available)('prepared review production integration', () => {
       kind: 'exact-frame', identity: { frameIndex: 0 },
     });
     const manifestPath = path.join(root, 'exact-review-proxy-cache', first.session.state().preparedReview!.cacheKey, 'manifest.json');
+    const timelinePath = path.join(path.dirname(manifestPath), 'loop-timeline-v1.json');
+    const timeline = JSON.parse(await readFile(timelinePath, 'utf8'));
+    expect(timeline).toMatchObject({
+      schemaVersion: 1, frameCount: 5, timebaseNumerator: '1', timebaseDenominator: '1000',
+      pts: ['0', '200', '400', '600', '800'],
+    });
+    await first.session.startExactPreview({ startFrameIndex: 0, endFrameIndex: 3 });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const paused = await first.session.pauseExactPreview();
+    expect(paused.identity.frameIndex).toBeGreaterThanOrEqual(0);
+    expect(paused.identity.frameIndex).toBeLessThanOrEqual(3);
+    await first.session.resumeExactPreview(paused.identity.frameIndex);
+    await first.session.stopExactPreview();
     const firstMtime = (await stat(manifestPath)).mtimeMs;
 
     const second = await openPrepared(first.host, movie);
@@ -87,6 +100,12 @@ describe.runIf(available)('prepared review production integration', () => {
     expect(restarted.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: true } });
     expect(restarted.phases).not.toContain('indexing');
     expect((await stat(manifestPath)).mtimeMs).toBe(firstMtime);
+    await writeFile(timelinePath, '{broken');
+    await restarted.session.dispose();
+    const repaired = await openPrepared(restarted.host, movie);
+    expect(repaired.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: true } });
+    expect(JSON.parse(await readFile(timelinePath, 'utf8')).pts).toEqual(timeline.pts);
+    await repaired.session.dispose();
     await restarted.host.dispose();
   }, 180_000);
 });

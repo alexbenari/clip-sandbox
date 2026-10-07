@@ -19,6 +19,8 @@ export interface IHostPlaybackFrame {
   readonly sourceWidth: number;
   readonly sourceHeight: number;
   readonly pixels: Uint8Array;
+  readonly droppedBeforeWrite?: number;
+  readonly previousAckRoundTripMs?: number | null;
 }
 
 export interface IPlaybackOpenOptions {
@@ -29,11 +31,14 @@ export interface IPlaybackOpenOptions {
 
 export interface IReviewPlaybackEngine {
   setFrameListener(listener: ((frame: IHostPlaybackFrame) => void) | undefined): void;
+  setEndedListener(listener: (() => void) | undefined): void;
   open(sourcePath: string, options: IPlaybackOpenOptions): Promise<IPlaybackStatus>;
   play(): Promise<void>;
   playAt(timestampUs: bigint): Promise<void>;
   pause(): Promise<void>;
   seek(timestampUs: bigint): Promise<void>;
+  armAbLoop(aTimeUs: bigint, bTimeUs: bigint): Promise<void>;
+  resetAbLoop(): Promise<void>;
   status(): Promise<IPlaybackStatus>;
   shutdown(): Promise<void>;
 }
@@ -41,6 +46,8 @@ export interface IReviewPlaybackEngine {
 export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
   private sourceGeneration = 0;
   private listener: ((frame: IHostPlaybackFrame) => void) | undefined;
+  private endedListener: (() => void) | undefined;
+  private previousAckRoundTripMs: number | null = null;
 
   constructor(private readonly client: NativeProcessClient) {
     client.setEventHandler((message) => this.onEvent(message));
@@ -48,6 +55,10 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
 
   setFrameListener(listener: ((frame: IHostPlaybackFrame) => void) | undefined): void {
     this.listener = listener;
+  }
+
+  setEndedListener(listener: (() => void) | undefined): void {
+    this.endedListener = listener;
   }
 
   async open(sourcePath: string, options: IPlaybackOpenOptions): Promise<IPlaybackStatus> {
@@ -75,6 +86,15 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
     await this.client.request('seek', { timeUs: timestampUs.toString() });
   }
 
+  async armAbLoop(aTimeUs: bigint, bTimeUs: bigint): Promise<void> {
+    if (aTimeUs < 0n || bTimeUs <= aTimeUs || bTimeUs > (1n << 63n) - 1n) {
+      throw new BackendError('invalid-request', 'A–B loop times are invalid.', true);
+    }
+    await this.client.request('arm-ab-loop', { aTimeUs: aTimeUs.toString(), bTimeUs: bTimeUs.toString() });
+  }
+
+  async resetAbLoop(): Promise<void> { await this.client.request('reset-ab-loop'); }
+
   async status(): Promise<IPlaybackStatus> {
     return this.parseStatus(await this.client.request('status'), this.sourceGeneration);
   }
@@ -82,6 +102,11 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
   shutdown(): Promise<void> { return this.client.shutdown(); }
 
   private onEvent(message: ITimedProtocolMessage): void {
+    if (message.metadata.type === 'playback-ended') {
+      if (FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceGeneration, 'sourceGeneration')
+        === this.sourceGeneration) this.endedListener?.();
+      return;
+    }
     if (message.metadata.type !== 'playback-frame') return;
     const sourceGeneration = FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceGeneration, 'sourceGeneration');
     const frameGeneration = FrameReviewWireValue.nonnegativeInteger(message.metadata.frameGeneration, 'frameGeneration');
@@ -103,8 +128,13 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
       sourceWidth: FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceWidth, 'sourceWidth'),
       sourceHeight: FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceHeight, 'sourceHeight'),
       pixels: this.packPixels(message.payload, width, height, stride),
+      droppedBeforeWrite: FrameReviewWireValue.nonnegativeInteger(
+        message.metadata.droppedBeforeWrite, 'droppedBeforeWrite'),
+      previousAckRoundTripMs: this.previousAckRoundTripMs,
     }));
-    void this.client.request('frame-ack', { frameGeneration }).catch(() => undefined);
+    void this.client.request('frame-ack', { frameGeneration }).then(response => {
+      this.previousAckRoundTripMs = response.roundTripMs;
+    }).catch(() => { this.previousAckRoundTripMs = null; });
   }
 
   private parseStatus(message: ITimedProtocolMessage, expectedGeneration: number): IPlaybackStatus {

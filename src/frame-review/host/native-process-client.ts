@@ -189,6 +189,7 @@ export class NativeCommandProcess {
     readonly signal?: AbortSignal;
     readonly timeoutMs?: number;
     readonly onStdoutLine?: (line: string) => void;
+    readonly captureStdout?: boolean;
   } = {}): Promise<INativeCommandResult> {
     if (!path.isAbsolute(executable)) return Promise.reject(new Error('Command executable must be an absolute path.'));
     return new Promise((resolve, reject) => {
@@ -223,7 +224,7 @@ export class NativeCommandProcess {
       child.stdout.on('data', (chunk: Buffer) => {
         if (settled) return;
         const text = chunk.toString('utf8');
-        stdout += text;
+        if (options.captureStdout !== false) stdout += text;
         if (stdout.length > 64 * 1024 * 1024) {
           child.kill();
           finish(new BackendError('protocol-error', 'Native command output exceeded 64 MiB.', false));

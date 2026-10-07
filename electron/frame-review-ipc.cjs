@@ -12,6 +12,7 @@ const COMMANDS = new Set([
   'state', 'play', 'pause', 'seek-playback', 'enter-scrub', 'scrub-to-frame',
   'step-adjacent', 'press-adjacent', 'release-adjacent', 'capture-current-point',
   'frame-identity', 'thumbnail-frame',
+  'start-exact-preview', 'pause-exact-preview', 'resume-exact-preview', 'stop-exact-preview',
 ]);
 
 class FrameReviewIpcBoundary {
@@ -115,6 +116,13 @@ class FrameReviewIpcBoundary {
       case 'play': return session.play();
       case 'pause': return session.pause();
       case 'seek-playback': return session.seekPlayback(this.decimalBigInt(args.timestampUs, 'timestampUs'));
+      case 'start-exact-preview': return session.startExactPreview({
+        startFrameIndex: this.nonnegativeInteger(args.startFrameIndex, 'startFrameIndex'),
+        endFrameIndex: this.nonnegativeInteger(args.endFrameIndex, 'endFrameIndex'),
+      });
+      case 'pause-exact-preview': return session.pauseExactPreview();
+      case 'resume-exact-preview': return session.resumeExactPreview(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      case 'stop-exact-preview': return session.stopExactPreview();
       case 'enter-scrub': return session.enterFrameScrub();
       case 'scrub-to-frame': return session.scrubToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
       case 'step-adjacent': return session.stepAdjacent(this.direction(args.direction));
