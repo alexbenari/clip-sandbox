@@ -17,6 +17,36 @@ function destinationService(overrides: Record<string, unknown> = {}) {
 }
 
 describe('ExtractionDestinationSession', () => {
+  it('publishes a refined folder clip without writing a collection file', async () => {
+    const service = destinationService();
+    const onPublished = vi.fn(async () => undefined);
+    const session = new ExtractionDestinationSession(service, {
+      destination: { kind: 'folder', folderPath: 'C:/pipelines/extraction-tmp' }, onPublished,
+    });
+    await session.open({ movieName: 'Sample Movie.mp4' });
+    await session.publishCreatedMedia({ mediaHandle: 'media_opaque_0001', filename: 'Sample Movie-001.mp4' });
+    expect(service.openExtractionDestination).toHaveBeenCalledWith({ folderPath: 'C:/pipelines/extraction-tmp' });
+    expect(service.saveCollection).not.toHaveBeenCalled();
+    expect(onPublished).toHaveBeenCalledWith(expect.objectContaining({
+      folderPath: 'C:/pipelines/extraction-tmp', collectionFilename: null,
+    }));
+  });
+  it('publishes a refined collection clip into its originating collection', async () => {
+    const service = destinationService({
+      openExtractionDestination: vi.fn(async () => ({
+        destinationHandle: 'destination_opaque_0001', folderPath: 'C:/pipelines/camera',
+        entries: [{ kind: 'collection', filename: 'Favorites.txt', content: 'old.mp4\n' }],
+      })),
+    });
+    const session = new ExtractionDestinationSession(service, {
+      destination: { kind: 'collection', folderPath: 'C:/pipelines/camera', collectionFilename: 'Favorites.txt' },
+    });
+    await session.open({ movieName: 'source.mkv' });
+    await session.publishCreatedMedia({ mediaHandle: 'media_opaque_0001', filename: 'Favorites-001.mp4' });
+    expect(service.openExtractionDestination).toHaveBeenCalledWith({ folderPath: 'C:/pipelines/camera' });
+    expect(service.saveCollection).toHaveBeenCalledWith(
+      'destination_opaque_0001', 'Favorites.txt', 'old.mp4\nFavorites-001.mp4\n');
+  });
   it('opens the fixed destination snapshot and derives a movie-stem collection filename', async () => {
     const service = destinationService({
       openExtractionDestination: vi.fn(async () => ({
@@ -48,8 +78,8 @@ describe('ExtractionDestinationSession', () => {
 
   it('publishes created media and persists serialized membership only after successful extraction', async () => {
     const service = destinationService();
-    const onCollectionPublished = vi.fn(async () => undefined);
-    const session = new ExtractionDestinationSession(service, { onCollectionPublished });
+    const onPublished = vi.fn(async () => undefined);
+    const session = new ExtractionDestinationSession(service, { onPublished });
     await session.open({ movieName: 'Sample Movie.mp4' });
 
     await session.publishCreatedMedia({ mediaHandle: 'media_opaque_0001', filename: 'Sample Movie-001.mp4' });
@@ -59,13 +89,13 @@ describe('ExtractionDestinationSession', () => {
       'Sample Movie.txt',
       'Sample Movie-001.mp4\n',
     );
-    expect(onCollectionPublished).toHaveBeenCalledWith({
+    expect(onPublished).toHaveBeenCalledWith({
       folderPath: 'C:/pipelines/extraction-tmp',
       collectionFilename: 'Sample Movie.txt',
       media: expect.objectContaining({ filename: 'Sample Movie-001.mp4' }),
     });
     expect(service.saveCollection.mock.invocationCallOrder[0])
-      .toBeLessThan(onCollectionPublished.mock.invocationCallOrder[0]);
+      .toBeLessThan(onPublished.mock.invocationCallOrder[0]);
   });
 
   it('retains pending publication state so a save failure retries without re-encoding', async () => {
@@ -73,17 +103,17 @@ describe('ExtractionDestinationSession', () => {
       .mockRejectedValueOnce(new Error('collection write failed'))
       .mockResolvedValueOnce(undefined);
     const service = destinationService({ saveCollection });
-    const onCollectionPublished = vi.fn(async () => undefined);
-    const session = new ExtractionDestinationSession(service, { onCollectionPublished });
+    const onPublished = vi.fn(async () => undefined);
+    const session = new ExtractionDestinationSession(service, { onPublished });
     await session.open({ movieName: 'Sample Movie.mp4' });
 
     await expect(session.publishCreatedMedia({ mediaHandle: 'media_opaque_0001', filename: 'Sample Movie-001.mp4' })).rejects.toThrow('collection write failed');
-    expect(onCollectionPublished).not.toHaveBeenCalled();
+    expect(onPublished).not.toHaveBeenCalled();
     await session.retryPublication();
 
     expect(saveCollection).toHaveBeenCalledTimes(2);
     expect(saveCollection.mock.calls[0]).toEqual(saveCollection.mock.calls[1]);
-    expect(onCollectionPublished).toHaveBeenCalledOnce();
+    expect(onPublished).toHaveBeenCalledOnce();
   });
 
   it('rebases a failed publication retry onto later successful collection membership', async () => {

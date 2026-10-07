@@ -24,6 +24,7 @@ type ShellElements = {
   onBoundsChange?: (screen: IAppScreen, width: number, durationMs: number) => void;
   onBoundsSettled?: (screen: IAppScreen) => void;
   onScreenChange?: (screen: IAppScreen) => void;
+  canLeaveScreen?: (current: IAppScreen, incoming: IAppScreen) => boolean;
 };
 
 export class ApplicationShellController {
@@ -123,6 +124,10 @@ export class ApplicationShellController {
     if (!incoming) throw new Error(`Unknown app screen: ${id}`);
     if (this.activated && incoming === this.current) {
       incoming.focusInitial();
+      return;
+    }
+    if (this.activated && this.elements.canLeaveScreen?.(this.current, incoming) === false) {
+      this.elements.selector.value = this.current.id;
       return;
     }
     if (this.activated) {

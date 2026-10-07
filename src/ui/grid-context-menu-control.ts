@@ -18,6 +18,9 @@ type GridContextMenuRequest = {
   onAddToCollection?: (choice: TargetCollectionChoice) => void;
   onNewCollection?: () => void;
   onDeleteFromDisk?: () => void;
+  hasClip?: boolean;
+  canRefine?: boolean;
+  onRefine?: () => void;
 };
 
 export class GridContextMenuControl {
@@ -36,6 +39,9 @@ export class GridContextMenuControl {
     onAddToCollection = () => {},
     onNewCollection = () => {},
     onDeleteFromDisk = () => {},
+    hasClip = false,
+    canRefine = false,
+    onRefine = () => {},
   }: GridContextMenuRequest = {}): ContextMenuItem[] {
     const items: ContextMenuItem[] = hasSelection
       ? targetCollections.map((choice) => ({
@@ -48,6 +54,13 @@ export class GridContextMenuControl {
         label: 'Select clips to add to a collection',
         disabled: true,
       }];
+
+    if (hasClip) items.push({
+      id: 'refine-clip',
+      label: 'Refine',
+      disabled: !canRefine,
+      onSelect: onRefine,
+    });
 
     items.push({
       id: 'new-collection',
@@ -75,6 +88,9 @@ export class GridContextMenuControl {
     onAddToCollection = () => {},
     onNewCollection = () => {},
     onDeleteFromDisk = () => {},
+    hasClip = false,
+    canRefine = false,
+    onRefine = () => {},
   }: GridContextMenuRequest = {}): void {
     this.contextMenuController?.open({
       point,
@@ -85,6 +101,9 @@ export class GridContextMenuControl {
         onAddToCollection,
         onNewCollection,
         onDeleteFromDisk,
+        hasClip,
+        canRefine,
+        onRefine,
       }),
     });
   }

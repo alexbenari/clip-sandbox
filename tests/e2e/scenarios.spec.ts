@@ -138,6 +138,23 @@ test.describe('Electron runtime migration', () => {
     })).toBe(true);
   });
 
+  test('switching views reads clips and collection membership changed on disk', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('delete'));
+    await fsp.writeFile(path.join(folderPath, 'subset.txt'), 'solo.mp4\n', 'utf8');
+    await loadFolder(page, folderPath);
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+
+    await fsp.copyFile(path.join(folderPath, 'solo.mp4'), path.join(folderPath, 'extra.mp4'));
+    await fsp.writeFile(path.join(folderPath, 'subset.txt'), 'solo.mp4\nextra.mp4\n', 'utf8');
+    await page.locator('#activeCollectionName').selectOption('subset.txt');
+
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+    await expect(allClipNames(page)).resolves.toEqual(['solo.mp4', 'extra.mp4']);
+    await page.locator('#activeCollectionName').selectOption('__pipeline__');
+    await expect(page.locator('#grid .thumb')).toHaveCount(3);
+    await expect(allClipNames(page)).resolves.toEqual(['duo.webm', 'extra.mp4', 'solo.mp4']);
+  });
+
   test('switches between saved collections in Electron', async () => {
     ({ tempRoot, folderPath } = await createScenarioFolder('legacy-default'));
 

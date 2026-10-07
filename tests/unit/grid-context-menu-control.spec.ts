@@ -65,4 +65,16 @@ describe('grid context menu control', () => {
       'delete-from-disk',
     ]);
   });
+
+  test('offers Refine for a collection clip and disables it without provenance', () => {
+    const control = new GridContextMenuControl();
+    const onRefine = vi.fn();
+    const unavailable = control.buildItems({ hasClip: true, canRefine: false, onRefine });
+    const available = control.buildItems({ hasClip: true, canRefine: true, onRefine });
+    expect(unavailable.find(item => item.id === 'refine-clip')).toMatchObject({ disabled: true });
+    const refine = available.find(item => item.id === 'refine-clip');
+    expect(refine).toMatchObject({ label: 'Refine', disabled: false });
+    refine?.onSelect?.();
+    expect(onRefine).toHaveBeenCalledOnce();
+  });
 });

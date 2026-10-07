@@ -34,10 +34,12 @@ test('Activity retains unresolved errors, copies details, retries a real save fa
     const panel = page.locator('#activityIndicatorPanel');
     const history = page.getByRole('region', { name: 'Activity history' });
     await expect(panel).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'More Details', exact: true })).toHaveCount(2);
     await page.screenshot({ path: 'test-results/activity-error.png', animations: 'disabled' });
     const failedSave = page.locator('#activityIndicatorList > li').filter({ hasText: 'Settings were not saved' });
-    await failedSave.locator('summary').focus();
+    await failedSave.getByRole('button', { name: 'More Details', exact: true }).focus();
     await page.keyboard.press('Space');
+    await expect(failedSave.getByRole('button', { name: 'More Details', exact: true })).toHaveAttribute('aria-expanded', 'true');
     await expect(failedSave.locator('pre')).toBeVisible();
     await page.keyboard.press('ArrowDown');
     await expect(failedSave.locator('summary')).toBeFocused();

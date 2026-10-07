@@ -49,6 +49,13 @@ class FolderAccessRegistry {
     return folderPath;
   }
 
+  knownPipelinePaths(webContents) {
+    return [...new Set([
+      ...this.pathsFor(webContents),
+      ...(this.catalogPipelinesByWebContentsId.get(webContents.id)?.values() || []),
+    ])];
+  }
+
   requireKnownPath(webContents, folderPath) {
     const resolvedPath = this.resolveAbsolutePath(folderPath);
     if (!this.pathsByWebContentsId.get(webContents.id)?.has(resolvedPath)) {

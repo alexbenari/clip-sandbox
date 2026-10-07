@@ -12,6 +12,7 @@ const { registerClipExtractionIpc } = require('./clip-extraction-ipc.cjs');
 const { ClipCapturesStore } = require('./clip-captures-store.cjs');
 const { registerClipCapturesIpc } = require('./clip-captures-ipc.cjs');
 const { createClipExtractionRuntime } = require('./clip-extraction-runtime.cjs');
+const { CollectionClipRefinement } = require('./collection-clip-refinement.cjs');
 const { NativeProductLocator } = require('./native-product-locator.cjs');
 const { ThumbnailCacheRuntime } = require('./thumbnail-cache-runtime.cjs');
 
@@ -113,6 +114,18 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
   });
   const folderAccess = new FolderAccessRegistry();
   const pipelineCatalogRuntime = new PipelineCatalogRuntime({ settingsStore, folderAccess });
+  const collectionClipRefinement = new CollectionClipRefinement({
+    folderAccess,
+    capturesStore: clipCapturesStore,
+    resolveFfprobe: () => nativeProducts.ffprobe(),
+    hostForEvent: frameReviewRuntime.hostForEvent,
+    chooseSourcePath: event => pickMovieFromDialog(BrowserWindow.fromWebContents(event.sender)),
+    environment: nativeEnvironment,
+  });
+  ipcMain.handle('clip-sandbox:collection-refine-inspect', (event, request) =>
+    collectionClipRefinement.inspect(event, request));
+  ipcMain.handle('clip-sandbox:collection-refine-resolve', (event, request) =>
+    collectionClipRefinement.resolve(event, request));
   ipcMain.handle('clip-sandbox:load-app-settings', () => settingsStore.load());
   ipcMain.handle('clip-sandbox:save-app-settings', (_event, settings) => settingsStore.save(settings));
   ipcMain.handle('clip-sandbox:choose-pipelines-root', async event => {
@@ -257,6 +270,7 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     ipcMain,
     runtime: clipExtractionRuntime,
     hostForEvent: frameReviewRuntime.hostForEvent,
+    folderAccess,
   });
   registerClipCapturesIpc({
     ipcMain,

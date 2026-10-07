@@ -10,9 +10,13 @@ import { PipelineSession } from './pipeline-session.js';
 
 export interface IExtractionDestinationPublication {
   readonly folderPath: string;
-  readonly collectionFilename: string;
+  readonly collectionFilename: string | null;
   readonly media: ICreatedExtractionMedia;
 }
+
+export type IExtractionDestination =
+  | Readonly<{ kind: 'collection'; folderPath: string; collectionFilename: string }>
+  | Readonly<{ kind: 'folder'; folderPath: string }>;
 
 export interface IExtractionDestinationSessionSnapshot {
   readonly destinationHandle: string;
@@ -22,8 +26,9 @@ export interface IExtractionDestinationSessionSnapshot {
 }
 
 type ExtractionDestinationSessionOptions = {
-  readonly onCollectionPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
-  readonly onCollectionPublishedError?: (error: unknown) => void;
+  readonly onPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
+  readonly onPublishError?: (error: unknown) => void;
+  readonly destination?: IExtractionDestination;
 };
 
 export class ExtractionDestinationSession {
@@ -41,9 +46,11 @@ export class ExtractionDestinationSession {
   ) {}
 
   async open({ movieName }: { movieName: string }): Promise<IExtractionDestinationSessionSnapshot> {
-    const collectionName = this.movieStem(movieName);
-    const collectionFilename = Collection.filenameFromCollectionName(collectionName);
-    const destination = await this.service.openExtractionDestination();
+    const collectionFilename = (this.options.destination?.kind === 'collection'
+      ? this.options.destination.collectionFilename : null)
+      ?? Collection.filenameFromCollectionName(this.movieStem(movieName));
+    const destination = await this.service.openExtractionDestination(
+      this.options.destination ? { folderPath: this.options.destination.folderPath } : undefined);
     this.loadPipeline(destination);
     this.destinationHandle = destination.destinationHandle;
     this.folderPath = destination.folderPath;
@@ -74,6 +81,12 @@ export class ExtractionDestinationSession {
   private async persist(mediaHandle: string): Promise<void> {
     const media = this.pendingPublications.get(mediaHandle);
     if (!media) throw new Error('There is no collection publication to persist.');
+    if (this.options.destination?.kind === 'folder') {
+      this.pendingPublications.delete(mediaHandle);
+      if (this.latestPendingMediaHandle === mediaHandle) this.latestPendingMediaHandle = null;
+      await this.publishCommitted(media, null);
+      return;
+    }
     const collection = this.collectionWith(media.filename);
     await this.service.saveCollection(this.destinationHandle, this.collectionFilename, collection.toText());
     const publication = this.pipelineSession.publishCreatedClipToCollection(
@@ -83,18 +96,18 @@ export class ExtractionDestinationSession {
     this.collection = collection;
     this.pendingPublications.delete(mediaHandle);
     if (this.latestPendingMediaHandle === mediaHandle) this.latestPendingMediaHandle = null;
-    await this.publishCollectionCommitted(media);
+    await this.publishCommitted(media, this.collectionFilename);
   }
 
-  private async publishCollectionCommitted(media: ICreatedExtractionMedia): Promise<void> {
+  private async publishCommitted(media: ICreatedExtractionMedia, collectionFilename: string | null): Promise<void> {
     try {
-      await this.options.onCollectionPublished?.(Object.freeze({
+      await this.options.onPublished?.(Object.freeze({
         folderPath: this.folderPath,
-        collectionFilename: this.collectionFilename,
+        collectionFilename,
         media,
       }));
     } catch (error) {
-      this.options.onCollectionPublishedError?.(error);
+      this.options.onPublishError?.(error);
     }
   }
 

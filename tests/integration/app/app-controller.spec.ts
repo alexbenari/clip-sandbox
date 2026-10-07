@@ -138,6 +138,8 @@ describe('app controller context menu wiring', () => {
   let originalPlay;
   let originalPause;
   let originalLoad;
+  let originalFileTextDescriptor;
+  let fileTextPatched = false;
   let originalDocumentAddEventListener;
   let originalWindowAddEventListener;
   let documentAddEventListenerSpy;
@@ -200,6 +202,12 @@ describe('app controller context menu wiring', () => {
   });
 
   afterEach(() => {
+    if (fileTextPatched) {
+      if (originalFileTextDescriptor) Object.defineProperty(File.prototype, 'text', originalFileTextDescriptor);
+      else delete File.prototype.text;
+    }
+    originalFileTextDescriptor = undefined;
+    fileTextPatched = false;
     for (const { type, listener, options } of documentListeners) {
       document.removeEventListener(type, listener, options);
     }
@@ -244,6 +252,36 @@ describe('app controller context menu wiring', () => {
         'Delete from Disk...',
       ]);
     });
+  });
+
+  test('failed disk deletion shows the file and operating system error in More Details', async () => {
+    window.clipSandboxDesktop.deleteFiles = vi.fn(async () => ({
+      ok: false,
+      code: 'partial',
+      results: [{
+        filename: 'alpha.mp4',
+        ok: false,
+        code: 'delete-failed',
+        error: { message: "EBUSY: resource busy or locked, unlink 'C:/clips/alpha.mp4'" },
+      }],
+    }));
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
+    document.getElementById('pickBtn').click();
+    await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
+
+    document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.getElementById('deleteFromDiskBtn').click();
+    await waitFor(() => expect(document.getElementById('deleteFromDiskDialog').open).toBe(true));
+    document.getElementById('confirmDeleteFromDiskBtn').click();
+
+    await waitFor(() => expect(document.querySelector('#activityIndicatorList li')?.textContent).toContain('Failed to delete'));
+    const details = document.querySelector('#activityIndicatorList li details');
+    expect(details?.querySelector('summary')?.textContent).toBe('More Details');
+    expect(details?.textContent).toContain('alpha.mp4');
+    expect(details?.textContent).toContain('EBUSY: resource busy or locked');
   });
 
   test('running Loopify from zoom mode refreshes pipeline view, selects the new clip, and records success history', async () => {
@@ -523,7 +561,7 @@ describe('app controller context menu wiring', () => {
   });
 
   test('save failure does not continue a pending collection switch', async () => {
-    window.clipSandboxDesktop.pickFolder = vi.fn(async () => ({
+    const folder = {
       canceled: false,
       folderPath: 'C:/clips',
       folderName: 'clips',
@@ -532,15 +570,28 @@ describe('app controller context menu wiring', () => {
         desktopFile({ name: 'bravo.mp4' }),
         desktopFile({ name: 'charlie.mp4' }),
       ],
+    };
+    const savedCollections = new Map();
+    originalFileTextDescriptor = Object.getOwnPropertyDescriptor(File.prototype, 'text');
+    fileTextPatched = true;
+    Object.defineProperty(File.prototype, 'text', {
+      configurable: true,
+      value() { return Promise.resolve(savedCollections.get(this.name) || ''); },
+    });
+    window.clipSandboxDesktop.pickFolder = vi.fn(async () => folder);
+    window.clipSandboxDesktop.refreshFolder = vi.fn(async () => ({
+      ...folder,
+      files: [...folder.files, ...Array.from(savedCollections, ([name, text]) => desktopFile({ name, text }))],
     }));
 
     const saveFailure = new Error('disk full');
     let subsetSaveAttempts = 0;
-    window.clipSandboxDesktop.saveTextFile = vi.fn(async ({ filename }) => {
+    window.clipSandboxDesktop.saveTextFile = vi.fn(async ({ filename, text }) => {
       if (filename === 'subset.txt') {
         subsetSaveAttempts += 1;
         if (subsetSaveAttempts > 1) throw saveFailure;
       }
+      savedCollections.set(filename, text);
       return { mode: 'saved' };
     });
 

@@ -98,6 +98,22 @@ function press(key: string, target: Element = document.activeElement!) {
 }
 
 describe('detailed Activity and Errors', () => {
+  test('each error has its own More Details control, including errors without diagnostics', () => {
+    const control = createControl();
+    control.showError('First failure', { technicalDetails: 'First cause' });
+    control.showError('Second failure');
+
+    expect(rows()).toHaveLength(2);
+    const secondDetails = rows()[0].querySelector('details');
+    const firstDetails = rows()[1].querySelector('details');
+    expect(secondDetails?.querySelector('summary')?.textContent).toBe('More Details');
+    expect(firstDetails?.querySelector('summary')?.textContent).toBe('More Details');
+    expect(secondDetails?.textContent).toContain('No additional details were provided.');
+    expect(firstDetails?.textContent).toContain('First cause');
+    firstDetails.open = true;
+    expect(secondDetails.open).toBe(false);
+  });
+
   test('retains newest 50 ordinary entries plus all unresolved errors; resolution applies the limit', () => {
     const control = createControl();
     const error = control.showError('Keep me');

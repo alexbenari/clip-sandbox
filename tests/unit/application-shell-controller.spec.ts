@@ -64,6 +64,20 @@ function panelContentFixture() {
 }
 
 describe('application shell screen ownership', () => {
+  it('keeps the current workspace selected when a leave guard rejects navigation', () => {
+    const f = fixture();
+    const canLeaveScreen = vi.fn(() => false);
+    const shell = new ApplicationShellController({ ...f,
+      screens: [f.collection, f.settings], canLeaveScreen,
+    });
+    f.selector.value = f.settings.id;
+    f.selector.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(shell.activeScreen).toBe(f.collection);
+    expect(f.selector.value).toBe(f.collection.id);
+    expect(f.collection.onDeactivate).not.toHaveBeenCalled();
+    expect(canLeaveScreen).toHaveBeenCalledWith(f.collection, f.settings);
+    shell.destroy();
+  });
   it('reclaims each panel width and notifies the active screen once after both settle', async () => {
     const f = fixture();
     const workspace = document.createElement('div');

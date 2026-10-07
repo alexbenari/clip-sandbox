@@ -23,6 +23,8 @@ const DEFAULT_ACTIVITY_INDICATOR_CSS = `
 .activity-indicator-entry button,.activity-clear-history{font:inherit;font-size:12px;padding:4px 7px}
 .activity-indicator-feedback{display:block;margin-top:7px;color:#cbd5e1;font-size:12px}
 .activity-indicator-details{margin-top:8px}
+.activity-indicator-details summary{display:inline-block;cursor:pointer;list-style:none;font:inherit;font-size:12px;padding:4px 7px;border:1px solid rgba(148,163,184,.3);border-radius:999px;background:rgba(30,41,59,.65)}
+.activity-indicator-details summary::-webkit-details-marker{display:none}
 .activity-indicator-details pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .activity-indicator-clear-feedback{min-height:1.2em;color:#cbd5e1;font-size:12px}
 @media(prefers-reduced-motion:reduce){.activity-indicator-btn[data-state="progress"] .activity-status-dot{animation:none}}
@@ -295,21 +297,29 @@ export class ActivityIndicatorControl {
     const status = this.doc.createElement('div');
     status.className = 'activity-indicator-feedback';
     node.append(status);
-    if (entry.affected) this.appendText(node, 'Affected: ', entry.affected);
-    if (entry.recovery) this.appendText(node, 'Recovery: ', entry.recovery);
+    const details = this.doc.createElement('details');
+    details.className = 'activity-indicator-details';
+    const summary = this.doc.createElement('summary');
+    summary.textContent = 'More Details';
+    summary.setAttribute('role', 'button');
+    summary.setAttribute('aria-expanded', 'false');
+    details.append(summary);
+    if (entry.affected) this.appendText(details, 'Affected: ', entry.affected);
+    if (entry.recovery) this.appendText(details, 'Recovery: ', entry.recovery);
     let copy: HTMLButtonElement | undefined;
     if (entry.technicalDetails) {
-      const details = this.doc.createElement('details');
-      details.className = 'activity-indicator-details';
-      const summary = this.doc.createElement('summary');
-      summary.textContent = 'Technical details';
       const pre = this.doc.createElement('pre');
       pre.textContent = entry.technicalDetails;
       copy = this.makeButton('Copy details', () => { void this.copyDetails(entry); });
-      details.append(summary, pre, copy);
-      details.addEventListener('toggle', () => this.updateOverflow());
-      node.append(details);
+      details.append(pre, copy);
+    } else if (!entry.affected && !entry.recovery) {
+      this.appendText(details, '', 'No additional details were provided.');
     }
+    details.addEventListener('toggle', () => {
+      summary.setAttribute('aria-expanded', String(details.open));
+      this.updateOverflow();
+    });
+    node.append(details);
     const actions = this.doc.createElement('div');
     actions.className = 'activity-indicator-entry-actions';
     let retry: HTMLButtonElement | undefined;
