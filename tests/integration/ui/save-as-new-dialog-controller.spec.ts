@@ -34,9 +34,9 @@ describe('save-as-new dialog controller', () => {
         if (name.includes(':')) return 'Collection names cannot contain: < > : " / \\ | ? *';
         return '';
       },
-      onConfirm,
-      onCancel,
     });
+    controller.on('confirmed', onConfirm);
+    controller.on('cancelled', onCancel);
 
     return {
       dialog: document.getElementById('dialog'),

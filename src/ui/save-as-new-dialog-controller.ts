@@ -1,4 +1,11 @@
-export class SaveAsNewDialogController {
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+
+export interface ISaveAsNewDialogEvents {
+  confirmed: string;
+  cancelled: void;
+}
+
+export class SaveAsNewDialogController implements IEventSource<ISaveAsNewDialogEvents>, IEventSubscriberCount<ISaveAsNewDialogEvents> {
   private readonly dialog: HTMLElement | null;
   private readonly titleEl: HTMLElement | null;
   private readonly textEl: HTMLElement | null;
@@ -7,8 +14,7 @@ export class SaveAsNewDialogController {
   private readonly confirmBtn: HTMLButtonElement | null;
   private readonly cancelBtn: HTMLElement | null;
   private readonly validateName: (name: string) => string;
-  private readonly onConfirm: (name: string) => void;
-  private readonly onCancel: () => void;
+  private readonly events = new EventSource<ISaveAsNewDialogEvents>();
   private externalError: string;
 
   constructor({
@@ -20,8 +26,6 @@ export class SaveAsNewDialogController {
     confirmBtn,
     cancelBtn,
     validateName = () => '',
-    onConfirm = () => {},
-    onCancel = () => {},
   }: {
     dialog?: HTMLElement | null;
     titleEl?: HTMLElement | null;
@@ -31,8 +35,6 @@ export class SaveAsNewDialogController {
     confirmBtn?: HTMLButtonElement | null;
     cancelBtn?: HTMLElement | null;
     validateName?: (name: string) => string;
-    onConfirm?: (name: string) => void;
-    onCancel?: () => void;
   } = {}) {
     this.dialog = dialog || null;
     this.titleEl = titleEl || null;
@@ -42,8 +44,6 @@ export class SaveAsNewDialogController {
     this.confirmBtn = confirmBtn || null;
     this.cancelBtn = cancelBtn || null;
     this.validateName = validateName;
-    this.onConfirm = onConfirm;
-    this.onCancel = onCancel;
     this.externalError = '';
 
     if (!dialog || !nameInput || !confirmBtn) return;
@@ -55,16 +55,24 @@ export class SaveAsNewDialogController {
     nameInput.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' || confirmBtn.disabled) return;
       event.preventDefault();
-      this.onConfirm(nameInput.value || '');
+      this.events.emit('confirmed', nameInput.value || '');
     });
     confirmBtn.addEventListener('click', () => {
       if (confirmBtn.disabled) return;
-      this.onConfirm(nameInput.value || '');
+      this.events.emit('confirmed', nameInput.value || '');
     });
     cancelBtn?.addEventListener('click', () => {
       this.close();
-      this.onCancel();
+      this.events.emit('cancelled');
     });
+  }
+
+  on<TName extends keyof ISaveAsNewDialogEvents>(name: TName, handler: EventHandler<ISaveAsNewDialogEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof ISaveAsNewDialogEvents): number {
+    return this.events.subscriberCount(name);
   }
 
   isOpen(): boolean {
@@ -132,7 +140,7 @@ export class SaveAsNewDialogController {
   handleGlobalKeyDown(event: KeyboardEvent): boolean {
     if (!this.isOpen() || event?.key !== 'Escape') return false;
     this.close();
-    this.onCancel();
+    this.events.emit('cancelled');
     return true;
   }
 }

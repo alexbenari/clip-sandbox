@@ -1359,11 +1359,12 @@ this.initialized = true;
     confirmBtn: confirmSaveAsNewBtn,
     cancelBtn: cancelSaveAsNewBtn,
     validateName: name => newCollectionNameCheck.problemText(name),
-    onConfirm: (name) => {
-      void workflows.confirmSaveAsNew(name);
-    },
-    onCancel: workflows.cancelSaveAsNewFlow,
   });
+  saveAsNewDialogController.on('confirmed', (name) => {
+    void workflows.confirmSaveAsNew(name);
+  });
+  saveAsNewDialogController.on('cancelled', workflows.cancelSaveAsNewFlow);
+  eventWiring.require('saveAsNewDialog', saveAsNewDialogController, ['confirmed', 'cancelled']);
   const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
     fullScreen: fullscreenAdapter,
     zoom: zoomOverlay,
