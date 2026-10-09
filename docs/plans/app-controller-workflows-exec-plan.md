@@ -10,7 +10,7 @@ Signed-off spec: `docs/specs/app-controller-workflows-spec.md` (signed off 2026-
 
 - [x] (2026-10-10) Plan signed off by the user.
 - [x] (2026-10-09) Baseline on `master` at `61d4d99`: `npm run typecheck` exit 0; `npx vitest run tests/unit tests/integration` exit 0, 88 files and 467 tests passed.
-- [ ] Milestone 1: desktop API fakes and characterization tests
+- [x] (2026-10-10) Milestone 1: desktop API fakes and characterization tests. 9 new characterization tests pass on unmodified application code (G1). A deliberate-bug check confirmed they fail when the refinement stop rule or the refresh deferral is removed. G0: typecheck exit 0; 89 files, 476 tests passed. Evidence: `test-evidence/app-controller-workflows/G0-m1-*.log`, `G1-characterization.log`, `G1-mutation-check.log`.
 - [ ] Milestone 2: event source, wiring check and optional adapter factories
 - [ ] Milestone 3: standalone query components
 - [ ] Milestone 4: controls report application events
@@ -61,6 +61,8 @@ Unavailable skills or fallbacks:
   Evidence: `src/app/app-controller.ts` lines 140-142, 187-189 and 1107-1122; `src/adapters/browser/fullscreen-adapter.ts`.
 - Discovery: `coding-quality.md` now requires that an interaction whose outcome a workflow needs returns it to the caller, and settles on every exit path, including cancel, Escape and closing by other means. D9 implements this for Save as Collection. One extra exit path exists: the dialog is closed directly at startup (`clearLoadedState`, line 554).
   Evidence: `coding-quality.md`, application controller layer section; `app-controller.ts` lines 220, 554 and 893.
+- Discovery (Milestone 1): the GIF screens cannot drive a real extraction in jsdom, because capture needs rendered frames. The extraction-refresh and refinement-startup tests therefore replace `GifExtractionSession` with a module-level fake (`vi.mock`) and call its `onPublished` option, or observe the calls `AppController` makes on it. The desktop API fakes are still needed so the optional adapters construct. A module-level fake applies to its whole test file, so the characterization tests live in their own file, `tests/integration/app/app-controller-characterization.spec.ts`, instead of `app-controller.spec.ts`. Both files share one fixture and setup, now in `tests/integration/app/app-controller-harness.ts`; the existing tests are otherwise unchanged. The fake keeps a static instance list that survives module resets, so tests take the newest instance.
+  Evidence: `tests/integration/app/app-controller-characterization.spec.ts`; `test-evidence/app-controller-workflows/G1-characterization.log`.
 - Discovery: Electron end-to-end tests run against the built output, so they must be started through `npm run e2e -- <spec files>`, which rebuilds first.
   Evidence: `docs/agent-docs/agent-architecture-map.md`, Validation Map.
 - Discovery: the existing adapter unit tests already contain fake desktop APIs in the real wire format, which Milestone 1 can reuse.
