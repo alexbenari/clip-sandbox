@@ -42,9 +42,9 @@ function setup() {
     cancelBtn,
     newChoiceValue: '__new_collection__',
     validateNewName: (name) => (!name.trim() ? 'Enter a collection name.' : ''),
-    onConfirm,
-    onCancel,
   });
+  controller.on('confirmed', onConfirm);
+  controller.on('cancelled', onCancel);
 
   return {
     dialog,

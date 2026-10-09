@@ -1,4 +1,5 @@
 import type { Pipeline } from '../domain/pipeline.js';
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
 
 export type AddToCollectionChoice = {
   label: string;
@@ -10,7 +11,12 @@ export type AddToCollectionDestination =
   | { kind: 'new'; name: string }
   | { kind: 'existing'; collectionFilename: string | null };
 
-export class AddToCollectionDialogController {
+export interface IAddToCollectionDialogEvents {
+  confirmed: AddToCollectionDestination;
+  cancelled: void;
+}
+
+export class AddToCollectionDialogController implements IEventSource<IAddToCollectionDialogEvents>, IEventSubscriberCount<IAddToCollectionDialogEvents> {
   private readonly dialog: HTMLDialogElement | null;
   private readonly destinationSelect: HTMLSelectElement | null;
   private readonly newCollectionNameLabel: HTMLElement | null;
@@ -20,8 +26,7 @@ export class AddToCollectionDialogController {
   private readonly cancelBtn: HTMLButtonElement | null;
   private readonly newChoiceValue: string;
   private readonly validateNewName: (name: string) => string;
-  private readonly onConfirm: (destination: AddToCollectionDestination) => void;
-  private readonly onCancel: () => void;
+  private readonly events = new EventSource<IAddToCollectionDialogEvents>();
   private readonly doc: Document;
   private hasSelection: boolean;
   private externalError: string;
@@ -47,8 +52,6 @@ export class AddToCollectionDialogController {
     cancelBtn,
     newChoiceValue,
     validateNewName = () => '',
-    onConfirm = () => {},
-    onCancel = () => {},
   }: {
     dialog?: HTMLDialogElement | null;
     destinationSelect?: HTMLSelectElement | null;
@@ -59,8 +62,6 @@ export class AddToCollectionDialogController {
     cancelBtn?: HTMLButtonElement | null;
     newChoiceValue: string;
     validateNewName?: (name: string) => string;
-    onConfirm?: (destination: AddToCollectionDestination) => void;
-    onCancel?: () => void;
   }) {
     this.dialog = dialog || null;
     this.destinationSelect = destinationSelect || null;
@@ -71,8 +72,6 @@ export class AddToCollectionDialogController {
     this.cancelBtn = cancelBtn || null;
     this.newChoiceValue = newChoiceValue;
     this.validateNewName = validateNewName;
-    this.onConfirm = onConfirm;
-    this.onCancel = onCancel;
     this.doc = dialog?.ownerDocument || document;
     this.hasSelection = false;
     this.externalError = '';
@@ -92,18 +91,26 @@ export class AddToCollectionDialogController {
     newCollectionNameInput.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' || confirmBtn.disabled) return;
       event.preventDefault();
-      this.onConfirm(this.currentDestination());
+      this.events.emit('confirmed', this.currentDestination());
     });
-    confirmBtn.addEventListener('click', () => this.onConfirm(this.currentDestination()));
+    confirmBtn.addEventListener('click', () => this.events.emit('confirmed', this.currentDestination()));
     cancelBtn?.addEventListener('click', () => {
       this.close();
-      this.onCancel();
+      this.events.emit('cancelled');
     });
     dialog.addEventListener('cancel', (event) => {
       event.preventDefault();
       this.close();
-      this.onCancel();
+      this.events.emit('cancelled');
     });
+  }
+
+  on<TName extends keyof IAddToCollectionDialogEvents>(name: TName, handler: EventHandler<IAddToCollectionDialogEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof IAddToCollectionDialogEvents): number {
+    return this.events.subscriberCount(name);
   }
 
   isOpen(): boolean {

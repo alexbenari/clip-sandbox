@@ -1338,10 +1338,11 @@ this.initialized = true;
     cancelBtn: cancelAddToCollectionBtn,
     newChoiceValue: NEW_COLLECTION_CHOICE_VALUE,
     validateNewName: name => newCollectionNameCheck.problemText(name),
-    onConfirm: (destination) => {
-      void workflows.confirmAddToCollection(destination);
-    },
   });
+  addToCollectionDialogController.on('confirmed', (destination) => {
+    void workflows.confirmAddToCollection(destination);
+  });
+  eventWiring.require('addToCollectionDialog', addToCollectionDialogController, ['confirmed']);
   const collectionConflictController = new CollectionConflictController({
     appText,
     root: collectionConflict,
