@@ -1861,17 +1861,19 @@ this.initialized = true;
     initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
     screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
     canLeaveScreen: current => refineScreenLeavePolicy.canLeave(current),
-    onScreenChange: screen => keyboardMap?.render(screen),
     workspace: AppControllerSupport.optionalElement('workspaceRow') ?? undefined,
     center: AppControllerSupport.optionalElement('centralWorkspace') ?? undefined,
     panels,
-    onBoundsChange: (screen, width, duration) => {
-      if (screen === collectionScreen) gridController.beginWorkspaceResize(width, duration);
-    },
-    onBoundsSettled: screen => {
-      if (screen === collectionScreen) gridController.endWorkspaceResize();
-    },
   });
+  shell.on('screenChanged', screen => keyboardMap?.render(screen));
+  shell.on('boundsChanging', ({ screen, width, durationMs }) => {
+    if (screen === collectionScreen) gridController.beginWorkspaceResize(width, durationMs);
+  });
+  shell.on('boundsSettled', screen => {
+    if (screen === collectionScreen) gridController.endWorkspaceResize();
+  });
+  eventWiring.require('applicationShell', shell, ['screenChanged', 'boundsChanging', 'boundsSettled']);
+  shell.start();
   if (utilityHost && keyboardPanel && keyboardMap) {
     utilities = new GlobalUtilityCoordinator(utilityHost, [
       { id: 'keyboard', label: 'Keyboard shortcuts', trigger: AppControllerSupport.requiredElement<HTMLButtonElement>('keyboardMapBtn'), panel: keyboardPanel, focusInitial: () => keyboardMap.focusInitial() },

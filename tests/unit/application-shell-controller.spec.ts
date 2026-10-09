@@ -70,6 +70,7 @@ describe('application shell screen ownership', () => {
     const shell = new ApplicationShellController({ ...f,
       screens: [f.collection, f.settings], canLeaveScreen,
     });
+    shell.start();
     f.selector.value = f.settings.id;
     f.selector.dispatchEvent(new Event('change', { bubbles: true }));
     expect(shell.activeScreen).toBe(f.collection);
@@ -93,7 +94,10 @@ describe('application shell screen ownership', () => {
     });
     document.body.append(workspace); workspace.append(center); center.append(f.commandHost, f.screenHost);
     const changed = vi.fn(); const settled = vi.fn();
-    const shell = new ApplicationShellController({ ...f, workspace, center, panels, screens: [f.collection, f.settings], onBoundsChange: changed, onBoundsSettled: settled });
+    const shell = new ApplicationShellController({ ...f, workspace, center, panels, screens: [f.collection, f.settings] });
+    shell.on('boundsChanging', ({ screen, width, durationMs }) => changed(screen, width, durationMs));
+    shell.on('boundsSettled', settled);
+    shell.start();
     settled.mockClear();
     panels[0].foldButton.click();
     expect(changed).toHaveBeenLastCalledWith(f.collection, 924, 240);
@@ -111,6 +115,7 @@ describe('application shell screen ownership', () => {
   it('mounts one screen and hides a redundant selector', () => {
     const f = fixture();
     const shell = new ApplicationShellController({ ...f, screens: [f.collection] });
+    shell.start();
     expect(shell.activeScreen).toBe(f.collection);
     expect(f.selector.hidden).toBe(true);
     expect(f.commandHost.firstElementChild).toBe(f.collection.commands);
@@ -122,6 +127,7 @@ describe('application shell screen ownership', () => {
   it('activates the explicit initial screen instead of relying on registration order', () => {
     const f = fixture();
     const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings, f.extraction], initialScreenId: f.extraction.id });
+    shell.start();
 
     expect(shell.activeScreen).toBe(f.extraction);
     expect(f.selector.value).toBe(f.extraction.id);
@@ -131,6 +137,7 @@ describe('application shell screen ownership', () => {
   it('switches to a commandless screen without stale commands or inactive focus', () => {
     const f = fixture();
     const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings, f.extraction] });
+    shell.start();
     shell.activate(f.settings.id);
     expect(f.commandHost.hidden).toBe(true);
     expect(f.commandHost.childElementCount).toBe(0);
@@ -156,7 +163,9 @@ describe('application shell screen ownership', () => {
     const extraction = { ...f.extraction, initiallyFoldedPanelIds: ['pipelines'], panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
     const refine = { ...f.refine, initiallyFoldedPanelIds: ['pipelines'], panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
     const settled = vi.fn();
-    const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips, pipelines], screens: [collection, settings, extraction, refine], initialScreenId: extraction.id, onBoundsSettled: settled });
+    const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips, pipelines], screens: [collection, settings, extraction, refine], initialScreenId: extraction.id });
+    shell.on('boundsSettled', settled);
+    shell.start();
     const folded = () => [clips.root, pipelines.root].map(root => root.classList.contains('folded'));
 
     expect(folded()).toEqual([false, true]);
@@ -202,8 +211,9 @@ describe('application shell screen ownership', () => {
       ...workspace,
       panels: [clips],
       screens: [f.collection, f.settings, extraction, refine],
-      onScreenChange: screen => order.push(`${screen.id}:changed`),
     });
+    shell.on('screenChanged', screen => order.push(`${screen.id}:changed`));
+    shell.start();
     shell.activate(extraction.id);
     order.length = 0;
     clips.foldButton.click();
@@ -235,6 +245,7 @@ describe('application shell screen ownership', () => {
     workspace.workspace.append(pipelines.root);
     const settings = { ...f.settings, initiallyFoldedPanelIds: ['clips'] } satisfies IAppScreen;
     const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips, pipelines], screens: [settings, f.collection] });
+    shell.start();
 
     expect(clips.root.classList.contains('folded')).toBe(true);
     expect(pipelines.root.classList.contains('folded')).toBe(false);
@@ -252,6 +263,7 @@ describe('application shell screen ownership', () => {
   it('settles rapid requests with matching commands, selector and focus', () => {
     const f = fixture();
     const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings, f.extraction] });
+    shell.start();
     shell.activate('Settings');
     shell.activate('Extraction');
     shell.activate('Collection');
@@ -266,6 +278,7 @@ describe('application shell screen ownership', () => {
   it('honors the selector and rejects an unknown screen without changing state', () => {
     const f = fixture();
     const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings] });
+    shell.start();
     f.selector.value = 'Settings';
     f.selector.dispatchEvent(new Event('change'));
     expect(shell.activeScreen).toBe(f.settings);

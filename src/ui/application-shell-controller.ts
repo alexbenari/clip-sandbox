@@ -1,5 +1,12 @@
 import type { IAppScreen } from './app-screen.js';
 import { FoldablePanelController } from './foldable-panel-controller.js';
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+
+export interface IApplicationShellEvents {
+  screenChanged: IAppScreen;
+  boundsChanging: Readonly<{ screen: IAppScreen; width: number; durationMs: number }>;
+  boundsSettled: IAppScreen;
+}
 
 type ShellPanel = {
   id: string;
@@ -21,14 +28,12 @@ type ShellElements = {
   workspace?: HTMLElement;
   center?: HTMLElement;
   panels?: readonly ShellPanel[];
-  onBoundsChange?: (screen: IAppScreen, width: number, durationMs: number) => void;
-  onBoundsSettled?: (screen: IAppScreen) => void;
-  onScreenChange?: (screen: IAppScreen) => void;
   canLeaveScreen?: (current: IAppScreen, incoming: IAppScreen) => boolean;
 };
 
-export class ApplicationShellController {
+export class ApplicationShellController implements IEventSource<IApplicationShellEvents>, IEventSubscriberCount<IApplicationShellEvents> {
   private readonly screens = new Map<string, IAppScreen>();
+  private readonly events = new EventSource<IApplicationShellEvents>();
   private current: IAppScreen;
   private readonly panels = new Map<string, {
     readonly shell: ShellPanel;
@@ -80,7 +85,19 @@ export class ApplicationShellController {
     }));
     for (const screen of elements.screens) elements.screenHost.append(screen.root);
     elements.selector.addEventListener('change', this.onSelectionChange);
+  }
+
+  // Activation is separate from construction so subscribers also receive the initial screen's events.
+  start(): void {
     this.activate(this.current.id);
+  }
+
+  on<TName extends keyof IApplicationShellEvents>(name: TName, handler: EventHandler<IApplicationShellEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof IApplicationShellEvents): number {
+    return this.events.subscriberCount(name);
   }
 
   get activeScreen(): IAppScreen { return this.current; }
@@ -100,7 +117,7 @@ export class ApplicationShellController {
     center.style.flex = 'none';
     center.style.width = `${width}px`;
     const targetCommandHeight = commandHost.getBoundingClientRect().height;
-    this.elements.onBoundsChange?.(this.current, width, duration);
+    this.events.emit('boundsChanging', { screen: this.current, width, durationMs: duration });
     center.style.flex = '';
     center.style.width = '';
     commandHost.style.height = `${currentCommandHeight}px`;
@@ -115,7 +132,7 @@ export class ApplicationShellController {
     if (this.elements.workspace) this.elements.workspace.dataset.moving = 'false';
     this.elements.commandHost.style.transition = '';
     this.elements.commandHost.style.height = '';
-    this.elements.onBoundsSettled?.(this.current);
+    this.events.emit('boundsSettled', this.current);
   }
 
   activate(id: string): void {
@@ -160,11 +177,11 @@ export class ApplicationShellController {
     this.activated = true;
     incoming.onActivate?.();
     incoming.focusInitial();
-    this.elements.onScreenChange?.(incoming);
+    this.events.emit('screenChanged', incoming);
     if (this.motionPending) {
       this.prepareWorkspaceResize(0);
       this.settleWorkspaceResize();
-    } else this.elements.onBoundsSettled?.(incoming);
+    } else this.events.emit('boundsSettled', incoming);
   }
 
   destroy(): void {
