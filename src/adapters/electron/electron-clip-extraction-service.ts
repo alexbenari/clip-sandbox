@@ -31,6 +31,10 @@ export class ElectronClipExtractionService implements IClipExtractionService {
   private operationSequence = 0;
   private currentOperationId: string | null = null;
 
+  static tryCreate(win: ClipExtractionWindow = window): ElectronClipExtractionService | null {
+    return win.clipSandboxDesktop?.clipExtraction ? new ElectronClipExtractionService(win) : null;
+  }
+
   constructor(win: ClipExtractionWindow = window) {
     const api = win.clipSandboxDesktop?.clipExtraction;
     if (!api || typeof api.subscribeProgress !== 'function'

@@ -38,6 +38,10 @@ type ElectronFrameReviewWindow = Window & {
 export class ElectronFrameReviewService implements IFrameReviewService {
   private readonly api: IElectronFrameReviewApi;
 
+  static tryCreate(win: ElectronFrameReviewWindow = window): ElectronFrameReviewService | null {
+    return win.clipSandboxDesktop?.frameReview ? new ElectronFrameReviewService(win) : null;
+  }
+
   constructor(win: ElectronFrameReviewWindow = window) {
     const api = win.clipSandboxDesktop?.frameReview;
     if (!api || typeof api.chooseSource !== 'function' || typeof api.open !== 'function' || typeof api.command !== 'function'

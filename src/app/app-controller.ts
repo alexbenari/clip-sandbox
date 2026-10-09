@@ -126,6 +126,15 @@ class AppControllerSupport {
   static optionalElement<T extends HTMLElement = HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
   }
+
+  static gifSessionServices(win: Window) {
+    const frameReview = ElectronFrameReviewService.tryCreate(win);
+    const thumbnails = ElectronThumbnailCacheService.tryCreate(win);
+    const extractionService = ElectronClipExtractionService.tryCreate(win);
+    const captureStore = ElectronClipCapturesStoreService.tryCreate(win);
+    if (!frameReview || !thumbnails || !extractionService || !captureStore) return null;
+    return { frameReview, thumbnails, extractionService, captureStore };
+  }
 }
 
 export class AppController {
@@ -1213,11 +1222,7 @@ this.initialized = true;
     },
   });
   const fileSystem = new ElectronFileSystemService({ win: window });
-  let collectionRefinementService: ElectronCollectionClipRefinementService | null = null;
-  try { collectionRefinementService = new ElectronCollectionClipRefinementService(window); }
-  catch (error) {
-    if (!(error instanceof Error) || error.message !== 'Electron collection refinement API is unavailable.') throw error;
-  }
+  const collectionRefinementService = ElectronCollectionClipRefinementService.tryCreate(window);
   const clipEditor = new ClipEditor({
     runtimeEditingService: fileSystem,
     videoEditCatalog,
@@ -1670,13 +1675,18 @@ this.initialized = true;
   let shell: ApplicationShellController;
   let refineSelectionRevision = 0;
   let collectionRefineRevision = 0;
-  try {
+  // Non-Electron DOM tests and unsupported hosts keep the shell available without native movie opening.
+  const gifServices = AppControllerSupport.gifSessionServices(window);
+  const collectionRefinementGifServices = gifServices && collectionRefinementService
+    ? AppControllerSupport.gifSessionServices(window)
+    : null;
+  if (gifServices) {
     gifExtractionSession = new GifExtractionSession(
-      new ElectronFrameReviewService(window),
-      new ElectronThumbnailCacheService({ window }),
+      gifServices.frameReview,
+      gifServices.thumbnails,
       {
-        extractionService: new ElectronClipExtractionService(window),
-        captureStore: new ElectronClipCapturesStoreService(window),
+        extractionService: gifServices.extractionService,
+        captureStore: gifServices.captureStore,
         onRestoredCaptures: (review, endpoint) => frameReviewPlayer.showFrameAfterCapture(review, endpoint),
         onPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
         onProgress: workflows.showProgressStatus,
@@ -1689,12 +1699,12 @@ this.initialized = true;
         },
       },
     );
-    if (collectionRefinementService) {
+    if (collectionRefinementGifServices) {
       collectionRefinementSession = new GifExtractionSession(
-        new ElectronFrameReviewService(window),
-        new ElectronThumbnailCacheService({ window }),
+        collectionRefinementGifServices.frameReview,
+        collectionRefinementGifServices.thumbnails,
         {
-          extractionService: new ElectronClipExtractionService(window),
+          extractionService: collectionRefinementGifServices.extractionService,
           onPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
           onProgress: workflows.showProgressStatus,
           onSuccess: workflows.showStatus,
@@ -1732,14 +1742,6 @@ this.initialized = true;
         })(); },
       });
     }
-  } catch (error) {
-    const unavailable = error instanceof Error && (
-      error.message === 'Electron frame-review API is unavailable.'
-      || error.message === 'Electron thumbnail-cache API is unavailable.'
-      || error.message === 'Electron clip-extraction API is unavailable.'
-    );
-    if (!unavailable) throw error;
-    // Non-Electron DOM tests and unsupported hosts keep the shell available without native movie opening.
   }
   const gifExtractionScreen = new GifExtractionScreen({
     player: frameReviewPlayer,

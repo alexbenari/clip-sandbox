@@ -1,12 +1,29 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { DesktopAppTestEnvironment, desktopFile, openActivityPanel, waitFor } from './app-controller-harness.js';
+import { installGifDesktopApiFakes } from './desktop-api-fakes.js';
 
 describe('app controller context menu wiring', () => {
   const environment = new DesktopAppTestEnvironment();
 
   beforeEach(() => environment.setUp());
   afterEach(() => environment.tearDown());
+
+  test('starts without the saved-captures desktop API and reports movie opening as unavailable', async () => {
+    installGifDesktopApiFakes(window.clipSandboxDesktop);
+    delete window.clipSandboxDesktop.clipCaptures;
+    const { AppController } = await import('../../../src/app/app-controller.js');
+
+    new AppController().init();
+    document.querySelector('[data-command="open-movie"]').click();
+
+    expect(document.querySelector('.gif-workflow-command-status').textContent).toBe('Movie opening is currently unavailable.');
+    expect(window.clipSandboxDesktop.frameReview.chooseSource).not.toHaveBeenCalled();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
+    document.getElementById('pickBtn').click();
+    await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
+  });
 
   test('right-clicking a selected clip opens the app context menu', async () => {
     const { AppController } = await import('../../../src/app/app-controller.js');

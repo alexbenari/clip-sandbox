@@ -13,6 +13,10 @@ type ClipCapturesWindow = Window & { clipSandboxDesktop?: { clipCaptures?: IClip
 export class ElectronClipCapturesStoreService implements IClipCapturesStoreService {
   private readonly api: IClipCapturesApi;
 
+  static tryCreate(win: ClipCapturesWindow = window): ElectronClipCapturesStoreService | null {
+    return win.clipSandboxDesktop?.clipCaptures ? new ElectronClipCapturesStoreService(win) : null;
+  }
+
   constructor(win: ClipCapturesWindow = window) {
     const api = win.clipSandboxDesktop?.clipCaptures;
     if (!api || typeof api.attach !== 'function' || typeof api.save !== 'function') {

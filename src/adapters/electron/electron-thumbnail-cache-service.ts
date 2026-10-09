@@ -31,6 +31,10 @@ export class ElectronThumbnailCacheService implements IThumbnailCacheService {
   private readonly encoder: IThumbnailPngEncoder;
   private readonly urls = new Map<ThumbnailId, string>();
 
+  static tryCreate(win: ElectronThumbnailCacheWindow = window): ElectronThumbnailCacheService | null {
+    return win.clipSandboxDesktop?.thumbnailCache ? new ElectronThumbnailCacheService({ window: win }) : null;
+  }
+
   constructor(options: ElectronThumbnailCacheServiceOptions = {}) {
     const win: ElectronThumbnailCacheWindow = options.window ?? window;
     const api = win.clipSandboxDesktop?.thumbnailCache;

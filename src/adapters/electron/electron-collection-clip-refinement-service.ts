@@ -10,10 +10,16 @@ type CollectionRefineApi = {
   resolve(request: ICollectionClipRefinementRequest): Promise<unknown>;
 };
 
+type CollectionRefineWindow = Window & { clipSandboxDesktop?: { collectionRefine?: CollectionRefineApi } };
+
 export class ElectronCollectionClipRefinementService implements ICollectionClipRefinementService {
   private readonly api: CollectionRefineApi;
 
-  constructor(win: Window & { clipSandboxDesktop?: { collectionRefine?: CollectionRefineApi } } = window) {
+  static tryCreate(win: CollectionRefineWindow = window): ElectronCollectionClipRefinementService | null {
+    return win.clipSandboxDesktop?.collectionRefine ? new ElectronCollectionClipRefinementService(win) : null;
+  }
+
+  constructor(win: CollectionRefineWindow = window) {
     const api = win.clipSandboxDesktop?.collectionRefine;
     if (!api || typeof api.inspect !== 'function' || typeof api.resolve !== 'function') {
       throw new Error('Electron collection refinement API is unavailable.');
