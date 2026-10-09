@@ -69,6 +69,12 @@ test('refines an extracted collection clip from its original movie and adds a ne
     await pipelineRefine.click();
     expect(await page.locator('#appScreenSelector').inputValue()).toBe('collection-refine');
     await expect(page.locator('#collection-refineScreen [data-refine-range-title]')).toContainText('Range 1', { timeout: 90_000 });
+    await page.keyboard.press('f');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('frame-review-player'))).toBe(true);
+    await page.keyboard.press('e');
+    await expect(page.locator('#collection-refineScreen [data-refine-range-title]')).toContainText('Range 1');
+    await page.keyboard.press('f');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await page.keyboard.press('x');
     await page.locator('#collection-refineScreen [data-command="extract-current"]').click();
     await expect.poll(async () => existsSync(path.join(collectionFolder, 'source-002.mp4'))).toBe(true);
@@ -104,7 +110,13 @@ test('refines an extracted collection clip from its original movie and adds a ne
     await expect(page.locator('#collection-refineScreen [data-command="lock-refinement"]')).toBeEnabled();
     await page.keyboard.press('x');
     await expect(page.locator('#collection-refineScreen [data-command="extract-current"]')).toBeEnabled();
-    await page.locator('#collection-refineScreen [data-command="extract-current"]').click();
+    await page.keyboard.press('f');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('frame-review-player'))).toBe(true);
+    await page.keyboard.press('e');
+    expect(existsSync(path.join(collectionFolder, 'source-003.mp4'))).toBe(false);
+    await page.keyboard.press('f');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    await page.keyboard.press('e');
     await expect.poll(async () => fs.readFile(path.join(collectionFolder, 'source.txt'), 'utf8'))
       .toBe('source-001.mp4\nsource-003.mp4\n');
     expect(existsSync(path.join(collectionFolder, 'source-003.mp4'))).toBe(true);

@@ -4,6 +4,8 @@ import { FrameReviewPlayerControl } from './frame-review-player-control.js';
 import { GifWorkflowKeyboardController } from './gif-workflow-keyboard-controller.js';
 
 export const GIF_EXTRACTION_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
+  { description: 'Enter or exit movie full screen', sequences: [['F']] },
+  { description: 'Exit movie full screen', sequences: [['Escape']] },
   { description: 'Play or pause', sequences: [['Space']] },
   { description: 'Step backward one frame; hold to accelerate', sequences: [['Left']] },
   { description: 'Step forward one frame; hold to accelerate', sequences: [['Right']] },

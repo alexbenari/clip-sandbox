@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { GifWorkflowKeyboardController } from '../../src/ui/gif-workflow-keyboard-controller.js';
 
 function player() {
-  return { togglePlayback: vi.fn(), pressStep: vi.fn(), releaseStep: vi.fn(), jumpBySeconds: vi.fn() };
+  return {
+    togglePlayback: vi.fn(), pressStep: vi.fn(), releaseStep: vi.fn(), jumpBySeconds: vi.fn(),
+    toggleMovieFullScreen: vi.fn(), exitMovieFullScreen: vi.fn(async () => undefined),
+    isMovieFullScreen: vi.fn(() => false),
+  };
 }
 
 function capture(withExtract = false) {
@@ -22,6 +26,33 @@ function event(key: string, target: EventTarget = document.body, options: Partia
 }
 
 describe('GifWorkflowKeyboardController', () => {
+  it('routes F from buttons and the Jump-by select, keeps text editing, and blocks E only in movie full screen', () => {
+    const transport = player();
+    const commands = capture(true);
+    const controller = new GifWorkflowKeyboardController();
+    controller.activate({ player: transport, capture: commands });
+    const button = document.createElement('button');
+    const select = document.createElement('select');
+    const text = document.createElement('input');
+    const textarea = document.createElement('textarea');
+    const editable = document.createElement('div');
+    editable.setAttribute('contenteditable', 'true');
+
+    controller.handleKeyDown(event('f', button));
+    controller.handleKeyDown(event('f', select));
+    controller.handleKeyDown(event('f', text));
+    controller.handleKeyDown(event('f', textarea));
+    controller.handleKeyDown(event('f', editable));
+    expect(transport.toggleMovieFullScreen).toHaveBeenCalledTimes(2);
+    controller.handleKeyDown(event('e'));
+    expect(commands.extractCurrent).toHaveBeenCalledOnce();
+    transport.isMovieFullScreen.mockReturnValue(true);
+    controller.handleKeyDown(event('e'));
+    expect(commands.extractCurrent).toHaveBeenCalledOnce();
+    controller.handleKeyDown(event('Escape'));
+    expect(transport.exitMovieFullScreen).toHaveBeenCalledOnce();
+  });
+
   it('routes transport and capture commands only while an active target is installed', () => {
     const transport = player();
     const commands = capture(true);

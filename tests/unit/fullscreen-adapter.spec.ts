@@ -28,4 +28,18 @@ describe('fullscreen adapter', () => {
     await adapter.exitFullScreen();
     expect(exitFullscreen).toHaveBeenCalledTimes(1);
   });
+
+  it('targets a supplied element without treating another element as the same mode', async () => {
+    const requestFullscreen = vi.fn(async () => {});
+    const player = { requestFullscreen };
+    const collection = {};
+    const doc = { fullscreenElement: player, documentElement: collection };
+    const adapter = new FullscreenAdapter({ doc });
+
+    await adapter.enterElementFullScreen(player);
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(adapter.isElementFullScreen(player)).toBe(true);
+    expect(adapter.isElementFullScreen(collection)).toBe(false);
+    expect(adapter.isFullScreenActive()).toBe(true);
+  });
 });

@@ -471,6 +471,32 @@ describe('app controller context menu wiring', () => {
     });
   });
 
+  test('an error during any full screen element remains in Activity without opening its panel or moving focus', async () => {
+    document.getElementById('globalAppBar').insertAdjacentHTML('beforeend', '<button id="keyboardMapBtn"></button>');
+    document.body.insertAdjacentHTML('beforeend', '<div id="globalUtilityHost" hidden><section id="keyboardMapPanel" hidden></section></div>');
+    window.clipSandboxDesktop.pickFolder = vi.fn(async () => { throw new Error('Folder unavailable'); });
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
+    const playerRoot = document.createElement('section');
+    playerRoot.tabIndex = -1;
+    document.body.append(playerRoot);
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => playerRoot });
+    try {
+      playerRoot.focus();
+      document.getElementById('pickBtn').click();
+      await waitFor(() => expect(document.getElementById('activityIndicatorBtn').dataset.state).toBe('error'));
+      expect(document.getElementById('activityIndicatorPanel').hidden).toBe(true);
+      expect(document.activeElement).toBe(playerRoot);
+      expect(document.getElementById('activityIndicatorList').textContent).toContain('Folder unavailable');
+    } finally {
+      delete document.fullscreenElement;
+    }
+    document.getElementById('activityIndicatorBtn').click();
+    expect(document.getElementById('activityIndicatorPanel').hidden).toBe(false);
+  });
+
   test('reports created output when application update fails and allows another edit', async () => {
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     const load = vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});

@@ -21,9 +21,16 @@ export interface IFrameReviewDisplayedCapture {
   readonly thumbnail: FrameReviewDisplayFrame;
 }
 
+export interface IPlayerFullScreen {
+  enterElementFullScreen(element: HTMLElement): Promise<void>;
+  exitFullScreen(): Promise<void>;
+  isElementFullScreen(element: Element): boolean;
+}
+
 type FrameReviewPlayerControlOptions = {
   readonly document?: Document;
   readonly frameRenderer?: IFrameReviewFrameRenderer;
+  readonly fullScreen?: IPlayerFullScreen;
 };
 
 type FrameReviewProbeWindow = Window & {
@@ -51,9 +58,22 @@ export class FrameReviewPlayerControl {
   private readonly stepRight: HTMLButtonElement;
   private readonly jumpDuration: HTMLSelectElement;
   private readonly jumpButton: HTMLButtonElement;
+  private readonly fullScreenButton: HTMLButtonElement;
+  private readonly progressRow: HTMLElement;
   private readonly frameIdentity: HTMLElement;
   private readonly error: HTMLElement;
   private readonly frameRenderer: IFrameReviewFrameRenderer;
+  private readonly doc: Document;
+  private readonly fullScreen: IPlayerFullScreen | null;
+  private fullScreenRequest = 0;
+  private fullScreenPending = false;
+  private pendingEntry: Promise<void> | null = null;
+  private fullScreenActive = false;
+  private overlayTimer: ReturnType<typeof setTimeout> | null = null;
+  private overlayHovered = false;
+  private lastPointer: Readonly<{ x: number; y: number }> | null = null;
+  private reservedHost: Readonly<{ element: HTMLElement; minHeight: string }> | null = null;
+  private replacementBarrier: Promise<void> | null = null;
   private session: IFrameReviewSession | null = null;
   private unsubscribe: (() => void) | null = null;
   private reviewState: IFrameReviewState | null = null;
@@ -84,6 +104,8 @@ export class FrameReviewPlayerControl {
 
   constructor(options: FrameReviewPlayerControlOptions = {}) {
     const doc = options.document ?? document;
+    this.doc = doc;
+    this.fullScreen = options.fullScreen ?? null;
     this.frameRenderer = options.frameRenderer ?? new CanvasFrameRenderer();
     this.root = doc.createElement('section');
     this.root.className = 'frame-review-player';
@@ -123,6 +145,7 @@ export class FrameReviewPlayerControl {
           </select>
         </label>
         <button type="button" class="frame-review-jump-button" data-command="jump-seconds" disabled>Jump +2s</button>
+        <button type="button" class="frame-review-full-screen" data-command="full-screen" aria-label="Full screen" title="Full screen" disabled>Full screen</button>
         <output class="frame-review-identity">Frame unavailable</output>
       </div>
       <p class="frame-review-error" role="alert"></p>`;
@@ -141,6 +164,8 @@ export class FrameReviewPlayerControl {
     this.stepRight = this.required(this.root.querySelector('[data-command="step-right"]'), HTMLButtonElement, 'forward step control');
     this.jumpDuration = this.required(this.root.querySelector('.frame-review-jump select'), HTMLSelectElement, 'jump duration');
     this.jumpButton = this.required(this.root.querySelector('[data-command="jump-seconds"]'), HTMLButtonElement, 'jump control');
+    this.fullScreenButton = this.required(this.root.querySelector('[data-command="full-screen"]'), HTMLButtonElement, 'full screen control');
+    this.progressRow = this.required(this.root.querySelector('.frame-review-progress-row'), HTMLElement, 'progress row');
     this.frameIdentity = this.required(this.root.querySelector('.frame-review-identity'), HTMLElement, 'frame identity');
     this.error = this.required(this.root.querySelector('.frame-review-error'), HTMLElement, 'player error');
     this.bind();
@@ -149,6 +174,7 @@ export class FrameReviewPlayerControl {
 
   mount(host: HTMLElement, emptyMessage = 'Open a movie to begin'): void {
     if (this.destroyed) throw new Error('Frame-review player is destroyed.');
+    if (this.isMovieFullScreen()) void this.exitMovieFullScreen();
     this.emptyState.textContent = emptyMessage;
     host.replaceChildren(this.root);
   }
@@ -156,6 +182,18 @@ export class FrameReviewPlayerControl {
   attachSession(session: IFrameReviewSession | null): void {
     if (this.destroyed) throw new Error('Frame-review player is destroyed.');
     if (session === this.session) return;
+    this.fullScreenRequest += 1;
+    this.fullScreenPending = false;
+    if (this.isMovieFullScreen() || this.pendingEntry) {
+      const barrier = this.exitForReplacement();
+      this.replacementBarrier = barrier;
+      void barrier.finally(() => {
+        if (this.replacementBarrier === barrier) this.replacementBarrier = null;
+      });
+    }
+    this.overlayHovered = false;
+    this.lastPointer = null;
+    this.hideOverlay();
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.cancelProgressPreview();
@@ -177,7 +215,10 @@ export class FrameReviewPlayerControl {
     this.progress.value = '0';
     this.currentTime.textContent = '00:00:00.000';
     this.duration.textContent = '00:00:00.000';
-    this.frameRenderer.clear(this.canvas);
+    if (this.replacementBarrier) void this.replacementBarrier.then(() => {
+      if (!this.destroyed && this.session === session) this.frameRenderer.clear(this.canvas);
+    });
+    else this.frameRenderer.clear(this.canvas);
     this.session = session;
     this.reviewState = session?.state() ?? null;
     if (session) this.unsubscribe = session.subscribe(event => this.onSessionEvent(event));
@@ -205,6 +246,128 @@ export class FrameReviewPlayerControl {
 
   state(): IFrameReviewState | null {
     return this.reviewState;
+  }
+
+  isMovieFullScreen(): boolean { return this.fullScreen?.isElementFullScreen(this.root) === true; }
+
+  canEnterMovieFullScreen(): boolean {
+    return !this.destroyed && !this.fullScreenPending && this.fullScreen !== null
+      && this.session !== null && this.reviewState?.phase === 'exact-ready' && this.reviewState.captureEnabled;
+  }
+
+  toggleMovieFullScreen(): void {
+    if (this.isMovieFullScreen()) { void this.exitMovieFullScreen(); return; }
+    if (!this.canEnterMovieFullScreen()) return;
+    const request = ++this.fullScreenRequest;
+    this.fullScreenPending = true;
+    this.reserveHostHeight();
+    // Keep the browser request in the trusted key or click task.
+    const entry = this.fullScreen!.enterElementFullScreen(this.root);
+    this.pendingEntry = entry;
+    void entry.then(() => {
+      if (request !== this.fullScreenRequest && !this.replacementBarrier && this.isMovieFullScreen()) {
+        void this.exitMovieFullScreen();
+      }
+      this.onFullScreenChange();
+    }).catch(error => {
+      if (request !== this.fullScreenRequest) return;
+      this.fullScreenPending = false;
+      this.releaseHostHeight();
+      this.showError(error);
+      this.renderState();
+    }).finally(() => {
+      if (this.pendingEntry === entry) this.pendingEntry = null;
+    });
+  }
+
+  async exitMovieFullScreen(): Promise<void> {
+    this.fullScreenRequest += 1;
+    this.fullScreenPending = false;
+    if (!this.isMovieFullScreen()) { this.onFullScreenChange(); return; }
+    try { await this.fullScreen?.exitFullScreen(); }
+    catch (error) { if (this.isMovieFullScreen()) this.showError(error); }
+    this.onFullScreenChange();
+  }
+
+  onFullScreenChange(): void {
+    const active = this.isMovieFullScreen();
+    if (active === this.fullScreenActive) return;
+    this.fullScreenActive = active;
+    this.fullScreenPending = false;
+    this.root.classList.toggle('movie-full-screen', active);
+    if (active) {
+      if (this.replacementBarrier || !this.isVisibleHost()) {
+        if (!this.replacementBarrier) void this.exitMovieFullScreen();
+        return;
+      }
+      this.lastPointer = null;
+      this.root.focus();
+      this.showOverlay();
+      this.scheduleOverlayHide();
+    } else {
+      this.overlayHovered = false;
+      this.lastPointer = null;
+      this.hideOverlay();
+      this.releaseHostHeight();
+      if (!this.destroyed && this.isVisibleHost()) this.root.focus();
+    }
+    this.renderState();
+  }
+
+  private isVisibleHost(): boolean {
+    return this.root.isConnected && this.root.closest('[hidden]') === null;
+  }
+
+  private async exitForReplacement(): Promise<void> {
+    await this.pendingEntry?.catch(() => undefined);
+    if (this.isMovieFullScreen()) void this.exitMovieFullScreen();
+    for (let attempt = 0; attempt < 30 && this.isMovieFullScreen(); attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 16));
+    }
+    if (this.isMovieFullScreen()) {
+      const host = this.root.parentElement;
+      if (host) { this.root.remove(); host.append(this.root); }
+    }
+    while (this.isMovieFullScreen()) await new Promise(resolve => setTimeout(resolve, 16));
+    this.onFullScreenChange();
+  }
+
+  private reserveHostHeight(): void {
+    const host = this.root.parentElement;
+    if (!host || this.reservedHost) return;
+    this.reservedHost = { element: host, minHeight: host.style.minHeight };
+    host.style.minHeight = `${host.getBoundingClientRect().height}px`;
+  }
+
+  private releaseHostHeight(): void {
+    if (!this.reservedHost) return;
+    this.reservedHost.element.style.minHeight = this.reservedHost.minHeight;
+    this.reservedHost = null;
+  }
+
+  private showOverlay(): void {
+    this.root.classList.add('movie-overlay-visible');
+    this.progressRow.removeAttribute('aria-hidden');
+    this.progress.tabIndex = 0;
+  }
+
+  private hideOverlay(): void {
+    if (this.overlayTimer !== null) clearTimeout(this.overlayTimer);
+    this.overlayTimer = null;
+    this.root.classList.remove('movie-overlay-visible');
+    if (this.doc.activeElement === this.progress) this.root.focus();
+    if (this.isMovieFullScreen()) this.progressRow.setAttribute('aria-hidden', 'true');
+    else this.progressRow.removeAttribute('aria-hidden');
+    this.progress.tabIndex = this.isMovieFullScreen() ? -1 : 0;
+  }
+
+  private scheduleOverlayHide(): void {
+    if (this.overlayTimer !== null) clearTimeout(this.overlayTimer);
+    if (!this.isMovieFullScreen() || this.overlayHovered || this.progressInteractionActive) return;
+    this.overlayTimer = setTimeout(() => {
+      this.overlayTimer = null;
+      if (!this.overlayHovered && !this.progressInteractionActive) this.hideOverlay();
+    }, 3000);
   }
 
   exactPreviewPhase(): 'inactive' | 'running' | 'paused' { return this.previewPhase; }
@@ -516,6 +679,9 @@ export class FrameReviewPlayerControl {
 
   destroy(): void {
     if (this.destroyed) return;
+    if (this.isMovieFullScreen()) void this.exitMovieFullScreen();
+    this.hideOverlay();
+    this.releaseHostHeight();
     if (this.session) void this.session.releaseAdjacent().catch(error => this.showError(error));
     this.destroyed = true;
     this.interruptJumps();
@@ -533,6 +699,23 @@ export class FrameReviewPlayerControl {
 
   private bind(): void {
     this.playPause.addEventListener('click', () => { void this.togglePlayback(); });
+    this.fullScreenButton.addEventListener('click', () => this.toggleMovieFullScreen());
+    this.root.addEventListener('pointermove', event => {
+      if (!this.isMovieFullScreen()) return;
+      if (this.lastPointer?.x === event.clientX && this.lastPointer.y === event.clientY) return;
+      this.lastPointer = { x: event.clientX, y: event.clientY };
+      this.showOverlay();
+      this.scheduleOverlayHide();
+    });
+    this.progressRow.addEventListener('pointerenter', () => {
+      this.overlayHovered = true;
+      this.showOverlay();
+      if (this.overlayTimer !== null) clearTimeout(this.overlayTimer);
+    });
+    this.progressRow.addEventListener('pointerleave', () => {
+      this.overlayHovered = false;
+      this.scheduleOverlayHide();
+    });
     this.jumpDuration.addEventListener('change', () => this.renderState());
     this.jumpButton.addEventListener('click', () => this.jumpBySeconds(Number(this.jumpDuration.value)));
     this.progress.addEventListener('input', () => this.previewProgress());
@@ -544,6 +727,10 @@ export class FrameReviewPlayerControl {
     this.progress.addEventListener('pointercancel', () => {
       this.cancelProgressPreview();
       this.progressInteractionActive = false;
+      if (this.isMovieFullScreen()) { this.root.focus(); this.scheduleOverlayHide(); }
+    });
+    this.progress.addEventListener('pointerup', () => {
+      if (this.isMovieFullScreen()) { this.root.focus(); this.scheduleOverlayHide(); }
     });
     this.bindStepButton(this.stepLeft, -1);
     this.bindStepButton(this.stepRight, 1);
@@ -684,7 +871,10 @@ export class FrameReviewPlayerControl {
     } catch (error) {
       this.showError(error);
     } finally {
-      if (this.session === session) this.progressInteractionActive = false;
+      if (this.session === session) {
+        this.progressInteractionActive = false;
+        if (this.isMovieFullScreen()) { this.root.focus(); this.scheduleOverlayHide(); }
+      }
     }
   }
 
@@ -726,6 +916,9 @@ export class FrameReviewPlayerControl {
         this.invalidatePendingDisplay();
       }
       this.reviewState = event.state;
+      if (this.isMovieFullScreen() && (!event.state.captureEnabled || event.state.phase !== 'exact-ready')) {
+        void this.exitMovieFullScreen();
+      }
       this.renderState();
       if (event.state.captureEnabled && this.session) void this.showInitialFrame(this.session);
       return;
@@ -758,16 +951,19 @@ export class FrameReviewPlayerControl {
     if (this.pendingDisplay) (window as FrameReviewProbeWindow).__clipSandboxFrameReviewPaintProbe?.replaced?.();
     const revision = ++this.renderRevision;
     const session = this.session;
-    const promise = this.frameRenderer.render(this.canvas, frame, () => (
+    const promise = (async () => {
+      if (this.replacementBarrier) await this.replacementBarrier;
+      if (this.destroyed || this.session !== session || revision !== this.renderRevision) return;
+      await this.frameRenderer.render(this.canvas, frame, () => (
         !this.destroyed && this.session === session && revision === this.renderRevision
-      )).then(() => {
+      ));
       if (this.destroyed || this.session !== session || revision !== this.renderRevision) return;
       this.displayedFrame = frame;
       if (frame.kind === 'exact-frame') this.retainPreviewAt(frame.identity.frameIndex);
       this.emptyState.hidden = true;
       this.updateProgressFromFrame(frame);
       this.renderState();
-    }).catch(error => {
+    })().catch(error => {
       if (revision === this.renderRevision) this.showError(error);
     }).finally(() => {
       if (this.pendingDisplay?.promise === promise) this.pendingDisplay = null;
@@ -866,6 +1062,7 @@ export class FrameReviewPlayerControl {
     this.jumpButton.setAttribute('aria-label', `Jump ${jumpDirection === 1 ? 'forward' : 'backward'} ${jumpSeconds} ${jumpSeconds === 1 ? 'second' : 'seconds'}`);
     this.jumpButton.disabled = !attached || this.jumpUnavailable
       || (this.scrubbingExact && !this.playing && !exactReady);
+    this.fullScreenButton.disabled = !this.canEnterMovieFullScreen();
     this.duration.textContent = this.formatTime(duration);
     this.playPause.dataset.playing = String(this.playing);
     this.playPause.title = this.playing ? 'Pause' : 'Play';
