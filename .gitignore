@@ -2,6 +2,7 @@ node_modules/
 build/
 playwright-report/
 test-results/
+test-evidence/
 .worktrees/
 .firecrawl/
 tests/fixtures/gif-extraction/generated/

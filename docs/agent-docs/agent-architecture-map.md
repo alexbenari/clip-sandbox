@@ -6,12 +6,13 @@ GIF capture, refinement, original-source extraction, extraction-publication refr
 
 Per-movie capture and draft storage, per-capture removal, lazy exact-endpoint revalidation, optional MP4 provenance, and source-bound queue persistence ownership verified: 2026-09-29.
 
-GIF test cross-references refreshed: 2026-09-29.
+GIF test cross-references refreshed: 2026-09-29. E2E invocation and evidence location guidance verified: 2026-10-09.
 
 Verified against:
 
 - `index.html`
 - `package.json`
+- `playwright.config.mjs`
 - `tsconfig.base.json`
 - `tsconfig.json`
 - `tsconfig.build.json`
@@ -315,6 +316,8 @@ Flow:
    `npm run frame-review:test` covers [`tools/frame-review/tests/`](../../tools/frame-review/tests/) plus CTest targets declared in [`native/frame-review/CMakeLists.txt`](../../native/frame-review/CMakeLists.txt). Focused TypeScript host/cache/adapter checks live under [`tests/unit/frame-review/`](../../tests/unit/frame-review/) and [`tests/integration/frame-review/`](../../tests/integration/frame-review/); [`tests/e2e/frame-review-backend.spec.ts`](../../tests/e2e/frame-review-backend.spec.ts) proves cold build, same-process reuse, restart reuse, stable cache mtimes, and exact frame capture through the real preload boundary when the explicit native build is available. Original-source media correctness remains independently covered by [`tools/gif-extraction/verify-extraction.ps1`](../../tools/gif-extraction/verify-extraction.ps1).
 
 If a change crosses multiple subsystems, the end-to-end suite is usually the safest final check.
+
+Electron e2e tests launch the app from the emitted `build/src/...` output, so a bare `npx playwright test` after source edits exercises stale code. Run subsets with `npm run e2e -- <spec files> [--grep ...]`, which rebuilds before passing the arguments to Playwright. Playwright deletes `test-results/` at the start of every run; keep evidence that must outlive a run under the ignored `test-evidence/<feature-name>/` folder.
 
 ## Knowledge Base Rules
 

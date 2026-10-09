@@ -99,6 +99,9 @@ weakening the agreed behavior, code quality, or verification.
 - Preserve complete evidence and exit codes in log files, and record their
   location in the plan's `Progress` section. Report concise pass counts,
   decisions, and failure excerpts during work.
+- Store evidence where no test runner or build step cleans it; Playwright
+  deletes `test-results/` at the start of every run. Default to the ignored
+  `test-evidence/<feature-name>/` folder.
 - Reject an optimization that trades away confidence, coverage, correctness, or
   a user-visible requirement.
 
