@@ -28,6 +28,7 @@ import { CollectionFileWriter } from './collection-file-writer.js';
 import { CollectionViewWorkflow } from './collection-view-workflow.js';
 import { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import { AddToCollectionWorkflow } from './add-to-collection-workflow.js';
+import { FolderSelectionWorkflow } from './folder-selection-workflow.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
 import { OrderMenuController } from '../ui/order-menu-controller.js';
@@ -116,7 +117,7 @@ export class AppController {
   if (this.initialized) return;
     let startCollectionRefinement: ((request: ICollectionClipRefinementRequest, collectionFilename: string) => Promise<void>) | null = null;
     let gridMenuRevision = 0;
-    let selectionRevision = 0;
+
     class AppWorkflows {
     private collectionFullscreenWasActive = false;
     private movieFullscreenWasActive = false;
@@ -147,34 +148,6 @@ export class AppController {
     readonly closeZoom = () => {
         clipContextMenuController.close({ restoreFocus: false });
         zoomOverlay.close();
-      };
-
-    readonly hideCollectionConflict = () => {
-        collectionConflictController.hide();
-      };
-
-
-    readonly openUnsavedDialog = () => {
-        const action = state.getPendingSelectionAction();
-        unsavedChangesDialogController.open({
-          message: action?.type === 'browse-folder'
-            ? 'The current view has unsaved changes. Save before browsing to another folder?'
-            : 'The current view has unsaved changes. Save before switching views?',
-          onSave: () => {
-            void this.continuePendingAction({ saveFirst: true });
-          },
-          onDiscard: () => {
-            void this.continuePendingAction({ saveFirst: false });
-          },
-          onCancel: () => {
-            state.clearPendingSelectionAction();
-            collectionView.refreshSelector();
-          },
-        });
-      };
-
-    readonly closeUnsavedDialog = () => {
-        unsavedChangesDialogController.close();
       };
 
     readonly buildDeleteRequestFromSelection = (): DeleteRequest | null => {
@@ -296,7 +269,7 @@ export class AppController {
 
         if (result.deletedClipIds.length > 0) {
           gridController.invalidateAllViews();
-          await this.reloadSelection({
+          await folderSelection.reloadSelection({
             pipeline: this.currentPipeline(),
             collection: this.activeCollection(),
             folderSession: state.currentFolderSession,
@@ -344,275 +317,16 @@ export class AppController {
 
 
     readonly clearLoadedState = () => {
-        this.hideCollectionConflict();
+        collectionConflictController.hide();
         pendingDeleteRequest = null;
         collectionSave.cancelSaveAsNew();
         addToCollectionDialogController.close();
         deleteFromDiskDialogController.closeAll();
         clipContextMenuController.close({ restoreFocus: false });
-        this.closeUnsavedDialog();
+        unsavedChangesDialogController.close();
         this.closeZoom();
-        state.clearPendingSelectionAction();
         collectionView.clearLoadedView();
       };
-
-    readonly queueMissingConflict = (
-        conflict: Parameters<typeof collectionConflictController.showConflict>[0],
-        handlers: Parameters<typeof collectionConflictController.showConflict>[1]
-      ): void => {
-        collectionConflictController.showConflict(conflict, handlers);
-      };
-
-    readonly reloadSelection = async ({
-        pipeline = this.currentPipeline(),
-        collection = this.activeCollection(),
-        folderSession = state.currentFolderSession,
-      }: {
-        pipeline?: Pipeline | null;
-        collection?: Collection | null;
-        folderSession?: unknown;
-      } = {}): Promise<void> => {
-        if (!pipeline) return;
-        const loaded = pipelineSession.materializeSelection(collection);
-        if (!loaded) return;
-        const { selection, materialization: result } = loaded;
-        if (result.kind === 'has-missing') {
-          this.queueMissingConflict(result, {
-            onApply: () => {
-              if (result.existingNamesInOrder.length === 0) {
-                collectionView.refreshSelector();
-                activityReporter.success(appText.noCollectionMatchesText(result.missingCount), 4500);
-                return;
-              }
-              gridController.invalidateView(collectionView.cacheKeyFor(collection));
-              collectionView.applySelection(result.partialSequence, {
-                collection,
-                folderSession,
-                statusText: appText.collectionPartiallyLoadedText(result.existingNamesInOrder.length, result.missingCount),
-                timeout: 4000,
-              });
-            },
-            onCancel: () => {
-              collectionView.refreshSelector();
-            },
-          });
-          return;
-        }
-
-        collectionView.applySelection(result.sequence, {
-          collection: selection instanceof Collection ? selection : null,
-          folderSession,
-        });
-        loadStatusControl.showSelectionLoadStatus({
-          isPipelineMode: selection === pipeline,
-          clipCount: result.sequence.orderedClips().length,
-        });
-      };
-
-      readonly loadPipeline = async ({
-        folderSession = null,
-        files = [],
-        folderName = '',
-        preserveCollectionFilename = '',
-        reportInitialLoad = true,
-      }: Partial<FolderSelection> & { preserveCollectionFilename?: string; reportInitialLoad?: boolean } = {}): Promise<boolean> => {
-        await settingsReady;
-        try {
-          const buildResult = await pipelineFactory.buildPipeline({
-            folderName,
-            files,
-            validator,
-            logInvalidDescription: (result) => diagnostics.logInvalidDescription(result, folderSession),
-          });
-          const { pipeline } = buildResult;
-          const result = pipelineSession.loadPipeline(pipeline);
-          if (!result) return false;
-
-          gridController.invalidateAllViews();
-          gridController.retagActiveView(null);
-          const preservedCollection = preserveCollectionFilename
-            ? pipeline.getCollectionByFilename(preserveCollectionFilename)
-            : null;
-          if (preservedCollection) {
-            await this.reloadSelection({ pipeline, collection: preservedCollection, folderSession });
-            return true;
-          }
-          collectionView.applySelection(result.sequence, {
-            collection: null,
-            folderSession,
-          });
-          if (reportInitialLoad) {
-            loadStatusControl.showInitialLoadStatus({
-              pipeline,
-              clipCount: result.sequence.orderedClips().length,
-            });
-          }
-          return true;
-        } catch (err) {
-          await diagnostics.logRuntimeError('Failed to load the selected folder.', err, folderSession);
-          activityReporter.failure(appText.collectionReadErrorText(err), {
-            affected: 'Open folder', recovery: 'Check that the folder is accessible, then choose it again.',
-            technicalDetails: activityReporter.technicalDetailsOf(err),
-          });
-          return false;
-        }
-      };
-
-    readonly triggerFolderPicker = async (): Promise<void> => {
-        this.hideCollectionConflict();
-        try {
-          const selection = await fileSystem.pickFolder({
-            onFileReadError: (info, folderSession) => {
-              void diagnostics.logDirectoryReadError(
-                info as Parameters<typeof diagnostics.logDirectoryReadError>[0],
-                folderSession
-              );
-            },
-          });
-          await this.loadPipeline(selection);
-        } catch (err) {
-          if (err instanceof DOMException && err.name === 'AbortError') return;
-          await diagnostics.logRuntimeError('Failed to browse for a folder.', err, state.currentFolderSession);
-          activityReporter.failure(appText.collectionReadErrorText(err), {
-            affected: 'Open folder', recovery: 'Check that the folder is accessible, then choose it again.',
-            technicalDetails: activityReporter.technicalDetailsOf(err),
-          });
-        }
-      };
-
-    readonly loadCatalogPipeline = async (entry: IPipelineCatalogEntry): Promise<void> => {
-        try {
-          const selection = await fileSystem.openPipelineCatalogEntry(entry);
-          if (await this.loadPipeline(selection)) shell.activate(collectionScreen.id);
-        } catch (err) {
-          await diagnostics.logRuntimeError(`Failed to open pipeline ${entry.name}.`, err, state.currentFolderSession);
-          activityReporter.failure(`Could not open ${entry.name}.`, {
-            affected: 'Open pipeline',
-            recovery: 'Check that the pipeline folder is still accessible, then refresh Pipelines.',
-            technicalDetails: activityReporter.technicalDetailsOf(err),
-          });
-        }
-      };
-
-    readonly onCatalogPipelineRequested = async (entry: IPipelineCatalogEntry): Promise<void> => {
-        if (pipelineSession.hasDirtyClipSequenceChanges) {
-          state.setPendingSelectionAction({ type: 'open-catalog-pipeline', pipeline: entry });
-          collectionView.refreshSelector();
-          this.openUnsavedDialog();
-          return;
-        }
-        await this.loadCatalogPipeline(entry);
-      };
-
-      readonly refreshActiveFolder = async (): Promise<void> => {
-        const folderSession = state.currentFolderSession;
-        if (!fileSystem.canMutateDisk(folderSession)) return;
-
-        const activeCollectionFilename = this.activeCollectionFilename();
-        const selection = await fileSystem.refreshFolder(folderSession);
-        if (state.currentFolderSession !== folderSession || pipelineSession.hasDirtyClipSequenceChanges) return;
-        await this.loadPipeline({
-          ...selection,
-          preserveCollectionFilename: activeCollectionFilename,
-          reportInitialLoad: false,
-        });
-      };
-
-      readonly switchSelectionFromDisk = async (collectionFilename: string | null): Promise<void> => {
-        const revision = ++selectionRevision;
-        const folderSession = state.currentFolderSession;
-        const pipeline = this.currentPipeline();
-        if (!pipeline) return;
-        if (!fileSystem.canMutateDisk(folderSession)) {
-          await this.reloadSelection({
-            pipeline,
-            collection: collectionFilename ? pipeline?.getCollectionByFilename(collectionFilename) : null,
-          });
-          return;
-        }
-        try {
-          const selection = await fileSystem.refreshFolder(folderSession);
-          if (revision !== selectionRevision || state.currentFolderSession !== folderSession
-            || this.currentPipeline() !== pipeline || pipelineSession.hasDirtyClipSequenceChanges) return;
-          const refreshed = await pipelineFactory.buildPipeline({
-            folderName: selection.folderName,
-            files: selection.files,
-            validator,
-            logInvalidDescription: result => diagnostics.logInvalidDescription(result, selection.folderSession),
-          });
-          if (revision !== selectionRevision || state.currentFolderSession !== folderSession
-            || this.currentPipeline() !== pipeline || pipelineSession.hasDirtyClipSequenceChanges) return;
-          pipeline.setVideoFiles(refreshed.pipeline.videoFiles());
-          pipeline.setCollections(refreshed.pipeline.collections());
-          await this.reloadSelection({
-            pipeline,
-            collection: collectionFilename ? pipeline.getCollectionByFilename(collectionFilename) : null,
-            folderSession: selection.folderSession,
-          });
-        } catch (error) {
-          if (revision !== selectionRevision || state.currentFolderSession !== folderSession) return;
-          activityReporter.failure('The folder could not be refreshed.', {
-            affected: collectionFilename || 'Folder view',
-            recovery: 'Check that the folder is accessible, then switch views again.',
-            technicalDetails: activityReporter.technicalDetailsOf(error),
-          });
-        }
-      };
-
-    readonly onPickFolder = async (): Promise<void> => {
-        if (pipelineSession.hasDirtyClipSequenceChanges) {
-          state.setPendingSelectionAction({ type: 'browse-folder' });
-          collectionView.refreshSelector();
-          this.openUnsavedDialog();
-          return;
-        }
-        await this.triggerFolderPicker();
-      };
-
-    readonly continuePendingAction = async ({ saveFirst }: { saveFirst: boolean }): Promise<void> => {
-        const nextPendingAction = state.getPendingSelectionAction();
-        if (!nextPendingAction) {
-          this.closeUnsavedDialog();
-          collectionView.refreshSelector();
-          return;
-        }
-        if (saveFirst) {
-          const outcome = await collectionSave.saveActive();
-          if (outcome === 'cancelled') {
-            state.clearPendingSelectionAction();
-            collectionView.refreshSelector();
-            return;
-          }
-          if (outcome === 'failed') {
-            this.openUnsavedDialog();
-            return;
-          }
-        }
-        this.closeUnsavedDialog();
-        state.clearPendingSelectionAction();
-        if (nextPendingAction.type === 'browse-folder') {
-          await this.triggerFolderPicker();
-          return;
-        }
-        if (nextPendingAction.type === 'open-catalog-pipeline') {
-          await this.loadCatalogPipeline(nextPendingAction.pipeline);
-          return;
-        }
-        if (nextPendingAction.type === 'switch-selection') {
-          if (!saveFirst) {
-            gridController.invalidateView(collectionView.activeCacheKey());
-            gridController.retagActiveView(null);
-            await this.reloadSelection({
-              pipeline: this.currentPipeline(),
-              collection: this.activeCollection(),
-            });
-          }
-          await this.switchSelectionFromDisk(nextPendingAction.collectionFilename);
-          return;
-        }
-        collectionView.refreshSelector();
-      };
-
 
     readonly confirmDeletePreflightSave = async (): Promise<void> => {
         const deleteRequest = pendingDeleteRequest;
@@ -951,7 +665,7 @@ this.initialized = true;
   const openFolderRefreshSession = new OpenFolderRefreshSession({
     isActiveFolder: folderPath => fileSystem.isActiveFolder(state.currentFolderSession, folderPath),
     hasUnsavedActiveSequenceChanges: () => pipelineSession.hasDirtyClipSequenceChanges,
-    refreshActiveFolder: workflows.refreshActiveFolder,
+    refreshActiveFolder: (): Promise<void> => folderSelection.refreshActiveFolder(),
     onRefreshError: error => {
       const message = 'The clip was saved, but the Collection view could not refresh.';
       activityReporter.failure(message, {
@@ -981,27 +695,6 @@ this.initialized = true;
     pipelineSelectionValue: PIPELINE_SELECTION_VALUE,
     defaultTitle: appText.defaultAppTitle,
   });
-  collectionSelectorControl.on('selectionRequested', (selectedCollectionFilename) => {
-    const pipeline = workflows.currentPipeline();
-    if (!pipeline) {
-      collectionView.refreshSelector();
-      return;
-    }
-    if ((selectedCollectionFilename || '') === workflows.activeCollectionFilename()) {
-      collectionView.refreshSelector();
-      return;
-    }
-    if (pipelineSession.hasDirtyClipSequenceChanges) {
-      state.setPendingSelectionAction({
-        type: 'switch-selection',
-        collectionFilename: selectedCollectionFilename,
-      });
-      collectionView.refreshSelector();
-      workflows.openUnsavedDialog();
-      return;
-    }
-    void workflows.switchSelectionFromDisk(selectedCollectionFilename);
-  });
   eventWiring.require('collectionSelector', collectionSelectorControl, ['selectionRequested']);
   const mainToolbarControl = new MainToolbarControl({
     appText,
@@ -1014,7 +707,7 @@ this.initialized = true;
     deleteFromDiskBtn,
     toggleTitlesBtn,
   });
-  mainToolbarControl.on('browseRequested', () => void workflows.onPickFolder());
+
 
 
   mainToolbarControl.on('deleteFromDiskRequested', workflows.openDeleteFromDiskFlow);
@@ -1296,6 +989,44 @@ this.initialized = true;
     reporter: activityReporter,
     appText,
   });
+  const pipelinesPanelHost = AppControllerSupport.optionalElement('pipelinesPanelHost');
+  const pipelineCatalogControl = pipelinesPanelHost ? new PipelineCatalogControl({
+    host: pipelinesPanelHost,
+    catalog: fileSystem,
+    document,
+  }) : null;
+  if (pipelineCatalogControl) {
+    pipelineCatalogControl.on('failed', ({ message, error }) => {
+      activityReporter.failure(message, {
+        affected: 'Pipelines',
+        recovery: 'Check the Pipelines top folder in Settings, then try again.',
+        technicalDetails: activityReporter.technicalDetailsOf(error),
+      });
+      void diagnostics.logRuntimeError(message, error);
+    });
+    eventWiring.require('pipelineCatalog', pipelineCatalogControl, ['loadRequested', 'failed']);
+  }
+  const folderSelection = new FolderSelectionWorkflow({
+    pipelineSession,
+    openFolder: state,
+    folders: fileSystem,
+    pipelineFactory,
+    collectionFileValidator: validator,
+    diagnostics,
+    grid: gridController,
+    collectionView,
+    missingClipsPrompt: collectionConflictController,
+    unsavedChangesPrompt: unsavedChangesDialogController,
+    loadStatus: loadStatusControl,
+    collectionSave,
+    screens: { showCollectionScreen: () => shell.activate(collectionScreen.id) },
+    settingsLoaded: () => settingsReady,
+    toolbar: mainToolbarControl,
+    selector: collectionSelectorControl,
+    catalog: pipelineCatalogControl,
+    reporter: activityReporter,
+    appText,
+  });
   eventWiring.require('clipGrid', gridController, [
     'cardCountChanged', 'selectionChanged', 'orderChanged', 'openClipRequested',
     'removeSelectedRequested', 'contextMenuRequested', 'metadataFailed',
@@ -1359,24 +1090,6 @@ this.initialized = true;
   workflows.clearLoadedState();
   recomputeLayout();
   collectionView.setTitlesHidden(false);
-  const pipelinesPanelHost = AppControllerSupport.optionalElement('pipelinesPanelHost');
-  const pipelineCatalogControl = pipelinesPanelHost ? new PipelineCatalogControl({
-    host: pipelinesPanelHost,
-    catalog: fileSystem,
-    document,
-  }) : null;
-  if (pipelineCatalogControl) {
-    pipelineCatalogControl.on('loadRequested', entry => void workflows.onCatalogPipelineRequested(entry));
-    pipelineCatalogControl.on('failed', ({ message, error }) => {
-      activityReporter.failure(message, {
-        affected: 'Pipelines',
-        recovery: 'Check the Pipelines top folder in Settings, then try again.',
-        technicalDetails: activityReporter.technicalDetailsOf(error),
-      });
-      void diagnostics.logRuntimeError(message, error);
-    });
-    eventWiring.require('pipelineCatalog', pipelineCatalogControl, ['loadRequested', 'failed']);
-  }
   const settingsScreen = new SettingsScreen(settingsService, {
     progress: activityReporter.progress,
     success: activityReporter.success,
@@ -1624,6 +1337,7 @@ this.initialized = true;
       collectionView.dispose();
       collectionSave.dispose();
       addToCollection.dispose();
+      folderSelection.dispose();
       await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
     },
     destroyControls: () => {
