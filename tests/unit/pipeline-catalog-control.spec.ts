@@ -15,7 +15,8 @@ describe('PipelineCatalogControl', () => {
       })),
     };
     const onLoadPipeline = vi.fn(async () => undefined);
-    const control = new PipelineCatalogControl({ host, catalog, onLoadPipeline, onError: vi.fn() });
+    const control = new PipelineCatalogControl({ host, catalog });
+    control.on('loadRequested', onLoadPipeline);
 
     await control.load();
     const expandPipeline = host.querySelector<HTMLButtonElement>('[aria-label="Expand Sample"]')!;

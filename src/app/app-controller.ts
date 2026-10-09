@@ -1654,17 +1654,20 @@ this.initialized = true;
   const pipelineCatalogControl = pipelinesPanelHost ? new PipelineCatalogControl({
     host: pipelinesPanelHost,
     catalog: fileSystem,
-    onLoadPipeline: workflows.onCatalogPipelineRequested,
-    onError: (message, error) => {
+    document,
+  }) : null;
+  if (pipelineCatalogControl) {
+    pipelineCatalogControl.on('loadRequested', entry => void workflows.onCatalogPipelineRequested(entry));
+    pipelineCatalogControl.on('failed', ({ message, error }) => {
       workflows.showErrorStatus(message, {
         affected: 'Pipelines',
         recovery: 'Check the Pipelines top folder in Settings, then try again.',
         technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
       });
       void diagnostics.logRuntimeError(message, error);
-    },
-    document,
-  }) : null;
+    });
+    eventWiring.require('pipelineCatalog', pipelineCatalogControl, ['loadRequested', 'failed']);
+  }
   const settingsScreen = new SettingsScreen(settingsService, {
     progress: workflows.showProgressStatus,
     success: workflows.showStatus,

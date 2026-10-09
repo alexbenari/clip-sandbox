@@ -4,6 +4,12 @@ import type {
   IPipelineCatalogEntry,
   PipelineCatalogResult,
 } from '../app/pipeline-catalog.js';
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+
+export interface IPipelineCatalogEvents {
+  loadRequested: IPipelineCatalogEntry;
+  failed: Readonly<{ message: string; error: unknown }>;
+}
 
 type PipelineCatalogPort = {
   listPipelineCatalog(): Promise<PipelineCatalogResult>;
@@ -13,16 +19,13 @@ type PipelineCatalogPort = {
 type PipelineCatalogControlOptions = {
   host: HTMLElement;
   catalog: PipelineCatalogPort;
-  onLoadPipeline(entry: IPipelineCatalogEntry): Promise<void>;
-  onError(message: string, error: unknown): void;
   document?: Document;
 };
 
-export class PipelineCatalogControl {
+export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEvents>, IEventSubscriberCount<IPipelineCatalogEvents> {
   private readonly host: HTMLElement;
   private readonly catalog: PipelineCatalogPort;
-  private readonly onLoadPipeline: (entry: IPipelineCatalogEntry) => Promise<void>;
-  private readonly onError: (message: string, error: unknown) => void;
+  private readonly events = new EventSource<IPipelineCatalogEvents>();
   private readonly document: Document;
   private readonly detailsByPipelineId = new Map<string, IPipelineCatalogDetails>();
   private requestGeneration = 0;
@@ -31,9 +34,15 @@ export class PipelineCatalogControl {
   constructor(options: PipelineCatalogControlOptions) {
     this.host = options.host;
     this.catalog = options.catalog;
-    this.onLoadPipeline = options.onLoadPipeline;
-    this.onError = options.onError;
     this.document = options.document ?? document;
+  }
+
+  on<TName extends keyof IPipelineCatalogEvents>(name: TName, handler: EventHandler<IPipelineCatalogEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof IPipelineCatalogEvents): number {
+    return this.events.subscriberCount(name);
   }
 
   async load(): Promise<void> {
@@ -47,7 +56,7 @@ export class PipelineCatalogControl {
     } catch (error) {
       if (!this.isCurrent(requestGeneration)) return;
       this.host.replaceChildren(this.message('Pipelines could not be loaded. Review the configured folder and try again.', 'pipeline-catalog-error'));
-      this.onError('Could not load Pipelines.', error);
+      this.events.emit('failed', { message: 'Could not load Pipelines.', error });
     }
   }
 
@@ -92,7 +101,7 @@ export class PipelineCatalogControl {
     details.hidden = true;
 
     expand.addEventListener('click', () => { void this.togglePipeline(entry, expand, details); });
-    load.addEventListener('click', () => { void this.onLoadPipeline(entry); });
+    load.addEventListener('click', () => this.events.emit('loadRequested', entry));
     header.append(expand, load);
     row.append(header, details);
     return row;
@@ -122,7 +131,7 @@ export class PipelineCatalogControl {
     } catch (error) {
       if (this.destroyed || expand.getAttribute('aria-expanded') !== 'true') return;
       details.replaceChildren(this.message('Pipeline contents could not be loaded.', 'pipeline-catalog-error'));
-      this.onError(`Could not load ${entry.name}.`, error);
+      this.events.emit('failed', { message: `Could not load ${entry.name}.`, error });
     }
   }
 
