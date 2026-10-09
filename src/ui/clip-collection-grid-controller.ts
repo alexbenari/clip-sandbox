@@ -4,6 +4,22 @@ import { GridVideoMetadataTracker } from './grid-video-metadata-tracker.js';
 import type { DisplayLayoutRules } from './display-layout-rules.js';
 import { ClipLabelFormatter } from './clip-label-formatter.js';
 import { GridPreviewPlaybackController } from './grid-preview-playback-controller.js';
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+
+export interface IClipGridEvents {
+  cardCountChanged: void;
+  selectionChanged: Readonly<{ selectedClipId: string | null; selectedClipIds: string[] }>;
+  orderChanged: string[];
+  openClipRequested: string;
+  removeSelectedRequested: string[];
+  contextMenuRequested: Readonly<{
+    point: { x: number; y: number };
+    selectedClipId: string | null;
+    selectedClipIds: string[];
+    clipId: string | null;
+  }>;
+  metadataFailed: Readonly<{ clip: Clip; error: unknown }>;
+}
 
 const CLIP_COLLECTION_GRID_STYLE_ID = 'clipCollectionGridStyles';
 const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
@@ -78,23 +94,11 @@ type ClipCollectionGridControllerOptions = {
   formatLabel?: ClipLabelFormatterFn;
   layoutRules?: Pick<DisplayLayoutRules, 'computeBestGrid' | 'computeFullscreenLayout'> | null;
   isFullscreen?: (() => boolean) | null;
-  onMetadataFailure?: ((event: { clip: Clip; error: unknown }) => void) | null;
-  updateCount?: () => void;
-  onSelectionChange?: (selectedClipId: string | null, selectedClipIds: string[]) => void;
-  onOrderChange?: (orderedClipIds: string[]) => void;
-  onOpenClip?: (clipId: string) => void;
-  onRemoveSelected?: (orderedClipIds: string[]) => void;
-  onContextMenu?: (event: {
-    point: { x: number; y: number };
-    selectedClipId: string | null;
-    selectedClipIds: string[];
-    clipId: string | null;
-  }) => void;
   metadataTracker?: GridVideoMetadataTracker;
   metadataRelayoutDebounceMs?: number;
 };
 
-export class ClipCollectionGridController {
+export class ClipCollectionGridController implements IEventSource<IClipGridEvents>, IEventSubscriberCount<IClipGridEvents> {
   private asClipCard(element: Element | null | undefined): ClipCard | null {
   return element instanceof HTMLElement ? element as ClipCard : null;
 }
@@ -275,13 +279,7 @@ export class ClipCollectionGridController {
   private formatClipLabel: ClipLabelFormatterFn;
   private layoutRules: Pick<DisplayLayoutRules, 'computeBestGrid' | 'computeFullscreenLayout'> | null;
   private isFullscreen: (() => boolean) | null;
-  private onMetadataFailure: ((event: { clip: Clip; error: unknown }) => void) | null;
-  private updateCount?: () => void;
-  private onSelectionChange?: (selectedClipId: string | null, selectedClipIds: string[]) => void;
-  private onOrderChange?: (orderedClipIds: string[]) => void;
-  private onOpenClip?: (clipId: string) => void;
-  private onRemoveSelected?: (orderedClipIds: string[]) => void;
-  private onContextMenu?: NonNullable<ClipCollectionGridControllerOptions['onContextMenu']>;
+  private readonly events = new EventSource<IClipGridEvents>();
   private doc: Document;
   private currentCollection: ClipSequence | null;
   private selectedClipIds: Set<string>;
@@ -307,13 +305,7 @@ export class ClipCollectionGridController {
     this.formatClipLabel = options.formatLabel ?? defaultLabelFormatter.formatLabel.bind(defaultLabelFormatter);
     this.layoutRules = options.layoutRules ?? null;
     this.isFullscreen = options.isFullscreen ?? null;
-    this.onMetadataFailure = options.onMetadataFailure ?? null;
-    this.updateCount = options.updateCount;
-    this.onSelectionChange = options.onSelectionChange;
-    this.onOrderChange = options.onOrderChange;
-    this.onOpenClip = options.onOpenClip;
-    this.onRemoveSelected = options.onRemoveSelected;
-    this.onContextMenu = options.onContextMenu;
+
     this.doc = this.grid?.ownerDocument || document;
     this.currentCollection = null;
     this.selectedClipIds = new Set();
@@ -325,7 +317,7 @@ export class ClipCollectionGridController {
     this.gridViewCache = new Map();
     this.metadataTracker = options.metadataTracker ?? new GridVideoMetadataTracker({
       onComplete: () => this.onMetadataComplete(),
-      onFailure: ({ clip, error }) => this.onMetadataFailure?.({ clip, error }),
+      onFailure: ({ clip, error }) => this.events.emit('metadataFailed', { clip, error }),
       debounceMs: options.metadataRelayoutDebounceMs ?? 0,
     });
 
@@ -456,7 +448,7 @@ export class ClipCollectionGridController {
       Array.from(previousSelection).filter((clipId) => collection.hasClip(clipId))
     );
     this.applySelectionClasses();
-    this.updateCount?.();
+    this.events.emit('cardCountChanged');
     this.recomputeLayout();
     this.notifySelectionChange();
     this.previewPlayback.schedule(this.grid);
@@ -715,7 +707,7 @@ export class ClipCollectionGridController {
   }
 
   private notifySelectionChange(): void {
-    this.onSelectionChange?.(this.getSelectedClipId(), this.getSelectedClipIds());
+    this.events.emit('selectionChanged', { selectedClipId: this.getSelectedClipId(), selectedClipIds: this.getSelectedClipIds() });
   }
 
   getSelectedClipId(): string | null {
@@ -832,14 +824,14 @@ export class ClipCollectionGridController {
   private onDoubleClick(card: ClipCard | null | undefined): void {
     this.selectOnlyCard(card);
     const clipId = card?.dataset.clipId || null;
-    if (clipId) this.onOpenClip?.(clipId);
+    if (clipId) this.events.emit('openClipRequested', clipId);
   }
 
   private onGridContextMenu(event: MouseEvent): void {
-    if (!this.onContextMenu) return;
+    if (this.events.subscriberCount('contextMenuRequested') === 0) return;
     event.preventDefault();
     const card = event.target instanceof Element ? this.asClipCard(event.target.closest('.thumb')) : null;
-    this.onContextMenu({
+    this.events.emit('contextMenuRequested', {
       point: { x: event.clientX, y: event.clientY },
       selectedClipId: this.getSelectedClipId(),
       selectedClipIds: this.getSelectedClipIds(),
@@ -847,13 +839,21 @@ export class ClipCollectionGridController {
     });
   }
 
+  on<TName extends keyof IClipGridEvents>(name: TName, handler: EventHandler<IClipGridEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof IClipGridEvents): number {
+    return this.events.subscriberCount(name);
+  }
+
   handleKeyDown(event: KeyboardEvent): boolean {
-    if (!this.onRemoveSelected) return false;
+    if (this.events.subscriberCount('removeSelectedRequested') === 0) return false;
     if (!(event?.key === 'Delete' || event?.key === 'Backspace')) return false;
     if (this.isEditableTarget(event.target)) return false;
     const orderedSelectedClipIds = this.getSelectedClipIds();
     if (orderedSelectedClipIds.length === 0) return false;
-    this.onRemoveSelected(orderedSelectedClipIds);
+    this.events.emit('removeSelectedRequested', orderedSelectedClipIds);
     event.preventDefault();
     return true;
   }
@@ -896,7 +896,7 @@ export class ClipCollectionGridController {
     const before = event.clientY - rect.top < rect.height / 2;
     if (before) this.grid.insertBefore(srcEl, card);
     else this.grid.insertBefore(srcEl, card.nextSibling);
-    this.onOrderChange?.(this.getOrderedClipIds());
+    this.events.emit('orderChanged', this.getOrderedClipIds());
     this.recomputeLayout();
   }
 
@@ -952,7 +952,7 @@ export class ClipCollectionGridController {
     if (!this.currentCollection) {
       this.metadataTracker.reset();
       this.selectedClipIds = new Set();
-      this.updateCount?.();
+      this.events.emit('cardCountChanged');
       this.recomputeLayout();
       this.notifySelectionChange();
       return;
@@ -986,7 +986,7 @@ export class ClipCollectionGridController {
       Array.from(previousSelection).filter((clipId) => this.currentCollection?.hasClip(clipId))
     );
     this.applySelectionClasses();
-    this.updateCount?.();
+    this.events.emit('cardCountChanged');
     this.recomputeLayout();
     this.notifySelectionChange();
   }

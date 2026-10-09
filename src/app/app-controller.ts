@@ -1548,41 +1548,45 @@ this.initialized = true;
     formatLabel: clipLabelFormatter.formatLabel.bind(clipLabelFormatter),
     layoutRules: displayLayoutRules,
     isFullscreen: () => fullscreenAdapter.isDocumentFullScreen(),
-    updateCount: workflows.refreshToolbarView,
-    onMetadataFailure: ({ clip, error }) => {
-      void diagnostics.logVideoMetadataFailure({ filename: clip?.name || '', error });
-    },
-    onSelectionChange: () => {
-      workflows.refreshToolbarView();
-    },
-    onOrderChange: (orderedClipIds) => {
-      if (!workflows.currentClipSequence()) return;
-      pipelineSession.replaceCurrentOrder(orderedClipIds);
-      workflows.refreshCollectionSelectorView();
-      workflows.refreshToolbarView();
-    },
-    onOpenClip: workflows.openZoomForClipId,
-    onRemoveSelected: (orderedSelectedClipIds) => {
-      if (zoomOverlay.isOpen() || !workflows.currentClipSequence()) return;
-      if (workflows.isPipelineMode()) {
-        workflows.openDeleteFromDiskFlow();
-        return;
-      }
-      const removedClipIds = pipelineSession.removeFromCurrentSequence(orderedSelectedClipIds);
-      if (removedClipIds.length === 0) return;
-      gridController.invalidateView(workflows.activeGridViewCacheKey());
-      gridController.renderCollection(workflows.currentClipSequence(), {
-        cacheKey: workflows.activeGridViewCacheKey(),
-      });
-      workflows.refreshCollectionSelectorView();
-      workflows.refreshToolbarView();
-      workflows.showStatus(appText.removedClipsText(removedClipIds.length));
-    },
-    onContextMenu: ({ point, clipId }) => {
-      if (zoomOverlay.isOpen() || fullscreenAdapter.isDocumentFullScreen()) return;
-      void workflows.openGridContextMenu(point, clipId);
-    },
   });
+  gridController.on('cardCountChanged', workflows.refreshToolbarView);
+  gridController.on('metadataFailed', ({ clip, error }) => {
+    void diagnostics.logVideoMetadataFailure({ filename: clip?.name || '', error });
+  });
+  gridController.on('selectionChanged', () => {
+    workflows.refreshToolbarView();
+  });
+  gridController.on('orderChanged', (orderedClipIds) => {
+    if (!workflows.currentClipSequence()) return;
+    pipelineSession.replaceCurrentOrder(orderedClipIds);
+    workflows.refreshCollectionSelectorView();
+    workflows.refreshToolbarView();
+  });
+  gridController.on('openClipRequested', workflows.openZoomForClipId);
+  gridController.on('removeSelectedRequested', (orderedSelectedClipIds) => {
+    if (zoomOverlay.isOpen() || !workflows.currentClipSequence()) return;
+    if (workflows.isPipelineMode()) {
+      workflows.openDeleteFromDiskFlow();
+      return;
+    }
+    const removedClipIds = pipelineSession.removeFromCurrentSequence(orderedSelectedClipIds);
+    if (removedClipIds.length === 0) return;
+    gridController.invalidateView(workflows.activeGridViewCacheKey());
+    gridController.renderCollection(workflows.currentClipSequence(), {
+      cacheKey: workflows.activeGridViewCacheKey(),
+    });
+    workflows.refreshCollectionSelectorView();
+    workflows.refreshToolbarView();
+    workflows.showStatus(appText.removedClipsText(removedClipIds.length));
+  });
+  gridController.on('contextMenuRequested', ({ point, clipId }) => {
+    if (zoomOverlay.isOpen() || fullscreenAdapter.isDocumentFullScreen()) return;
+    void workflows.openGridContextMenu(point, clipId);
+  });
+  eventWiring.require('clipGrid', gridController, [
+    'cardCountChanged', 'selectionChanged', 'orderChanged', 'openClipRequested',
+    'removeSelectedRequested', 'contextMenuRequested', 'metadataFailed',
+  ]);
 
   const { recomputeLayout, computeGrid, fsApplySlots, fsRestore } = gridController;
 

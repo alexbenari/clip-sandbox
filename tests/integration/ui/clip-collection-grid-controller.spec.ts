@@ -87,9 +87,10 @@ describe('clip collection grid controller', () => {
     const collection = makeThreeClipCollection();
     const opened = vi.fn();
     const controller = createClipCollectionGridController({
-      grid, isFullscreen: () => true, onOpenClip: opened,
+      grid, isFullscreen: () => true,
       layoutRules: { computeFullscreenLayout: () => ({ cols: 2, cellH: 100, targetVisible: 2 }) },
     });
+    controller.on('openClipRequested', opened);
     controller.renderCollection(collection);
     const cards = [...grid.children];
     const sources = cards.map(card => card.querySelector('video').src);
@@ -158,10 +159,9 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
-      onSelectionChange: (clipId, clipIds) => selectionChanges.push({ clipId, clipIds }),
     });
+    controller.on('selectionChanged', ({ selectedClipId, selectedClipIds }) => selectionChanges.push({ clipId: selectedClipId, clipIds: selectedClipIds }));
 
     controller.renderCollection(makeCollection());
     const cards = document.querySelectorAll('#grid .thumb');
@@ -194,11 +194,10 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
-      onOrderChange: (ids) => orders.push(ids),
-      onOpenClip: (clipId) => openRequests.push(clipId),
     });
+    controller.on('orderChanged', (ids) => orders.push(ids));
+    controller.on('openClipRequested', (clipId) => openRequests.push(clipId));
 
     controller.renderCollection(makeCollection());
     const cards = document.querySelectorAll('#grid .thumb');
@@ -236,7 +235,6 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name, seconds) => `${name} (${seconds ?? '--:--:--'})`,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
     });
 
@@ -265,7 +263,6 @@ describe('clip collection grid controller', () => {
       grid,
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
     });
 
@@ -290,7 +287,6 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
     });
     const pipeline = makeThreeClipCollection();
@@ -350,7 +346,6 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
     });
     const pipeline = makeThreeClipCollection();
@@ -381,7 +376,6 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       layoutRules: { computeBestGrid: ({ count }) => ({ cols: count, cellH: count === 1 ? 240 : 120 }) },
     });
     const pipeline = makeThreeClipCollection();
@@ -404,7 +398,6 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
     });
 
@@ -435,7 +428,6 @@ describe('clip collection grid controller', () => {
         computeFullscreenLayout: vi.fn(() => ({ cols: 2, cellH: 220, targetVisible: 2 })),
       },
       isFullscreen: () => fullscreen,
-      updateCount: vi.fn(),
     });
 
     controller.renderCollection(makeThreeClipCollection());
@@ -466,7 +458,6 @@ describe('clip collection grid controller', () => {
       gridRoot,
       formatLabel: (name) => name,
       layoutRules: { computeBestGrid },
-      updateCount: vi.fn(),
     });
     const collection = makeCollection();
 
@@ -497,7 +488,6 @@ describe('clip collection grid controller', () => {
           .mockReturnValueOnce({ cols: 2, cellH: 100 })
           .mockReturnValueOnce({ cols: 2, cellH: 180 }),
       },
-      updateCount: vi.fn(),
     });
 
     controller.renderCollection(makeCollection());
@@ -523,7 +513,6 @@ describe('clip collection grid controller', () => {
           .mockReturnValueOnce({ cols: 1, cellH: 100 })
           .mockReturnValueOnce({ cols: 2, cellH: 180 }),
       },
-      updateCount: vi.fn(),
     });
 
     controller.renderCollection(makeCollection());
@@ -561,9 +550,8 @@ describe('clip collection grid controller', () => {
           .mockReturnValueOnce({ cols: 1, cellH: 100 })
           .mockReturnValueOnce({ cols: 2, cellH: 180 }),
       },
-      updateCount: vi.fn(),
-      onMetadataFailure: (failure) => metadataFailures.push(failure),
     });
+    controller.on('metadataFailed', (failure) => metadataFailures.push(failure));
 
     controller.renderCollection(makeCollection());
     const videos = Array.from(document.querySelectorAll('#grid video'));
@@ -587,7 +575,6 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
     });
 
@@ -623,10 +610,9 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
-      onRemoveSelected: (clipIds) => removalRequests.push(clipIds),
     });
+    controller.on('removeSelectedRequested', (clipIds) => removalRequests.push(clipIds));
 
     controller.renderCollection(
       new ClipSequence({
@@ -670,10 +656,9 @@ describe('clip collection grid controller', () => {
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
-      onContextMenu: (payload) => contextMenuRequests.push(payload),
     });
+    controller.on('contextMenuRequested', (payload) => contextMenuRequests.push(payload));
 
     controller.renderCollection(
       new ClipSequence({
@@ -706,7 +691,6 @@ describe('clip collection grid controller', () => {
     createClipCollectionGridController({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
     });
 
@@ -720,7 +704,6 @@ describe('clip collection grid controller', () => {
     createClipCollectionGridController({
       grid: otherGrid,
       gridRoot: otherRoot,
-      updateCount: vi.fn(),
       recomputeLayout: vi.fn(),
     });
 
