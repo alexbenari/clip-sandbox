@@ -7,6 +7,8 @@ const DEFAULT_ZOOM_OVERLAY_CSS = `
 .zoom-video{ width:100%; height:100%; object-fit:contain; display:block; background:#000; }
 `;
 
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+
 type ZoomContextMenuEvent = {
   clipId: string | null;
   name: string;
@@ -19,38 +21,38 @@ type ZoomPlaybackFailure = {
   error: unknown;
 };
 
+export interface IZoomOverlayEvents {
+  playbackFailed: Readonly<ZoomPlaybackFailure>;
+  contextMenuRequested: Readonly<ZoomContextMenuEvent>;
+}
+
 type ZoomItem = {
   clipId: string | null;
   src: string;
   name: string;
 };
 
-export class ZoomOverlayController {
+export class ZoomOverlayController implements IEventSource<IZoomOverlayEvents>, IEventSubscriberCount<IZoomOverlayEvents> {
   private readonly mountEl: HTMLElement | null;
   private readonly doc: Document;
-  private readonly onContextMenu: ((event: ZoomContextMenuEvent) => void) | null;
+  private readonly events = new EventSource<IZoomOverlayEvents>();
   private overlayEl: HTMLElement | null;
   private frameEl: HTMLElement | null;
   private videoEl: HTMLVideoElement | null;
   private currentItem: ZoomItem | null;
   private readonly handleOverlayClick: (event: MouseEvent) => void;
   private readonly audioDefault: () => boolean;
-  private readonly onPlaybackFailure: (event: ZoomPlaybackFailure) => void;
   private playbackAttempt = 0;
   private playbackFailureReported = false;
 
-  constructor({ mountEl, document: doc = document, onContextMenu = null, audioDefault = () => false, onPlaybackFailure = () => {} }: {
+  constructor({ mountEl, document: doc = document, audioDefault = () => false }: {
     mountEl?: HTMLElement | null;
     document?: Document;
     audioDefault?: () => boolean;
-    onPlaybackFailure?: (event: ZoomPlaybackFailure) => void;
-    onContextMenu?: ((event: ZoomContextMenuEvent) => void) | null;
   } = {}) {
     this.mountEl = mountEl || null;
     this.doc = doc;
     this.audioDefault = audioDefault;
-    this.onPlaybackFailure = onPlaybackFailure;
-    this.onContextMenu = onContextMenu;
     this.overlayEl = null;
     this.frameEl = null;
     this.videoEl = null;
@@ -58,6 +60,14 @@ export class ZoomOverlayController {
     this.handleOverlayClick = (event) => {
       if (event.target === this.overlayEl) this.close();
     };
+  }
+
+  on<TName extends keyof IZoomOverlayEvents>(name: TName, handler: EventHandler<IZoomOverlayEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof IZoomOverlayEvents): number {
+    return this.events.subscriberCount(name);
   }
 
   private ensureMount(): HTMLElement {
@@ -126,7 +136,7 @@ export class ZoomOverlayController {
     nextVideo.addEventListener('error', () => this.reportPlaybackFailure(nextVideo, new Error('Video playback failed.')));
     nextVideo.addEventListener('contextmenu', (event) => {
       event.preventDefault();
-      this.onContextMenu?.({
+      this.events.emit('contextMenuRequested', {
         clipId: this.getCurrentClipId(),
         name,
         point: {
@@ -156,7 +166,7 @@ export class ZoomOverlayController {
     if (video !== this.videoEl || !this.currentItem || this.playbackFailureReported) return;
     this.playbackFailureReported = true;
     const mediaError = video.error;
-    this.onPlaybackFailure({
+    this.events.emit('playbackFailed', {
       clipId: this.currentItem.clipId,
       name: this.currentItem.name,
       error: mediaError ? new Error(`Media error ${mediaError.code}: ${mediaError.message || 'Playback failed.'}`, { cause: error }) : error,

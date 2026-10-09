@@ -30,7 +30,8 @@ describe('zoom overlay controller', () => {
     const failure = new DOMException('Unsupported media', 'NotSupportedError');
     HTMLMediaElement.prototype.play = vi.fn(() => Promise.reject(failure));
     const onPlaybackFailure = vi.fn();
-    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), onPlaybackFailure });
+    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot') });
+    controller.on('playbackFailed', onPlaybackFailure);
     controller.open({ clipId: 'clip_1', src: 'file:///damaged.mp4', name: 'damaged.mp4' });
     await new Promise(resolve => setTimeout(resolve, 0));
     const video = document.getElementById('zoomVideo');
@@ -46,7 +47,8 @@ describe('zoom overlay controller', () => {
     const rejectors = [];
     HTMLMediaElement.prototype.play = vi.fn(() => new Promise((resolve, reject) => rejectors.push(reject)));
     const onPlaybackFailure = vi.fn();
-    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), onPlaybackFailure });
+    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot') });
+    controller.on('playbackFailed', onPlaybackFailure);
     controller.open({ clipId: 'a', src: 'file:///a.mp4', name: 'a.mp4' });
     const oldVideo = document.getElementById('zoomVideo');
     controller.close();
@@ -69,7 +71,8 @@ describe('zoom overlay controller', () => {
     let rejectPlay;
     HTMLMediaElement.prototype.play = vi.fn(() => new Promise((resolve, reject) => { rejectPlay = reject; }));
     const onPlaybackFailure = vi.fn();
-    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), onPlaybackFailure });
+    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot') });
+    controller.on('playbackFailed', onPlaybackFailure);
     controller.open({ clipId: 'a', src: 'file:///a.mp4', name: 'a.mp4' });
     document.getElementById('zoomVideo').dispatchEvent(new Event('playing'));
     rejectPlay(new DOMException('Earlier attempt interrupted', 'AbortError'));
@@ -80,7 +83,8 @@ describe('zoom overlay controller', () => {
 
   test('reports decode failure after playback starts and permits a report after reopening', () => {
     const onPlaybackFailure = vi.fn();
-    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), onPlaybackFailure });
+    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot') });
+    controller.on('playbackFailed', onPlaybackFailure);
     const clip = { clipId: 'a', src: 'file:///a.mp4', name: 'a.mp4' };
     controller.open(clip);
     const video = document.getElementById('zoomVideo');
@@ -230,8 +234,8 @@ describe('zoom overlay controller', () => {
     const controller = createZoomOverlayController({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
-      onContextMenu,
     });
+    controller.on('contextMenuRequested', onContextMenu);
 
     controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
     document.getElementById('zoomVideo').dispatchEvent(new MouseEvent('contextmenu', {

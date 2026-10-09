@@ -1200,21 +1200,22 @@ this.initialized = true;
   const zoomOverlay = new ZoomOverlayController({
     mountEl: zoomLayerRoot,
     audioDefault: () => settingsService.current.singleClipAudioDefault,
-    onPlaybackFailure: ({ name, error }) => {
-      const problem = `Could not play ${name || 'the selected clip'} in Zoom.`;
-      workflows.showErrorStatus(problem, {
-        affected: name,
-        recovery: 'Close and reopen the clip. If playback still fails, check that the file is available and playable.',
-        technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
-      });
-      void diagnostics.logRuntimeError(problem, error);
-    },
     document,
-    onContextMenu: ({ point }) => {
-      if (fullscreenAdapter.isDocumentFullScreen()) return;
-      workflows.openZoomEditMenu(point);
-    },
   });
+  zoomOverlay.on('playbackFailed', ({ name, error }) => {
+    const problem = `Could not play ${name || 'the selected clip'} in Zoom.`;
+    workflows.showErrorStatus(problem, {
+      affected: name,
+      recovery: 'Close and reopen the clip. If playback still fails, check that the file is available and playable.',
+      technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
+    });
+    void diagnostics.logRuntimeError(problem, error);
+  });
+  zoomOverlay.on('contextMenuRequested', ({ point }) => {
+    if (fullscreenAdapter.isDocumentFullScreen()) return;
+    workflows.openZoomEditMenu(point);
+  });
+  eventWiring.require('zoomOverlay', zoomOverlay, ['playbackFailed', 'contextMenuRequested']);
   const fileSystem = new ElectronFileSystemService({ win: window });
   const collectionRefinementService = ElectronCollectionClipRefinementService.tryCreate(window);
   const clipEditor = new ClipEditor({
