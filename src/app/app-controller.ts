@@ -25,6 +25,7 @@ import { AppText } from './app-text.js';
 import { CollectionNameValidator } from './collection-name-validator.js';
 import { NewCollectionNameCheck } from './new-collection-name-check.js';
 import { EventWiringCheck } from './event-wiring-check.js';
+import { CollectionFileWriter } from './collection-file-writer.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
 import { OrderMenuController } from '../ui/order-menu-controller.js';
@@ -107,11 +108,6 @@ type SaveClipSequenceResult =
   | { ok: false; code: string; error?: unknown; collection?: Collection | null }
   | { ok: true; code: 'saved'; mode: string | undefined; collection: Collection };
 
-type PersistCollectionResult = {
-  ok: true;
-  mode: string | undefined;
-  collection: Collection;
-};
 
 class AppControllerSupport {
   static isDeferredSaveResult(result: SaveCollectionResult | null | undefined): result is { deferred: true } {
@@ -266,7 +262,7 @@ export class AppController {
         pipeline: Pipeline, mutation: Extract<ReturnType<Pipeline['addClipsToCollection']>, { ok: true }>,
       ): Promise<AddToCollectionResult> => {
         try {
-          const { mode: saveMode } = await this.persistCollection(mutation.collection);
+          const { mode: saveMode } = await collectionFileWriter.write(mutation.collection);
           return { ...mutation, saveMode };
         } catch (error) {
           if (mutation.previousCollection) {
@@ -397,7 +393,7 @@ export class AppController {
         let cleanedSavedCollectionCount = 0;
         for (const entry of changedCollections) {
           try {
-            await this.persistCollection(entry.collection);
+            await collectionFileWriter.write(entry.collection);
             cleanedSavedCollectionCount += 1;
           } catch (error) {
             pipeline.upsertCollection(entry.previousCollection);
@@ -809,19 +805,6 @@ export class AppController {
         this.refreshCollectionSelectorView();
       };
 
-    readonly persistCollection = async (collection: Collection): Promise<PersistCollectionResult> => {
-        if (!collection.filename) throw new Error('Collection filename is required.');
-        const { mode } = await fileSystem.saveTextFile({
-          folderSession: state.currentFolderSession,
-          filename: collection.filename,
-          text: collection.toText(),
-        });
-        return {
-          ok: true,
-          mode,
-          collection,
-        };
-      };
 
     readonly saveClipSequenceAsCollection = async (filename: string): Promise<SaveClipSequenceResult> => {
         const pipeline = this.currentPipeline();
@@ -831,7 +814,7 @@ export class AppController {
         const collection = pipelineSession.collectionFromCurrentSequence(filename);
         if (!collection) return { ok: false, code: 'missing-context' };
         try {
-          const { mode } = await this.persistCollection(collection);
+          const { mode } = await collectionFileWriter.write(collection);
           pipeline.upsertCollection(collection);
           return {
             ok: true,
@@ -1207,6 +1190,7 @@ this.initialized = true;
   });
   eventWiring.require('zoomOverlay', zoomOverlay, ['playbackFailed', 'contextMenuRequested']);
   const fileSystem = new ElectronFileSystemService({ win: window });
+  const collectionFileWriter = new CollectionFileWriter(fileSystem, state);
   const collectionRefinementService = ElectronCollectionClipRefinementService.tryCreate(window);
   const clipEditor = new ClipEditor({
     runtimeEditingService: fileSystem,
