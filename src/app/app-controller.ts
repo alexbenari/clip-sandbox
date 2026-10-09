@@ -45,7 +45,8 @@ import { GifExtractionSession } from './gif-extraction-session.js';
 import { AppSettingsService } from './app-settings-service.js';
 import { AppSettingsParser, DEFAULT_STARTUP_SCREEN_ID } from './app-settings.js';
 import { ElectronAppSettingsService } from '../adapters/electron/electron-app-settings-service.js';
-import { ActivityIndicatorControl, type ActivityErrorOptions } from '../ui/activity-indicator-control.js';
+import { ActivityIndicatorControl } from '../ui/activity-indicator-control.js';
+import { ActivityLogger, type ActivityErrorOptions } from './activity-logger.js';
 import { ContextMenuController } from '../ui/context-menu-controller.js';
 import { GridContextMenuControl } from '../ui/grid-context-menu-control.js';
 import { ZoomEditMenuControl } from '../ui/zoom-edit-menu-control.js';
@@ -137,15 +138,15 @@ export class AppController {
     let selectionRevision = 0;
     class AppWorkflows {
     readonly showStatus = (msg: string, timeout = 2500): void => {
-        activityIndicatorControl.show(msg, timeout);
+        activityLogger.log({ kind: 'success', message: msg, timeoutMs: timeout });
       };
 
     readonly showErrorStatus = (msg: string, options?: ActivityErrorOptions): void => {
-        activityIndicatorControl.showError(msg, options);
+        activityLogger.log({ kind: 'error', message: msg, ...options });
       };
 
     readonly showProgressStatus = (msg: string): void => {
-        activityIndicatorControl.showProgress(msg);
+        activityLogger.log({ kind: 'progress', message: msg });
       };
 
     readonly currentPipeline = (): Pipeline | null => {
@@ -1210,7 +1211,9 @@ this.initialized = true;
   });
   const utilityHost = AppControllerSupport.optionalElement('globalUtilityHost');
   let utilities: GlobalUtilityCoordinator | null = null;
+  const activityLogger = new ActivityLogger({ clock: window });
   const activityIndicatorControl = new ActivityIndicatorControl({
+    logger: activityLogger,
     requestPanelClose: () => utilities?.close(),
     writeClipboard: text => navigator.clipboard.writeText(text),
     root: activityIndicatorRoot,
@@ -1225,7 +1228,9 @@ this.initialized = true;
       utilities?.open('activity');
     } : undefined,
   });
-  const loadStatusControl = new LoadStatusControl({ appText, statusControl: activityIndicatorControl });
+  const loadStatusControl = new LoadStatusControl({ appText, statusControl: {
+    show: (message, timeout) => activityLogger.log({ kind: 'success', message, timeoutMs: timeout }),
+  } });
   const audioFeedback = new AudioFeedbackAdapter({ win: window });
   const clock = new ClockAdapter();
   const fullscreenAdapter = new FullscreenAdapter({ doc: document });
@@ -1659,9 +1664,11 @@ this.initialized = true;
       {
         extractionService: new ElectronClipExtractionService(window),
         captureStore: new ElectronClipCapturesStoreService(window),
+        onRestoredCaptures: (review, endpoint) => frameReviewPlayer.showFrameAfterCapture(review, endpoint),
         onPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
         onProgress: workflows.showProgressStatus,
         onSuccess: workflows.showStatus,
+        onActivity: entry => { activityLogger.log(entry); },
         onWarning: message => workflows.showStatus(message, 5000),
         onError: (message, error) => {
           workflows.showErrorStatus(message);
@@ -1678,6 +1685,7 @@ this.initialized = true;
           onPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
           onProgress: workflows.showProgressStatus,
           onSuccess: workflows.showStatus,
+          onActivity: entry => { activityLogger.log(entry); },
           onWarning: message => workflows.showStatus(message, 5000),
           onError: (message, error) => {
             workflows.showErrorStatus(message);
@@ -1883,6 +1891,7 @@ this.initialized = true;
       frameReviewPlayer.destroy();
       utilities?.destroy();
       activityIndicatorControl.destroy();
+      activityLogger.destroy();
       pipelineCatalogControl?.destroy();
       collectionSelectorControl.destroy();
       mainToolbarControl.destroy();

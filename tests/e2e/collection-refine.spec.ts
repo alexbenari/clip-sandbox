@@ -51,7 +51,7 @@ test('refines an extracted collection clip from its original movie and adds a ne
     await page.getByRole('button', { name: 'Extract All (1)' }).click();
     await expect(page.locator('[data-range-id="range-1"]')).toContainText('Extracted as source-001.mp4', { timeout: 90_000 });
     const captureDirectory = path.join(profile, 'clip-captures');
-    const captureFilename = (await fs.readdir(captureDirectory)).find(name => name.endsWith('.json') && name !== 'last-active.json');
+    const captureFilename = (await fs.readdir(captureDirectory)).find(name => name.endsWith('.json'));
     expect(captureFilename).toBeDefined();
     const capturePath = path.join(captureDirectory, captureFilename);
     await expect.poll(async () => JSON.parse(await fs.readFile(capturePath, 'utf8')).ranges.length).toBe(0);

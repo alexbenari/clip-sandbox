@@ -42,6 +42,11 @@ export interface IExtractionBatchProgress {
   readonly progress: IClipExtractionProgress;
 }
 
+export type ClipExtractionActivity =
+  | Readonly<{ kind: 'batch-started'; total: number }>
+  | Readonly<{ kind: 'clip-extracted'; filename: string; folderPath: string; durationMs: number }>
+  | Readonly<{ kind: 'batch-finished'; total: number; extracted: number; cancelled: boolean }>;
+
 export class ClipExtractionWorkflow {
   private readonly states = new Map<string, ClipExtractionEntryState>();
   private running = false;
@@ -53,6 +58,7 @@ export class ClipExtractionWorkflow {
     private readonly extractor: ExtractorPort,
     private readonly destination: DestinationPort,
     private readonly changed: () => void = () => undefined,
+    private readonly onActivity: (event: ClipExtractionActivity) => void = () => undefined,
   ) {}
 
   state(rangeId: string): ClipExtractionEntryState {
@@ -79,14 +85,14 @@ export class ClipExtractionWorkflow {
   }
 
   async extractOne(request: IExtractOneRequest): Promise<void> {
-    await this.run(request, [request.range]);
+    await this.run(request, [request.range], false);
   }
 
   async extractAll(request: IExtractAllRequest): Promise<void> {
     if (this.running) throw new Error('An extraction batch is already running.');
     const eligible = [...request.ranges].filter(range => range.kind === 'ready-to-extract');
     for (const range of eligible) this.setState(range.id, { kind: 'pending' });
-    await this.run(request, eligible);
+    await this.run(request, eligible, true);
   }
 
   async retryPublication(rangeId: string): Promise<void> {
@@ -118,13 +124,15 @@ export class ClipExtractionWorkflow {
     }
   }
 
-  private async run(context: IWorkflowContext, ranges: readonly IReadyToExtractRange[]): Promise<void> {
+  private async run(context: IWorkflowContext, ranges: readonly IReadyToExtractRange[], isExtractAll: boolean): Promise<void> {
     if (this.running) throw new Error('An extraction batch is already running.');
     this.running = true;
     this.cancelRequested = false;
-    this.updateBatch({ currentRangeId: null, currentPosition: 0, total: ranges.length,
-      completed: 0, cancelling: false, usingExactFallback: false, progress: { stage: 'checking-source' } });
+    let extracted = 0;
     try {
+      this.updateBatch({ currentRangeId: null, currentPosition: 0, total: ranges.length,
+        completed: 0, cancelling: false, usingExactFallback: false, progress: { stage: 'checking-source' } });
+      if (isExtractAll) this.onActivity({ kind: 'batch-started', total: ranges.length });
       const opened = await this.destination.open({ movieName: context.collectionName });
       for (const [index, range] of ranges.entries()) {
         if (this.cancelRequested) break;
@@ -133,6 +141,8 @@ export class ClipExtractionWorkflow {
           usingExactFallback: false, progress: { stage: 'checking-source' } });
         this.setState(range.id, { kind: 'extracting' });
         let media: ICreatedExtractionMedia;
+        const startedAt = performance.now();
+        let durationMs: number;
         try {
           media = await this.extractor.extract({
             range,
@@ -147,6 +157,7 @@ export class ClipExtractionWorkflow {
                 usingExactFallback: this.batch.usingExactFallback || progress.stage === 'exact-fallback' });
             }
           });
+          durationMs = Math.max(0, Math.round(performance.now() - startedAt));
         } catch (error) {
           if (this.cancelRequested) this.setState(range.id, { kind: 'cancelled' });
           else this.setState(range.id, { kind: 'failed', message: this.message(error) });
@@ -160,12 +171,18 @@ export class ClipExtractionWorkflow {
           if (this.batch) this.updateBatch({ ...this.batch, completed: this.batch.completed + 1 });
         } catch (error) {
           this.setState(range.id, { kind: 'publication-failed', media, message: this.message(error) });
+          continue;
         }
+        extracted += 1;
+        this.onActivity({ kind: 'clip-extracted', filename: media.filename,
+          folderPath: opened.folderPath, durationMs });
       }
     } finally {
       this.currentRangeId = null;
       this.running = false;
       this.updateBatch(null);
+      if (isExtractAll) this.onActivity({ kind: 'batch-finished', total: ranges.length, extracted,
+        cancelled: this.cancelRequested });
     }
   }
 

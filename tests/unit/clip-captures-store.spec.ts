@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 describe('ClipCapturesStore', () => {
-  it('persists per-movie queues and keeps the newest attached movie active after older saves', async () => {
+  it('persists per-movie queues without selecting one for startup', async () => {
     const userData = await mkdtemp(path.join(os.tmpdir(), 'clip-captures-'));
     folders.push(userData);
     const store = new ClipCapturesStore(userData);
@@ -36,13 +36,13 @@ describe('ClipCapturesStore', () => {
       end: { kind: 'exact-frame', frameIndex: 4, frameInfoHash: '0000000000000004', reviewTimeUs: '40000' },
     }] };
     const emptyData = { nextRangeSequence: 1, ranges: [] };
-    await store.save({ fingerprint: first, displayName: 'First.mp4', sourcePath: path.join(userData, 'First.mp4'), data: firstData, markActive: true });
-    await store.save({ fingerprint: second, displayName: 'Second.mp4', sourcePath: path.join(userData, 'Second.mp4'), data: emptyData, markActive: true });
+    await store.save({ fingerprint: first, displayName: 'First.mp4', sourcePath: path.join(userData, 'First.mp4'), data: firstData });
+    await store.save({ fingerprint: second, displayName: 'Second.mp4', sourcePath: path.join(userData, 'Second.mp4'), data: emptyData });
     await store.save({ fingerprint: first, displayName: 'First.mp4', sourcePath: path.join(userData, 'First.mp4'), data: firstData });
     await store.flush();
 
     const reopened = new ClipCapturesStore(userData);
-    expect((await reopened.lastActive()).displayName).toBe('Second.mp4');
+    await expect(readFile(path.join(userData, 'clip-captures', 'last-active.json'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await reopened.load(first)).ranges).toEqual(firstData.ranges);
     expect((await reopened.load(second)).ranges).toEqual([]);
     const bytes = await readFile(path.join(userData, 'clip-captures', `${store.key(first)}.json`));
@@ -55,7 +55,7 @@ describe('ClipCapturesStore', () => {
     const store = new ClipCapturesStore(userData);
     const movie = fingerprint('a');
     const file = path.join(userData, 'clip-captures', `${store.key(movie)}.json`);
-    await store.save({ fingerprint: movie, displayName: 'Movie.mp4', sourcePath: path.join(userData, 'Movie.mp4'), data: { nextRangeSequence: 1, ranges: [] }, markActive: true });
+    await store.save({ fingerprint: movie, displayName: 'Movie.mp4', sourcePath: path.join(userData, 'Movie.mp4'), data: { nextRangeSequence: 1, ranges: [] } });
     await writeFile(file, '{bad json', 'utf8');
 
     await expect(store.load(movie)).rejects.toThrow();

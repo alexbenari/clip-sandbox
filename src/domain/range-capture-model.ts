@@ -252,6 +252,10 @@ export class RangeCaptureModel {
     });
   }
 
+  continuationEndpoint(): CaptureEndpoint | null {
+    return this.end ?? this.start ?? this.ranges.at(-1)?.end ?? null;
+  }
+
   private beginNextDraft(): void {
     this.start = null;
     this.end = null;

@@ -7,6 +7,11 @@ export const GIF_EXTRACTION_SHORTCUTS: readonly IShortcutDescriptor[] = Object.f
   { description: 'Play or pause', sequences: [['Space']] },
   { description: 'Step backward one frame; hold to accelerate', sequences: [['Left']] },
   { description: 'Step forward one frame; hold to accelerate', sequences: [['Right']] },
+  { description: 'Jump 1 second; scrub follows the last step direction', sequences: [['1']] },
+  { description: 'Jump 2 seconds', sequences: [['2']] },
+  { description: 'Jump 5 seconds', sequences: [['3']] },
+  { description: 'Jump 7 seconds', sequences: [['4']] },
+  { description: 'Jump 10 seconds', sequences: [['5']] },
   { description: 'Set or replace range start', sequences: [['Q']] },
   { description: 'Set or replace range end', sequences: [['W']] },
   { description: 'Jump to exact start', sequences: [['A']] },
@@ -106,7 +111,6 @@ export class GifExtractionScreen implements IAppScreen {
 
   onActivate(): void {
     this.active = true;
-    void this.options.session?.reopenLastMovie();
     this.options.player.mount(this.playerHost);
     this.attachCurrentSession();
     this.options.keyboard.activate({
@@ -130,6 +134,7 @@ export class GifExtractionScreen implements IAppScreen {
 
   onDeactivate(): void {
     this.active = false;
+    this.options.player.interruptJumps();
     this.options.keyboard.deactivate();
     this.previewOperation += 1;
     if (this.options.player.exactPreviewPhase() !== 'inactive') {
@@ -159,6 +164,7 @@ export class GifExtractionScreen implements IAppScreen {
   }
 
   private async requestOpenMovie(): Promise<void> {
+    this.options.player.interruptJumps();
     const session = this.options.session;
     if (!session) {
       this.commandStatus.textContent = 'Movie opening is currently unavailable.';
@@ -175,11 +181,13 @@ export class GifExtractionScreen implements IAppScreen {
 
   private markStart(): void {
     if (this.options.player.exactPreviewPhase() === 'running') return;
+    this.options.player.interruptJumps();
     this.options.session?.markStart(this.options.player.displayedCapture());
   }
 
   private markEnd(): void {
     if (this.options.player.exactPreviewPhase() === 'running') return;
+    this.options.player.interruptJumps();
     this.options.session?.markEnd(this.options.player.displayedCapture());
   }
 
@@ -299,6 +307,7 @@ export class GifExtractionScreen implements IAppScreen {
     this.loopButton.title = this.loopButton.disabled
       ? 'Select a two-frame or longer exact range and enter frame scrub to loop.' : 'Loop the exact range';
     this.openMovie.disabled = snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening';
+    this.options.player.setJumpUnavailable(this.openMovie.disabled);
     this.attachCurrentSession();
   }
 

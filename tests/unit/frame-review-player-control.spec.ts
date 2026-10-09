@@ -9,12 +9,13 @@ import type {
 import { FrameReviewState, type IFrameReviewState } from '../../src/frame-review/model/frame-review-state.js';
 import { FrameReviewPlayerControl } from '../../src/ui/frame-review-player-control.js';
 
-type Deferred<T> = { promise: Promise<T>; resolve(value: T): void };
+type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(error: Error): void };
 
 function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => { resolve = complete; });
-  return { promise, resolve };
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((complete, fail) => { resolve = complete; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 const exactIdentity = Object.freeze({
@@ -63,8 +64,10 @@ function session(initialState = state('exact-ready')): {
   play: ReturnType<typeof vi.fn>;
   pause: ReturnType<typeof vi.fn>;
   seekPlayback: ReturnType<typeof vi.fn>;
+  jumpPlaybackBy: ReturnType<typeof vi.fn>;
   enterFrameScrub: ReturnType<typeof vi.fn>;
   scrubToFrame: ReturnType<typeof vi.fn>;
+  scrubToTime: ReturnType<typeof vi.fn>;
   thumbnailFrame: ReturnType<typeof vi.fn>;
   pressAdjacent: ReturnType<typeof vi.fn>;
   releaseAdjacent: ReturnType<typeof vi.fn>;
@@ -76,8 +79,10 @@ function session(initialState = state('exact-ready')): {
     state: vi.fn(() => initialState),
     play: vi.fn(async () => undefined), pause: vi.fn(async () => undefined),
     seekPlayback: vi.fn(async () => undefined),
+    jumpPlaybackBy: vi.fn(async (deltaUs: bigint) => deltaUs),
     enterFrameScrub: vi.fn(async () => exactFrame(12, 1)),
     scrubToFrame: vi.fn(async (frameIndex: number) => exactFrame(frameIndex, frameIndex)),
+    scrubToTime: vi.fn(async (timestampUs: bigint) => exactFrame(Number(timestampUs / 333_000n), Number(timestampUs / 333_000n))),
     thumbnailFrame: vi.fn(async (frameIndex: number) => exactFrame(frameIndex, frameIndex)),
     stepAdjacent: vi.fn(async (direction: -1 | 1) => exactFrame(12 + direction, 2)),
     pressAdjacent: vi.fn(async () => undefined), releaseAdjacent: vi.fn(async () => undefined),
@@ -89,8 +94,10 @@ function session(initialState = state('exact-ready')): {
     value, emit: (event) => listener?.(event), state: value.state as ReturnType<typeof vi.fn>,
     play: value.play as ReturnType<typeof vi.fn>, pause: value.pause as ReturnType<typeof vi.fn>,
     seekPlayback: value.seekPlayback as ReturnType<typeof vi.fn>,
+    jumpPlaybackBy: value.jumpPlaybackBy as ReturnType<typeof vi.fn>,
     thumbnailFrame: value.thumbnailFrame as ReturnType<typeof vi.fn>,
     enterFrameScrub: value.enterFrameScrub as ReturnType<typeof vi.fn>, scrubToFrame: value.scrubToFrame as ReturnType<typeof vi.fn>,
+    scrubToTime: value.scrubToTime as ReturnType<typeof vi.fn>,
     pressAdjacent: value.pressAdjacent as ReturnType<typeof vi.fn>, releaseAdjacent: value.releaseAdjacent as ReturnType<typeof vi.fn>,
     dispose: value.dispose as ReturnType<typeof vi.fn>,
   };
@@ -209,6 +216,36 @@ describe('FrameReviewPlayerControl', () => {
     expect(review.scrubToFrame).toHaveBeenCalledWith(24);
     expect(review.seekPlayback).not.toHaveBeenCalled();
     expect(capture?.point).toMatchObject({ kind: 'exact-frame', identity: { frameIndex: 24 } });
+  });
+
+  it('displays the frame after a saved capture and clamps at the movie end', async () => {
+    const review = session();
+    const control = new FrameReviewPlayerControl({ document,
+      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    control.attachSession(review.value);
+
+    await control.showFrameAfterCapture(review.value, { kind: 'saved-exact-frame', frameIndex: 24,
+      frameInfoHash: '0000000000000024', reviewTimeUs: 800_000n, sourceGeneration: 7 });
+    expect(review.scrubToFrame).toHaveBeenCalledWith(25);
+    expect(control.capturePoint()).toMatchObject({ kind: 'exact-frame', identity: { frameIndex: 25 } });
+
+    await control.showFrameAfterCapture(review.value, { kind: 'saved-exact-frame', frameIndex: 119,
+      frameInfoHash: '0000000000000119', reviewTimeUs: 3_966_000n, sourceGeneration: 7 });
+    expect(review.scrubToFrame).toHaveBeenLastCalledWith(119);
+  });
+
+  it('resolves a timestamp capture to its exact frame before stepping forward', async () => {
+    const review = session();
+    const control = new FrameReviewPlayerControl({ document,
+      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    control.attachSession(review.value);
+
+    await control.showFrameAfterCapture(review.value, { kind: 'playback-timestamp', timestampUs: 1_000_000n,
+      sourceGeneration: 7 });
+
+    expect(review.scrubToTime).toHaveBeenCalledWith(1_000_000n);
+    expect((review.value.stepAdjacent as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(1);
+    expect(control.capturePoint()).toMatchObject({ kind: 'exact-frame', identity: { frameIndex: 13 } });
   });
 
   it('returns a synchronous point from the displayed frame and rejects older async render completion', async () => {
@@ -408,5 +445,110 @@ describe('FrameReviewPlayerControl', () => {
       point: { kind: 'exact-frame', identity: { frameIndex: 24 } },
     });
     expect(control.root.querySelector('[data-command="play-pause"]')?.getAttribute('aria-label')).toBe('Play');
+  });
+
+  it('starts with a 2-second selection and uses the same playback jump for the button and duration command', async () => {
+    const review = session(state('playback-ready', false));
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    control.attachSession(review.value);
+    const selector = control.root.querySelector<HTMLSelectElement>('[aria-label="Jump by seconds"]')!;
+    const button = control.root.querySelector<HTMLButtonElement>('[data-command="jump-seconds"]')!;
+    expect(selector.value).toBe('2');
+    expect(button.textContent).toBe('Jump +2s');
+
+    button.click();
+    await vi.waitFor(() => expect(review.jumpPlaybackBy).toHaveBeenCalledWith(2_000_000n));
+    selector.value = '7';
+    selector.dispatchEvent(new Event('change'));
+    control.jumpBySeconds(5);
+    await vi.waitFor(() => expect(review.jumpPlaybackBy).toHaveBeenCalledWith(5_000_000n));
+    expect(selector.value).toBe('7');
+  });
+
+  it('uses elapsed time and the last manual step direction in exact scrub', async () => {
+    const review = session();
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    control.attachSession(review.value);
+    await control.enterExactScrubAtFrame(12);
+    control.pressStep(-1);
+    control.releaseStep(-1);
+
+    control.jumpBySeconds(2);
+    await vi.waitFor(() => expect(review.scrubToTime).toHaveBeenCalledWith(1_996_000n));
+    expect(control.root.querySelector('[data-command="jump-seconds"]')?.textContent).toBe('Jump −2s');
+    expect(review.jumpPlaybackBy).not.toHaveBeenCalled();
+  });
+
+  it('drops queued jumps at arrow input and enters scrub after only the issued seek settles', async () => {
+    const first = deferred<bigint>();
+    const review = session();
+    review.jumpPlaybackBy.mockReturnValueOnce(first.promise);
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    control.attachSession(review.value);
+    await control.togglePlayback();
+    control.jumpBySeconds(5);
+    control.jumpBySeconds(5);
+    await vi.waitFor(() => expect(review.jumpPlaybackBy).toHaveBeenCalledOnce());
+    control.pressStep(-1);
+    control.releaseStep(-1);
+    expect(control.exactScrubActive()).toBe(true);
+    first.resolve(5_000_000n);
+    await vi.waitFor(() => expect(review.enterFrameScrub).toHaveBeenCalledOnce());
+    expect(review.jumpPlaybackBy).toHaveBeenCalledOnce();
+    expect(review.pressAdjacent).not.toHaveBeenCalled();
+  });
+
+  it('accumulates rapid playback presses while one jump is pending', async () => {
+    const first = deferred<bigint>();
+    const review = session(state('playback-ready', false));
+    review.jumpPlaybackBy.mockReturnValueOnce(first.promise);
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    control.attachSession(review.value);
+
+    control.jumpBySeconds(2);
+    control.jumpBySeconds(5);
+    control.jumpBySeconds(5);
+    expect(review.jumpPlaybackBy).toHaveBeenCalledTimes(1);
+    first.resolve(2_000_000n);
+
+    await vi.waitFor(() => expect(review.jumpPlaybackBy).toHaveBeenNthCalledWith(2, 10_000_000n));
+    expect(review.jumpPlaybackBy).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a new jump when a previously interrupted seek fails', async () => {
+    const first = deferred<bigint>();
+    const review = session(state('playback-ready', false));
+    review.jumpPlaybackBy.mockReturnValueOnce(first.promise);
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    control.attachSession(review.value);
+
+    control.jumpBySeconds(2);
+    control.interruptJumps();
+    control.jumpBySeconds(5);
+    first.reject(new Error('Old seek failed'));
+
+    await vi.waitFor(() => expect(review.jumpPlaybackBy).toHaveBeenNthCalledWith(2, 5_000_000n));
+    expect(control.root.querySelector('[role="alert"]')?.textContent).not.toContain('Old seek failed');
+  });
+
+  it('drops queued jumps when a movie-position drag begins', async () => {
+    const first = deferred<bigint>();
+    const review = session();
+    review.jumpPlaybackBy.mockReturnValueOnce(first.promise);
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    control.attachSession(review.value);
+    await control.togglePlayback();
+    control.jumpBySeconds(7);
+    control.jumpBySeconds(7);
+    await vi.waitFor(() => expect(review.jumpPlaybackBy).toHaveBeenCalledOnce());
+    const progress = control.root.querySelector<HTMLInputElement>('input[type="range"]')!;
+    expect(progress.disabled).toBe(false);
+    progress.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    progress.value = '50000';
+    progress.dispatchEvent(new Event('change', { bubbles: true }));
+    first.resolve(7_000_000n);
+
+    await vi.waitFor(() => expect(review.seekPlayback).toHaveBeenCalled());
+    expect(review.jumpPlaybackBy).toHaveBeenCalledOnce();
   });
 });

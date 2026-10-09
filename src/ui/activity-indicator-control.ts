@@ -1,3 +1,5 @@
+import { ActivityLogger, type ActivityEntry, type ActivityErrorEntry } from '../app/activity-logger.js';
+
 const ACTIVITY_INDICATOR_STYLE_ID = 'activityIndicatorStyles';
 const DEFAULT_ACTIVITY_INDICATOR_CSS = `
 .activity-indicator-host{position:relative;display:flex;align-items:center}
@@ -31,19 +33,6 @@ const DEFAULT_ACTIVITY_INDICATOR_CSS = `
 @keyframes activity-indicator-pulse{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,.32)}70%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(34,197,94,0)}100%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,0)}}
 `;
 
-export type ActivityErrorOptions = {
-  affected?: string;
-  recovery?: string;
-  technicalDetails?: string;
-  retry?: () => Promise<void | { ok: true } | { ok: false; error: string }>;
-};
-
-type ActivityState = 'idle' | 'progress' | 'success';
-type EntryBase = { id: string; message: string };
-type ErrorEntry = EntryBase & ActivityErrorOptions & {
-  kind: 'error'; resolution: 'unresolved' | 'resolved'; retryBusy: boolean; copyBusy: boolean; feedback: string;
-};
-type ActivityEntry = (EntryBase & { kind: 'progress' | 'success' | 'information' }) | ErrorEntry;
 type EntryView = { node: HTMLLIElement; error?: {
   status: HTMLElement; feedback: HTMLElement; clear: HTMLButtonElement; retry?: HTMLButtonElement; copy?: HTMLButtonElement;
 } };
@@ -55,12 +44,12 @@ export class ActivityIndicatorControl {
   private readonly listEl: HTMLElement | null;
   private readonly doc: Document;
   private readonly win: ActivityWindow;
-  private readonly maxEntries: number;
+  private readonly logger: ActivityLogger;
+  private readonly unsubscribeLogger: () => void;
   private readonly requestPanelOpen?: () => void;
   private readonly writeClipboard?: (text: string) => Promise<void>;
   private readonly statusDot: HTMLElement | null;
   private readonly statusLabel: HTMLElement | null;
-  private entries: ActivityEntry[] = [];
   private readonly views = new Map<string, EntryView>();
   private readonly listeners: (() => void)[] = [];
   private historyRegion: HTMLElement | null = null;
@@ -68,27 +57,34 @@ export class ActivityIndicatorControl {
   private clearHistoryButton: HTMLButtonElement | null = null;
   private clearFeedback: HTMLElement | null = null;
   private resizeObserver?: ResizeObserver;
-  private state: ActivityState = 'idle';
-  private resetTimer: number | null = null;
-  private nextEntryNumber = 1;
   private destroyed = false;
 
   constructor({
     root, button, panel, listEl,
     document: doc = root?.ownerDocument || document,
     win = doc.defaultView || window,
-    maxEntries = 50, requestPanelOpen, requestPanelClose, writeClipboard,
+    logger, requestPanelOpen, requestPanelClose, writeClipboard,
   }: {
+    logger: ActivityLogger;
     root?: HTMLElement | null; button?: HTMLButtonElement | null; panel?: HTMLElement | null; listEl?: HTMLElement | null;
-    document?: Document; win?: ActivityWindow; maxEntries?: number;
+    document?: Document; win?: ActivityWindow;
     requestPanelClose?: () => void; requestPanelOpen?: () => void; writeClipboard?: (text: string) => Promise<void>;
-  } = {}) {
+  }) {
     this.button = button || null;
     this.panel = panel || null;
     this.listEl = listEl || null;
     this.doc = doc;
     this.win = win;
-    this.maxEntries = Number.isFinite(maxEntries) ? Math.max(1, Math.floor(maxEntries)) : 50;
+    this.logger = logger;
+    this.unsubscribeLogger = this.logger.subscribe(change => {
+      if (change.added?.kind !== 'error' && this.clearFeedback) this.clearFeedback.textContent = '';
+      this.renderHistory();
+      this.renderStatus();
+      if (change.added?.kind === 'error') {
+        if (this.requestPanelOpen) this.requestPanelOpen();
+        else this.setPanelOpen(true);
+      }
+    });
     this.requestPanelOpen = requestPanelOpen;
     this.writeClipboard = writeClipboard;
     this.statusDot = button ? this.ensureStatusElement(button, 'activity-status-dot') : null;
@@ -107,53 +103,9 @@ export class ActivityIndicatorControl {
       else this.setPanelOpen(false);
     });
     this.prepareHistoryRegion();
-    this.setState('idle');
+    this.renderStatus();
     this.setPanelOpen(false);
     this.renderHistory();
-  }
-
-  show(message: string, timeout = 2500): void { this.showSuccess(message, timeout); }
-
-  showProgress(message: string): void {
-    this.clearResetTimer();
-    this.setState('progress');
-    this.addEntry(message, 'progress');
-  }
-
-  showInformation(message: string): void { this.addEntry(message, 'information'); }
-
-  showSuccess(message: string, timeout = 2500): void {
-    this.clearResetTimer();
-    this.setState('success');
-    this.addEntry(message, 'success');
-    this.resetTimer = this.win.setTimeout(() => {
-      this.resetTimer = null;
-      this.setState('idle');
-    }, Number.isFinite(timeout) && timeout >= 0 ? timeout : 2500);
-  }
-
-  showError(message: string, options?: ActivityErrorOptions): string {
-    this.clearResetTimer();
-    this.state = 'idle';
-    const id = `activity-error-${this.nextEntryNumber++}`;
-    this.entries.unshift({ id, kind: 'error', message, ...options, resolution: 'unresolved', retryBusy: false, copyBusy: false, feedback: '' });
-    this.trimEntries();
-    this.renderHistory();
-    this.renderStatus();
-    if (this.requestPanelOpen) this.requestPanelOpen();
-    else this.setPanelOpen(true);
-    return id;
-  }
-
-  resolveError(id: string): void {
-    const entry = this.entries.find(candidate => candidate.id === id);
-    if (entry?.kind !== 'error') return;
-    entry.resolution = 'resolved';
-    entry.retryBusy = false;
-    entry.feedback = '';
-    this.trimEntries();
-    this.renderHistory();
-    this.renderStatus();
   }
 
   focusInitial(): void {
@@ -163,16 +115,10 @@ export class ActivityIndicatorControl {
 
   destroy(): void {
     this.destroyed = true;
-    this.clearResetTimer();
+    this.unsubscribeLogger();
     this.resizeObserver?.disconnect();
     for (const remove of this.listeners.splice(0)) remove();
     this.views.clear();
-    this.entries = [];
-  }
-
-  private clearResetTimer(): void {
-    if (this.resetTimer !== null) this.win.clearTimeout(this.resetTimer);
-    this.resetTimer = null;
   }
 
   private listen<T extends Event>(target: EventTarget, type: string, handler: (event: T) => void): void {
@@ -217,23 +163,19 @@ export class ActivityIndicatorControl {
     return element;
   }
 
-  private setState(state: ActivityState): void {
-    this.state = state;
-    this.renderStatus();
-  }
-
   private renderStatus(): void {
     if (!this.button) return;
-    const unresolvedErrorCount = this.entries.filter(
+    const { entries, state } = this.logger.snapshot;
+    const unresolvedErrorCount = entries.filter(
       entry => entry.kind === 'error' && entry.resolution === 'unresolved',
     ).length;
-    const renderedState = unresolvedErrorCount > 0 ? 'error' : this.state;
+    const renderedState = unresolvedErrorCount > 0 ? 'error' : state;
     const visibleStatus = unresolvedErrorCount > 0
       ? `${unresolvedErrorCount} error${unresolvedErrorCount === 1 ? '' : 's'}`
-      : this.state === 'progress' ? 'Working…' : 'Ready';
+      : state === 'progress' ? 'Working…' : 'Ready';
     const accessibleStatus = unresolvedErrorCount > 0
       ? `${unresolvedErrorCount} unresolved error${unresolvedErrorCount === 1 ? '' : 's'}`
-      : this.state === 'progress' ? 'Working' : 'Ready';
+      : state === 'progress' ? 'Working' : 'Ready';
     const semanticName = `Activity and Errors: ${accessibleStatus}`;
 
     this.button.dataset.state = renderedState;
@@ -249,21 +191,10 @@ export class ActivityIndicatorControl {
     if (open) this.updateOverflow();
   }
 
-  private addEntry(message: string, kind: 'progress' | 'success' | 'information'): void {
-    if (this.clearFeedback) this.clearFeedback.textContent = '';
-    this.entries.unshift({ id: `activity-${this.nextEntryNumber++}`, kind, message });
-    this.trimEntries();
-    this.renderHistory();
-  }
-
-  private trimEntries(): void {
-    let clearable = 0;
-    this.entries = this.entries.filter(entry => (entry.kind === 'error' && entry.resolution === 'unresolved') || ++clearable <= this.maxEntries);
-  }
-
   private renderHistory(): void {
     if (!this.listEl || this.destroyed) return;
-    const liveIds = new Set(this.entries.map(entry => entry.id));
+    const entries = this.logger.snapshot.entries;
+    const liveIds = new Set(entries.map(entry => entry.id));
     for (const [id, view] of this.views) {
       if (liveIds.has(id)) continue;
       if (view.node.contains(this.doc.activeElement)) this.focusInitial();
@@ -271,7 +202,7 @@ export class ActivityIndicatorControl {
       this.views.delete(id);
     }
     let previous: Node | null = null;
-    for (const entry of this.entries) {
+    for (const entry of entries) {
       let view = this.views.get(entry.id);
       if (!view) { view = this.createEntryView(entry); this.views.set(entry.id, view); }
       this.updateEntryView(entry, view);
@@ -279,7 +210,7 @@ export class ActivityIndicatorControl {
       if (next !== view.node) this.listEl.insertBefore(view.node, next);
       previous = view.node;
     }
-    if (this.empty) this.empty.hidden = this.entries.length > 0;
+    if (this.empty) this.empty.hidden = entries.length > 0;
     this.updateOverflow();
   }
 
@@ -293,7 +224,24 @@ export class ActivityIndicatorControl {
     message.textContent = entry.message;
     node.append(message);
     const view: EntryView = { node };
-    if (entry.kind !== 'error') return view;
+    if (entry.kind !== 'error') {
+      if (entry.details || entry.fields?.length) {
+        const details = this.doc.createElement('details');
+        details.className = 'activity-indicator-details';
+        const summary = this.doc.createElement('summary');
+        summary.textContent = 'More info';
+        details.append(summary);
+        if (entry.details) {
+          const info = this.doc.createElement('pre');
+          info.textContent = entry.details;
+          details.append(info);
+        }
+        for (const field of entry.fields ?? []) this.appendText(details, `${field.label}: `, field.value);
+        details.addEventListener('toggle', () => this.updateOverflow());
+        node.append(details);
+      }
+      return view;
+    }
     const status = this.doc.createElement('div');
     status.className = 'activity-indicator-feedback';
     node.append(status);
@@ -306,13 +254,15 @@ export class ActivityIndicatorControl {
     details.append(summary);
     if (entry.affected) this.appendText(details, 'Affected: ', entry.affected);
     if (entry.recovery) this.appendText(details, 'Recovery: ', entry.recovery);
+    if (entry.details) this.appendText(details, '', entry.details);
+    for (const field of entry.fields ?? []) this.appendText(details, `${field.label}: `, field.value);
     let copy: HTMLButtonElement | undefined;
     if (entry.technicalDetails) {
       const pre = this.doc.createElement('pre');
       pre.textContent = entry.technicalDetails;
       copy = this.makeButton('Copy details', () => { void this.copyDetails(entry); });
       details.append(pre, copy);
-    } else if (!entry.affected && !entry.recovery) {
+    } else if (!entry.affected && !entry.recovery && !entry.details && !entry.fields?.length) {
       this.appendText(details, '', 'No additional details were provided.');
     }
     details.addEventListener('toggle', () => {
@@ -370,79 +320,71 @@ export class ActivityIndicatorControl {
   }
 
   private clearHistory(): void {
-    const retained = this.entries.filter(entry => entry.kind === 'error' && entry.resolution === 'unresolved');
-    const removed = this.entries.length - retained.length;
-    this.entries = retained;
-    this.renderHistory();
-    if (this.clearFeedback) this.clearFeedback.textContent = retained.length ? `Cleared ${removed} entries; ${retained.length} unresolved error${retained.length === 1 ? '' : 's'} retained.` : `Cleared ${removed} entries.`;
-    this.renderStatus();
+    const { removed, retainedErrors } = this.logger.clearHistory();
+    if (this.clearFeedback) this.clearFeedback.textContent = retainedErrors
+      ? `Cleared ${removed} entries; ${retainedErrors} unresolved error${retainedErrors === 1 ? '' : 's'} retained.`
+      : `Cleared ${removed} entries.`;
   }
 
-  private dismissError(entry: ErrorEntry): void {
-    if (entry.retryBusy) return;
-    this.entries = this.entries.filter(candidate => candidate !== entry);
-    this.renderHistory();
-    this.renderStatus();
+  private dismissError(entry: ActivityErrorEntry): void {
+    this.logger.dismissError(entry.id);
   }
 
-  private async retryEntry(entry: ErrorEntry): Promise<void> {
+  private async retryEntry(entry: ActivityErrorEntry): Promise<void> {
     if (!entry.retry || entry.retryBusy || entry.resolution === 'resolved') return;
-    entry.retryBusy = true;
-    entry.feedback = '';
-    this.renderHistory();
+    this.logger.updateError(entry.id, { retryBusy: true, feedback: '' });
     let failure: string | undefined;
     try {
       const result = await entry.retry();
       if (result && result.ok === false) failure = result.error;
     } catch (error) { failure = error instanceof Error ? error.message : String(error); }
-    if (this.destroyed || !this.entries.includes(entry)) return;
-    entry.retryBusy = false;
-    if (failure !== undefined) { entry.feedback = `Retry failed: ${failure}`; this.renderHistory(); }
-    else this.resolveError(entry.id);
+    if (this.destroyed || !this.logger.has(entry.id)) return;
+    this.logger.updateError(entry.id, { retryBusy: false });
+    if (failure !== undefined) this.logger.updateError(entry.id, { feedback: `Retry failed: ${failure}` });
+    else this.logger.resolveError(entry.id);
   }
 
-  private async copyDetails(entry: ErrorEntry): Promise<void> {
+  private async copyDetails(entry: ActivityErrorEntry): Promise<void> {
     if (!entry.technicalDetails || entry.copyBusy) return;
-    entry.copyBusy = true;
-    this.renderHistory();
+    this.logger.updateError(entry.id, { copyBusy: true });
     let feedback: string;
     try {
       if (!this.writeClipboard) throw new Error('Clipboard is unavailable.');
       await this.writeClipboard(entry.technicalDetails);
       feedback = 'Technical details copied.';
     } catch (error) { feedback = `Copy failed: ${error instanceof Error ? error.message : String(error)}`; }
-    if (this.destroyed || !this.entries.includes(entry)) return;
-    entry.copyBusy = false;
-    entry.feedback = feedback;
-    this.renderHistory();
+    if (this.destroyed || !this.logger.has(entry.id)) return;
+    this.logger.updateError(entry.id, { copyBusy: false, feedback });
   }
 
   private handleHistoryKeyDown(event: KeyboardEvent): void {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
     if (event.target instanceof Element && event.target.closest('button,input,textarea,select,summary,a,[contenteditable]')) return;
-    if (!this.entries.length) return;
+    const entries = this.logger.snapshot.entries;
+    if (!entries.length) return;
     const active = this.doc.activeElement;
-    const current = this.entries.findIndex(entry => this.views.get(entry.id)?.node === active);
+    const current = entries.findIndex(entry => this.views.get(entry.id)?.node === active);
     let target: number;
     if (event.key === 'Home') target = 0;
-    else if (event.key === 'End') target = this.entries.length - 1;
-    else if (event.key === 'ArrowDown') target = Math.min(this.entries.length - 1, current + 1);
+    else if (event.key === 'End') target = entries.length - 1;
+    else if (event.key === 'ArrowDown') target = Math.min(entries.length - 1, current + 1);
     else if (event.key === 'ArrowUp') target = Math.max(0, current - 1);
     else if (event.key === 'PageDown' || event.key === 'PageUp') target = this.pageTarget(Math.max(0, current), event.key === 'PageDown' ? 1 : -1);
     else return;
     event.preventDefault();
-    const view = this.views.get(this.entries[target].id);
+    const view = this.views.get(entries[target].id);
     view?.node.focus({ preventScroll: true });
     view?.node.scrollIntoView?.({ block: 'nearest' });
   }
 
   private pageTarget(current: number, direction: 1 | -1): number {
-    const start = this.views.get(this.entries[current].id)?.node.getBoundingClientRect().top ?? 0;
+    const entries = this.logger.snapshot.entries;
+    const start = this.views.get(entries[current].id)?.node.getBoundingClientRect().top ?? 0;
     const distance = this.historyRegion?.clientHeight ?? 0;
     let target = current;
-    for (let index = current + direction; index >= 0 && index < this.entries.length; index += direction) {
+    for (let index = current + direction; index >= 0 && index < entries.length; index += direction) {
       target = index;
-      const top = this.views.get(this.entries[index].id)?.node.getBoundingClientRect().top ?? start;
+      const top = this.views.get(entries[index].id)?.node.getBoundingClientRect().top ?? start;
       if (Math.abs(top - start) >= distance) break;
     }
     return target;

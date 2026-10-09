@@ -19,7 +19,7 @@ function fakes() {
   return {
     extractor: { extract: vi.fn(async ({ range: current }: { range: Range }) => ({ kind: 'created-media', mediaHandle: `media-${current.id}`, filename: `${current.id}.mp4` })) },
     destination: {
-      open: vi.fn(async () => ({ destinationHandle: 'destination_opaque_0001', collectionFilename: 'Sample Movie.txt', collection: Collection.fromFilename({ filename: 'Sample Movie.txt' }) })),
+      open: vi.fn(async () => ({ destinationHandle: 'destination_opaque_0001', folderPath: 'D:\\Clips', collectionFilename: 'Sample Movie.txt', collection: Collection.fromFilename({ filename: 'Sample Movie.txt' }) })),
       publishCreatedMedia: vi.fn(async () => undefined),
       retryPublication: vi.fn(async () => undefined),
     },
@@ -27,6 +27,53 @@ function fakes() {
 }
 
 describe('ClipExtractionWorkflow', () => {
+  it('reports Extract All boundaries and each successful clip with elapsed extraction time', async () => {
+    const ports = fakes();
+    const activity: unknown[] = [];
+    const workflow = new ClipExtractionWorkflow(ports.extractor, ports.destination,
+      () => undefined, event => activity.push(event));
+
+    await workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
+      ranges: [range('range-1', 10), range('range-2', 20)], collectionName: 'Sample Movie' });
+
+    expect(activity).toMatchObject([
+      { kind: 'batch-started', total: 2 },
+      { kind: 'clip-extracted', filename: 'range-1.mp4', folderPath: 'D:\\Clips' },
+      { kind: 'clip-extracted', filename: 'range-2.mp4', folderPath: 'D:\\Clips' },
+      { kind: 'batch-finished', total: 2, extracted: 2, cancelled: false },
+    ]);
+    for (const event of activity.slice(1, 3)) {
+      expect(event.durationMs).toEqual(expect.any(Number));
+      expect(event.durationMs).toBeGreaterThanOrEqual(0);
+      expect(Number.isInteger(event.durationMs)).toBe(true);
+    }
+  });
+
+  it('reports a single extraction without Extract All boundaries', async () => {
+    const ports = fakes();
+    const activity: unknown[] = [];
+    const workflow = new ClipExtractionWorkflow(ports.extractor, ports.destination,
+      () => undefined, event => activity.push(event));
+    await workflow.extractOne({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
+      range: range('range-1', 10), collectionName: 'Sample Movie' });
+    expect(activity).toMatchObject([{ kind: 'clip-extracted', filename: 'range-1.mp4' }]);
+  });
+
+  it('counts only published clips in the finished entry', async () => {
+    const ports = fakes();
+    ports.destination.publishCreatedMedia.mockRejectedValueOnce(new Error('collection save failed'));
+    const activity: unknown[] = [];
+    const workflow = new ClipExtractionWorkflow(ports.extractor, ports.destination,
+      () => undefined, event => activity.push(event));
+    await workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
+      ranges: [range('range-1', 10)], collectionName: 'Sample Movie' });
+    expect(workflow.state('range-1').kind).toBe('publication-failed');
+    expect(activity).toEqual([
+      { kind: 'batch-started', total: 1 },
+      { kind: 'batch-finished', total: 1, extracted: 0, cancelled: false },
+    ]);
+  });
+
   it('extracts a movie whose filename leaves whitespace after extension removal into the opened collection', async () => {
     const extractionService = {
       extract: vi.fn(async () => ({ kind: 'created-media', mediaHandle: 'media_opaque_0001', filename: 'Sample Movie-001.mp4' })),

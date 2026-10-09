@@ -13,20 +13,6 @@ class ClipCapturesStore {
     this.writers = new Map();
   }
 
-  async lastActive() {
-    let pointer;
-    try {
-      pointer = this.parse(await this.fs.readFile(path.join(this.directory, 'last-active.json'), 'utf8'));
-    } catch (error) {
-      if (error?.code === 'ENOENT') return null;
-      throw error;
-    }
-    if (pointer.schemaVersion !== 1) throw new Error('Saved last-movie pointer is unsupported.');
-    const record = await this.load(pointer.movieFingerprint);
-    if (!record) throw new Error('The last saved capture record is missing.');
-    return record;
-  }
-
   async load(fingerprint) {
     const key = this.key(fingerprint);
     const pending = this.writers.get(key)?.running;
@@ -45,7 +31,7 @@ class ClipCapturesStore {
     return record;
   }
 
-  save({ fingerprint, displayName, sourcePath, data, markActive = false }) {
+  save({ fingerprint, displayName, sourcePath, data }) {
     const record = {
       schemaVersion: 1,
       movieFingerprint: this.fingerprint(fingerprint),
@@ -63,7 +49,7 @@ class ClipCapturesStore {
       this.writers.set(key, writer);
     }
     const completion = new Promise((resolve, reject) => writer.waiters.push({ resolve, reject }));
-    writer.latest = { record, markActive: markActive || writer.latest?.markActive === true };
+    writer.latest = { record };
     if (!writer.running) writer.running = this.drain(key, writer);
     return completion;
   }
@@ -75,11 +61,11 @@ class ClipCapturesStore {
   async drain(key, writer) {
     try {
       while (writer.latest) {
-        const { record, markActive } = writer.latest;
+        const { record } = writer.latest;
         const waiters = writer.waiters.splice(0);
         writer.latest = null;
         try {
-          await this.write(key, record, markActive);
+          await this.write(key, record);
           for (const waiter of waiters) waiter.resolve();
         } catch (error) {
           for (const waiter of waiters) waiter.reject(error);
@@ -91,12 +77,9 @@ class ClipCapturesStore {
     }
   }
 
-  async write(key, record, markActive) {
+  async write(key, record) {
     await this.fs.mkdir(this.directory, { recursive: true });
     await this.replace(`${key}.json`, record);
-    if (markActive) {
-      await this.replace('last-active.json', { schemaVersion: 1, movieFingerprint: record.movieFingerprint });
-    }
   }
 
   async replace(filename, value) {

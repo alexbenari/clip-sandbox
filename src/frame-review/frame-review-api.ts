@@ -63,12 +63,14 @@ export interface IFrameReviewSession {
   play(): Promise<void>;
   pause(): Promise<void>;
   seekPlayback(timestampUs: bigint): Promise<void>;
+  jumpPlaybackBy(deltaUs: bigint): Promise<bigint>;
   startExactPreview(range: Readonly<{ startFrameIndex: number; endFrameIndex: number }>): Promise<void>;
   pauseExactPreview(): Promise<IExactDisplayFrame>;
   resumeExactPreview(frameIndex: number): Promise<void>;
   stopExactPreview(): Promise<IExactDisplayFrame | null>;
   enterFrameScrub(): Promise<IExactDisplayFrame>;
   scrubToFrame(frameIndex: number): Promise<IExactDisplayFrame>;
+  scrubToTime(timestampUs: bigint): Promise<IExactDisplayFrame>;
   stepAdjacent(direction: AdjacentDirection): Promise<IExactDisplayFrame>;
   pressAdjacent(direction: AdjacentDirection): Promise<void>;
   releaseAdjacent(direction?: AdjacentDirection): Promise<void>;

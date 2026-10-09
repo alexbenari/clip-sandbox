@@ -1,11 +1,9 @@
-import { FrameReviewOpaqueId } from '../../frame-review/frame-review-api.js';
 import type { FrameReviewSessionId } from '../../frame-review/frame-review-api.js';
 import { SourceFingerprint, type ISourceFingerprint } from '../../frame-review/model/source-fingerprint.js';
 import type { ISavedRangeCaptureData } from '../../domain/range-capture-model.js';
-import type { AttachedCaptures, IClipCapturesStoreService, LastSavedMovie } from '../../app/clip-captures-store-service.js';
+import type { AttachedCaptures, IClipCapturesStoreService } from '../../app/clip-captures-store-service.js';
 
 interface IClipCapturesApi {
-  last(): Promise<unknown>;
   attach(request: unknown): Promise<unknown>;
   save(request: unknown): Promise<unknown>;
 }
@@ -17,28 +15,10 @@ export class ElectronClipCapturesStoreService implements IClipCapturesStoreServi
 
   constructor(win: ClipCapturesWindow = window) {
     const api = win.clipSandboxDesktop?.clipCaptures;
-    if (!api || typeof api.last !== 'function' || typeof api.attach !== 'function' || typeof api.save !== 'function') {
+    if (!api || typeof api.attach !== 'function' || typeof api.save !== 'function') {
       throw new Error('Saved-captures API is unavailable.');
     }
     this.api = api;
-  }
-
-  async last(): Promise<LastSavedMovie | null> {
-    const value = this.result(await this.api.last());
-    if (value === null) return null;
-    const record = this.record(value);
-    if (typeof record.name !== 'string' || !record.name || record.name.length > 512) {
-      throw new Error('Saved movie name is invalid.');
-    }
-    if (record.unavailable === true) return Object.freeze({
-      kind: 'unavailable', name: record.name, movieRef: this.movieRef(record.movieRef),
-      data: this.record(record.data) as unknown as ISavedRangeCaptureData,
-    });
-    return Object.freeze({
-      kind: 'available',
-      selection: Object.freeze({ name: record.name, sourceHandle: FrameReviewOpaqueId.sourceHandle(record.sourceHandle) }),
-      expectedFingerprint: SourceFingerprint.parse(record.expectedFingerprint),
-    });
   }
 
   async attach(sessionId: FrameReviewSessionId, expectedFingerprint?: ISourceFingerprint): Promise<AttachedCaptures> {

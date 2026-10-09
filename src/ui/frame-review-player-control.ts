@@ -7,6 +7,7 @@ import type {
   IFrameReviewSession,
 } from '../frame-review/frame-review-api.js';
 import type { IFrameReviewState } from '../frame-review/model/frame-review-state.js';
+import type { CaptureEndpoint } from '../domain/capture-endpoint.js';
 
 export interface IFrameReviewFrameRenderer {
   render(canvas: HTMLCanvasElement, frame: FrameReviewDisplayFrame, stillCurrent?: () => boolean): Promise<void>;
@@ -48,6 +49,8 @@ export class FrameReviewPlayerControl {
   private readonly pauseIcon: SVGElement;
   private readonly stepLeft: HTMLButtonElement;
   private readonly stepRight: HTMLButtonElement;
+  private readonly jumpDuration: HTMLSelectElement;
+  private readonly jumpButton: HTMLButtonElement;
   private readonly frameIdentity: HTMLElement;
   private readonly error: HTMLElement;
   private readonly frameRenderer: IFrameReviewFrameRenderer;
@@ -67,6 +70,12 @@ export class FrameReviewPlayerControl {
   private lastTransportKey = '';
   private readonly heldStepDirections = new Set<AdjacentDirection>();
   private progressInteractionActive = false;
+  private lastScrubDirection: AdjacentDirection = 1;
+  private queuedJumpUs = 0n;
+  private jumpTask: Promise<void> | null = null;
+  private jumpRevision = 0;
+  private scrubJumpTargetUs: bigint | null = null;
+  private jumpUnavailable = false;
   private progressPreviewTimer: ReturnType<typeof setTimeout> | null = null;
   private busy = false;
   private busyMessage = '';
@@ -106,6 +115,14 @@ export class FrameReviewPlayerControl {
         <button type="button" data-command="step-right" aria-label="Step forward one frame" title="Step forward one frame" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 5v14M6 6l8 6-8 6V6Z"/></svg>
         </button>
+        <label class="frame-review-jump">Jump by
+          <select aria-label="Jump by seconds">
+            <option value="1">1 second</option><option value="2" selected>2 seconds</option>
+            <option value="5">5 seconds</option><option value="7">7 seconds</option>
+            <option value="10">10 seconds</option>
+          </select>
+        </label>
+        <button type="button" class="frame-review-jump-button" data-command="jump-seconds" disabled>Jump +2s</button>
         <output class="frame-review-identity">Frame unavailable</output>
       </div>
       <p class="frame-review-error" role="alert"></p>`;
@@ -122,6 +139,8 @@ export class FrameReviewPlayerControl {
     this.pauseIcon = this.required(this.playPause.querySelector('[data-icon="pause"]'), SVGElement, 'pause icon');
     this.stepLeft = this.required(this.root.querySelector('[data-command="step-left"]'), HTMLButtonElement, 'back step control');
     this.stepRight = this.required(this.root.querySelector('[data-command="step-right"]'), HTMLButtonElement, 'forward step control');
+    this.jumpDuration = this.required(this.root.querySelector('.frame-review-jump select'), HTMLSelectElement, 'jump duration');
+    this.jumpButton = this.required(this.root.querySelector('[data-command="jump-seconds"]'), HTMLButtonElement, 'jump control');
     this.frameIdentity = this.required(this.root.querySelector('.frame-review-identity'), HTMLElement, 'frame identity');
     this.error = this.required(this.root.querySelector('.frame-review-error'), HTMLElement, 'player error');
     this.bind();
@@ -140,6 +159,7 @@ export class FrameReviewPlayerControl {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.cancelProgressPreview();
+    this.interruptJumps();
     this.previewOperationRevision += 1;
     this.invalidatePendingDisplay();
     this.displayedFrame = null;
@@ -149,6 +169,8 @@ export class FrameReviewPlayerControl {
     this.previewPhase = 'inactive';
     this.heldStepDirections.clear();
     this.progressInteractionActive = false;
+    this.lastScrubDirection = 1;
+    this.jumpUnavailable = false;
     this.busy = false;
     this.busyMessage = '';
     this.initialFrameRequested = false;
@@ -191,6 +213,82 @@ export class FrameReviewPlayerControl {
 
   exactScrubActive(): boolean { return this.scrubbingExact && !this.playing; }
 
+  setJumpUnavailable(unavailable: boolean): void {
+    this.jumpUnavailable = unavailable;
+    this.renderState();
+  }
+
+  jumpBySeconds(seconds: number): void {
+    if (!this.session || this.destroyed || this.jumpUnavailable
+      || ![1, 2, 5, 7, 10].includes(seconds)) return;
+    if (this.scrubbingExact && !this.playing && !this.reviewState?.captureEnabled) return;
+    if (this.previewPhase === 'running') {
+      this.previewPhase = 'inactive';
+      this.previewRange = null;
+    } else if (this.previewPhase === 'paused') {
+      this.previewPhase = 'inactive';
+      this.previewRange = null;
+    }
+    const exact = this.scrubbingExact && !this.playing;
+    const direction = exact ? this.lastScrubDirection : 1;
+    if (exact) {
+      const base = this.scrubJumpTargetUs ?? (this.displayedFrame?.kind === 'exact-frame' ? this.displayedFrame.reviewTimeUs : 0n);
+      const requested = base + BigInt(direction * seconds) * 1_000_000n;
+      const duration = this.reviewState?.preparedReview?.durationUs ?? this.effectiveDuration();
+      this.scrubJumpTargetUs = requested < 0n ? 0n : requested > duration ? duration : requested;
+    }
+    this.queuedJumpUs += BigInt(seconds) * 1_000_000n;
+    this.renderState();
+    this.startJumps();
+  }
+
+  private startJumps(): void {
+    if (this.jumpTask || this.queuedJumpUs === 0n) return;
+    this.jumpTask = this.drainJumps(this.jumpRevision).finally(() => {
+      this.jumpTask = null;
+      this.renderState();
+      this.startJumps();
+    });
+  }
+
+  interruptJumps(): Promise<void> {
+    if (this.jumpTask) this.invalidatePendingDisplay();
+    this.jumpRevision += 1;
+    this.queuedJumpUs = 0n;
+    this.scrubJumpTargetUs = null;
+    return this.jumpTask ?? Promise.resolve();
+  }
+
+  private async drainJumps(revision: number): Promise<void> {
+    const session = this.session;
+    if (!session) return;
+    while (this.queuedJumpUs > 0n && revision === this.jumpRevision && this.session === session) {
+      const exact = this.scrubbingExact && !this.playing;
+      const deltaUs = exact || this.queuedJumpUs > 10_000_000n ? 10_000_000n : this.queuedJumpUs;
+      this.queuedJumpUs = exact ? 0n : this.queuedJumpUs - deltaUs;
+      try {
+        if (exact) {
+          const target = this.scrubJumpTargetUs;
+          if (target === null) break;
+          const frame = await session.scrubToTime(target);
+          if (revision !== this.jumpRevision || this.session !== session || this.destroyed) break;
+          await this.requestDisplay(frame);
+        } else {
+          const confirmed = await session.jumpPlaybackBy(deltaUs);
+          if (revision !== this.jumpRevision || this.session !== session || this.destroyed) break;
+          this.currentTime.textContent = this.formatTime(confirmed);
+        }
+      } catch (error) {
+        if (revision === this.jumpRevision && this.session === session && !this.destroyed) {
+          this.showError(error);
+          this.queuedJumpUs = 0n;
+        }
+        break;
+      }
+    }
+    if (revision === this.jumpRevision) this.scrubJumpTargetUs = null;
+  }
+
   subscribeTransport(listener: () => void): () => void {
     this.transportListeners.add(listener);
     return () => this.transportListeners.delete(listener);
@@ -204,10 +302,18 @@ export class FrameReviewPlayerControl {
 
   async togglePlayback(): Promise<void> {
     if (!this.session || this.busy || this.destroyed) return;
+    const barrier = this.interruptJumps();
+    const revision = this.jumpRevision;
+    await barrier;
+    if (revision !== this.jumpRevision || this.destroyed) return;
     await this.changePlayback();
   }
 
   async startExactPreview(range: Readonly<{ startFrameIndex: number; endFrameIndex: number }>): Promise<void> {
+    const barrier = this.interruptJumps();
+    const revision = this.jumpRevision;
+    await barrier;
+    if (revision !== this.jumpRevision) return;
     const session = this.session;
     if (!session || !this.reviewState?.captureEnabled || this.destroyed) return;
     const operation = ++this.previewOperationRevision;
@@ -233,6 +339,7 @@ export class FrameReviewPlayerControl {
   }
 
   async pauseExactPreview(): Promise<IFrameReviewDisplayedCapture | null> {
+    await this.interruptJumps();
     const session = this.session;
     if (!session || this.destroyed) return null;
     const operation = ++this.previewOperationRevision;
@@ -261,6 +368,7 @@ export class FrameReviewPlayerControl {
   }
 
   async resumeExactPreview(frameIndex: number): Promise<void> {
+    await this.interruptJumps();
     const session = this.session;
     if (!session || this.destroyed) return;
     const operation = ++this.previewOperationRevision;
@@ -284,6 +392,7 @@ export class FrameReviewPlayerControl {
   }
 
   async stopExactPreview(): Promise<IFrameReviewDisplayedCapture | null> {
+    await this.interruptJumps();
     const session = this.session;
     if (!session || this.destroyed) return null;
     const operation = ++this.previewOperationRevision;
@@ -328,9 +437,28 @@ export class FrameReviewPlayerControl {
     return capture;
   }
 
+  async showFrameAfterCapture(review: IFrameReviewSession, endpoint: CaptureEndpoint): Promise<void> {
+    if (this.session !== review) return;
+    if (endpoint.kind === 'playback-timestamp') {
+      await this.enterExactScrub(async session => {
+        await session.scrubToTime(endpoint.timestampUs);
+        return session.stepAdjacent(1);
+      });
+      return;
+    }
+    const frameCount = this.reviewState?.preparedReview?.frameCount ?? 0;
+    if (frameCount < 1) return;
+    const frameIndex = endpoint.kind === 'exact-frame' ? endpoint.identity.frameIndex : endpoint.frameIndex;
+    await this.enterExactScrubAtFrame(frameIndex < frameCount - 1 ? frameIndex + 1 : frameCount - 1);
+  }
+
   private async enterExactScrub(
     resolveFrame: (session: IFrameReviewSession) => Promise<IExactDisplayFrame>,
   ): Promise<IFrameReviewDisplayedCapture | null> {
+    const barrier = this.interruptJumps();
+    const revision = this.jumpRevision;
+    await barrier;
+    if (revision !== this.jumpRevision) return null;
     const session = this.session;
     if (!session || !this.reviewState?.captureEnabled || this.busy || this.destroyed) return null;
     this.busy = true;
@@ -359,13 +487,24 @@ export class FrameReviewPlayerControl {
 
   pressStep(direction: AdjacentDirection): void {
     if (!this.session || !this.reviewState?.captureEnabled || this.busy || this.destroyed) return;
+    const wasPlaying = this.playing;
+    const activeJump = this.jumpTask;
+    const barrier = this.interruptJumps();
+    const revision = this.jumpRevision;
+    this.lastScrubDirection = direction;
     this.heldStepDirections.add(direction);
-    if (this.playing) {
-      void this.enterExactScrubForHeldStep(direction);
-      return;
-    }
+    this.playing = false;
     this.scrubbingExact = true;
-    void this.session.pressAdjacent(direction).catch(error => this.showError(error));
+    this.renderState();
+    const step = (): void => {
+      if (revision !== this.jumpRevision || this.destroyed || !this.session) return;
+      if (wasPlaying) void this.enterExactScrubForHeldStep(direction);
+      else if (this.heldStepDirections.has(direction)) {
+        void this.session.pressAdjacent(direction).catch(error => this.showError(error));
+      }
+    };
+    if (activeJump) void barrier.then(step);
+    else step();
   }
 
   releaseStep(direction?: AdjacentDirection): void {
@@ -379,6 +518,7 @@ export class FrameReviewPlayerControl {
     if (this.destroyed) return;
     if (this.session) void this.session.releaseAdjacent().catch(error => this.showError(error));
     this.destroyed = true;
+    this.interruptJumps();
     this.cancelProgressPreview();
     this.previewOperationRevision += 1;
     this.unsubscribe?.();
@@ -393,9 +533,14 @@ export class FrameReviewPlayerControl {
 
   private bind(): void {
     this.playPause.addEventListener('click', () => { void this.togglePlayback(); });
+    this.jumpDuration.addEventListener('change', () => this.renderState());
+    this.jumpButton.addEventListener('click', () => this.jumpBySeconds(Number(this.jumpDuration.value)));
     this.progress.addEventListener('input', () => this.previewProgress());
     this.progress.addEventListener('change', () => { void this.commitProgress(); });
-    this.progress.addEventListener('pointerdown', () => { this.progressInteractionActive = true; });
+    this.progress.addEventListener('pointerdown', () => {
+      this.progressInteractionActive = true;
+      this.interruptJumps();
+    });
     this.progress.addEventListener('pointercancel', () => {
       this.cancelProgressPreview();
       this.progressInteractionActive = false;
@@ -477,8 +622,8 @@ export class FrameReviewPlayerControl {
     try {
       await this.requestDisplay(await session.enterFrameScrub());
       if (this.displayedFrame?.kind === 'exact-frame') this.retainPreviewAt(this.displayedFrame.identity.frameIndex);
-      if (this.session === session && !this.destroyed && this.heldStepDirections.has(direction)) {
-        await session.pressAdjacent(direction);
+      if (this.session === session && !this.destroyed) {
+        if (this.heldStepDirections.has(direction)) await session.pressAdjacent(direction);
       }
     } catch (error) {
       if (!this.isSuperseded(error)) this.showError(error);
@@ -493,7 +638,9 @@ export class FrameReviewPlayerControl {
 
   private previewProgress(): void {
     if (!this.session) return;
+    this.interruptJumps();
     this.progressInteractionActive = true;
+    this.rememberSliderDirection();
     this.updateCurrentTimeFromProgress();
     if (!this.playing && this.reviewState?.captureEnabled) void this.scrubToProgressFrame();
     else {
@@ -519,6 +666,10 @@ export class FrameReviewPlayerControl {
   private async commitProgress(): Promise<void> {
     const session = this.session;
     if (!session) return;
+    const barrier = this.interruptJumps();
+    const revision = this.jumpRevision;
+    await barrier;
+    if (revision !== this.jumpRevision || this.session !== session) return;
     this.cancelProgressPreview();
     try {
       if (!this.playing && this.reviewState?.captureEnabled) {
@@ -545,6 +696,9 @@ export class FrameReviewPlayerControl {
   private async scrubToProgressFrame(): Promise<void> {
     const session = this.session;
     if (!session) return;
+    const barrier = this.jumpTask;
+    if (barrier) await barrier;
+    if (this.session !== session || this.destroyed) return;
     const frameIndex = Math.round(Number(this.progress.value));
     this.scrubbingExact = true;
     try {
@@ -554,6 +708,14 @@ export class FrameReviewPlayerControl {
     } catch (error) {
       if (!this.isSuperseded(error)) this.showError(error);
     }
+  }
+
+  private rememberSliderDirection(): void {
+    if (this.playing || !this.reviewState?.captureEnabled || this.displayedFrame?.kind !== 'exact-frame') return;
+    const target = Number(this.progress.value);
+    const current = this.displayedFrame.identity.frameIndex;
+    if (target > current) this.lastScrubDirection = 1;
+    else if (target < current) this.lastScrubDirection = -1;
   }
 
   private onSessionEvent(event: FrameReviewEvent): void {
@@ -698,6 +860,12 @@ export class FrameReviewPlayerControl {
     this.playPause.disabled = !attached || this.busy;
     this.stepLeft.disabled = !exactReady || this.playing || this.busy;
     this.stepRight.disabled = !exactReady || this.playing || this.busy;
+    const jumpSeconds = Number(this.jumpDuration.value);
+    const jumpDirection = this.scrubbingExact && !this.playing ? this.lastScrubDirection : 1;
+    this.jumpButton.textContent = `Jump ${jumpDirection === 1 ? '+' : '−'}${jumpSeconds}s`;
+    this.jumpButton.setAttribute('aria-label', `Jump ${jumpDirection === 1 ? 'forward' : 'backward'} ${jumpSeconds} ${jumpSeconds === 1 ? 'second' : 'seconds'}`);
+    this.jumpButton.disabled = !attached || this.jumpUnavailable
+      || (this.scrubbingExact && !this.playing && !exactReady);
     this.duration.textContent = this.formatTime(duration);
     this.playPause.dataset.playing = String(this.playing);
     this.playPause.title = this.playing ? 'Pause' : 'Play';

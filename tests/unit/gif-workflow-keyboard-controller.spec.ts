@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { GifWorkflowKeyboardController } from '../../src/ui/gif-workflow-keyboard-controller.js';
 
 function player() {
-  return { togglePlayback: vi.fn(), pressStep: vi.fn(), releaseStep: vi.fn() };
+  return { togglePlayback: vi.fn(), pressStep: vi.fn(), releaseStep: vi.fn(), jumpBySeconds: vi.fn() };
 }
 
 function capture(withExtract = false) {
@@ -119,5 +119,21 @@ describe('GifWorkflowKeyboardController', () => {
 
     expect(transport.releaseStep).toHaveBeenCalledWith(1);
     expect(transport.togglePlayback).toHaveBeenCalledOnce();
+  });
+
+  it('maps only plain physical top-row digits to jump durations', () => {
+    const transport = player();
+    const controller = new GifWorkflowKeyboardController();
+    controller.activate({ player: transport });
+    for (let digit = 1; digit <= 5; digit += 1) {
+      controller.handleKeyDown(event(String(digit), document.body, { code: `Digit${digit}` }));
+    }
+    controller.handleKeyDown(event('1', document.body, { code: 'Numpad1' }));
+    controller.handleKeyDown(event('1', document.body, { code: 'Digit1', shiftKey: true }));
+    controller.handleKeyDown(event('1', document.body, { code: 'Digit1', repeat: true }));
+    const selector = document.createElement('select');
+    controller.handleKeyDown(event('1', selector, { code: 'Digit1' }));
+
+    expect(transport.jumpBySeconds.mock.calls.map(call => call[0])).toEqual([1, 2, 5, 7, 10]);
   });
 });

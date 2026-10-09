@@ -24,6 +24,7 @@ import {
   type RefineGifCommitResult,
 } from './refine-gif-session.js';
 import { ClipExtractionWorkflow, type ClipExtractionEntryState, type IExtractionBatchProgress } from './clip-extraction-workflow.js';
+import type { ActivityInput } from './activity-logger.js';
 import { ExtractionDestinationSession, type IExtractionDestination, type IExtractionDestinationPublication } from './extraction-destination-session.js';
 import { GifCaptureThumbnailSession, type GifThumbnailState } from './gif-capture-thumbnail-session.js';
 import type { IClipCapturesStoreService } from './clip-captures-store-service.js';
@@ -76,8 +77,10 @@ type GifExtractionSessionOptions = {
   readonly previewBounds?: Readonly<{ maxWidth: number; maxHeight: number }>;
   readonly onProgress?: (message: string) => void;
   readonly onSuccess?: (message: string) => void;
+  readonly onActivity?: (entry: ActivityInput) => void;
   readonly onWarning?: (message: string) => void;
   readonly onError?: (message: string, error?: unknown) => void;
+  readonly onRestoredCaptures?: (review: IFrameReviewSession, endpoint: CaptureEndpoint) => Promise<void>;
   readonly extractionService?: IClipExtractionService;
   readonly captureStore?: IClipCapturesStoreService;
   readonly onPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
@@ -106,7 +109,6 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   private restoringCaptures = false;
   private capturesLoading = false;
   private restoreStarted = false;
-  private reopenAttempted = false;
   private readonly notifiedProvenanceWarnings = new Set<string>();
   private previewRevision = 0;
   private lastRefinementRevision: number | null = null;
@@ -263,49 +265,6 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     model.hydrateSavedRange(rangeId, { start, end });
     this.rangeModel = model;
     return this.beginRefinement(rangeId);
-  }
-
-  async reopenLastMovie(): Promise<void> {
-    const captureStore = this.options.captureStore;
-    if (this.disposed || this.source || this.opening || !captureStore || this.reopenAttempted) return;
-    this.reopenAttempted = true;
-    this.opening = true;
-    this.capturesLoading = true;
-    this.publish();
-    let handedOffToRestore = false;
-    try {
-      const saved = await captureStore.last();
-      if (!saved || this.disposed || this.source) return;
-      if (saved.kind === 'unavailable') {
-        this.sourceGeneration += 1;
-        this.savedCaptureQueue = this.createSavedCaptureQueue(captureStore);
-        this.rangeModel = this.savedCaptureQueue.adoptUnavailable(saved.movieRef, saved.data);
-        for (const range of this.rangeModel.snapshot.ranges) {
-          this.captureThumbnails.markRestoredMissing(range.id);
-        }
-        this.message = `Saved captures for ${saved.name} are unavailable. Use Open movie to find it.`;
-        return;
-      }
-      this.lifecycle = 'opening';
-      this.message = `Reopening ${saved.selection.name}`;
-      this.publish();
-      const candidate = await this.frameReview.open({
-        sourceHandle: saved.selection.sourceHandle,
-        previewBounds: this.previewBounds,
-      });
-      await this.replaceSource(saved.selection, candidate, saved.expectedFingerprint);
-      handedOffToRestore = true;
-    } catch (error) {
-      this.lifecycle = 'failed';
-      this.message = 'Saved movie could not be reopened. Use Open movie to find it.';
-      this.options.onError?.(this.message, error);
-    } finally {
-      this.opening = false;
-      if (!handedOffToRestore) {
-        this.capturesLoading = false;
-        this.publish();
-      }
-    }
   }
 
   markStart(capture: IFrameReviewDisplayedCapture | null): RangeCaptureTransition {
@@ -682,6 +641,24 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
           ),
         }),
         () => { this.persistQueue(); this.publish(); },
+        event => {
+          const sourceField = { label: 'Source movie', value: selected.name };
+          if (event.kind === 'batch-started') {
+            this.options.onActivity?.({ kind: 'information',
+              message: `Extraction started for ${event.total} clip${event.total === 1 ? '' : 's'}.`,
+              fields: [sourceField] });
+          } else if (event.kind === 'clip-extracted') {
+            this.options.onActivity?.({ kind: 'information',
+              message: `Extracted ${event.filename} in ${event.durationMs} ms.`,
+              fields: [{ label: 'Clip', value: event.filename },
+                { label: 'Destination folder', value: event.folderPath }, sourceField] });
+          } else {
+            const outcome = event.cancelled ? 'cancelled' : 'finished';
+            this.options.onActivity?.({ kind: 'information',
+              message: `Extraction ${outcome}: ${event.extracted} of ${event.total} clip${event.total === 1 ? '' : 's'} extracted.`,
+              fields: [sourceField] });
+          }
+        },
       )
       : null;
     this.lifecycle = 'open';
@@ -832,6 +809,15 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       this.rangeModel = attached.model;
       for (const range of this.rangeModel.snapshot.ranges) this.captureThumbnails.markRestoredMissing(range.id);
       void this.restoreThumbnails(review, generation);
+      const continuation = this.rangeModel.continuationEndpoint();
+      if (continuation) {
+        try {
+          await this.options.onRestoredCaptures?.(review, continuation);
+        } catch (error) {
+          this.options.onError?.('Saved captures loaded, but the movie could not be positioned after them.', error);
+        }
+      }
+      if (this.disposed || this.review !== review || this.sourceGeneration !== generation) return;
       const savedDraft = this.rangeModel.snapshot.capture;
       const count = this.rangeModel.snapshot.ranges.length;
       this.message = count > 0

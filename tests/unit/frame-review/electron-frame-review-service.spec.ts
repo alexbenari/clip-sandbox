@@ -85,4 +85,23 @@ describe('Electron frame review service', () => {
       sourceHandle: 'source_123456789',
     });
   });
+
+  it('sends decimal jump times and reads the confirmed playback position', async () => {
+    const command = vi.fn(async (_id: string, name: string) => ({
+      ok: true,
+      result: name === 'jump-playback-by' ? '3500000' : null,
+    }));
+    const api: IElectronFrameReviewApi = {
+      chooseSource: vi.fn(),
+      open: async () => ({ ok: true, result: { sessionId: 'session_12345678', state: readyState } }),
+      command, close: vi.fn(async () => ({ ok: true, result: null })), subscribe: vi.fn(() => () => undefined),
+    };
+    const service = new ElectronFrameReviewService({ clipSandboxDesktop: { frameReview: api } } as unknown as Window);
+    const session = await service.open({ sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789'),
+      previewBounds: { maxWidth: 960, maxHeight: 540 } });
+
+    await expect(session.jumpPlaybackBy(2_000_000n)).resolves.toBe(3_500_000n);
+    expect(command).toHaveBeenCalledWith(session.id, 'jump-playback-by', { deltaUs: '2000000' });
+    await session.dispose();
+  });
 });

@@ -157,6 +157,19 @@ describe('RangeCaptureModel', () => {
     expect(restored.lockRange()).toMatchObject({ kind: 'locked', range: { kind: 'needs-exact-frames' } });
   });
 
+  it('resumes after the latest draft endpoint ahead of saved ranges', () => {
+    const original = new RangeCaptureModel(1);
+    original.markStart(CaptureEndpointValue.exact(identity(10), 100_000n, 1));
+    original.markEnd(CaptureEndpointValue.exact(identity(12), 120_000n, 1));
+    original.lockRange();
+    original.markStart(CaptureEndpointValue.exact(identity(20), 200_000n, 1));
+    const restored = RangeCaptureModel.fromSavedData(original.toSavedData(), 2);
+
+    expect(restored.continuationEndpoint()).toMatchObject({ kind: 'saved-exact-frame', frameIndex: 20 });
+    restored.markEnd(CaptureEndpointValue.timestamp(230_000n, 2));
+    expect(restored.continuationEndpoint()).toMatchObject({ kind: 'playback-timestamp', timestampUs: 230_000n });
+  });
+
   it('checks a restored exact draft before it can be locked', () => {
     const original = new RangeCaptureModel(1);
     original.markStart(CaptureEndpointValue.exact(identity(10), 100_000n, 1));

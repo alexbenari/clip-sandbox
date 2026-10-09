@@ -42,12 +42,14 @@ export interface IFrameReviewHostSession {
   play(): Promise<void>;
   pause(): Promise<void>;
   seekPlayback(timestampUs: bigint): Promise<void>;
+  jumpPlaybackBy(deltaUs: bigint): Promise<bigint>;
   startExactPreview(range: IExactPreviewRange): Promise<void>;
   pauseExactPreview(): Promise<IHostExactFrame>;
   resumeExactPreview(frameIndex: number): Promise<void>;
   stopExactPreview(): Promise<IHostExactFrame | null>;
   enterFrameScrub(): Promise<IHostExactFrame>;
   scrubToFrame(frameIndex: number): Promise<IHostExactFrame>;
+  scrubToTime(timestampUs: bigint): Promise<IHostExactFrame>;
   stepAdjacent(direction: AdjacentDirection): Promise<IHostExactFrame>;
   pressAdjacent(direction: AdjacentDirection): Promise<void>;
   releaseAdjacent(direction?: AdjacentDirection): Promise<void>;

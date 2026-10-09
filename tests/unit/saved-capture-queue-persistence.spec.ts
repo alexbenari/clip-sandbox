@@ -15,7 +15,7 @@ const savedData = {
 };
 
 function captureStore(attach: IClipCapturesStoreService['attach']): IClipCapturesStoreService {
-  return { last: vi.fn(), attach, save: vi.fn(async () => undefined) };
+  return { attach, save: vi.fn(async () => undefined) };
 }
 
 describe('SavedCaptureQueuePersistence', () => {

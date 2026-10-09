@@ -109,6 +109,65 @@ describe('review session', () => {
       timebaseNumerator: 1n, timebaseDenominator: 1000n, durationPts: 4000n }),
   });
 
+  it('jumps from the live playback clock, clamps to the end, and keeps playback running', async () => {
+    const playback = new PlaybackFake();
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      prepare: async () => prepared, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+    await session.play();
+    playback.listener?.({
+      kind: 'playback-frame', sourceGeneration: 1, frameGeneration: 1,
+      playbackTimestampUs: 1_500_000n, width: 1, height: 1,
+      sourceWidth: 1, sourceHeight: 1, pixels: new Uint8Array(4),
+    });
+    playback.timestampUs = 2_500_000n;
+
+    expect(await session.jumpPlaybackBy(1_000_000n)).toBe(3_500_000n);
+    expect(await session.jumpPlaybackBy(2_000_000n)).toBe(4_000_000n);
+    expect(playback.stateValue).toBe('playing');
+    expect(playback.loopCalls.slice(-2)).toEqual(['seek:3500000', 'seek:4000000']);
+    await session.dispose();
+  });
+
+  it('resolves exact time by the index and uses indexed boundary frames', async () => {
+    const exact = new ExactFake();
+    const atTime = vi.fn(async () => exactFrame);
+    const scrub = vi.fn(async (index: number) => Object.freeze({ ...exactFrame,
+      identity: Object.freeze({ ...exactFrame.identity, frameIndex: index }) }));
+    exact.atTime = atTime;
+    exact.scrub = scrub;
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback: new PlaybackFake(), exact,
+      prepare: async () => prepared, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+
+    expect((await session.scrubToTime(2_500_000n)).identity.frameIndex).toBe(2);
+    expect(atTime).toHaveBeenCalledWith(2_500_000n);
+    expect((await session.scrubToTime(0n)).identity.frameIndex).toBe(0);
+    expect((await session.scrubToTime(4_000_000n)).identity.frameIndex).toBe(3);
+    expect(scrub.mock.calls.map(call => call[0])).toEqual([0, 3]);
+    await session.dispose();
+  });
+
+  it('accumulates paused jumps when the native status clock remains stale after a seek', async () => {
+    const playback = new PlaybackFake();
+    const status = playback.status.bind(playback);
+    playback.status = async () => Object.freeze({ ...await status(), timestampUs: 0n, lengthUs: 0n });
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      prepare: async () => prepared, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+
+    expect(await session.jumpPlaybackBy(1_000_000n)).toBe(1_000_000n);
+    expect(await session.jumpPlaybackBy(2_000_000n)).toBe(3_000_000n);
+    expect(playback.loopCalls.slice(-2)).toEqual(['seek:1000000', 'seek:3000000']);
+    await session.dispose();
+  });
+
   it('arms the indexed A–B pair before seeking and hands Space to an exact in-range frame', async () => {
     const playback = new PlaybackFake();
     const exact = new ExactFake();

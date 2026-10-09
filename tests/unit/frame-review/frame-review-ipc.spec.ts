@@ -56,4 +56,23 @@ describe('frame review IPC', () => {
     });
     expect(JSON.stringify(response)).not.toContain('D:\\\\Movies');
   });
+
+  it('validates jump duration and exact target time before calling the session', async () => {
+    const handlers = new Map<string, Function>();
+    const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
+    const session = { jumpPlaybackBy: vi.fn(async () => 3_000_000n), scrubToTime: vi.fn(async () => null) };
+    const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
+    registerFrameReviewIpc({ ipcMain, hostForEvent: () => ({ session: () => session }), chooseSourcePath: vi.fn(async () => null) });
+    const command = handlers.get('clip-sandbox:frame-review-command')!;
+    const request = (name: string, args: object) => command({ sender: { send: vi.fn() } },
+      { operationId: 'operation_123456', sessionId: 'session_12345678', command: name, args });
+
+    expect(await request('jump-playback-by', { deltaUs: '2000000' })).toMatchObject({ ok: true, result: '3000000' });
+    expect(session.jumpPlaybackBy).toHaveBeenCalledWith(2_000_000n);
+    expect(await request('jump-playback-by', { deltaUs: '0' })).toMatchObject({ ok: false, error: { category: 'invalid-request' } });
+    expect(await request('jump-playback-by', { deltaUs: '10000001' })).toMatchObject({ ok: false, error: { category: 'invalid-request' } });
+    expect(await request('scrub-to-time', { timestampUs: '-1' })).toMatchObject({ ok: false, error: { category: 'invalid-request' } });
+    expect(await request('scrub-to-time', { timestampUs: '9223372036854775808' })).toMatchObject({ ok: false, error: { category: 'invalid-request' } });
+    expect(session.scrubToTime).not.toHaveBeenCalled();
+  });
 });

@@ -1,8 +1,9 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ActivityIndicatorControl } from '../../src/ui/activity-indicator-control.js';
+import { ActivityLogger } from '../../src/app/activity-logger.js';
 
-const controls: ActivityIndicatorControl[] = [];
+const controls: { destroy(): void }[] = [];
 afterEach(() => {
   for (const control of controls.splice(0)) control.destroy();
   vi.useRealTimers();
@@ -11,6 +12,7 @@ afterEach(() => {
 });
 
 function createControl(options = {}) {
+  const { maxEntries, ...panelOptions } = options;
   document.body.innerHTML = `
     <div id="root">
       <button id="button" aria-expanded="false" aria-controls="panel"></button>
@@ -20,15 +22,28 @@ function createControl(options = {}) {
     </div>
   `;
 
-  const control = new ActivityIndicatorControl({
+  const logger = new ActivityLogger({ maxEntries, clock: window });
+  const panel = new ActivityIndicatorControl({
     root: document.getElementById('root'),
     button: document.getElementById('button'),
     panel: document.getElementById('panel'),
     listEl: document.getElementById('list'),
     document,
     win: window,
-    ...options,
+    ...panelOptions,
+    logger,
   });
+  const control = {
+    show: (message: string, timeout?: number) => logger.log({ kind: 'success', message, timeoutMs: timeout }),
+    showSuccess: (message: string, timeout?: number) => logger.log({ kind: 'success', message, timeoutMs: timeout }),
+    showProgress: (message: string) => logger.log({ kind: 'progress', message }),
+    showInformation: (message: string, details?: string) => logger.log({ kind: 'information', message, details }),
+    log: (entry: Parameters<ActivityLogger['log']>[0]) => logger.log(entry),
+    showError: (message: string, extra = {}) => logger.log({ kind: 'error', message, ...extra }),
+    resolveError: (id: string) => logger.resolveError(id),
+    focusInitial: () => panel.focusInitial(),
+    destroy: () => { panel.destroy(); logger.destroy(); },
+  };
   controls.push(control);
   return control;
 }
@@ -98,6 +113,20 @@ function press(key: string, target: Element = document.activeElement!) {
 }
 
 describe('detailed Activity and Errors', () => {
+  test('information entries expose safe clip details without opening the panel', () => {
+    const control = createControl();
+    control.log({ kind: 'information', message: 'Extracted clip.mp4 in 12 ms.', fields: [
+      { label: 'Clip', value: 'clip.mp4' },
+      { label: 'Destination folder', value: 'D:\\Clips' },
+      { label: 'Source movie', value: 'movie.mp4' },
+    ] });
+    const entry = rows()[0];
+    expect(entry.firstElementChild?.textContent).toBe('Extracted clip.mp4 in 12 ms.');
+    expect(entry.querySelector('summary')?.textContent).toBe('More info');
+    expect(entry.querySelector('details')?.textContent).toContain('Source movie: movie.mp4');
+    expect(document.getElementById('panel').hidden).toBe(true);
+  });
+
   test('each error has its own More Details control, including errors without diagnostics', () => {
     const control = createControl();
     control.showError('First failure', { technicalDetails: 'First cause' });

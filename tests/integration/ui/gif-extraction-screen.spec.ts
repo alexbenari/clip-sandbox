@@ -76,12 +76,14 @@ describe('GifExtractionScreen', () => {
     });
     const capture = { point: { kind: 'playback-timestamp', timestampUs: 1n }, positionUs: 1n, sourceGeneration: 1, thumbnail: {} };
     vi.spyOn(player, 'displayedCapture').mockReturnValue(capture as never);
+    const interrupt = vi.spyOn(player, 'interruptJumps');
     const keyboard = new GifWorkflowKeyboardController();
     const rangesPanel = { mount: vi.fn() };
     const screen = new GifExtractionScreen({ player, keyboard, session: session as never, rangesPanel, document });
     document.body.append(screen.commands, screen.root);
     screen.onActivate();
 
+    expect(session.reopenLastMovie).not.toHaveBeenCalled();
     expect(screen.root.querySelector<HTMLButtonElement>('[data-command="mark-start"]')?.disabled).toBe(true);
     expect(screen.root.querySelector('.gif-workflow-local-status')).toBeNull();
     publish(snapshot(true));
@@ -90,6 +92,7 @@ describe('GifExtractionScreen', () => {
 
     keyboard.handleKeyDown(new KeyboardEvent('keydown', { key: 'q' }));
     expect(session.markStart).toHaveBeenCalledWith(capture);
+    expect(interrupt).toHaveBeenCalled();
     expect(screen.panelContributions[0]?.content).toBe(rangesPanel);
     expect(screen.root.querySelectorAll('input[type="range"]')).toHaveLength(1);
   });

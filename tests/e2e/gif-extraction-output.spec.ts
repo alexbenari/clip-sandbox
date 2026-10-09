@@ -40,6 +40,29 @@ test('extracts a movie with a space before its extension into a valid collection
     const destination = path.join(pipelines, 'extraction-tmp');
     expect(await fs.readFile(path.join(destination, 'Sample Movie.txt'), 'utf8')).toBe('Sample Movie-001.mp4\n');
     expect(existsSync(path.join(destination, 'Sample Movie-001.mp4'))).toBe(true);
+    await page.locator('#activityIndicatorBtn').click();
+    const activity = page.locator('#activityIndicatorList > li');
+    const started = activity.filter({ hasText: 'Extraction started for 1 clip.' });
+    const extracted = activity.filter({ hasText: /^Extracted Sample Movie-001\.mp4 in \d+ ms\./ });
+    const finished = activity.filter({ hasText: 'Extraction finished: 1 of 1 clip extracted.' });
+    await expect(started).toHaveCount(1);
+    await expect(extracted).toHaveCount(1);
+    await expect(finished).toHaveCount(1);
+    const messages = await activity.allTextContents();
+    const finishedIndex = messages.findIndex(message => message.includes('Extraction finished: 1 of 1 clip extracted.'));
+    const clipIndex = messages.findIndex(message => /Extracted Sample Movie-001\.mp4 in \d+ ms\./.test(message));
+    const startedIndex = messages.findIndex(message => message.includes('Extraction started for 1 clip.'));
+    expect(finishedIndex).toBeGreaterThanOrEqual(0);
+    expect(finishedIndex).toBeLessThan(clipIndex);
+    expect(clipIndex).toBeLessThan(startedIndex);
+    for (const boundary of [started, finished]) {
+      await boundary.locator('summary').click();
+      await expect(boundary.locator('details')).toContainText('Source movie: Sample Movie .mkv');
+    }
+    await extracted.locator('summary').click();
+    await expect(extracted.locator('details')).toContainText('Clip: Sample Movie-001.mp4');
+    await expect(extracted.locator('details')).toContainText(`Destination folder: ${destination}`);
+    await expect(extracted.locator('details')).toContainText('Source movie: Sample Movie .mkv');
   } finally {
     await app.close().catch(() => undefined);
     await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);

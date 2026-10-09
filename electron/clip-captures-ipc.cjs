@@ -1,9 +1,7 @@
-const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 
 const CHANNELS = Object.freeze({
-  last: 'clip-sandbox:clip-captures-last',
   attach: 'clip-sandbox:clip-captures-attach',
   save: 'clip-sandbox:clip-captures-save',
 });
@@ -21,35 +19,9 @@ class ClipCapturesIpcBoundary {
   }
 
   register() {
-    this.ipcMain.handle(CHANNELS.last, (event) => this.last(event));
     this.ipcMain.handle(CHANNELS.attach, (event, payload) => this.attach(event, payload));
     this.ipcMain.handle(CHANNELS.save, (event, payload) => this.save(event, payload));
     return () => Object.values(CHANNELS).forEach(channel => this.ipcMain.removeHandler(channel));
-  }
-
-  async last(event) {
-    try {
-      const record = await this.store.lastActive();
-      if (!record) return { ok: true, result: null };
-      try {
-        const info = await fs.stat(record.lastKnownPath);
-        if (!info.isFile()) throw new Error('Saved movie is not a file.');
-      } catch {
-        const movieRef = this.grant(event, record);
-        return { ok: true, result: {
-          name: record.displayName, unavailable: true, movieRef,
-          data: { schemaVersion: 1, nextRangeSequence: record.nextRangeSequence,
-            ...(record.draft ? { draft: record.draft } : {}), ranges: record.ranges },
-        } };
-      }
-      const sourceHandle = this.hostForEvent(event).registerSource(record.lastKnownPath);
-      return {
-        ok: true,
-        result: { name: record.displayName, sourceHandle, expectedFingerprint: record.movieFingerprint },
-      };
-    } catch (error) {
-      return this.failure(error);
-    }
   }
 
   async attach(event, payload) {
@@ -84,7 +56,6 @@ class ClipCapturesIpcBoundary {
           displayName: path.basename(context.sourcePath),
           sourcePath: context.sourcePath,
           data: { nextRangeSequence: 1, ranges: [] },
-          markActive: true,
         });
         record = await this.store.load(context.fingerprint);
       } else {
@@ -93,7 +64,6 @@ class ClipCapturesIpcBoundary {
           displayName: path.basename(context.sourcePath),
           sourcePath: context.sourcePath,
           data: { nextRangeSequence: record.nextRangeSequence, draft: record.draft, ranges: record.ranges },
-          markActive: true,
         });
       }
       const movieRef = this.grant(event, {

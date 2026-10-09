@@ -50,6 +50,7 @@ export class ReviewSession {
   private readonly adjacentScheduler: AdjacentStepScheduler<IHostExactFrame>;
   private currentState = FrameReviewState.create('opening', 1);
   private playbackDurationUs: bigint | null = null;
+  private pendingPlaybackTargetUs: bigint | null = null;
   private currentExactFrame: IHostExactFrame | null = null;
   private preparationPromise: Promise<void> = Promise.resolve();
   private playbackTurn: Promise<void> = Promise.resolve();
@@ -82,6 +83,10 @@ export class ReviewSession {
     this.adjacentScheduler.setSourceGeneration(1);
     options.playback.setFrameListener((frame) => {
       if (this.disposed || this.currentExactFrame) return;
+      if (this.pendingPlaybackTargetUs !== null) {
+        const difference = frame.playbackTimestampUs - this.pendingPlaybackTargetUs;
+        if (difference >= -500_000n && difference <= 500_000n) this.pendingPlaybackTargetUs = null;
+      }
       options.emit(Object.freeze({
         type: 'display-frame',
         frame: Object.freeze({ ...frame, sourceGeneration: 1 }),
@@ -127,7 +132,10 @@ export class ReviewSession {
       if (this.currentExactFrame) {
         const time = this.proxyClock?.at(this.currentExactFrame.identity.frameIndex)
           ?? this.currentExactFrame.reviewTimeUs;
-        await this.options.playback.playAt(time);
+        const priorTarget = this.pendingPlaybackTargetUs;
+        this.pendingPlaybackTargetUs = time;
+        try { await this.options.playback.playAt(time); }
+        catch (error) { this.pendingPlaybackTargetUs = priorTarget; throw error; }
       }
       else await this.options.playback.play();
       this.currentExactFrame = null;
@@ -144,8 +152,56 @@ export class ReviewSession {
     this.requireOpen();
     await this.stopPreviewRule();
     await this.withPlayback(async () => {
-      await this.options.playback.seek(timestampUs);
+      const priorTarget = this.pendingPlaybackTargetUs;
+      this.pendingPlaybackTargetUs = timestampUs;
+      try {
+        await this.options.playback.seek(timestampUs);
+        this.currentExactFrame = null;
+      } catch (error) {
+        this.pendingPlaybackTargetUs = priorTarget;
+        throw error;
+      }
+    });
+  }
+
+  async jumpPlaybackBy(deltaUs: bigint): Promise<bigint> {
+    this.requireOpen();
+    if (deltaUs < 1n || deltaUs > 10_000_000n) {
+      throw new BackendError('invalid-request', 'Jump duration is out of range.', true);
+    }
+    if (this.playbackDisabled) throw new BackendError('invalid-state', 'Playback needs a new review session.', true);
+    return this.withPlayback(async () => {
+      const status = await this.options.playback.status();
+      const wasPlaying = status.state === 'playing';
+      const limit = [status.lengthUs, this.currentState.preparedReview?.durationUs, this.playbackDurationUs]
+        .find(value => value !== null && value !== undefined && value > 0n) ?? null;
+      const requested = (this.pendingPlaybackTargetUs ?? status.timestampUs) + deltaUs;
+      const target = limit !== null && requested > limit ? limit : requested;
+      const leavingPreview = this.preview !== null || this.abLoopArmed;
+      if (leavingPreview) {
+        ++this.previewEpoch;
+        if (wasPlaying) await this.options.playback.pause();
+        try {
+          await this.options.playback.resetAbLoop();
+        } catch {
+          await this.recoverPlaybackAt(this.currentExactFrame?.identity.frameIndex ?? 0);
+          this.preview = null;
+          throw new BackendError('invalid-state', 'Loop preview could not be stopped. Try again.', true);
+        }
+        this.abLoopArmed = false;
+        this.preview = null;
+      }
+      const priorTarget = this.pendingPlaybackTargetUs;
+      this.pendingPlaybackTargetUs = target;
+      try {
+        await this.options.playback.seek(target);
+      } catch (error) {
+        this.pendingPlaybackTargetUs = priorTarget;
+        throw error;
+      }
       this.currentExactFrame = null;
+      if (wasPlaying && leavingPreview) await this.options.playback.play();
+      return target;
     });
   }
 
@@ -154,7 +210,7 @@ export class ReviewSession {
     if (this.preview?.phase === 'running') return this.pauseExactPreview();
     await this.options.playback.pause();
     const status = await this.options.playback.status();
-    return this.rememberFrame(await this.options.exact.atTime(status.timestampUs));
+    return this.rememberFrame(await this.options.exact.atTime(this.pendingPlaybackTargetUs ?? status.timestampUs));
   }
 
   async scrubToFrame(frameIndex: number): Promise<IHostExactFrame> {
@@ -163,6 +219,24 @@ export class ReviewSession {
     if (!this.playbackDisabled) await this.options.playback.pause();
     const frame = this.rememberFrame(await this.scrubScheduler.submit(frameIndex));
     this.retainPreviewIfInRange(frame.identity.frameIndex);
+    return frame;
+  }
+
+  async scrubToTime(timestampUs: bigint): Promise<IHostExactFrame> {
+    this.requireExactReady();
+    if (timestampUs < 0n) throw new BackendError('invalid-request', 'Scrub time is negative.', true);
+    await this.stopPreviewRule();
+    if (!this.playbackDisabled) await this.withPlayback(() => this.options.playback.pause());
+    const prepared = this.currentState.preparedReview;
+    if (!prepared || prepared.frameCount < 1) {
+      throw new BackendError('invalid-state', 'Exact frames are unavailable.', true);
+    }
+    const frame = timestampUs === 0n
+      ? await this.options.exact.scrub(0)
+      : timestampUs >= prepared.durationUs
+        ? await this.options.exact.scrub(prepared.frameCount - 1)
+        : await this.options.exact.atTime(timestampUs);
+    this.currentExactFrame = frame;
     return frame;
   }
 
@@ -315,7 +389,9 @@ export class ReviewSession {
             maxWidth: this.options.previewBounds.maxWidth,
             maxHeight: this.options.previewBounds.maxHeight,
           });
-          await this.options.playback.seek(playbackStatus.timestampUs);
+          const target = this.pendingPlaybackTargetUs ?? playbackStatus.timestampUs;
+          this.pendingPlaybackTargetUs = target;
+          await this.options.playback.seek(target);
           if (wasPlaying) await this.options.playback.play();
         });
       }
@@ -379,6 +455,7 @@ export class ReviewSession {
       if (epoch !== this.previewEpoch || this.disposed) return;
       this.currentExactFrame = null;
       this.preview = Object.freeze({ range: Object.freeze({ ...range }), times, phase: 'running' });
+      this.pendingPlaybackTargetUs = null;
       await this.options.playback.play();
     } catch (error) {
       this.preview = null;
@@ -454,7 +531,9 @@ export class ReviewSession {
         maxWidth: this.options.previewBounds.maxWidth,
         maxHeight: this.options.previewBounds.maxHeight,
       });
-      await this.options.playback.seek(playbackStatus.timestampUs);
+      const target = this.pendingPlaybackTargetUs ?? playbackStatus.timestampUs;
+      this.pendingPlaybackTargetUs = target;
+      await this.options.playback.seek(target);
       if (wasPlaying) await this.options.playback.play();
     });
   }

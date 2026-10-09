@@ -1,7 +1,4 @@
 import { createRequire } from 'node:module';
-import { randomUUID } from 'node:crypto';
-import os from 'node:os';
-import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
@@ -74,29 +71,4 @@ describe('ClipCapturesIpcBoundary', () => {
     expect((await boundary.save({ sender: { id: 8 } }, { movieRef, data: changedData })).ok).toBe(false);
   });
 
-  it('grants removal from a saved queue when its source movie is missing', async () => {
-    const missingPath = path.join(os.tmpdir(), `missing-${randomUUID()}.mp4`);
-    const store = {
-      lastActive: vi.fn(async () => ({
-        ...saved, movieFingerprint: original, displayName: 'Missing.mp4', lastKnownPath: missingPath,
-      })),
-      save: vi.fn(async () => undefined),
-    };
-    const boundary = new ClipCapturesIpcBoundary({ ipcMain: { handle: vi.fn() }, store,
-      hostForEvent: vi.fn() });
-    const event = { sender: { id: 7 } };
-    const result = await boundary.last(event);
-
-    expect(result).toMatchObject({ ok: true, result: {
-      unavailable: true, name: 'Missing.mp4', movieRef: expect.stringMatching(/^capture_/),
-      data: { schemaVersion: 1, ...saved },
-    } });
-    expect(JSON.stringify(result)).not.toContain(missingPath);
-    const changedData = { nextRangeSequence: 2, ranges: [] };
-    expect(await boundary.save(event, { movieRef: result.result.movieRef, data: changedData }))
-      .toEqual({ ok: true, result: null });
-    expect(store.save).toHaveBeenCalledWith({
-      fingerprint: original, displayName: 'Missing.mp4', sourcePath: missingPath, data: changedData,
-    });
-  });
 });

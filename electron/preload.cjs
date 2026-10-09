@@ -96,7 +96,6 @@ const desktopApi = {
     },
   },
   clipCaptures: {
-    last() { return ipcRenderer.invoke('clip-sandbox:clip-captures-last'); },
     attach(request) { return ipcRenderer.invoke('clip-sandbox:clip-captures-attach', request); },
     save(request) { return ipcRenderer.invoke('clip-sandbox:clip-captures-save', request); },
   },

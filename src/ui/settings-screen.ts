@@ -1,6 +1,6 @@
 import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
 import { AppSettingsService, type SettingsResult } from '../app/app-settings-service.js';
-import type { ActivityErrorOptions } from './activity-indicator-control.js';
+import type { ActivityErrorOptions } from '../app/activity-logger.js';
 import { isStartupScreenId, type IAppSettings } from '../app/app-settings.js';
 
 type SettingsFeedback = {

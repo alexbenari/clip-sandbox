@@ -13,6 +13,11 @@ const REFINE_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
   { description: 'Play or pause', sequences: [['Space']] },
   { description: 'Step backward one frame; hold to accelerate', sequences: [['Left']] },
   { description: 'Step forward one frame; hold to accelerate', sequences: [['Right']] },
+  { description: 'Jump 1 second; scrub follows the last step direction', sequences: [['1']] },
+  { description: 'Jump 2 seconds', sequences: [['2']] },
+  { description: 'Jump 5 seconds', sequences: [['3']] },
+  { description: 'Jump 7 seconds', sequences: [['4']] },
+  { description: 'Jump 10 seconds', sequences: [['5']] },
   { description: 'Set exact start at the displayed frame', sequences: [['Q']] },
   { description: 'Set exact end at the displayed frame', sequences: [['W']] },
   { description: 'Jump to exact start', sequences: [['A']] },
@@ -205,6 +210,7 @@ export class RefineGifScreen implements IAppScreen {
 
   onDeactivate(): void {
     this.active = false;
+    this.options.player.interruptJumps();
     this.previewOperation += 1;
     if (this.options.player.exactPreviewPhase() !== 'inactive') {
       this.pendingPreviewStop = this.options.player.stopExactPreview().catch(() => null);
@@ -249,6 +255,7 @@ export class RefineGifScreen implements IAppScreen {
 
   private markEndpoint(endpoint: RefineGifEndpoint): void {
     if (this.options.player.exactPreviewPhase() === 'running') return;
+    this.options.player.interruptJumps();
     const refinement = this.options.session?.refinementSession;
     if (!refinement) return;
     const capture = this.options.player.displayedCapture();
@@ -257,6 +264,7 @@ export class RefineGifScreen implements IAppScreen {
   }
 
   private focusEndpoint(endpoint: RefineGifEndpoint): void {
+    this.options.player.interruptJumps();
     if (this.snapshot?.refinement?.status === 'committed') {
       this.jump(endpoint);
       return;
@@ -341,6 +349,8 @@ export class RefineGifScreen implements IAppScreen {
 
   private render(snapshot: IGifExtractionSessionSnapshot): void {
     this.snapshot = snapshot;
+    this.options.player.setJumpUnavailable(this.preparationMessage !== null
+      || snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening');
     this.cancelExtraction.hidden = !snapshot.extractionBatch;
     this.cancelExtraction.disabled = snapshot.extractionBatch?.cancelling === true;
     if (this.previewRevision !== null && snapshot.previewRevision !== this.previewRevision) {
@@ -419,6 +429,7 @@ export class RefineGifScreen implements IAppScreen {
     if (refinement.status !== 'editing') return;
     const key = `${refinement.rangeId}:${refinement.seekRevision}`;
     if (this.lastSeekKey === key) return;
+    this.options.player.interruptJumps();
     this.lastSeekKey = key;
     this.seekGeneration += 1;
     this.pendingSeek = refinement;

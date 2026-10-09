@@ -117,6 +117,9 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
   play(): Promise<void> { return this.voidCommand('play'); }
   pause(): Promise<void> { return this.voidCommand('pause'); }
   seekPlayback(timestampUs: bigint): Promise<void> { return this.voidCommand('seek-playback', { timestampUs: timestampUs.toString() }); }
+  async jumpPlaybackBy(deltaUs: bigint): Promise<bigint> {
+    return FrameReviewWireValue.decimalBigInt(await this.command('jump-playback-by', { deltaUs: deltaUs.toString() }), 'jump position');
+  }
   startExactPreview(range: Readonly<{ startFrameIndex: number; endFrameIndex: number }>): Promise<void> {
     return this.voidCommand('start-exact-preview', range);
   }
@@ -128,6 +131,9 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
   }
   enterFrameScrub(): Promise<IExactDisplayFrame> { return this.exactCommand('enter-scrub'); }
   scrubToFrame(frameIndex: number): Promise<IExactDisplayFrame> { return this.exactCommand('scrub-to-frame', { frameIndex }); }
+  scrubToTime(timestampUs: bigint): Promise<IExactDisplayFrame> {
+    return this.exactCommand('scrub-to-time', { timestampUs: timestampUs.toString() });
+  }
   stepAdjacent(direction: -1 | 1): Promise<IExactDisplayFrame> { return this.exactCommand('step-adjacent', { direction }); }
   pressAdjacent(direction: -1 | 1): Promise<void> { return this.voidCommand('press-adjacent', { direction }); }
   releaseAdjacent(direction?: -1 | 1): Promise<void> {

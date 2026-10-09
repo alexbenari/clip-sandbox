@@ -4,6 +4,7 @@ export interface IGifWorkflowPlayerCommands {
   togglePlayback(): void;
   pressStep(direction: AdjacentDirection): void;
   releaseStep(direction?: AdjacentDirection): void;
+  jumpBySeconds(seconds: number): void;
 }
 
 export interface IGifWorkflowCaptureCommands {
@@ -56,10 +57,21 @@ export class GifWorkflowKeyboardController {
       return;
     }
     if (event.repeat) return;
+    const jumpSeconds = this.jumpSecondsForCode(event.code);
+    if (jumpSeconds !== null && !event.shiftKey) {
+      this.target.player.jumpBySeconds(jumpSeconds);
+      event.preventDefault();
+      return;
+    }
     const command = this.commandForKey(key);
     if (!command) return;
     command();
     event.preventDefault();
+  }
+
+  private jumpSecondsForCode(code: string): number | null {
+    const values: Record<string, number> = { Digit1: 1, Digit2: 2, Digit3: 5, Digit4: 7, Digit5: 10 };
+    return values[code] ?? null;
   }
 
   handleKeyUp(event: KeyboardEvent): void {

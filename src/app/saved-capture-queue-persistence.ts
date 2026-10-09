@@ -27,12 +27,6 @@ export class SavedCaptureQueuePersistence {
   markStale(rangeId: CapturedRangeId): void { this.staleRangeIds.add(rangeId); }
   forgetRange(rangeId: CapturedRangeId): void { this.staleRangeIds.delete(rangeId); }
 
-  adoptUnavailable(movieRef: string, data: ISavedRangeCaptureData): RangeCaptureModel {
-    const model = this.adopt(movieRef, data);
-    this.markAllStale(model);
-    return model;
-  }
-
   async attach(sessionId: FrameReviewSessionId, expectedFingerprint?: ISourceFingerprint): Promise<RestoredQueue | null> {
     const attached = await this.store.attach(sessionId, expectedFingerprint);
     if (!this.active) return null;

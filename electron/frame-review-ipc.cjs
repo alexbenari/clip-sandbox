@@ -9,7 +9,7 @@ const CHANNELS = Object.freeze({
 });
 
 const COMMANDS = new Set([
-  'state', 'play', 'pause', 'seek-playback', 'enter-scrub', 'scrub-to-frame',
+  'state', 'play', 'pause', 'seek-playback', 'jump-playback-by', 'enter-scrub', 'scrub-to-frame', 'scrub-to-time',
   'step-adjacent', 'press-adjacent', 'release-adjacent', 'capture-current-point',
   'frame-identity', 'thumbnail-frame',
   'start-exact-preview', 'pause-exact-preview', 'resume-exact-preview', 'stop-exact-preview',
@@ -116,6 +116,11 @@ class FrameReviewIpcBoundary {
       case 'play': return session.play();
       case 'pause': return session.pause();
       case 'seek-playback': return session.seekPlayback(this.decimalBigInt(args.timestampUs, 'timestampUs'));
+      case 'jump-playback-by': {
+        const deltaUs = this.decimalBigInt(args.deltaUs, 'deltaUs');
+        if (deltaUs < 1n || deltaUs > 10_000_000n) throw this.invalid('Jump duration is out of range.');
+        return session.jumpPlaybackBy(deltaUs);
+      }
       case 'start-exact-preview': return session.startExactPreview({
         startFrameIndex: this.nonnegativeInteger(args.startFrameIndex, 'startFrameIndex'),
         endFrameIndex: this.nonnegativeInteger(args.endFrameIndex, 'endFrameIndex'),
@@ -125,6 +130,11 @@ class FrameReviewIpcBoundary {
       case 'stop-exact-preview': return session.stopExactPreview();
       case 'enter-scrub': return session.enterFrameScrub();
       case 'scrub-to-frame': return session.scrubToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      case 'scrub-to-time': {
+        const timestampUs = this.decimalBigInt(args.timestampUs, 'timestampUs');
+        if (timestampUs > 9_223_372_036_854_775_807n) throw this.invalid('Scrub time is out of range.');
+        return session.scrubToTime(timestampUs);
+      }
       case 'step-adjacent': return session.stepAdjacent(this.direction(args.direction));
       case 'press-adjacent': return session.pressAdjacent(this.direction(args.direction));
       case 'release-adjacent': return session.releaseAdjacent(
