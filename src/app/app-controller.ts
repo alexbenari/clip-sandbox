@@ -5,7 +5,7 @@ import { ClipEditor } from '../business-logic/clip-editor.js';
 import type { ContextMenuPoint } from '../ui/context-menu-controller.js';
 import type { Clip, ClipFile } from '../domain/clip.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
-import type { Pipeline, RemovedCollectionChange } from '../domain/pipeline.js';
+import type { Pipeline } from '../domain/pipeline.js';
 import { VideoEditCatalog, type VideoEdit } from '../business-logic/video-edit-catalog.js';
 import { AppSessionState } from './app-session-state.js';
 import { PipelineSession } from './pipeline-session.js';
@@ -29,6 +29,7 @@ import { CollectionViewWorkflow } from './collection-view-workflow.js';
 import { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import { AddToCollectionWorkflow } from './add-to-collection-workflow.js';
 import { FolderSelectionWorkflow } from './folder-selection-workflow.js';
+import { DeleteFromDiskWorkflow } from './delete-from-disk-workflow.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
 import { OrderMenuController } from '../ui/order-menu-controller.js';
@@ -81,12 +82,6 @@ type FolderSelection = {
   folderSession: unknown;
   files: ClipFile[];
   folderName: string;
-};
-
-type DeleteRequest = {
-  selectedClipIds: string[];
-  selectedClipNames: string[];
-  affectedSavedCollectionCount: number;
 };
 
 class AppControllerSupport {
@@ -150,207 +145,16 @@ export class AppController {
         zoomOverlay.close();
       };
 
-    readonly buildDeleteRequestFromSelection = (): DeleteRequest | null => {
-        const pipeline = this.currentPipeline();
-        if (!this.currentClipSequence() || !pipeline) return null;
-        const selectedClipIds = gridController.getSelectedClipIds();
-        if (selectedClipIds.length === 0) return null;
-        const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(selectedClipIds);
-        if (selectedClipNames.length === 0) return null;
-        return {
-          selectedClipIds,
-          selectedClipNames,
-          affectedSavedCollectionCount: pipeline.savedCollectionEntriesContainingClipNames(selectedClipNames).length,
-        };
-      };
-
-    readonly openDeletePreflightDialog = () => {
-        deleteFromDiskDialogController.openPreflight({
-          text: appText.deleteFromDiskPreflightText(),
-          onSave: () => {
-            void this.confirmDeletePreflightSave();
-          },
-          onDiscard: this.continueDeleteWithoutSaving,
-          onCancel: this.cancelPendingDeleteFlow,
-        });
-      };
-
-    readonly openDeleteFromDiskDialog = (deleteRequest: DeleteRequest): void => {
-        deleteFromDiskDialogController.openConfirmForDeleteRequest(deleteRequest, {
-          onConfirm: () => {
-            void this.confirmDeleteFromDisk();
-          },
-          onCancel: this.cancelPendingDeleteFlow,
-        });
-      };
-
-    readonly cancelPendingDeleteFlow = () => {
-        pendingDeleteRequest = null;
-        deleteFromDiskDialogController.closeAll();
-      };
-
-    readonly removeVideosAndRewriteCollections = async (pipeline: Pipeline, deletedClipNames: string[]) => {
-        const changedCollections: RemovedCollectionChange[] = deletedClipNames.length > 0
-          ? pipeline.removeVideos(deletedClipNames).changedCollections
-          : [];
-        const failedCollectionRewrites: Array<{ filename: string; collectionName: string; error: unknown }> = [];
-        let cleanedSavedCollectionCount = 0;
-        for (const entry of changedCollections) {
-          try {
-            await collectionFileWriter.write(entry.collection);
-            cleanedSavedCollectionCount += 1;
-          } catch (error) {
-            pipeline.upsertCollection(entry.previousCollection);
-            failedCollectionRewrites.push({
-              filename: entry.filename,
-              collectionName: entry.collectionName,
-              error,
-            });
-          }
-        }
-        return { targetedSavedCollectionCount: changedCollections.length, cleanedSavedCollectionCount, failedCollectionRewrites };
-      };
-
-    readonly deleteSelectedFilesAndUpdatePipeline = async (deleteRequest: DeleteRequest, pipeline: Pipeline) => {
-        const deleteResult = await fileSystem.deleteFiles({
-          folderSession: state.currentFolderSession,
-          filenames: deleteRequest.selectedClipNames,
-        });
-        if (deleteResult.code === 'unavailable') return null;
-
-        const deletedClipNames = deleteResult.results
-          .filter((entry) => entry.ok)
-          .map((entry) => entry.filename);
-        const failedDeletes = deleteResult.results.filter((entry) => !entry.ok);
-        const clipIdByName = new Map(deleteRequest.selectedClipNames.map((name, index) => [name, deleteRequest.selectedClipIds[index]]));
-        const deletedClipIds = deletedClipNames.flatMap((name) => {
-          const clipId = clipIdByName.get(name);
-          return clipId ? [clipId] : [];
-        });
-
-        const collectionChanges = await this.removeVideosAndRewriteCollections(pipeline, deletedClipNames);
-        const { cleanedSavedCollectionCount, failedCollectionRewrites } = collectionChanges;
-
-        return {
-          ok: deletedClipNames.length > 0 && failedDeletes.length === 0 && failedCollectionRewrites.length === 0,
-          code: deletedClipNames.length === 0
-            ? 'delete-failed'
-            : (failedDeletes.length === 0 && failedCollectionRewrites.length === 0 ? 'deleted' : 'partial'),
-          selectedClipIds: Array.from(deleteRequest.selectedClipIds || []),
-          selectedClipNames: Array.from(deleteRequest.selectedClipNames || []),
-          deletedClipIds,
-          deletedClipNames,
-          failedDeletes,
-          ...collectionChanges,
-        };
-      };
-
-    readonly confirmDeleteFromDisk = async (): Promise<void> => {
-        const deleteRequest = pendingDeleteRequest;
-        const pipeline = this.currentPipeline();
-        if (!deleteRequest || !this.currentClipSequence() || !pipeline) return;
-        deleteFromDiskDialogController.closeConfirm();
-        pendingDeleteRequest = null;
-
-        const result = await this.deleteSelectedFilesAndUpdatePipeline(deleteRequest, pipeline);
-        if (!result) {
-          activityReporter.failure(appText.deleteFromDiskResultText({
-            deletedCount: 0,
-            failedDeleteCount: deleteRequest.selectedClipNames.length,
-            cleanedSavedCollectionCount: 0,
-            failedCollectionRewriteCount: 0,
-          }), {
-            affected: deleteRequest.selectedClipNames.join(', '),
-            recovery: 'Open the folder again before retrying the deletion.',
-            technicalDetails: 'Disk access is unavailable for the current folder session.',
-          });
-          return;
-        }
-
-        if (result.deletedClipIds.length > 0) {
-          gridController.invalidateAllViews();
-          await folderSelection.reloadSelection({
-            pipeline: this.currentPipeline(),
-            collection: this.activeCollection(),
-            folderSession: state.currentFolderSession,
-          });
-        } else {
-          collectionView.refreshToolbar();
-        }
-
-        if (result.failedDeletes.length > 0 || result.failedCollectionRewrites.length > 0) {
-          await diagnostics.logDeleteFailures(result);
-        }
-
-        const deleteStatusText = appText.deleteFromDiskResultText({
-          deletedCount: result.deletedClipIds.length,
-          failedDeleteCount: result.failedDeletes.length,
-          cleanedSavedCollectionCount: result.cleanedSavedCollectionCount,
-          failedCollectionRewriteCount: result.failedCollectionRewrites.length,
-        });
-        if (result.failedDeletes.length > 0 || result.failedCollectionRewrites.length > 0 || result.deletedClipIds.length === 0) {
-          const failedDeleteDetails = result.failedDeletes.map(({ filename, error }) =>
-            `${filename}: ${error instanceof Error ? error.message : String(error || 'Delete failed')}`);
-          const failedRewriteDetails = result.failedCollectionRewrites.map(({ collectionName, filename, error }) =>
-            `${collectionName} (${filename}): ${error instanceof Error ? error.message : String(error || 'Collection update failed')}`);
-          activityReporter.failure(deleteStatusText, {
-            affected: [...result.failedDeletes.map(({ filename }) => filename),
-              ...result.failedCollectionRewrites.map(({ collectionName }) => collectionName)].join(', '),
-            recovery: 'Close any player using the clip, then try deleting it again.',
-            technicalDetails: [...failedDeleteDetails, ...failedRewriteDetails].join('\n') || 'No file was deleted.',
-          });
-          return;
-        }
-        activityReporter.success(deleteStatusText, 4500);
-      };
-
-    readonly openDeleteFromDiskFlow = () => {
-        const deleteRequest = this.buildDeleteRequestFromSelection();
-        if (!deleteRequest) return;
-        pendingDeleteRequest = deleteRequest;
-        if (pipelineSession.hasDirtyClipSequenceChanges) {
-          this.openDeletePreflightDialog();
-          return;
-        }
-        this.openDeleteFromDiskDialog(deleteRequest);
-      };
-
-
     readonly clearLoadedState = () => {
         collectionConflictController.hide();
-        pendingDeleteRequest = null;
+        deleteFromDisk.discardPendingRequest();
         collectionSave.cancelSaveAsNew();
         addToCollectionDialogController.close();
-        deleteFromDiskDialogController.closeAll();
         clipContextMenuController.close({ restoreFocus: false });
         unsavedChangesDialogController.close();
         this.closeZoom();
         collectionView.clearLoadedView();
       };
-
-    readonly confirmDeletePreflightSave = async (): Promise<void> => {
-        const deleteRequest = pendingDeleteRequest;
-        if (!deleteRequest) return;
-        deleteFromDiskDialogController.closePreflight();
-        const outcome = await collectionSave.saveActive();
-        if (pendingDeleteRequest !== deleteRequest) return;
-        if (outcome === 'cancelled') {
-          pendingDeleteRequest = null;
-          return;
-        }
-        if (outcome === 'failed') {
-          this.openDeletePreflightDialog();
-          return;
-        }
-        this.openDeleteFromDiskDialog(deleteRequest);
-      };
-
-    readonly continueDeleteWithoutSaving = (): void => {
-        if (!pendingDeleteRequest) return;
-        deleteFromDiskDialogController.closePreflight();
-        this.openDeleteFromDiskDialog(pendingDeleteRequest);
-      };
-
 
     readonly openZoomForClip = (clip: Clip | null): boolean => {
         if (!clip || fullscreenAdapter.isDocumentFullScreen()) return false;
@@ -494,7 +298,7 @@ export class AppController {
             addToCollection.openDialog({ startWithNewCollection: true });
           },
           onDeleteFromDisk: () => {
-            this.openDeleteFromDiskFlow();
+            deleteFromDisk.start();
           },
         });
       };
@@ -710,7 +514,7 @@ this.initialized = true;
 
 
 
-  mainToolbarControl.on('deleteFromDiskRequested', workflows.openDeleteFromDiskFlow);
+
 
   mainToolbarControl.on('toggleFullscreenRequested', workflows.onFsToggle);
   eventWiring.require('mainToolbar', mainToolbarControl, [
@@ -777,108 +581,6 @@ this.initialized = true;
     confirmDeleteBtn: confirmDeleteFromDiskBtn,
     cancelDeleteBtn: cancelDeleteFromDiskBtn,
   });
-  let pendingDeleteRequest: DeleteRequest | null = null;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   const zoomVideoEditWorkflow = new ZoomVideoEditWorkflow({
     clipEditor,
     onStarted: ({ edit, sourceClip }) => {
@@ -942,10 +644,7 @@ this.initialized = true;
   });
 
   gridController.on('openClipRequested', workflows.openZoomForClipId);
-  gridController.on('removeSelectedRequested', () => {
-    if (zoomOverlay.isOpen() || !workflows.currentClipSequence() || !workflows.isPipelineMode()) return;
-    workflows.openDeleteFromDiskFlow();
-  });
+
   gridController.on('contextMenuRequested', ({ point, clipId }) => {
     if (zoomOverlay.isOpen() || fullscreenAdapter.isDocumentFullScreen()) return;
     void workflows.openGridContextMenu(point, clipId);
@@ -1024,6 +723,22 @@ this.initialized = true;
     toolbar: mainToolbarControl,
     selector: collectionSelectorControl,
     catalog: pipelineCatalogControl,
+    reporter: activityReporter,
+    appText,
+  });
+  const deleteFromDisk = new DeleteFromDiskWorkflow({
+    pipelineSession,
+    openFolder: state,
+    files: fileSystem,
+    fileWriter: collectionFileWriter,
+    dialog: deleteFromDiskDialogController,
+    grid: gridController,
+    toolbar: mainToolbarControl,
+    zoom: zoomOverlay,
+    collectionSave,
+    folderSelection,
+    collectionView,
+    diagnostics,
     reporter: activityReporter,
     appText,
   });
@@ -1338,6 +1053,7 @@ this.initialized = true;
       collectionSave.dispose();
       addToCollection.dispose();
       folderSelection.dispose();
+      deleteFromDisk.dispose();
       await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
     },
     destroyControls: () => {

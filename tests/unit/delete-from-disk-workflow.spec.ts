@@ -1,0 +1,153 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { ActivityReporter } from '../../src/app/activity-reporter.js';
+import { AppSessionState } from '../../src/app/app-session-state.js';
+import { AppText } from '../../src/app/app-text.js';
+import type { SaveOutcome } from '../../src/app/collection-save-workflow.js';
+import { DeleteFromDiskWorkflow } from '../../src/app/delete-from-disk-workflow.js';
+import { EventSource } from '../../src/app/event-source.js';
+import { PipelineSession } from '../../src/app/pipeline-session.js';
+import { Collection } from '../../src/domain/collection.js';
+import { Pipeline } from '../../src/domain/pipeline.js';
+
+type PreflightRequest = { text: string; onSave: () => void; onDiscard: () => void; onCancel: () => void };
+type ConfirmHandlers = { onConfirm: () => void; onCancel: () => void };
+
+class FakeGrid extends EventSource<{ removeSelectedRequested: string[] }> {
+  selectedClipIds: string[] = [];
+  getSelectedClipIds() { return this.selectedClipIds; }
+  invalidateAllViews = vi.fn();
+}
+
+function deleteWorkflow({ saveOutcome = 'saved' as SaveOutcome, failingDeletes = [] as string[], unavailable = false } = {}) {
+  const pipeline = new Pipeline({
+    folderName: 'clips',
+    videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')],
+    collections: [Collection.fromFilename({ filename: 'picks.txt', orderedClipNames: ['alpha.mp4', 'bravo.mp4'] })],
+  });
+  const pipelineSession = new PipelineSession();
+  pipelineSession.loadPipeline(pipeline);
+  const grid = new FakeGrid();
+  const [alpha] = pipelineSession.currentClipSequence!.orderedClips();
+  grid.selectedClipIds = [alpha.id];
+  const preflights: PreflightRequest[] = [];
+  const confirmations: ConfirmHandlers[] = [];
+  const dialog = {
+    openPreflight: vi.fn((request: PreflightRequest) => { preflights.push(request); }),
+    openConfirmForDeleteRequest: vi.fn((_request: unknown, handlers: ConfirmHandlers) => { confirmations.push(handlers); }),
+    closePreflight: vi.fn(), closeConfirm: vi.fn(), closeAll: vi.fn(),
+  };
+  const files = {
+    deleteFiles: vi.fn(async ({ filenames }: { filenames: string[] }) => (unavailable
+      ? { code: 'unavailable', results: [] }
+      : { code: 'deleted', results: filenames.map(filename => (failingDeletes.includes(filename)
+        ? { filename, ok: false, error: new Error('EBUSY') }
+        : { filename, ok: true })) })),
+  };
+  const written: Collection[] = [];
+  const entries: { kind: string; message: string; affected?: string }[] = [];
+  const toolbar = new EventSource<{ deleteFromDiskRequested: void }>();
+  const zoom = { isOpen: vi.fn(() => false) };
+  const folderSelection = { reloadSelection: vi.fn(async () => undefined) };
+  const workflow = new DeleteFromDiskWorkflow({
+    pipelineSession,
+    openFolder: new AppSessionState(),
+    files,
+    fileWriter: { write: vi.fn(async (collection: Collection) => { written.push(collection); return { mode: 'saved' }; }) },
+    dialog,
+    grid,
+    toolbar,
+    zoom,
+    collectionSave: { saveActive: vi.fn(async () => saveOutcome) },
+    folderSelection,
+    collectionView: { refreshToolbar: vi.fn() },
+    diagnostics: { logDeleteFailures: vi.fn(async () => undefined) },
+    reporter: new ActivityReporter({ log: entry => { entries.push(entry); } }),
+    appText: new AppText(),
+  });
+  const makeViewDirty = () => {
+    const ids = pipelineSession.currentClipSequence!.orderedClips().map(clip => clip.id);
+    pipelineSession.replaceCurrentOrder([...ids].reverse());
+  };
+  return { workflow, pipeline, pipelineSession, grid, dialog, preflights, confirmations, files, written, entries, toolbar, zoom, folderSelection, makeViewDirty };
+}
+
+describe('DeleteFromDiskWorkflow', () => {
+  it('asks for confirmation, deletes the selected file and removes it from saved collections', async () => {
+    const context = deleteWorkflow();
+
+    context.toolbar.emit('deleteFromDiskRequested');
+    expect(context.dialog.openPreflight).not.toHaveBeenCalled();
+    context.confirmations[0].onConfirm();
+
+    await vi.waitFor(() => expect(context.entries.at(-1)?.kind).toBe('success'));
+    expect(context.files.deleteFiles).toHaveBeenCalledWith(expect.objectContaining({ filenames: ['alpha.mp4'] }));
+    expect(context.written.map(collection => [collection.filename, collection.orderedClipNames])).toEqual([['picks.txt', ['bravo.mp4']]]);
+    expect(context.folderSelection.reloadSelection).toHaveBeenCalledOnce();
+  });
+
+  it('offers to save unsaved changes first, then confirms once the save succeeds', async () => {
+    const context = deleteWorkflow({ saveOutcome: 'saved' });
+    context.makeViewDirty();
+
+    context.workflow.start();
+    context.preflights[0].onSave();
+
+    await vi.waitFor(() => expect(context.confirmations).toHaveLength(1));
+  });
+
+  it('offers the save again when it fails, without deleting anything', async () => {
+    const context = deleteWorkflow({ saveOutcome: 'failed' });
+    context.makeViewDirty();
+
+    context.workflow.start();
+    context.preflights[0].onSave();
+
+    await vi.waitFor(() => expect(context.preflights).toHaveLength(2));
+    expect(context.confirmations).toHaveLength(0);
+    expect(context.files.deleteFiles).not.toHaveBeenCalled();
+  });
+
+  it('drops the deletion when Save as Collection is cancelled', async () => {
+    const context = deleteWorkflow({ saveOutcome: 'cancelled' });
+    context.makeViewDirty();
+
+    context.workflow.start();
+    context.preflights[0].onSave();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(context.confirmations).toHaveLength(0);
+    expect(context.preflights).toHaveLength(1);
+  });
+
+  it('reports which files could not be deleted', async () => {
+    const context = deleteWorkflow({ failingDeletes: ['alpha.mp4'] });
+
+    context.workflow.start();
+    context.confirmations[0].onConfirm();
+
+    await vi.waitFor(() => expect(context.entries.at(-1)).toMatchObject({ kind: 'error', affected: 'alpha.mp4' }));
+    expect(context.folderSelection.reloadSelection).not.toHaveBeenCalled();
+  });
+
+  it('reports that the folder must be opened again when disk access is unavailable', async () => {
+    const context = deleteWorkflow({ unavailable: true });
+
+    context.workflow.start();
+    context.confirmations[0].onConfirm();
+
+    await vi.waitFor(() => expect(context.entries.at(-1)).toMatchObject({ kind: 'error', affected: 'alpha.mp4' }));
+  });
+
+  it('treats removing selected clips from the pipeline view as a deletion, except while Zoom is open', () => {
+    const context = deleteWorkflow();
+
+    context.zoom.isOpen.mockReturnValue(true);
+    context.grid.emit('removeSelectedRequested', context.grid.selectedClipIds);
+    expect(context.confirmations).toHaveLength(0);
+
+    context.zoom.isOpen.mockReturnValue(false);
+    context.grid.emit('removeSelectedRequested', context.grid.selectedClipIds);
+    expect(context.confirmations).toHaveLength(1);
+  });
+});
