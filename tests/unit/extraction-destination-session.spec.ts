@@ -116,6 +116,26 @@ describe('ExtractionDestinationSession', () => {
     expect(onPublished).toHaveBeenCalledOnce();
   });
 
+  it('appends new media without reordering a saved collection order', async () => {
+    const service = destinationService({
+      openExtractionDestination: vi.fn(async () => ({
+        destinationHandle: 'destination_opaque_0001', folderPath: 'C:/pipelines/extraction-tmp',
+        entries: [{ kind: 'collection', filename: 'Sample Movie.txt',
+          content: 'Sample Movie-002.mp4\nSample Movie-001.mp4\n' }],
+      })),
+    });
+    const session = new ExtractionDestinationSession(service);
+    await session.open({ movieName: 'Sample Movie.mp4' });
+
+    await session.publishCreatedMedia({ mediaHandle: 'media_opaque_0003', filename: 'Sample Movie-003.mp4' });
+
+    expect(service.saveCollection).toHaveBeenCalledWith(
+      'destination_opaque_0001',
+      'Sample Movie.txt',
+      'Sample Movie-002.mp4\nSample Movie-001.mp4\nSample Movie-003.mp4\n',
+    );
+  });
+
   it('rebases a failed publication retry onto later successful collection membership', async () => {
     const saveCollection = vi.fn()
       .mockRejectedValueOnce(new Error('collection write failed'))

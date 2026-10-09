@@ -17,7 +17,7 @@ interface IWorkflowContext {
   readonly sourceHandle: string;
   readonly reviewSessionId?: string;
   readonly sourceGeneration: number;
-  readonly collectionName: string;
+  readonly movieName: string;
 }
 
 interface IExtractAllRequest extends IWorkflowContext {
@@ -133,7 +133,7 @@ export class ClipExtractionWorkflow {
       this.updateBatch({ currentRangeId: null, currentPosition: 0, total: ranges.length,
         completed: 0, cancelling: false, usingExactFallback: false, progress: { stage: 'checking-source' } });
       if (isExtractAll) this.onActivity({ kind: 'batch-started', total: ranges.length });
-      const opened = await this.destination.open({ movieName: context.collectionName });
+      const opened = await this.destination.open({ movieName: context.movieName });
       for (const [index, range] of ranges.entries()) {
         if (this.cancelRequested) break;
         this.currentRangeId = range.id;

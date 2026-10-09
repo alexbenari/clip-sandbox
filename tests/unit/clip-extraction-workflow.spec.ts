@@ -34,7 +34,7 @@ describe('ClipExtractionWorkflow', () => {
       () => undefined, event => activity.push(event));
 
     await workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
-      ranges: [range('range-1', 10), range('range-2', 20)], collectionName: 'Sample Movie' });
+      ranges: [range('range-1', 10), range('range-2', 20)], movieName: 'Sample Movie.mp4' });
 
     expect(activity).toMatchObject([
       { kind: 'batch-started', total: 2 },
@@ -55,7 +55,7 @@ describe('ClipExtractionWorkflow', () => {
     const workflow = new ClipExtractionWorkflow(ports.extractor, ports.destination,
       () => undefined, event => activity.push(event));
     await workflow.extractOne({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
-      range: range('range-1', 10), collectionName: 'Sample Movie' });
+      range: range('range-1', 10), movieName: 'Sample Movie.mp4' });
     expect(activity).toMatchObject([{ kind: 'clip-extracted', filename: 'range-1.mp4' }]);
   });
 
@@ -66,7 +66,7 @@ describe('ClipExtractionWorkflow', () => {
     const workflow = new ClipExtractionWorkflow(ports.extractor, ports.destination,
       () => undefined, event => activity.push(event));
     await workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
-      ranges: [range('range-1', 10)], collectionName: 'Sample Movie' });
+      ranges: [range('range-1', 10)], movieName: 'Sample Movie.mp4' });
     expect(workflow.state('range-1').kind).toBe('publication-failed');
     expect(activity).toEqual([
       { kind: 'batch-started', total: 1 },
@@ -83,7 +83,7 @@ describe('ClipExtractionWorkflow', () => {
 
     await workflow.extractOne({
       sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
-      range: range('range-1', 10), collectionName: 'Sample Movie ',
+      range: range('range-1', 10), movieName: 'Sample Movie .mp4',
     });
 
     expect(extractionService.extract).toHaveBeenCalledWith(
@@ -94,7 +94,7 @@ describe('ClipExtractionWorkflow', () => {
   it('resets completed revisions without deleting the earlier media and blocks unresolved publication', async () => {
     const fakesForWorkflow = fakes();
     const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
-    const request = { sourceHandle: 'source_opaque_0001', sourceGeneration: 1, range: range('range-1', 10), collectionName: 'Sample Movie' };
+    const request = { sourceHandle: 'source_opaque_0001', sourceGeneration: 1, range: range('range-1', 10), movieName: 'Sample Movie.mp4' };
     await workflow.extractOne(request);
     const earlierMedia = workflow.state('range-1');
     expect(earlierMedia).toMatchObject({ kind: 'completed', media: { filename: 'range-1.mp4' } });
@@ -119,11 +119,11 @@ describe('ClipExtractionWorkflow', () => {
     }));
     const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
     const run = workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
-      ranges: [range('range-1', 10), range('range-2', 20)], collectionName: 'Sample Movie' });
+      ranges: [range('range-1', 10), range('range-2', 20)], movieName: 'Sample Movie.mp4' });
     expect(workflow.state('range-2')).toEqual({ kind: 'pending' });
     expect(workflow.revisionBlock('range-2')).toContain('Wait');
     await expect(workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
-      ranges: [range('range-2', 20)], collectionName: 'Sample Movie' })).rejects.toThrow('already running');
+      ranges: [range('range-2', 20)], movieName: 'Sample Movie.mp4' })).rejects.toThrow('already running');
     expect(workflow.batchProgress?.total).toBe(2);
     releaseOpen();
     await run;
@@ -138,7 +138,7 @@ describe('ClipExtractionWorkflow', () => {
       sourceHandle: 'source_opaque_0001',
       sourceGeneration: 1,
       ranges: eligible,
-      collectionName: 'Sample Movie',
+      movieName: 'Sample Movie.mp4',
     });
     eligible.push(range('range-added-after-start', 30));
     await run;
@@ -158,7 +158,7 @@ describe('ClipExtractionWorkflow', () => {
       .mockResolvedValueOnce({ kind: 'created-media', mediaHandle: 'media-3', filename: 'range-3.mp4' });
     const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
 
-    await workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1, ranges: [range('range-1', 10), range('range-2', 20), range('range-3', 30)], collectionName: 'Sample Movie' });
+    await workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1, ranges: [range('range-1', 10), range('range-2', 20), range('range-3', 30)], movieName: 'Sample Movie.mp4' });
 
     expect(fakesForWorkflow.extractor.extract).toHaveBeenCalledTimes(3);
     expect(workflow.state('range-1')).toMatchObject({ kind: 'completed' });
@@ -173,7 +173,7 @@ describe('ClipExtractionWorkflow', () => {
       .mockResolvedValueOnce(undefined);
     const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
 
-    await workflow.extractOne({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1, range: range('range-1', 10), collectionName: 'Sample Movie' });
+    await workflow.extractOne({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1, range: range('range-1', 10), movieName: 'Sample Movie.mp4' });
     expect(workflow.state('range-1')).toMatchObject({ kind: 'publication-failed' });
     await workflow.retryPublication('range-1');
 
@@ -186,7 +186,7 @@ describe('ClipExtractionWorkflow', () => {
     let releaseCurrent!: () => void;
     fakesForWorkflow.extractor.extract.mockImplementationOnce(() => new Promise(resolve => { releaseCurrent = () => resolve({ kind: 'created-media', mediaHandle: 'media-1', filename: 'range-1.mp4' }); }));
     const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
-    const run = workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1, ranges: [range('range-1', 10), range('range-2', 20)], collectionName: 'Sample Movie' });
+    const run = workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1, ranges: [range('range-1', 10), range('range-2', 20)], movieName: 'Sample Movie.mp4' });
 
     await vi.waitFor(() => expect(fakesForWorkflow.extractor.extract).toHaveBeenCalledOnce());
     await workflow.cancel();
@@ -198,7 +198,7 @@ describe('ClipExtractionWorkflow', () => {
     expect(fakesForWorkflow.destination.publishCreatedMedia).toHaveBeenCalledOnce();
     expect(workflow.wasCancelled).toBe(true);
     await workflow.extractOne({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
-      range: range('range-2', 20), collectionName: 'Sample Movie' });
+      range: range('range-2', 20), movieName: 'Sample Movie.mp4' });
     expect(workflow.wasCancelled).toBe(false);
     expect(workflow.state('range-2')).toMatchObject({ kind: 'completed' });
   });

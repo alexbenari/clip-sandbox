@@ -381,7 +381,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       reviewSessionId: this.review?.id,
       sourceGeneration: this.sourceGeneration,
       range,
-      collectionName: this.collectionName(),
+      movieName: this.source!.name,
     }));
   }
 
@@ -397,7 +397,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       reviewSessionId: this.review?.id,
       sourceGeneration: this.sourceGeneration,
       ranges,
-      collectionName: this.collectionName(),
+      movieName: this.source!.name,
     }));
   }
 
@@ -718,11 +718,6 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     return capture.point.kind === 'exact-frame'
       ? CaptureEndpointValue.exact(capture.point.identity, capture.positionUs, this.sourceGeneration)
       : CaptureEndpointValue.timestamp(capture.point.timestampUs, this.sourceGeneration);
-  }
-
-  private collectionName(): string {
-    const name = this.source?.name ?? '';
-    return name.replace(/\.[^.]+$/, '');
   }
 
   private preparationProgressMessage(state: IFrameReviewState): string | null {

@@ -112,13 +112,19 @@ export class ExtractionDestinationSession {
   }
 
   private collectionWith(filename: string): Collection {
-    const appended = this.collection!.appendMissingClipNames([filename]).collection;
-    const prefix = `${this.collection!.collectionName}-`;
-    return appended.withOrderedClipNames(appended.orderedClipNames.sort((left, right) => {
-      const leftSequence = this.outputSequence(left, prefix);
-      const rightSequence = this.outputSequence(right, prefix);
-      return leftSequence === null || rightSequence === null ? 0 : leftSequence - rightSequence;
-    }));
+    const collection = this.collection!;
+    const names = collection.orderedClipNames;
+    if (names.includes(filename)) return collection;
+    // Existing entries keep their saved order; only a retried earlier output moves ahead of later outputs.
+    const prefix = `${collection.collectionName}-`;
+    const sequence = this.outputSequence(filename, prefix);
+    const laterOutputIndex = sequence === null ? -1 : names.findIndex(name => {
+      const existingSequence = this.outputSequence(name, prefix);
+      return existingSequence !== null && existingSequence > sequence;
+    });
+    if (laterOutputIndex < 0) names.push(filename);
+    else names.splice(laterOutputIndex, 0, filename);
+    return collection.withOrderedClipNames(names);
   }
 
   private outputSequence(filename: string, prefix: string): number | null {

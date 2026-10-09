@@ -12,6 +12,7 @@ import { GifExtractionSession, type IThumbnailCacheService } from '../../src/app
 import type { IFrameReviewDisplayedCapture } from '../../src/ui/frame-review-player-control.js';
 import { ThumbnailOpaqueId } from '../../src/app/thumbnail-cache-service.js';
 import type { IClipCapturesStoreService } from '../../src/app/clip-captures-store-service.js';
+import type { IClipExtractionService } from '../../src/frame-review/clip-extraction-api.js';
 
 const identity = Object.freeze({
   frameIndex: 5, originalFrameIndex: 5, pts: 5_000n, duration: 1_000n,
@@ -237,6 +238,33 @@ describe('GifExtractionSession', () => {
       ranges: [{ kind: 'needs-exact-frames', thumbnail: { kind: 'ready', url: 'blob:thumbnail-1' } }],
     });
     expect(session.reviewSession).toBe(review);
+  });
+
+  it('names the extraction collection after the full movie stem when the stem contains dots', async () => {
+    const service: IFrameReviewService = {
+      chooseSource: vi.fn(async () => ({ name: 'Heat.1995.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
+      open: vi.fn(async () => reviewSession()),
+    };
+    const extractionService: IClipExtractionService = {
+      openExtractionDestination: vi.fn(async () => ({
+        destinationHandle: 'destination_12345678', folderPath: 'C:\\extraction-tmp', entries: [],
+      })),
+      extract: vi.fn(async () => ({ kind: 'created-media' as const, mediaHandle: 'media_12345678', filename: 'Heat.1995-001.mp4' })),
+      saveCollection: vi.fn(async () => undefined),
+    };
+    const session = new GifExtractionSession(service, thumbnailService(), { extractionService });
+    await session.openMovie();
+    session.markStart(displayedCapture('exact'));
+    session.markEnd(displayedCapture('exact'));
+    const locked = session.lockRange();
+    if (locked.kind !== 'locked') throw new Error('Range did not lock.');
+
+    await session.extractRange(locked.range.id);
+
+    expect(extractionService.extract).toHaveBeenCalledWith(
+      expect.objectContaining({ collectionName: 'Heat.1995' }), expect.any(Function));
+    expect(extractionService.saveCollection).toHaveBeenCalledWith(
+      'destination_12345678', 'Heat.1995.txt', 'Heat.1995-001.mp4\n');
   });
 
   it('switches movies with locked captures because they belong to the original movie', async () => {
