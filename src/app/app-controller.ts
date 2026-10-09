@@ -1283,28 +1283,29 @@ this.initialized = true;
     doc: document,
     pipelineSelectionValue: PIPELINE_SELECTION_VALUE,
     defaultTitle: appText.defaultAppTitle,
-    onSelectionRequested: (selectedCollectionFilename) => {
-      const pipeline = workflows.currentPipeline();
-      if (!pipeline) {
-        workflows.refreshCollectionSelectorView();
-        return;
-      }
-      if ((selectedCollectionFilename || '') === workflows.activeCollectionFilename()) {
-        workflows.refreshCollectionSelectorView();
-        return;
-      }
-      if (pipelineSession.hasDirtyClipSequenceChanges) {
-        state.setPendingSelectionAction({
-          type: 'switch-selection',
-          collectionFilename: selectedCollectionFilename,
-        });
-        workflows.refreshCollectionSelectorView();
-        workflows.openUnsavedDialog();
-        return;
-      }
-      void workflows.switchSelectionFromDisk(selectedCollectionFilename);
-    },
   });
+  collectionSelectorControl.on('selectionRequested', (selectedCollectionFilename) => {
+    const pipeline = workflows.currentPipeline();
+    if (!pipeline) {
+      workflows.refreshCollectionSelectorView();
+      return;
+    }
+    if ((selectedCollectionFilename || '') === workflows.activeCollectionFilename()) {
+      workflows.refreshCollectionSelectorView();
+      return;
+    }
+    if (pipelineSession.hasDirtyClipSequenceChanges) {
+      state.setPendingSelectionAction({
+        type: 'switch-selection',
+        collectionFilename: selectedCollectionFilename,
+      });
+      workflows.refreshCollectionSelectorView();
+      workflows.openUnsavedDialog();
+      return;
+    }
+    void workflows.switchSelectionFromDisk(selectedCollectionFilename);
+  });
+  eventWiring.require('collectionSelector', collectionSelectorControl, ['selectionRequested']);
   const mainToolbarControl = new MainToolbarControl({
     appText,
     browseButton: pickBtn,

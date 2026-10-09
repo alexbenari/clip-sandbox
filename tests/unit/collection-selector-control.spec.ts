@@ -80,8 +80,8 @@ describe('collection selector control', () => {
       doc: document,
       pipelineSelectionValue: '__pipeline__',
       defaultTitle: 'Clip Sandbox',
-      onSelectionRequested,
     });
+    control.on('selectionRequested', onSelectionRequested);
 
     control.render({ pipeline, activeCollection: null, currentClipSequence: { name: 'clips' } });
     const selectEl = document.getElementById('select');

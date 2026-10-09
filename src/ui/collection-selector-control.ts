@@ -2,6 +2,11 @@ import type { AppText } from '../app/app-text.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
 import type { Collection } from '../domain/collection.js';
 import type { Pipeline } from '../domain/pipeline.js';
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+
+export interface ICollectionSelectorEvents {
+  selectionRequested: string | null;
+}
 
 type SelectorChoice = {
   label: string;
@@ -9,13 +14,13 @@ type SelectorChoice = {
   collectionFilename?: string | null;
 };
 
-export class CollectionSelectorControl {
+export class CollectionSelectorControl implements IEventSource<ICollectionSelectorEvents>, IEventSubscriberCount<ICollectionSelectorEvents> {
   private readonly appText: Pick<AppText, 'activeCollectionText' | 'activeCollectionTabText'>;
+  private readonly events = new EventSource<ICollectionSelectorEvents>();
   selectEl: HTMLSelectElement | null;
   doc: Document;
   pipelineSelectionValue: string;
   defaultTitle: string;
-  onSelectionRequested: (collectionFilename: string | null) => void;
   onChange: (event: Event) => void;
 
   constructor({
@@ -24,30 +29,35 @@ export class CollectionSelectorControl {
     doc = document,
     pipelineSelectionValue = '__pipeline__',
     defaultTitle = '',
-    onSelectionRequested = () => {},
   }: {
     appText: Pick<AppText, 'activeCollectionText' | 'activeCollectionTabText'>;
     selectEl?: HTMLSelectElement | null;
     doc?: Document;
     pipelineSelectionValue?: string;
     defaultTitle?: string;
-    onSelectionRequested?: (collectionFilename: string | null) => void;
   }) {
     this.appText = appText;
     this.selectEl = selectEl || null;
     this.doc = doc;
     this.pipelineSelectionValue = pipelineSelectionValue;
     this.defaultTitle = defaultTitle;
-    this.onSelectionRequested = onSelectionRequested;
     this.onChange = (event) => {
       if (!(event.target instanceof HTMLSelectElement)) return;
       const collectionFilename = event.target.value === this.pipelineSelectionValue
         ? null
         : String(event.target.value || '').trim() || null;
-      this.onSelectionRequested(collectionFilename);
+      this.events.emit('selectionRequested', collectionFilename);
     };
 
     this.selectEl?.addEventListener('change', this.onChange);
+  }
+
+  on<TName extends keyof ICollectionSelectorEvents>(name: TName, handler: EventHandler<ICollectionSelectorEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof ICollectionSelectorEvents): number {
+    return this.events.subscriberCount(name);
   }
 
   render({
