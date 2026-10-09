@@ -27,6 +27,7 @@ import { NewCollectionNameCheck } from './new-collection-name-check.js';
 import { EventWiringCheck } from './event-wiring-check.js';
 import { CollectionFileWriter } from './collection-file-writer.js';
 import { CollectionViewWorkflow } from './collection-view-workflow.js';
+import { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
 import { OrderMenuController } from '../ui/order-menu-controller.js';
@@ -85,7 +86,6 @@ type DeleteRequest = {
   selectedClipIds: string[];
   selectedClipNames: string[];
   affectedSavedCollectionCount: number;
-  awaitingSave?: boolean;
 };
 
 type AddToCollectionResult =
@@ -101,24 +101,7 @@ type AddToCollectionResult =
     isNoOp?: boolean;
   };
 
-type SaveCollectionResult =
-  | { deferred: true }
-  | SaveClipSequenceResult;
-
-type SaveClipSequenceResult =
-  | { ok: false; code: string; error?: unknown; collection?: Collection | null }
-  | { ok: true; code: 'saved'; mode: string | undefined; collection: Collection };
-
-
 class AppControllerSupport {
-  static isDeferredSaveResult(result: SaveCollectionResult | null | undefined): result is { deferred: true } {
-  return !!result && 'deferred' in result && result.deferred === true;
-}
-
-  static isSuccessfulSaveResult(result: SaveCollectionResult | null | undefined): result is Extract<SaveClipSequenceResult, { ok: true }> {
-  return !!result && 'ok' in result && result.ok === true;
-}
-
   static requiredElement<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`Required element #${id} was not found.`);
@@ -183,18 +166,6 @@ export class AppController {
         collectionConflictController.hide();
       };
 
-    readonly cancelSaveAsNewFlow = () => {
-        saveAsNewDialogController.close();
-        if (pendingDeleteRequest?.awaitingSave) {
-          pendingDeleteRequest = null;
-        }
-        state.clearPendingSelectionAction();
-        collectionView.refreshSelector();
-      };
-
-    readonly openSaveAsNewDialog = () => {
-        saveAsNewDialogController.open({ isPipelineMode: this.isPipelineMode() });
-      };
 
     readonly openAddToCollectionDialog = ({ startWithNewCollection = false }: { startWithNewCollection?: boolean } = {}): void => {
         if (!this.currentPipeline()) return;
@@ -487,7 +458,7 @@ export class AppController {
     readonly clearLoadedState = () => {
         this.hideCollectionConflict();
         pendingDeleteRequest = null;
-        saveAsNewDialogController.close();
+        collectionSave.cancelSaveAsNew();
         addToCollectionDialogController.close();
         deleteFromDiskDialogController.closeAll();
         clipContextMenuController.close({ restoreFocus: false });
@@ -718,9 +689,13 @@ export class AppController {
           return;
         }
         if (saveFirst) {
-          const saveResult = await this.saveActiveCollection();
-          if (AppControllerSupport.isDeferredSaveResult(saveResult)) return;
-          if (!AppControllerSupport.isSuccessfulSaveResult(saveResult)) {
+          const outcome = await collectionSave.saveActive();
+          if (outcome === 'cancelled') {
+            state.clearPendingSelectionAction();
+            collectionView.refreshSelector();
+            return;
+          }
+          if (outcome === 'failed') {
             this.openUnsavedDialog();
             return;
           }
@@ -751,96 +726,26 @@ export class AppController {
       };
 
 
-    readonly saveClipSequenceAsCollection = async (filename: string): Promise<SaveClipSequenceResult> => {
-        const pipeline = this.currentPipeline();
-        if (!this.currentClipSequence() || !pipeline) {
-          return { ok: false, code: 'missing-context' };
-        }
-        const collection = pipelineSession.collectionFromCurrentSequence(filename);
-        if (!collection) return { ok: false, code: 'missing-context' };
-        try {
-          const { mode } = await collectionFileWriter.write(collection);
-          pipeline.upsertCollection(collection);
-          return {
-            ok: true,
-            code: 'saved',
-            mode,
-            collection,
-          };
-        } catch (error) {
-          return {
-            ok: false,
-            code: 'save-failed',
-            error,
-            collection,
-          };
-        }
-      };
-
-    readonly saveActiveCollection = async (): Promise<SaveCollectionResult | null> => {
-        if (!this.currentClipSequence() || !this.currentPipeline()) return null;
-        if (this.isPipelineMode()) {
-          this.openSaveAsNewDialog();
-          return { deferred: true };
-        }
-        const saveResult = await this.saveClipSequenceAsCollection(this.activeCollectionFilename());
-        if (!saveResult?.ok) return saveResult;
-        const savedCollection = saveResult.collection;
-        pipelineSession.markCurrentSequenceSavedAs(savedCollection);
-        await openFolderRefreshSession.afterCollectionSaved();
-        collectionView.refreshSelector();
-        collectionView.refreshToolbar();
-        activityReporter.success(appText.savedCollectionFileText(savedCollection.filename || ''));
-        return saveResult;
-      };
-
-    readonly confirmSaveAsNew = async (rawName: string): Promise<SaveCollectionResult | undefined> => {
-        const validationError = newCollectionNameCheck.problemText(rawName);
-        if (validationError) {
-          saveAsNewDialogController.showValidationError(validationError, { focusInput: true });
-          return;
-        }
-        const filename = Collection.filenameFromCollectionName(rawName);
-        const saveResult = await this.saveClipSequenceAsCollection(filename);
-        if (!saveResult?.ok) return saveResult;
-        const savedCollection = saveResult.collection;
-        const previousCacheKey = collectionView.activeCacheKey();
-        pipelineSession.markCurrentSequenceSavedAs(savedCollection);
-        await openFolderRefreshSession.afterCollectionSaved();
-        gridController.invalidateView(previousCacheKey);
-        gridController.retagActiveView(collectionView.activeCacheKey());
-        saveAsNewDialogController.close();
-        collectionView.refreshSelector();
-        collectionView.refreshToolbar();
-        activityReporter.success(appText.savedCollectionFileText(filename));
-        if (pendingDeleteRequest?.awaitingSave) {
-          pendingDeleteRequest.awaitingSave = false;
-          this.openDeleteFromDiskDialog(pendingDeleteRequest);
-          return;
-        }
-        if (state.getPendingSelectionAction()) {
-          await this.continuePendingAction({ saveFirst: false });
-        }
-        return saveResult;
-      };
-
     readonly confirmAddToCollection = async (destination: AddToCollectionDestination): Promise<void> => {
         if (!this.currentClipSequence() || !this.currentPipeline()) return;
         await this.runAddToCollection(destination, { showDialogValidation: true });
       };
 
     readonly confirmDeletePreflightSave = async (): Promise<void> => {
-        if (!pendingDeleteRequest) return;
+        const deleteRequest = pendingDeleteRequest;
+        if (!deleteRequest) return;
         deleteFromDiskDialogController.closePreflight();
-        pendingDeleteRequest.awaitingSave = true;
-        const saveResult = await this.saveActiveCollection();
-        if (AppControllerSupport.isDeferredSaveResult(saveResult)) return;
-        pendingDeleteRequest.awaitingSave = false;
-        if (!AppControllerSupport.isSuccessfulSaveResult(saveResult)) {
+        const outcome = await collectionSave.saveActive();
+        if (pendingDeleteRequest !== deleteRequest) return;
+        if (outcome === 'cancelled') {
+          pendingDeleteRequest = null;
+          return;
+        }
+        if (outcome === 'failed') {
           this.openDeletePreflightDialog();
           return;
         }
-        this.openDeleteFromDiskDialog(pendingDeleteRequest);
+        this.openDeleteFromDiskDialog(deleteRequest);
       };
 
     readonly continueDeleteWithoutSaving = (): void => {
@@ -1230,8 +1135,7 @@ this.initialized = true;
     toggleTitlesBtn,
   });
   mainToolbarControl.on('browseRequested', () => void workflows.onPickFolder());
-  mainToolbarControl.on('saveRequested', () => void workflows.saveActiveCollection());
-  mainToolbarControl.on('saveAsNewRequested', workflows.openSaveAsNewDialog);
+
   mainToolbarControl.on('addToCollectionRequested', () => workflows.openAddToCollectionDialog());
   mainToolbarControl.on('deleteFromDiskRequested', workflows.openDeleteFromDiskFlow);
 
@@ -1273,10 +1177,7 @@ this.initialized = true;
     cancelBtn: cancelSaveAsNewBtn,
     validateName: name => newCollectionNameCheck.problemText(name),
   });
-  saveAsNewDialogController.on('confirmed', (name) => {
-    void workflows.confirmSaveAsNew(name);
-  });
-  saveAsNewDialogController.on('cancelled', workflows.cancelSaveAsNewFlow);
+
   eventWiring.require('saveAsNewDialog', saveAsNewDialogController, ['confirmed', 'cancelled']);
   const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
     fullScreen: fullscreenAdapter,
@@ -1490,6 +1391,18 @@ this.initialized = true;
       addToCollectionDialog: addToCollectionDialogController,
       zoom: zoomOverlay,
     },
+    reporter: activityReporter,
+    appText,
+  });
+  const collectionSave = new CollectionSaveWorkflow({
+    pipelineSession,
+    fileWriter: collectionFileWriter,
+    saveAsNewDialog: saveAsNewDialogController,
+    toolbar: mainToolbarControl,
+    nameCheck: newCollectionNameCheck,
+    grid: gridController,
+    collectionView,
+    folderRefresh: openFolderRefreshSession,
     reporter: activityReporter,
     appText,
   });
@@ -1819,6 +1732,7 @@ this.initialized = true;
     },
     disposeWorkflow: async () => {
       collectionView.dispose();
+      collectionSave.dispose();
       await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
     },
     destroyControls: () => {
