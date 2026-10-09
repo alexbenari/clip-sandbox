@@ -194,7 +194,8 @@ describe('GifRangesPanelControl', () => {
     const onRefine = vi.fn();
     const root = document.createElement('section');
     document.body.append(root);
-    const control = new GifRangesPanelControl(root, session as never, { document, onRefine });
+    const control = new GifRangesPanelControl(root, session as never, { document });
+    control.on('refineRequested', onRefine);
 
     expect(root.querySelectorAll('.gif-range-card')).toHaveLength(2);
     const close = root.querySelector<HTMLButtonElement>('[data-remove-range="range_2"]');

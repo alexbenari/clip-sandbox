@@ -78,8 +78,7 @@ describe('RefineGifScreen', () => {
       frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
     const attach = vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
     const screen = new RefineGifScreen({ id: 'collection-refine', singleRange: true,
-      player, keyboard: new GifWorkflowKeyboardController(), session: session as never,
-      onBack: vi.fn(), document });
+      player, keyboard: new GifWorkflowKeyboardController(), session: session as never, document });
     document.body.append(screen.commands, screen.root);
     screen.showPreparation('Finding the original movie…');
     screen.onActivate();
@@ -137,10 +136,10 @@ describe('RefineGifScreen', () => {
       keyboard,
       session: session as never,
       rangesPanel: rangesPanel as never,
-      onBack,
       onExtractCurrent,
       document,
     });
+    screen.on('backRequested', onBack);
     document.body.append(screen.commands, screen.root);
     screen.onActivate();
     expect(screen.commands.textContent).toContain('Refine Gif · Range 1');

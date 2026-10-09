@@ -1735,26 +1735,28 @@ this.initialized = true;
         collectionRangesPanel.setAttribute('aria-label', 'Refined collection clip');
         collectionRangesPanelControl = new GifRangesPanelControl(collectionRangesPanel, collectionRefinementSession, {
           document, player: frameReviewPlayer,
-          onRefine: rangeId => {
-            const started = collectionRefinementSession?.beginRefinement(rangeId);
-            if (started?.kind === 'rejected') workflows.showErrorStatus(started.message);
-          },
         });
+        collectionRangesPanelControl.on('refineRequested', rangeId => {
+          const started = collectionRefinementSession?.beginRefinement(rangeId);
+          if (started?.kind === 'rejected') workflows.showErrorStatus(started.message);
+        });
+        eventWiring.require('collectionRangesPanel', collectionRangesPanelControl, ['refineRequested']);
       }
     }
     if (gifRangesPanel) {
       gifRangesPanelControl = new GifRangesPanelControl(gifRangesPanel, gifExtractionSession, {
         document,
         player: frameReviewPlayer,
-        onRefine: rangeId => { void (async () => {
-          const revision = ++refineSelectionRevision;
-          if (!await gifExtractionSession?.prepareSavedRange(rangeId)) return;
-          if (revision !== refineSelectionRevision) return;
-          const result = gifExtractionSession?.beginRefinement(rangeId);
-          if (result?.kind === 'started') shell.activate(refineGifScreen.id);
-          else if (result?.kind === 'rejected') workflows.showErrorStatus(result.message);
-        })(); },
       });
+      gifRangesPanelControl.on('refineRequested', rangeId => { void (async () => {
+        const revision = ++refineSelectionRevision;
+        if (!await gifExtractionSession?.prepareSavedRange(rangeId)) return;
+        if (revision !== refineSelectionRevision) return;
+        const result = gifExtractionSession?.beginRefinement(rangeId);
+        if (result?.kind === 'started') shell.activate(refineGifScreen.id);
+        else if (result?.kind === 'rejected') workflows.showErrorStatus(result.message);
+      })(); });
+      eventWiring.require('gifRangesPanel', gifRangesPanelControl, ['refineRequested']);
     }
   }
   const gifExtractionScreen = new GifExtractionScreen({
@@ -1769,12 +1771,13 @@ this.initialized = true;
     keyboard: gifWorkflowKeyboard,
     session: gifExtractionSession,
     rangesPanel: gifRangesPanelControl,
-    onBack: rangeId => {
-      shell.activate(gifExtractionScreen.id);
-      if (rangeId) gifRangesPanelControl?.focusRange(rangeId);
-    },
     document,
   });
+  refineGifScreen.on('backRequested', rangeId => {
+    shell.activate(gifExtractionScreen.id);
+    if (rangeId) gifRangesPanelControl?.focusRange(rangeId);
+  });
+  eventWiring.require('refineGifScreen', refineGifScreen, ['backRequested']);
   collectionRefineScreen = new RefineGifScreen({
     id: 'collection-refine',
     label: 'Refine Clip',
@@ -1784,15 +1787,16 @@ this.initialized = true;
     keyboard: gifWorkflowKeyboard,
     session: collectionRefinementSession,
     rangesPanel: collectionRangesPanelControl,
-    onBack: () => {
-      shell.activate(collectionScreen.id);
-      if (shell.activeScreen === collectionScreen) {
-        collectionRefineRevision += 1;
-        collectionRefineScreen.showPreparation(null);
-      }
-    },
     document,
   });
+  collectionRefineScreen.on('backRequested', () => {
+    shell.activate(collectionScreen.id);
+    if (shell.activeScreen === collectionScreen) {
+      collectionRefineRevision += 1;
+      collectionRefineScreen.showPreparation(null);
+    }
+  });
+  eventWiring.require('collectionRefineScreen', collectionRefineScreen, ['backRequested']);
   const refineScreenLeavePolicy = new RefineScreenLeavePolicy(
     collectionRefineScreen.id, collectionRefinementSession ?? null, workflows.showProgressStatus);
   startCollectionRefinement = async (request, collectionFilename) => {

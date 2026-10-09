@@ -8,15 +8,20 @@ import type {
 } from '../app/gif-extraction-session.js';
 import type { IAppPanelContent } from './app-screen.js';
 import type { FrameReviewPlayerControl } from './frame-review-player-control.js';
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
 
 type GifRangesPanelControlOptions = {
   readonly document?: Document;
-  readonly onRefine?: (rangeId: CapturedRangeId) => void;
   readonly player?: FrameReviewPlayerControl;
 };
 
-export class GifRangesPanelControl implements IAppPanelContent {
+export interface IGifRangesPanelEvents {
+  refineRequested: CapturedRangeId;
+}
+
+export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGifRangesPanelEvents>, IEventSubscriberCount<IGifRangesPanelEvents> {
   private readonly document: Document;
+  private readonly events = new EventSource<IGifRangesPanelEvents>();
   private readonly unsubscribe: () => void;
   private readonly unsubscribeTransport: () => void;
   private readonly clickListener = (event: Event): void => this.onClick(event);
@@ -34,6 +39,14 @@ export class GifRangesPanelControl implements IAppPanelContent {
     this.unsubscribe = session.subscribe(snapshot => this.render(snapshot));
     this.unsubscribeTransport = options.player?.subscribeTransport(() => this.refreshExtractAvailability())
       ?? (() => undefined);
+  }
+
+  on<TName extends keyof IGifRangesPanelEvents>(name: TName, handler: EventHandler<IGifRangesPanelEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof IGifRangesPanelEvents): number {
+    return this.events.subscriberCount(name);
   }
 
   mount(host: HTMLElement): void {
@@ -373,7 +386,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
     if (refine?.dataset.refineRange) {
       const rangeId = refine.dataset.refineRange as CapturedRangeId;
       this.session.selectRange(rangeId);
-      this.options.onRefine?.(rangeId);
+      this.events.emit('refineRequested', rangeId);
       return;
     }
     const retry = target.closest<HTMLElement>('[data-retry-thumbnail]');
@@ -385,7 +398,7 @@ export class GifRangesPanelControl implements IAppPanelContent {
     if (!card?.dataset.rangeId) return;
     const rangeId = card.dataset.rangeId as CapturedRangeId;
     this.session.selectRange(rangeId);
-    if (event instanceof MouseEvent && event.detail >= 2) this.options.onRefine?.(rangeId);
+    if (event instanceof MouseEvent && event.detail >= 2) this.events.emit('refineRequested', rangeId);
   }
 
   private refreshExtractAvailability(): void {
