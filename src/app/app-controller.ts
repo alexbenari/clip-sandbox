@@ -2,7 +2,6 @@ import { GlobalUtilityCoordinator, GLOBAL_UTILITY_SHORTCUTS } from '../ui/global
 import { KeyboardMapControl } from '../ui/keyboard-map-control.js';
 import { PipelineFactory } from '../business-logic/PipelineFactory.js';
 import { ClipEditor } from '../business-logic/clip-editor.js';
-import type { AddToCollectionDestination } from '../ui/add-to-collection-dialog-controller.js';
 import type { ContextMenuPoint } from '../ui/context-menu-controller.js';
 import type { Clip, ClipFile } from '../domain/clip.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
@@ -28,6 +27,7 @@ import { EventWiringCheck } from './event-wiring-check.js';
 import { CollectionFileWriter } from './collection-file-writer.js';
 import { CollectionViewWorkflow } from './collection-view-workflow.js';
 import { CollectionSaveWorkflow } from './collection-save-workflow.js';
+import { AddToCollectionWorkflow } from './add-to-collection-workflow.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
 import { OrderMenuController } from '../ui/order-menu-controller.js';
@@ -87,19 +87,6 @@ type DeleteRequest = {
   selectedClipNames: string[];
   affectedSavedCollectionCount: number;
 };
-
-type AddToCollectionResult =
-  | { ok: false; code: string; error?: unknown; destinationName?: string }
-  | {
-    ok: true;
-    code: string;
-    saveMode: string | null | undefined;
-    collection: Collection;
-    destinationName: string;
-    addedCount: number;
-    skippedCount: number;
-    isNoOp?: boolean;
-  };
 
 class AppControllerSupport {
   static requiredElement<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -166,105 +153,6 @@ export class AppController {
         collectionConflictController.hide();
       };
 
-
-    readonly openAddToCollectionDialog = ({ startWithNewCollection = false }: { startWithNewCollection?: boolean } = {}): void => {
-        if (!this.currentPipeline()) return;
-        addToCollectionDialogController.open({
-          choices: AddToCollectionDialogController.buildChoices({
-            pipeline: this.currentPipeline(),
-            activeCollectionFilename: this.activeCollectionFilename(),
-          }),
-          hasSelection: gridController?.getSelectedClipIds?.().length > 0,
-          startWithNewCollection,
-        });
-      };
-
-    readonly resolveAddDestinationFilename = (
-        destination: AddToCollectionDestination, showDialogValidation: boolean,
-      ): { ok: true; filename: string } | { ok: false; code: string } => {
-        if (destination.kind === 'existing') {
-          return { ok: true, filename: String(destination.collectionFilename || '').trim() };
-        }
-        if (destination.kind === 'new') {
-          const nameCheck = newCollectionNameCheck.check(destination.name);
-          if (nameCheck.kind === 'rejected') {
-            if (showDialogValidation && nameCheck.message) {
-              addToCollectionDialogController.showValidationError(nameCheck.message, { focusNameInput: true });
-            }
-            return { ok: false, code: nameCheck.problem };
-          }
-          if (nameCheck.filename === this.activeCollectionFilename()) {
-            return { ok: false, code: 'invalid-destination' };
-          }
-          return { ok: true, filename: nameCheck.filename };
-        }
-        return { ok: false, code: 'invalid-destination' };
-      };
-
-    readonly persistAddedCollection = async (
-        pipeline: Pipeline, mutation: Extract<ReturnType<Pipeline['addClipsToCollection']>, { ok: true }>,
-      ): Promise<AddToCollectionResult> => {
-        try {
-          const { mode: saveMode } = await collectionFileWriter.write(mutation.collection);
-          return { ...mutation, saveMode };
-        } catch (error) {
-          if (mutation.previousCollection) {
-            pipeline.upsertCollection(mutation.previousCollection);
-          } else if (mutation.filename) {
-            pipeline.removeCollection(mutation.filename);
-          }
-          return { ok: false, code: 'save-failed', error, destinationName: mutation.destinationName };
-        }
-      };
-
-    readonly showAddToCollectionSuccess = (result: Extract<AddToCollectionResult, { ok: true }>): void => {
-        addToCollectionDialogController.close();
-        collectionView.refreshSelector();
-        collectionView.refreshToolbar();
-        activityReporter.success(appText.addedSelectedClipsText(result.destinationName, result.addedCount, result.skippedCount), 4000);
-      };
-
-    readonly runAddToCollection = async (destination: AddToCollectionDestination, { showDialogValidation = false }: { showDialogValidation?: boolean } = {}) => {
-        const pipeline = this.currentPipeline();
-        if (!this.currentClipSequence() || !pipeline) return { ok: false, code: 'missing-context' };
-        const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(gridController.getSelectedClipIds());
-        if (selectedClipNames.length === 0) return { ok: false, code: 'no-selection' };
-        const target = this.resolveAddDestinationFilename(destination, showDialogValidation);
-        if (!target.ok) return target;
-
-        const mutation = pipeline.addClipsToCollection({
-          collectionFilename: target.filename,
-          clipNames: selectedClipNames,
-        });
-        if (!mutation.ok || mutation.isNoOp) {
-          const result = { ...mutation, saveMode: null };
-          if (result.ok) this.showAddToCollectionSuccess(result);
-          return result;
-        }
-
-        const result = await this.persistAddedCollection(pipeline, mutation);
-        if (!result.ok) {
-          const validationError = collectionNameValidator.validationErrorText(String(result.code));
-          if (showDialogValidation && validationError) {
-            addToCollectionDialogController.showValidationError(validationError, {
-              focusNameInput: destination.kind === 'new',
-            });
-            return result;
-          }
-          if (showDialogValidation) addToCollectionDialogController.close();
-          const failureDetail = 'error' in result ? result.error || result.code : result.code;
-          activityReporter.failure(appText.addSelectedClipsFailedText(result.destinationName || '', failureDetail), {
-            affected: result.destinationName || 'Add to collection',
-            recovery: 'Check folder access, then add the selected clips again.',
-            technicalDetails: activityReporter.technicalDetailsOf(failureDetail),
-          });
-          return result;
-        }
-
-        gridController.invalidateView(collectionView.cacheKeyFor(result.collection));
-        this.showAddToCollectionSuccess(result);
-        return result;
-      };
 
     readonly openUnsavedDialog = () => {
         const action = state.getPendingSelectionAction();
@@ -726,11 +614,6 @@ export class AppController {
       };
 
 
-    readonly confirmAddToCollection = async (destination: AddToCollectionDestination): Promise<void> => {
-        if (!this.currentClipSequence() || !this.currentPipeline()) return;
-        await this.runAddToCollection(destination, { showDialogValidation: true });
-      };
-
     readonly confirmDeletePreflightSave = async (): Promise<void> => {
         const deleteRequest = pendingDeleteRequest;
         if (!deleteRequest) return;
@@ -886,18 +769,15 @@ export class AppController {
           onRefine: () => {
             if (request && startCollectionRefinement) void startCollectionRefinement(request, collectionFilename);
           },
-          targetCollections: AddToCollectionDialogController.buildChoices({
-            pipeline: this.currentPipeline(),
-            activeCollectionFilename: this.activeCollectionFilename(),
-          }),
+          targetCollections: addToCollection.destinationChoices(),
           onAddToCollection: (choice) => {
-            void this.runAddToCollection({
+            void addToCollection.addSelectedClips({
               kind: 'existing',
               collectionFilename: choice.collectionFilename ?? null,
             });
           },
           onNewCollection: () => {
-            this.openAddToCollectionDialog({ startWithNewCollection: true });
+            addToCollection.openDialog({ startWithNewCollection: true });
           },
           onDeleteFromDisk: () => {
             this.openDeleteFromDiskFlow();
@@ -1136,7 +1016,7 @@ this.initialized = true;
   });
   mainToolbarControl.on('browseRequested', () => void workflows.onPickFolder());
 
-  mainToolbarControl.on('addToCollectionRequested', () => workflows.openAddToCollectionDialog());
+
   mainToolbarControl.on('deleteFromDiskRequested', workflows.openDeleteFromDiskFlow);
 
   mainToolbarControl.on('toggleFullscreenRequested', workflows.onFsToggle);
@@ -1155,9 +1035,7 @@ this.initialized = true;
     newChoiceValue: NEW_COLLECTION_CHOICE_VALUE,
     validateNewName: name => newCollectionNameCheck.problemText(name),
   });
-  addToCollectionDialogController.on('confirmed', (destination) => {
-    void workflows.confirmAddToCollection(destination);
-  });
+
   eventWiring.require('addToCollectionDialog', addToCollectionDialogController, ['confirmed']);
   const collectionConflictController = new CollectionConflictController({
     appText,
@@ -1403,6 +1281,18 @@ this.initialized = true;
     grid: gridController,
     collectionView,
     folderRefresh: openFolderRefreshSession,
+    reporter: activityReporter,
+    appText,
+  });
+  const addToCollection = new AddToCollectionWorkflow({
+    pipelineSession,
+    grid: gridController,
+    dialog: addToCollectionDialogController,
+    destinationChoices: AddToCollectionDialogController,
+    toolbar: mainToolbarControl,
+    nameCheck: newCollectionNameCheck,
+    fileWriter: collectionFileWriter,
+    collectionView,
     reporter: activityReporter,
     appText,
   });
@@ -1733,6 +1623,7 @@ this.initialized = true;
     disposeWorkflow: async () => {
       collectionView.dispose();
       collectionSave.dispose();
+      addToCollection.dispose();
       await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
     },
     destroyControls: () => {

@@ -66,7 +66,7 @@ Unavailable skills or fallbacks:
 - Discovery (Milestone 4): `AddToCollectionDialogController` emits `cancelled`, but the application has never handled it; closing the dialog is the whole behavior. The wiring check therefore requires only its `confirmed` event, rather than adding an empty subscription to satisfy D6.
   Evidence: `src/app/app-controller.ts` before commit `c85f222` passed only `onConfirm` to this dialog.
 - Discovery (Milestone 6): one small difference follows from D9. Previously, when "Save" on the unsaved-changes prompt went through Save as Collection, the old flag-based code resumed the pending switch as if the user had chosen Discard: it reloaded the just-saved view once before switching, which logged one extra transient load-status entry in Activity. With the awaitable save, that path now behaves like a direct save of a collection view and skips the redundant reload. The final view is the same. This is reported to the user rather than reproduced.
-  Evidence: `src/app/app-controller.ts` before commit `cdd74ab`, `confirmSaveAsNew` calling `continuePendingAction({ saveFirst: false })`.
+  Evidence: `src/app/app-controller.ts` before commit `696c358`, `confirmSaveAsNew` calling `continuePendingAction({ saveFirst: false })`.
 - Discovery (Milestone 6): a failed save of a collection view writes nothing to Activity, before and after this change; only the reopened prompt shows it. This is existing behavior and outside this refactor's scope.
   Evidence: `CollectionSaveWorkflow.saveActive`; previously `AppWorkflows.saveActiveCollection`.
 - Discovery: Electron end-to-end tests run against the built output, so they must be started through `npm run e2e -- <spec files>`, which rebuilds first.
