@@ -115,14 +115,14 @@ describe('main toolbar control', () => {
       deleteFromDiskBtn,
       toggleTitlesBtn,
       fullscreenButton,
-      onBrowse: handlers[0],
-      onSave: handlers[1],
-      onSaveAsNew: handlers[2],
-      onAddToCollection: handlers[3],
-      onDeleteFromDisk: handlers[4],
-      onToggleTitles: handlers[5],
-      onToggleFullscreen: handlers[6],
     });
+    control.on('browseRequested', handlers[0]);
+    control.on('saveRequested', handlers[1]);
+    control.on('saveAsNewRequested', handlers[2]);
+    control.on('addToCollectionRequested', handlers[3]);
+    control.on('deleteFromDiskRequested', handlers[4]);
+    control.on('toggleTitlesRequested', handlers[5]);
+    control.on('toggleFullscreenRequested', handlers[6]);
 
     buttons.forEach(button => button.click());
     handlers.forEach(handler => expect(handler).toHaveBeenCalledTimes(1));

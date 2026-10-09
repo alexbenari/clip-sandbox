@@ -24,6 +24,7 @@ import { DisplayLayoutRules } from '../ui/display-layout-rules.js';
 import { AppText } from './app-text.js';
 import { CollectionNameValidator } from './collection-name-validator.js';
 import { NewCollectionNameCheck } from './new-collection-name-check.js';
+import { EventWiringCheck } from './event-wiring-check.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
 import { OrderMenuController } from '../ui/order-menu-controller.js';
@@ -1185,6 +1186,7 @@ this.initialized = true;
   const body = document.body;
 
   const state = new AppSessionState();
+  const eventWiring = new EventWiringCheck();
   const pipelineSession = new PipelineSession();
   const appText = new AppText();
   const displayLayoutRules = new DisplayLayoutRules();
@@ -1313,14 +1315,18 @@ this.initialized = true;
     addToCollectionBtn,
     deleteFromDiskBtn,
     toggleTitlesBtn,
-    onBrowse: () => void workflows.onPickFolder(),
-    onSave: () => void workflows.saveActiveCollection(),
-    onSaveAsNew: workflows.openSaveAsNewDialog,
-    onAddToCollection: () => workflows.openAddToCollectionDialog(),
-    onDeleteFromDisk: workflows.openDeleteFromDiskFlow,
-    onToggleTitles: workflows.onToggleTitles,
-    onToggleFullscreen: workflows.onFsToggle,
   });
+  mainToolbarControl.on('browseRequested', () => void workflows.onPickFolder());
+  mainToolbarControl.on('saveRequested', () => void workflows.saveActiveCollection());
+  mainToolbarControl.on('saveAsNewRequested', workflows.openSaveAsNewDialog);
+  mainToolbarControl.on('addToCollectionRequested', () => workflows.openAddToCollectionDialog());
+  mainToolbarControl.on('deleteFromDiskRequested', workflows.openDeleteFromDiskFlow);
+  mainToolbarControl.on('toggleTitlesRequested', workflows.onToggleTitles);
+  mainToolbarControl.on('toggleFullscreenRequested', workflows.onFsToggle);
+  eventWiring.require('mainToolbar', mainToolbarControl, [
+    'browseRequested', 'saveRequested', 'saveAsNewRequested', 'addToCollectionRequested',
+    'deleteFromDiskRequested', 'toggleTitlesRequested', 'toggleFullscreenRequested',
+  ]);
   const addToCollectionDialogController = new AddToCollectionDialogController({
     dialog: addToCollectionDialog,
     destinationSelect: addToCollectionSelect,

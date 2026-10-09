@@ -1,16 +1,22 @@
 import type { AppText } from '../app/app-text.js';
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
 
-export class MainToolbarControl {
+export interface IMainToolbarEvents {
+  browseRequested: void;
+  saveRequested: void;
+  saveAsNewRequested: void;
+  addToCollectionRequested: void;
+  deleteFromDiskRequested: void;
+  toggleTitlesRequested: void;
+  toggleFullscreenRequested: void;
+}
+
+export class MainToolbarControl implements IEventSource<IMainToolbarEvents>, IEventSubscriberCount<IMainToolbarEvents> {
   private readonly appText: Pick<AppText, 'countText'>;
   private readonly browseButton?: HTMLButtonElement;
   private readonly fullscreenButton?: HTMLButtonElement;
-  private readonly onBrowse: EventListener;
-  private readonly onSave: EventListener;
-  private readonly onSaveAsNew: EventListener;
-  private readonly onAddToCollection: EventListener;
-  private readonly onDeleteFromDisk: EventListener;
-  private readonly onToggleTitles: EventListener;
-  private readonly onToggleFullscreen: EventListener;
+  private readonly events = new EventSource<IMainToolbarEvents>();
+  private readonly buttonRequests: ReadonlyArray<readonly [HTMLButtonElement | null | undefined, EventListener]>;
   countEl: HTMLElement | null;
   saveBtn: HTMLButtonElement | null;
   saveAsNewBtn: HTMLButtonElement | null;
@@ -28,13 +34,6 @@ export class MainToolbarControl {
     addToCollectionBtn,
     deleteFromDiskBtn,
     toggleTitlesBtn,
-    onBrowse = () => {},
-    onSave = () => {},
-    onSaveAsNew = () => {},
-    onAddToCollection = () => {},
-    onDeleteFromDisk = () => {},
-    onToggleTitles = () => {},
-    onToggleFullscreen = () => {},
   }: {
     appText: Pick<AppText, 'countText'>;
     browseButton?: HTMLButtonElement;
@@ -45,13 +44,6 @@ export class MainToolbarControl {
     addToCollectionBtn?: HTMLButtonElement | null;
     deleteFromDiskBtn?: HTMLButtonElement | null;
     toggleTitlesBtn?: HTMLButtonElement | null;
-    onBrowse?: () => void;
-    onSave?: () => void;
-    onSaveAsNew?: () => void;
-    onAddToCollection?: () => void;
-    onDeleteFromDisk?: () => void;
-    onToggleTitles?: () => void;
-    onToggleFullscreen?: () => void;
   }) {
     this.appText = appText;
     this.browseButton = browseButton;
@@ -62,23 +54,25 @@ export class MainToolbarControl {
     this.addToCollectionBtn = addToCollectionBtn || null;
     this.deleteFromDiskBtn = deleteFromDiskBtn || null;
     this.toggleTitlesBtn = toggleTitlesBtn || null;
-    this.onBrowse = onBrowse;
-    this.onSave = onSave;
-    this.onSaveAsNew = onSaveAsNew;
-    this.onAddToCollection = onAddToCollection;
-    this.onDeleteFromDisk = onDeleteFromDisk;
-    this.onToggleTitles = onToggleTitles;
-    this.onToggleFullscreen = onToggleFullscreen;
-
-    this.browseButton?.addEventListener('click', this.onBrowse);
-    this.saveBtn?.addEventListener('click', this.onSave);
-    this.saveAsNewBtn?.addEventListener('click', this.onSaveAsNew);
-    this.addToCollectionBtn?.addEventListener('click', this.onAddToCollection);
-    this.deleteFromDiskBtn?.addEventListener('click', this.onDeleteFromDisk);
-    this.toggleTitlesBtn?.addEventListener('click', this.onToggleTitles);
-    this.fullscreenButton?.addEventListener('click', this.onToggleFullscreen);
+    this.buttonRequests = [
+      [this.browseButton, () => this.events.emit('browseRequested')],
+      [this.saveBtn, () => this.events.emit('saveRequested')],
+      [this.saveAsNewBtn, () => this.events.emit('saveAsNewRequested')],
+      [this.addToCollectionBtn, () => this.events.emit('addToCollectionRequested')],
+      [this.deleteFromDiskBtn, () => this.events.emit('deleteFromDiskRequested')],
+      [this.toggleTitlesBtn, () => this.events.emit('toggleTitlesRequested')],
+      [this.fullscreenButton, () => this.events.emit('toggleFullscreenRequested')],
+    ];
+    for (const [button, request] of this.buttonRequests) button?.addEventListener('click', request);
   }
 
+  on<TName extends keyof IMainToolbarEvents>(name: TName, handler: EventHandler<IMainToolbarEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof IMainToolbarEvents): number {
+    return this.events.subscriberCount(name);
+  }
   setFullscreenButtonState(active: boolean): void {
     if (!this.fullscreenButton) return;
     const label = active ? 'Exit Full Screen' : 'Full Screen';
@@ -139,12 +133,6 @@ export class MainToolbarControl {
   }
 
   destroy(): void {
-    this.browseButton?.removeEventListener('click', this.onBrowse);
-    this.saveBtn?.removeEventListener('click', this.onSave);
-    this.saveAsNewBtn?.removeEventListener('click', this.onSaveAsNew);
-    this.addToCollectionBtn?.removeEventListener('click', this.onAddToCollection);
-    this.deleteFromDiskBtn?.removeEventListener('click', this.onDeleteFromDisk);
-    this.toggleTitlesBtn?.removeEventListener('click', this.onToggleTitles);
-    this.fullscreenButton?.removeEventListener('click', this.onToggleFullscreen);
+    for (const [button, request] of this.buttonRequests) button?.removeEventListener('click', request);
   }
 }
