@@ -137,6 +137,9 @@ export class AppController {
     let gridMenuRevision = 0;
     let selectionRevision = 0;
     class AppWorkflows {
+    private collectionFullscreenWasActive = false;
+    private movieFullscreenWasActive = false;
+
     readonly showStatus = (msg: string, timeout = 2500): void => {
         activityLogger.log({ kind: 'success', message: msg, timeoutMs: timeout });
       };
@@ -179,6 +182,10 @@ export class AppController {
 
     readonly isFullscreen = (): boolean => {
         return fullscreenAdapter.isFullScreenActive();
+      };
+
+    readonly isCollectionFullscreen = (): boolean => {
+        return fullscreenAdapter.isElementFullScreen(document.documentElement);
       };
 
     readonly refreshCollectionSelectorView = () => {
@@ -929,7 +936,7 @@ export class AppController {
       };
 
     readonly openZoomForClip = (clip: Clip | null): boolean => {
-        if (!clip || this.isFullscreen()) return false;
+        if (!clip || this.isCollectionFullscreen()) return false;
         const src = gridController.getClipMediaSource(clip.id);
         if (!src) return false;
         gridController.setSelectedClipId(clip.id);
@@ -1099,13 +1106,19 @@ export class AppController {
 
     readonly onFsChange = (): void => {
         utilities?.close(false);
-        if (this.isFullscreen() && zoomOverlay.isOpen()) this.closeZoom();
-        fullscreenSession.onFsChange();
-        if (!this.isFullscreen() && this.currentClipSequence()) {
+        const movieActive = frameReviewPlayer.isMovieFullScreen();
+        frameReviewPlayer.onFullScreenChange();
+        if (movieActive !== this.movieFullscreenWasActive) gifWorkflowKeyboard.releaseHeldSteps();
+        this.movieFullscreenWasActive = movieActive;
+        const collectionActive = this.isCollectionFullscreen();
+        if (collectionActive && zoomOverlay.isOpen()) this.closeZoom();
+        if (collectionActive || this.collectionFullscreenWasActive) fullscreenSession.onFsChange();
+        if (this.collectionFullscreenWasActive && !collectionActive && this.currentClipSequence()) {
           gridController.renderCollection(this.currentClipSequence(), {
             cacheKey: this.activeGridViewCacheKey(),
           });
         }
+        this.collectionFullscreenWasActive = collectionActive;
       };
   }
 
@@ -1195,7 +1208,7 @@ this.initialized = true;
     },
     document,
     onContextMenu: ({ point }) => {
-      if (workflows.isFullscreen()) return;
+      if (workflows.isCollectionFullscreen()) return;
       workflows.openZoomEditMenu(point);
     },
   });
@@ -1526,7 +1539,7 @@ this.initialized = true;
     coordinateWorkspaceLayout: true,
     formatLabel: clipLabelFormatter.formatLabel.bind(clipLabelFormatter),
     layoutRules: displayLayoutRules,
-    isFullscreen: workflows.isFullscreen,
+    isFullscreen: workflows.isCollectionFullscreen,
     updateCount: workflows.refreshToolbarView,
     onMetadataFailure: ({ clip, error }) => {
       void diagnostics.logVideoMetadataFailure({ filename: clip?.name || '', error });
@@ -1558,7 +1571,7 @@ this.initialized = true;
       workflows.showStatus(appText.removedClipsText(removedClipIds.length));
     },
     onContextMenu: ({ point, clipId }) => {
-      if (zoomOverlay.isOpen() || workflows.isFullscreen()) return;
+      if (zoomOverlay.isOpen() || workflows.isCollectionFullscreen()) return;
       void workflows.openGridContextMenu(point, clipId);
     },
   });
@@ -1572,7 +1585,7 @@ this.initialized = true;
     setTitlesHidden: workflows.setTitlesHidden,
     enterFullScreenAdapter: fullscreenAdapter.enterFullScreen.bind(fullscreenAdapter),
     exitFullScreenAdapter: fullscreenAdapter.exitFullScreen.bind(fullscreenAdapter),
-    isFullscreen: workflows.isFullscreen,
+    isFullscreen: workflows.isCollectionFullscreen,
     fsApplySlots,
     rotateVisibleClip: () => gridController.rotateVisibleClip(),
     cancelRotation: () => gridController.cancelRotation(),
@@ -1591,7 +1604,7 @@ this.initialized = true;
     unsavedChangesDialogController,
     zoomOverlay,
     gridController,
-    isFullscreen: workflows.isFullscreen,
+    isFullscreen: workflows.isCollectionFullscreen,
     closeZoom: workflows.closeZoom,
     browseZoomByOffset: workflows.browseZoomByOffset,
     openZoomForClipId: workflows.openZoomForClipId,
@@ -1645,7 +1658,7 @@ this.initialized = true;
   const keyboardPanel = utilityHost ? AppControllerSupport.requiredElement('keyboardMapPanel') : null;
   const keyboardMap = keyboardPanel ? new KeyboardMapControl(keyboardPanel, GLOBAL_UTILITY_SHORTCUTS, () => utilities?.close()) : null;
   const collectionScreen = new CollectionScreen(AppControllerSupport.requiredElement('collectionScreen'), toolbar, gridController, mainToolbarControl);
-  const frameReviewPlayer = new FrameReviewPlayerControl({ document });
+  const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
   const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
   const gifRangesPanel = AppControllerSupport.optionalElement('gifRangesPanel') ?? undefined;
   let gifExtractionSession: GifExtractionSession | undefined;

@@ -7,7 +7,7 @@ import type {
   IFrameReviewSession,
 } from '../../src/frame-review/frame-review-api.js';
 import { FrameReviewState, type IFrameReviewState } from '../../src/frame-review/model/frame-review-state.js';
-import { FrameReviewPlayerControl } from '../../src/ui/frame-review-player-control.js';
+import { FrameReviewPlayerControl, type IPlayerFullScreen } from '../../src/ui/frame-review-player-control.js';
 
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(error: Error): void };
 
@@ -109,6 +109,154 @@ function frameEvent(frame: FrameReviewDisplayFrame): FrameReviewEvent {
 
 describe('FrameReviewPlayerControl', () => {
   afterEach(() => { document.body.replaceChildren(); });
+
+  it('enters only with exact readiness, focuses its root, and leaves normal view after a rejected request', async () => {
+    let active = false;
+    const fullScreen: IPlayerFullScreen = {
+      enterElementFullScreen: vi.fn(async () => { active = true; }),
+      exitFullScreen: vi.fn(async () => { active = false; }),
+      isElementFullScreen: () => active,
+    };
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
+    control.mount(document.body);
+    control.toggleMovieFullScreen();
+    expect(fullScreen.enterElementFullScreen).not.toHaveBeenCalled();
+    control.attachSession(session().value);
+    expect(control.root.querySelector<HTMLButtonElement>('[data-command="full-screen"]')?.disabled).toBe(false);
+    control.toggleMovieFullScreen();
+    await vi.waitFor(() => expect(control.root.classList.contains('movie-full-screen')).toBe(true));
+    expect(document.activeElement).toBe(control.root);
+    await control.exitMovieFullScreen();
+    expect(document.activeElement).toBe(control.root);
+    expect(control.root.classList.contains('movie-full-screen')).toBe(false);
+
+    const rejected = new FrameReviewPlayerControl({ document, frameRenderer: renderer, fullScreen: {
+      ...fullScreen, enterElementFullScreen: vi.fn(async () => { throw new Error('Denied by browser'); }),
+    } });
+    rejected.mount(document.body);
+    rejected.attachSession(session().value);
+    rejected.toggleMovieFullScreen();
+    await vi.waitFor(() => expect(rejected.root.querySelector('.frame-review-error')?.textContent).toContain('Denied by browser'));
+    expect(rejected.root.classList.contains('movie-full-screen')).toBe(false);
+  });
+
+  it('holds the replacement first frame until the player leaves full screen, without requiring an event', async () => {
+    let active = false;
+    const exit = deferred<void>();
+    const fullScreen: IPlayerFullScreen = {
+      enterElementFullScreen: vi.fn(async () => { active = true; }),
+      exitFullScreen: vi.fn(() => exit.promise),
+      isElementFullScreen: () => active,
+    };
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
+    control.mount(document.body);
+    const old = session();
+    const replacement = session();
+    control.attachSession(old.value);
+    await vi.waitFor(() => expect(renderer.render).toHaveBeenCalled());
+    renderer.render.mockClear();
+    control.toggleMovieFullScreen();
+    await vi.waitFor(() => expect(control.isMovieFullScreen()).toBe(true));
+    control.attachSession(replacement.value);
+    await vi.waitFor(() => expect(replacement.thumbnailFrame).toHaveBeenCalledWith(0));
+    expect(renderer.render).not.toHaveBeenCalled();
+    active = false;
+    await vi.waitFor(() => expect(renderer.render).toHaveBeenCalledOnce());
+    expect(control.isMovieFullScreen()).toBe(false);
+    expect(control.root.querySelector('.frame-review-identity')?.textContent).toBe('Frame 0');
+  });
+
+  it('keeps a newly attached movie off screen while an earlier entry request is pending', async () => {
+    let active = false;
+    const enter = deferred<void>();
+    const fullScreen: IPlayerFullScreen = {
+      enterElementFullScreen: vi.fn(async () => { await enter.promise; active = true; }),
+      exitFullScreen: vi.fn(async () => { active = false; }),
+      isElementFullScreen: () => active,
+    };
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
+    control.mount(document.body);
+    control.attachSession(session().value);
+    await vi.waitFor(() => expect(renderer.render).toHaveBeenCalled());
+    renderer.render.mockClear();
+    control.toggleMovieFullScreen();
+    const replacement = session();
+    control.attachSession(replacement.value);
+    await vi.waitFor(() => expect(replacement.thumbnailFrame).toHaveBeenCalledWith(0));
+    expect(renderer.render).not.toHaveBeenCalled();
+    enter.resolve(undefined);
+    await vi.waitFor(() => expect(fullScreen.exitFullScreen).toHaveBeenCalled());
+    await vi.waitFor(() => expect(renderer.render).toHaveBeenCalledOnce());
+    expect(control.isMovieFullScreen()).toBe(false);
+    expect(control.root.querySelector('.frame-review-identity')?.textContent).toBe('Frame 0');
+  });
+
+  it('continues with the chosen movie when browser exit rejects during replacement', async () => {
+    let active = false;
+    const fullScreen: IPlayerFullScreen = {
+      enterElementFullScreen: vi.fn(async () => { active = true; }),
+      exitFullScreen: vi.fn(async () => { throw new Error('Exit rejected'); }),
+      isElementFullScreen: () => active,
+    };
+    const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+    const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
+    control.mount(document.body);
+    control.attachSession(session().value);
+    await vi.waitFor(() => expect(renderer.render).toHaveBeenCalled());
+    renderer.render.mockClear();
+    const remove = control.root.remove.bind(control.root);
+    vi.spyOn(control.root, 'remove').mockImplementation(() => { active = false; remove(); });
+    control.toggleMovieFullScreen();
+    await vi.waitFor(() => expect(control.root.classList.contains('movie-full-screen')).toBe(true));
+    const replacement = session();
+    control.attachSession(replacement.value);
+    await vi.waitFor(() => expect(renderer.render).toHaveBeenCalledOnce());
+    expect(control.isMovieFullScreen()).toBe(false);
+    expect(control.root.querySelector('.frame-review-identity')?.textContent).toBe('Frame 0');
+  });
+
+  it('hides the seek row after three idle seconds, ignores stationary movement, and exits on readiness loss', async () => {
+    vi.useFakeTimers();
+    try {
+      let active = false;
+      const fullScreen: IPlayerFullScreen = {
+        enterElementFullScreen: vi.fn(async () => { active = true; }),
+        exitFullScreen: vi.fn(async () => { active = false; }),
+        isElementFullScreen: () => active,
+      };
+      const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
+      const review = session();
+      const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
+      control.mount(document.body);
+      control.attachSession(review.value);
+      control.toggleMovieFullScreen();
+      control.onFullScreenChange();
+      expect(control.root.classList.contains('movie-overlay-visible')).toBe(true);
+      const bar = control.root.querySelector<HTMLInputElement>('input[type="range"]')!;
+      bar.focus();
+      vi.advanceTimersByTime(3000);
+      expect(control.root.classList.contains('movie-overlay-visible')).toBe(false);
+      expect(document.activeElement).toBe(control.root);
+      expect(bar.tabIndex).toBe(-1);
+      expect(control.root.querySelector('.frame-review-progress-row')?.getAttribute('aria-hidden')).toBe('true');
+      control.root.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 100 }));
+      expect(control.root.classList.contains('movie-overlay-visible')).toBe(true);
+      expect(bar.tabIndex).toBe(0);
+      vi.advanceTimersByTime(2000);
+      control.root.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 100 }));
+      vi.advanceTimersByTime(1000);
+      expect(control.root.classList.contains('movie-overlay-visible')).toBe(false);
+      review.emit({ type: 'state', state: state('closed') });
+      await Promise.resolve();
+      expect(fullScreen.exitFullScreen).toHaveBeenCalledOnce();
+      expect(control.isMovieFullScreen()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('shows the first frame when an already prepared movie attaches without a playback frame event', async () => {
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };

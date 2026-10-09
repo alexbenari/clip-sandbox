@@ -95,6 +95,12 @@ test('exact draft jumps, loops, pauses to scrub, resumes, and locks with X', asy
     await page.keyboard.press('z');
     await expect(page.locator('.frame-review-player [data-command="play-pause"]')).toHaveAttribute('data-playing', 'true');
     await expect(page.locator('#gifExtractionScreen [data-command="mark-start"]')).toBeDisabled();
+    await page.keyboard.press('f');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('frame-review-player'))).toBe(true);
+    await expect(page.locator('.frame-review-player [data-command="play-pause"]')).toHaveAttribute('data-playing', 'true');
+    await page.keyboard.press('f');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    await expect(page.locator('.frame-review-player [data-command="play-pause"]')).toHaveAttribute('data-playing', 'true');
     await page.keyboard.press('Space');
     await expect(page.locator('.frame-review-identity')).toContainText('Frame ');
     await expect(page.locator('.frame-review-player [data-command="play-pause"]')).toHaveAttribute('data-playing', 'false');
@@ -114,6 +120,11 @@ test('exact draft jumps, loops, pauses to scrub, resumes, and locks with X', asy
     await expect(locked.locator('[data-extract-range]')).toBeDisabled();
     await page.keyboard.press('Space');
     await locked.locator('[data-refine-range]').click();
+    await expect(page.locator('#refineGifScreen')).toBeVisible();
+    await page.keyboard.press('f');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('frame-review-player'))).toBe(true);
+    await page.keyboard.press('f');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await expect(page.locator('#refineGifScreen')).toBeVisible();
     await setFrame(progress, 7);
     await expect(page.locator('.frame-review-identity')).toHaveText('Frame 7');

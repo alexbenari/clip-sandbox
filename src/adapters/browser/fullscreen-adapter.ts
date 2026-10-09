@@ -15,12 +15,19 @@ export class FullscreenAdapter {
   }
 
   async enterFullScreen(doc: FullscreenDocument = this.doc): Promise<void> {
-    const el = doc.documentElement as FullscreenElement;
-    if (el.requestFullscreen) {
-      await el.requestFullscreen();
+    await this.enterElementFullScreen(doc.documentElement as FullscreenElement);
+  }
+
+  async enterElementFullScreen(element: FullscreenElement): Promise<void> {
+    if (element.requestFullscreen) {
+      await element.requestFullscreen();
       return;
     }
-    if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    if (element.webkitRequestFullscreen) {
+      element.webkitRequestFullscreen();
+      return;
+    }
+    throw new Error('Full screen is unavailable in this browser.');
   }
 
   async exitFullScreen(doc: FullscreenDocument = this.doc): Promise<void> {
@@ -33,5 +40,9 @@ export class FullscreenAdapter {
 
   isFullScreenActive(doc: FullscreenDocument = this.doc): boolean {
     return !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+  }
+
+  isElementFullScreen(element: Element, doc: FullscreenDocument = this.doc): boolean {
+    return (doc.fullscreenElement || doc.webkitFullscreenElement) === element;
   }
 }

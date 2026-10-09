@@ -1,6 +1,9 @@
 import type { AdjacentDirection } from '../frame-review/adjacent-step-scheduler.js';
 
 export interface IGifWorkflowPlayerCommands {
+  toggleMovieFullScreen(): void;
+  exitMovieFullScreen(): Promise<void>;
+  isMovieFullScreen(): boolean;
   togglePlayback(): void;
   pressStep(direction: AdjacentDirection): void;
   releaseStep(direction?: AdjacentDirection): void;
@@ -46,8 +49,23 @@ export class GifWorkflowKeyboardController {
   }
 
   handleKeyDown(event: KeyboardEvent): void {
-    if (!this.target || event.altKey || event.ctrlKey || event.metaKey || this.isEditable(event.target)) return;
+    if (!this.target || event.altKey || event.ctrlKey || event.metaKey) return;
     const key = event.key.toLowerCase();
+    if (key === 'escape' && this.target.player.isMovieFullScreen()) {
+      void this.target.player.exitMovieFullScreen();
+      event.preventDefault();
+      return;
+    }
+    if (key === 'f' && !event.repeat && !this.isTextEditable(event.target)) {
+      this.target.player.toggleMovieFullScreen();
+      event.preventDefault();
+      return;
+    }
+    if (this.isEditable(event.target)) return;
+    if (key === 'e' && this.target.player.isMovieFullScreen()) {
+      event.preventDefault();
+      return;
+    }
     if (key === 'arrowleft' || key === 'arrowright') {
       if (event.repeat) return;
       const direction = key === 'arrowleft' ? -1 : 1;
@@ -113,5 +131,12 @@ export class GifWorkflowKeyboardController {
     const input = target.closest('input');
     if (input instanceof HTMLInputElement && input.type === 'range') return false;
     return target.closest('input, textarea, select, [contenteditable], [contenteditable="true"]') !== null;
+  }
+
+  private isTextEditable(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    const input = target.closest('input');
+    if (input instanceof HTMLInputElement && input.type !== 'range') return true;
+    return target.closest('textarea, [contenteditable], [contenteditable="true"]') !== null;
   }
 }
