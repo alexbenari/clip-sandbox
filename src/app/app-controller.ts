@@ -50,7 +50,8 @@ import { AppSettingsService } from './app-settings-service.js';
 import { AppSettingsParser, DEFAULT_STARTUP_SCREEN_ID } from './app-settings.js';
 import { ElectronAppSettingsService } from '../adapters/electron/electron-app-settings-service.js';
 import { ActivityIndicatorControl } from '../ui/activity-indicator-control.js';
-import { ActivityLogger, type ActivityErrorOptions } from './activity-logger.js';
+import { ActivityLogger } from './activity-logger.js';
+import { ActivityReporter } from './activity-reporter.js';
 import { ContextMenuController } from '../ui/context-menu-controller.js';
 import { GridContextMenuControl } from '../ui/grid-context-menu-control.js';
 import { ZoomEditMenuControl } from '../ui/zoom-edit-menu-control.js';
@@ -153,17 +154,6 @@ export class AppController {
     private collectionFullscreenWasActive = false;
     private movieFullscreenWasActive = false;
 
-    readonly showStatus = (msg: string, timeout = 2500): void => {
-        activityLogger.log({ kind: 'success', message: msg, timeoutMs: timeout });
-      };
-
-    readonly showErrorStatus = (msg: string, options?: ActivityErrorOptions): void => {
-        activityLogger.log({ kind: 'error', message: msg, ...options });
-      };
-
-    readonly showProgressStatus = (msg: string): void => {
-        activityLogger.log({ kind: 'progress', message: msg });
-      };
 
     readonly currentPipeline = (): Pipeline | null => {
         return pipelineSession.pipeline;
@@ -292,7 +282,7 @@ export class AppController {
         addToCollectionDialogController.close();
         this.refreshCollectionSelectorView();
         this.refreshToolbarView();
-        this.showStatus(appText.addedSelectedClipsText(result.destinationName, result.addedCount, result.skippedCount), 4000);
+        activityReporter.success(appText.addedSelectedClipsText(result.destinationName, result.addedCount, result.skippedCount), 4000);
       };
 
     readonly runAddToCollection = async (destination: AddToCollectionDestination, { showDialogValidation = false }: { showDialogValidation?: boolean } = {}) => {
@@ -324,10 +314,10 @@ export class AppController {
           }
           if (showDialogValidation) addToCollectionDialogController.close();
           const failureDetail = 'error' in result ? result.error || result.code : result.code;
-          this.showErrorStatus(appText.addSelectedClipsFailedText(result.destinationName || '', failureDetail), {
+          activityReporter.failure(appText.addSelectedClipsFailedText(result.destinationName || '', failureDetail), {
             affected: result.destinationName || 'Add to collection',
             recovery: 'Check folder access, then add the selected clips again.',
-            technicalDetails: failureDetail instanceof Error ? failureDetail.stack ?? failureDetail.message : String(failureDetail),
+            technicalDetails: activityReporter.technicalDetailsOf(failureDetail),
           });
           return result;
         }
@@ -464,7 +454,7 @@ export class AppController {
 
         const result = await this.deleteSelectedFilesAndUpdatePipeline(deleteRequest, pipeline);
         if (!result) {
-          this.showErrorStatus(appText.deleteFromDiskResultText({
+          activityReporter.failure(appText.deleteFromDiskResultText({
             deletedCount: 0,
             failedDeleteCount: deleteRequest.selectedClipNames.length,
             cleanedSavedCollectionCount: 0,
@@ -503,7 +493,7 @@ export class AppController {
             `${filename}: ${error instanceof Error ? error.message : String(error || 'Delete failed')}`);
           const failedRewriteDetails = result.failedCollectionRewrites.map(({ collectionName, filename, error }) =>
             `${collectionName} (${filename}): ${error instanceof Error ? error.message : String(error || 'Collection update failed')}`);
-          this.showErrorStatus(deleteStatusText, {
+          activityReporter.failure(deleteStatusText, {
             affected: [...result.failedDeletes.map(({ filename }) => filename),
               ...result.failedCollectionRewrites.map(({ collectionName }) => collectionName)].join(', '),
             recovery: 'Close any player using the clip, then try deleting it again.',
@@ -511,7 +501,7 @@ export class AppController {
           });
           return;
         }
-        this.showStatus(deleteStatusText, 4500);
+        activityReporter.success(deleteStatusText, 4500);
       };
 
     readonly openDeleteFromDiskFlow = () => {
@@ -546,7 +536,7 @@ export class AppController {
         });
         this.refreshCollectionSelectorView();
         this.refreshToolbarView();
-        if (statusText) this.showStatus(statusText, timeout);
+        if (statusText) activityReporter.success(statusText, timeout);
       };
 
     readonly clearLoadedState = () => {
@@ -591,7 +581,7 @@ export class AppController {
             onApply: () => {
               if (result.existingNamesInOrder.length === 0) {
                 this.refreshCollectionSelectorView();
-                this.showStatus(appText.noCollectionMatchesText(result.missingCount), 4500);
+                activityReporter.success(appText.noCollectionMatchesText(result.missingCount), 4500);
                 return;
               }
               gridController.invalidateView(this.gridViewCacheKeyForCollection(collection));
@@ -660,9 +650,9 @@ export class AppController {
           return true;
         } catch (err) {
           await diagnostics.logRuntimeError('Failed to load the selected folder.', err, folderSession);
-          this.showErrorStatus(appText.collectionReadErrorText(err), {
+          activityReporter.failure(appText.collectionReadErrorText(err), {
             affected: 'Open folder', recovery: 'Check that the folder is accessible, then choose it again.',
-            technicalDetails: err instanceof Error ? err.stack ?? err.message : String(err),
+            technicalDetails: activityReporter.technicalDetailsOf(err),
           });
           return false;
         }
@@ -683,9 +673,9 @@ export class AppController {
         } catch (err) {
           if (err instanceof DOMException && err.name === 'AbortError') return;
           await diagnostics.logRuntimeError('Failed to browse for a folder.', err, state.currentFolderSession);
-          this.showErrorStatus(appText.collectionReadErrorText(err), {
+          activityReporter.failure(appText.collectionReadErrorText(err), {
             affected: 'Open folder', recovery: 'Check that the folder is accessible, then choose it again.',
-            technicalDetails: err instanceof Error ? err.stack ?? err.message : String(err),
+            technicalDetails: activityReporter.technicalDetailsOf(err),
           });
         }
       };
@@ -696,10 +686,10 @@ export class AppController {
           if (await this.loadPipeline(selection)) shell.activate(collectionScreen.id);
         } catch (err) {
           await diagnostics.logRuntimeError(`Failed to open pipeline ${entry.name}.`, err, state.currentFolderSession);
-          this.showErrorStatus(`Could not open ${entry.name}.`, {
+          activityReporter.failure(`Could not open ${entry.name}.`, {
             affected: 'Open pipeline',
             recovery: 'Check that the pipeline folder is still accessible, then refresh Pipelines.',
-            technicalDetails: err instanceof Error ? err.stack ?? err.message : String(err),
+            technicalDetails: activityReporter.technicalDetailsOf(err),
           });
         }
       };
@@ -761,10 +751,10 @@ export class AppController {
           });
         } catch (error) {
           if (revision !== selectionRevision || state.currentFolderSession !== folderSession) return;
-          this.showErrorStatus('The folder could not be refreshed.', {
+          activityReporter.failure('The folder could not be refreshed.', {
             affected: collectionFilename || 'Folder view',
             recovery: 'Check that the folder is accessible, then switch views again.',
-            technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
+            technicalDetails: activityReporter.technicalDetailsOf(error),
           });
         }
       };
@@ -872,7 +862,7 @@ export class AppController {
         await openFolderRefreshSession.afterCollectionSaved();
         this.refreshCollectionSelectorView();
         this.refreshToolbarView();
-        this.showStatus(appText.savedCollectionFileText(savedCollection.filename || ''));
+        activityReporter.success(appText.savedCollectionFileText(savedCollection.filename || ''));
         return saveResult;
       };
 
@@ -894,7 +884,7 @@ export class AppController {
         saveAsNewDialogController.close();
         this.refreshCollectionSelectorView();
         this.refreshToolbarView();
-        this.showStatus(appText.savedCollectionFileText(filename));
+        activityReporter.success(appText.savedCollectionFileText(filename));
         if (pendingDeleteRequest?.awaitingSave) {
           pendingDeleteRequest.awaitingSave = false;
           this.openDeleteFromDiskDialog(pendingDeleteRequest);
@@ -1019,8 +1009,8 @@ export class AppController {
             ? `${edit.label}: ${error.message}`
             : `${edit.label}: an unexpected application error interrupted editing.`;
           const errors: unknown[] = error instanceof VideoEditNotificationError ? error.errors : [error];
-          const technicalDetails = errors.map(cause => cause instanceof Error ? cause.stack ?? cause.message : String(cause)).join('\n\n');
-          this.showErrorStatus(problem, {
+          const technicalDetails = errors.map(cause => activityReporter.technicalDetailsOf(cause)).join('\n\n');
+          activityReporter.failure(problem, {
             affected: `${edit.label}: ${sourceClip.name}`,
             recovery: error instanceof VideoEditNotificationError && error.result?.ok
               ? `Check ${error.result.createdFile.name} in the output folder before running the edit again.`
@@ -1204,10 +1194,10 @@ this.initialized = true;
   });
   zoomOverlay.on('playbackFailed', ({ name, error }) => {
     const problem = `Could not play ${name || 'the selected clip'} in Zoom.`;
-    workflows.showErrorStatus(problem, {
+    activityReporter.failure(problem, {
       affected: name,
       recovery: 'Close and reopen the clip. If playback still fails, check that the file is available and playable.',
-      technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
+      technicalDetails: activityReporter.technicalDetailsOf(error),
     });
     void diagnostics.logRuntimeError(problem, error);
   });
@@ -1225,6 +1215,7 @@ this.initialized = true;
   const utilityHost = AppControllerSupport.optionalElement('globalUtilityHost');
   let utilities: GlobalUtilityCoordinator | null = null;
   const activityLogger = new ActivityLogger({ clock: window });
+  const activityReporter = new ActivityReporter(activityLogger);
   const activityIndicatorControl = new ActivityIndicatorControl({
     logger: activityLogger,
     requestPanelClose: () => utilities?.close(),
@@ -1258,10 +1249,10 @@ this.initialized = true;
     refreshActiveFolder: workflows.refreshActiveFolder,
     onRefreshError: error => {
       const message = 'The clip was saved, but the Collection view could not refresh.';
-      workflows.showErrorStatus(message, {
+      activityReporter.failure(message, {
         affected: 'Collection refresh',
         recovery: 'Open the folder again to refresh its clips.',
-        technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
+        technicalDetails: activityReporter.technicalDetailsOf(error),
       });
       void diagnostics.logRuntimeError(message, error, state.currentFolderSession);
     },
@@ -1500,7 +1491,7 @@ this.initialized = true;
     clipEditor,
     onStarted: ({ edit, sourceClip }) => {
       workflows.refreshToolbarView();
-      workflows.showProgressStatus(appText.videoEditStartedText(edit.label, sourceClip.name));
+      activityReporter.progress(appText.videoEditStartedText(edit.label, sourceClip.name));
     },
     onCreated: ({ edit, sourceClip, createdFile }) => {
       const rendererFile = fileSystem.toRendererFile(createdFile);
@@ -1512,19 +1503,19 @@ this.initialized = true;
       workflows.refreshToolbarView();
       if (!nextZoomClip) {
         if (workflows.isPipelineMode()) {
-          workflows.showErrorStatus(`${appText.videoEditSucceededText(rendererFile.name)} The pipeline view could not be refreshed.`);
+          activityReporter.failure(`${appText.videoEditSucceededText(rendererFile.name)} The pipeline view could not be refreshed.`);
         } else {
-          workflows.showErrorStatus(appText.videoEditPartialSuccessText(rendererFile.name));
+          activityReporter.failure(appText.videoEditPartialSuccessText(rendererFile.name));
         }
         return;
       }
 
       workflows.openZoomForClip(nextZoomClip);
-      workflows.showStatus(appText.videoEditSucceededText(rendererFile.name), 4000);
+      activityReporter.success(appText.videoEditSucceededText(rendererFile.name), 4000);
     },
     onFailed: ({ edit, sourceClip, result }) => {
       workflows.refreshToolbarView();
-      workflows.showErrorStatus(appText.videoEditFailedText({
+      activityReporter.failure(appText.videoEditFailedText({
         actionLabel: edit.label,
         code: result?.code,
       }), {
@@ -1581,7 +1572,7 @@ this.initialized = true;
     });
     workflows.refreshCollectionSelectorView();
     workflows.refreshToolbarView();
-    workflows.showStatus(appText.removedClipsText(removedClipIds.length));
+    activityReporter.success(appText.removedClipsText(removedClipIds.length));
   });
   gridController.on('contextMenuRequested', ({ point, clipId }) => {
     if (zoomOverlay.isOpen() || fullscreenAdapter.isDocumentFullScreen()) return;
@@ -1607,7 +1598,7 @@ this.initialized = true;
     cancelRotation: () => gridController.cancelRotation(),
     fsRestore,
     computeGrid,
-    showStatus: workflows.showStatus,
+    showStatus: activityReporter.success,
     layoutRules: displayLayoutRules,
     appText,
     every: clock.every.bind(clock),
@@ -1659,19 +1650,19 @@ this.initialized = true;
   if (pipelineCatalogControl) {
     pipelineCatalogControl.on('loadRequested', entry => void workflows.onCatalogPipelineRequested(entry));
     pipelineCatalogControl.on('failed', ({ message, error }) => {
-      workflows.showErrorStatus(message, {
+      activityReporter.failure(message, {
         affected: 'Pipelines',
         recovery: 'Check the Pipelines top folder in Settings, then try again.',
-        technicalDetails: error instanceof Error ? error.stack ?? error.message : String(error),
+        technicalDetails: activityReporter.technicalDetailsOf(error),
       });
       void diagnostics.logRuntimeError(message, error);
     });
     eventWiring.require('pipelineCatalog', pipelineCatalogControl, ['loadRequested', 'failed']);
   }
   const settingsScreen = new SettingsScreen(settingsService, {
-    progress: workflows.showProgressStatus,
-    success: workflows.showStatus,
-    error: workflows.showErrorStatus,
+    progress: activityReporter.progress,
+    success: activityReporter.success,
+    error: activityReporter.failure,
     pipelinesRootChanged: () => { void pipelineCatalogControl?.load(); },
   });
   const keyboardPanel = utilityHost ? AppControllerSupport.requiredElement('keyboardMapPanel') : null;
@@ -1703,12 +1694,12 @@ this.initialized = true;
         captureStore: gifServices.captureStore,
         onRestoredCaptures: (review, endpoint) => frameReviewPlayer.showFrameAfterCapture(review, endpoint),
         onPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
-        onProgress: workflows.showProgressStatus,
-        onSuccess: workflows.showStatus,
+        onProgress: activityReporter.progress,
+        onSuccess: activityReporter.success,
         onActivity: entry => { activityLogger.log(entry); },
-        onWarning: message => workflows.showStatus(message, 5000),
+        onWarning: message => activityReporter.success(message, 5000),
         onError: (message, error) => {
-          workflows.showErrorStatus(message);
+          activityReporter.failure(message);
           if (error !== undefined) void diagnostics.logRuntimeError(message, error);
         },
       },
@@ -1720,12 +1711,12 @@ this.initialized = true;
         {
           extractionService: collectionRefinementGifServices.extractionService,
           onPublished: publication => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
-          onProgress: workflows.showProgressStatus,
-          onSuccess: workflows.showStatus,
+          onProgress: activityReporter.progress,
+          onSuccess: activityReporter.success,
           onActivity: entry => { activityLogger.log(entry); },
-          onWarning: message => workflows.showStatus(message, 5000),
+          onWarning: message => activityReporter.success(message, 5000),
           onError: (message, error) => {
-            workflows.showErrorStatus(message);
+            activityReporter.failure(message);
             if (error !== undefined) void diagnostics.logRuntimeError(message, error);
           },
         },
@@ -1738,7 +1729,7 @@ this.initialized = true;
         });
         collectionRangesPanelControl.on('refineRequested', rangeId => {
           const started = collectionRefinementSession?.beginRefinement(rangeId);
-          if (started?.kind === 'rejected') workflows.showErrorStatus(started.message);
+          if (started?.kind === 'rejected') activityReporter.failure(started.message);
         });
         eventWiring.require('collectionRangesPanel', collectionRangesPanelControl, ['refineRequested']);
       }
@@ -1754,7 +1745,7 @@ this.initialized = true;
         if (revision !== refineSelectionRevision) return;
         const result = gifExtractionSession?.beginRefinement(rangeId);
         if (result?.kind === 'started') shell.activate(refineGifScreen.id);
-        else if (result?.kind === 'rejected') workflows.showErrorStatus(result.message);
+        else if (result?.kind === 'rejected') activityReporter.failure(result.message);
       })(); });
       eventWiring.require('gifRangesPanel', gifRangesPanelControl, ['refineRequested']);
     }
@@ -1798,7 +1789,7 @@ this.initialized = true;
   });
   eventWiring.require('collectionRefineScreen', collectionRefineScreen, ['backRequested']);
   const refineScreenLeavePolicy = new RefineScreenLeavePolicy(
-    collectionRefineScreen.id, collectionRefinementSession ?? null, workflows.showProgressStatus);
+    collectionRefineScreen.id, collectionRefinementSession ?? null, activityReporter.progress);
   startCollectionRefinement = async (request, collectionFilename) => {
     const session = collectionRefinementSession;
     const service = collectionRefinementService;
@@ -1806,7 +1797,7 @@ this.initialized = true;
     const revision = ++collectionRefineRevision;
     try {
       if (pipelineSession.hasDirtyClipSequenceChanges) {
-        workflows.showErrorStatus('Save or discard the current changes before refining a clip.');
+        activityReporter.failure('Save or discard the current changes before refining a clip.');
         return;
       }
       session.setExtractionDestination(collectionFilename
@@ -1835,13 +1826,13 @@ this.initialized = true;
       }
       if (started.kind === 'rejected') {
         collectionRefineScreen.showPreparation(started.message, false);
-        workflows.showErrorStatus(started.message);
+        activityReporter.failure(started.message);
       } else collectionRefineScreen.showPreparation(null);
     } catch (error) {
       if (revision !== collectionRefineRevision || shell.activeScreen !== collectionRefineScreen) return;
       const message = error instanceof Error ? error.message : 'The clip could not be opened for refinement.';
       collectionRefineScreen.showPreparation(message, false);
-      workflows.showErrorStatus(message);
+      activityReporter.failure(message);
       void diagnostics.logRuntimeError(message, error);
     }
   };
