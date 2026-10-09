@@ -42,6 +42,10 @@ export class FullscreenAdapter {
     return !!(doc.fullscreenElement || doc.webkitFullscreenElement);
   }
 
+  isDocumentFullScreen(doc: FullscreenDocument = this.doc): boolean {
+    return this.isElementFullScreen(doc.documentElement, doc);
+  }
+
   isElementFullScreen(element: Element, doc: FullscreenDocument = this.doc): boolean {
     return (doc.fullscreenElement || doc.webkitFullscreenElement) === element;
   }

@@ -150,6 +150,10 @@ export class Pipeline {
     return this.#collectionsByFilename.get(identityKey) || null;
   }
 
+  hasCollectionWithFilename(filename: string): boolean {
+    return this.getCollectionByFilename(filename) !== null;
+  }
+
   addClipsToCollection({
     collectionFilename = '',
     clipNames = [],

@@ -6,6 +6,16 @@ import { ClipSequence } from '../../src/domain/clip-sequence.js';
 import { Clip } from '../../src/domain/clip.js';
 
 describe('pipeline selections', () => {
+  test('hasCollectionWithFilename matches saved collections regardless of letter case', () => {
+    const pipeline = new Pipeline({
+      collections: [Collection.fromFilename({ filename: 'Highlights.txt', orderedClipNames: ['alpha.mp4'] })],
+    });
+
+    expect(pipeline.hasCollectionWithFilename('highlights.txt')).toBe(true);
+    expect(pipeline.hasCollectionWithFilename('Highlights.txt')).toBe(true);
+    expect(pipeline.hasCollectionWithFilename('picks.txt')).toBe(false);
+  });
+
   test('materializePipeline loads clips in pipeline order', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',

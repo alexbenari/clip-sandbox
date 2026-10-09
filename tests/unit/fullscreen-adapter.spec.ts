@@ -42,4 +42,15 @@ describe('fullscreen adapter', () => {
     expect(adapter.isElementFullScreen(collection)).toBe(false);
     expect(adapter.isFullScreenActive()).toBe(true);
   });
+
+  it('reports document full screen only when the document element itself is full screen', () => {
+    const player = {};
+    const collection = {};
+    const doc = { fullscreenElement: player, documentElement: collection };
+    const adapter = new FullscreenAdapter({ doc });
+
+    expect(adapter.isDocumentFullScreen()).toBe(false);
+    doc.fullscreenElement = collection;
+    expect(adapter.isDocumentFullScreen()).toBe(true);
+  });
 });

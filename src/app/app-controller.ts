@@ -23,6 +23,9 @@ import { ApplicationShutdownCoordinator } from './application-shutdown-coordinat
 import { DisplayLayoutRules } from '../ui/display-layout-rules.js';
 import { AppText } from './app-text.js';
 import { CollectionNameValidator } from './collection-name-validator.js';
+import { NewCollectionNameCheck } from './new-collection-name-check.js';
+import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
+import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
 import { OrderMenuController } from '../ui/order-menu-controller.js';
 import { AddToCollectionDialogController } from '../ui/add-to-collection-dialog-controller.js';
 import { CollectionSelectorControl } from '../ui/collection-selector-control.js';
@@ -193,10 +196,6 @@ export class AppController {
         return fullscreenAdapter.isFullScreenActive();
       };
 
-    readonly isCollectionFullscreen = (): boolean => {
-        return fullscreenAdapter.isElementFullScreen(document.documentElement);
-      };
-
     readonly refreshCollectionSelectorView = () => {
         collectionSelectorControl.render({
           pipeline: this.currentPipeline(),
@@ -251,31 +250,23 @@ export class AppController {
       };
 
     readonly resolveAddDestinationFilename = (
-        destination: AddToCollectionDestination, pipeline: Pipeline, showDialogValidation: boolean,
+        destination: AddToCollectionDestination, showDialogValidation: boolean,
       ): { ok: true; filename: string } | { ok: false; code: string } => {
         if (destination.kind === 'existing') {
           return { ok: true, filename: String(destination.collectionFilename || '').trim() };
         }
         if (destination.kind === 'new') {
-          const validation = Collection.validateCollectionName(destination.name);
-          if (!validation.ok) {
-            const validationError = collectionNameValidator.validationErrorText(validation.code);
-            if (showDialogValidation && validationError) {
-              addToCollectionDialogController.showValidationError(validationError, { focusNameInput: true });
+          const nameCheck = newCollectionNameCheck.check(destination.name);
+          if (nameCheck.kind === 'rejected') {
+            if (showDialogValidation && nameCheck.message) {
+              addToCollectionDialogController.showValidationError(nameCheck.message, { focusNameInput: true });
             }
-            return { ok: false, code: validation.code };
+            return { ok: false, code: nameCheck.problem };
           }
-          if (pipeline.getCollectionByFilename(validation.filename)) {
-            const validationError = collectionNameValidator.validationErrorText('already-exists');
-            if (showDialogValidation && validationError) {
-              addToCollectionDialogController.showValidationError(validationError, { focusNameInput: true });
-            }
-            return { ok: false, code: 'already-exists' };
-          }
-          if (validation.filename === this.activeCollectionFilename()) {
+          if (nameCheck.filename === this.activeCollectionFilename()) {
             return { ok: false, code: 'invalid-destination' };
           }
-          return { ok: true, filename: validation.filename };
+          return { ok: true, filename: nameCheck.filename };
         }
         return { ok: false, code: 'invalid-destination' };
       };
@@ -308,7 +299,7 @@ export class AppController {
         if (!this.currentClipSequence() || !pipeline) return { ok: false, code: 'missing-context' };
         const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(gridController.getSelectedClipIds());
         if (selectedClipNames.length === 0) return { ok: false, code: 'no-selection' };
-        const target = this.resolveAddDestinationFilename(destination, pipeline, showDialogValidation);
+        const target = this.resolveAddDestinationFilename(destination, showDialogValidation);
         if (!target.ok) return target;
 
         const mutation = pipeline.addClipsToCollection({
@@ -885,7 +876,7 @@ export class AppController {
       };
 
     readonly confirmSaveAsNew = async (rawName: string): Promise<SaveCollectionResult | undefined> => {
-        const validationError = collectionNameValidator.validate(rawName, this.currentPipeline());
+        const validationError = newCollectionNameCheck.problemText(rawName);
         if (validationError) {
           saveAsNewDialogController.showValidationError(validationError, { focusInput: true });
           return;
@@ -945,7 +936,7 @@ export class AppController {
       };
 
     readonly openZoomForClip = (clip: Clip | null): boolean => {
-        if (!clip || this.isCollectionFullscreen()) return false;
+        if (!clip || fullscreenAdapter.isDocumentFullScreen()) return false;
         const src = gridController.getClipMediaSource(clip.id);
         if (!src) return false;
         gridController.setSelectedClipId(clip.id);
@@ -1119,7 +1110,7 @@ export class AppController {
         frameReviewPlayer.onFullScreenChange();
         if (movieActive !== this.movieFullscreenWasActive) gifWorkflowKeyboard.releaseHeldSteps();
         this.movieFullscreenWasActive = movieActive;
-        const collectionActive = this.isCollectionFullscreen();
+        const collectionActive = fullscreenAdapter.isDocumentFullScreen();
         if (collectionActive && zoomOverlay.isOpen()) this.closeZoom();
         if (collectionActive || this.collectionFullscreenWasActive) fullscreenSession.onFsChange();
         if (this.collectionFullscreenWasActive && !collectionActive && this.currentClipSequence()) {
@@ -1198,6 +1189,7 @@ this.initialized = true;
   const appText = new AppText();
   const displayLayoutRules = new DisplayLayoutRules();
   const collectionNameValidator = new CollectionNameValidator(appText);
+  const newCollectionNameCheck = new NewCollectionNameCheck(pipelineSession, collectionNameValidator);
   const videoEditCatalog = new VideoEditCatalog();
   const clipLabelFormatter = new ClipLabelFormatter();
   const validator = new CollectionDescriptionValidator();
@@ -1217,7 +1209,7 @@ this.initialized = true;
     },
     document,
     onContextMenu: ({ point }) => {
-      if (workflows.isCollectionFullscreen()) return;
+      if (fullscreenAdapter.isDocumentFullScreen()) return;
       workflows.openZoomEditMenu(point);
     },
   });
@@ -1241,9 +1233,7 @@ this.initialized = true;
     document,
     win: window,
     requestPanelOpen: utilityHost ? () => {
-      if (workflows.isFullscreen() || zoomOverlay.isOpen() || saveAsNewDialogController.isOpen()
-        || collectionConflictController.isVisible() || document.querySelector('dialog[open]')) return;
-      utilities?.open('activity');
+      if (activityPanelAutoOpenPolicy.mayOpenAutomatically()) utilities?.open('activity');
     } : undefined,
   });
   const loadStatusControl = new LoadStatusControl({ appText, statusControl: {
@@ -1340,7 +1330,7 @@ this.initialized = true;
     confirmBtn: confirmAddToCollectionBtn,
     cancelBtn: cancelAddToCollectionBtn,
     newChoiceValue: NEW_COLLECTION_CHOICE_VALUE,
-    validateNewName: name => collectionNameValidator.validate(name, workflows.currentPipeline()),
+    validateNewName: name => newCollectionNameCheck.problemText(name),
     onConfirm: (destination) => {
       void workflows.confirmAddToCollection(destination);
     },
@@ -1361,11 +1351,18 @@ this.initialized = true;
     errorMessageEl: saveAsNewError,
     confirmBtn: confirmSaveAsNewBtn,
     cancelBtn: cancelSaveAsNewBtn,
-    validateName: name => collectionNameValidator.validate(name, workflows.currentPipeline()),
+    validateName: name => newCollectionNameCheck.problemText(name),
     onConfirm: (name) => {
       void workflows.confirmSaveAsNew(name);
     },
     onCancel: workflows.cancelSaveAsNewFlow,
+  });
+  const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
+    fullScreen: fullscreenAdapter,
+    zoom: zoomOverlay,
+    saveAsNewDialog: saveAsNewDialogController,
+    collectionConflict: collectionConflictController,
+    document,
   });
   const unsavedChangesDialogController = new UnsavedChangesDialogController({
     dialog: unsavedChangesDialog,
@@ -1544,7 +1541,7 @@ this.initialized = true;
     coordinateWorkspaceLayout: true,
     formatLabel: clipLabelFormatter.formatLabel.bind(clipLabelFormatter),
     layoutRules: displayLayoutRules,
-    isFullscreen: workflows.isCollectionFullscreen,
+    isFullscreen: () => fullscreenAdapter.isDocumentFullScreen(),
     updateCount: workflows.refreshToolbarView,
     onMetadataFailure: ({ clip, error }) => {
       void diagnostics.logVideoMetadataFailure({ filename: clip?.name || '', error });
@@ -1576,7 +1573,7 @@ this.initialized = true;
       workflows.showStatus(appText.removedClipsText(removedClipIds.length));
     },
     onContextMenu: ({ point, clipId }) => {
-      if (zoomOverlay.isOpen() || workflows.isCollectionFullscreen()) return;
+      if (zoomOverlay.isOpen() || fullscreenAdapter.isDocumentFullScreen()) return;
       void workflows.openGridContextMenu(point, clipId);
     },
   });
@@ -1590,7 +1587,7 @@ this.initialized = true;
     setTitlesHidden: workflows.setTitlesHidden,
     enterFullScreenAdapter: fullscreenAdapter.enterFullScreen.bind(fullscreenAdapter),
     exitFullScreenAdapter: fullscreenAdapter.exitFullScreen.bind(fullscreenAdapter),
-    isFullscreen: workflows.isCollectionFullscreen,
+    isFullscreen: () => fullscreenAdapter.isDocumentFullScreen(),
     fsApplySlots,
     rotateVisibleClip: () => gridController.rotateVisibleClip(),
     cancelRotation: () => gridController.cancelRotation(),
@@ -1609,7 +1606,7 @@ this.initialized = true;
     unsavedChangesDialogController,
     zoomOverlay,
     gridController,
-    isFullscreen: workflows.isCollectionFullscreen,
+    isFullscreen: () => fullscreenAdapter.isDocumentFullScreen(),
     closeZoom: workflows.closeZoom,
     browseZoomByOffset: workflows.browseZoomByOffset,
     openZoomForClipId: workflows.openZoomForClipId,
@@ -1779,6 +1776,8 @@ this.initialized = true;
     },
     document,
   });
+  const refineScreenLeavePolicy = new RefineScreenLeavePolicy(
+    collectionRefineScreen.id, collectionRefinementSession ?? null, workflows.showProgressStatus);
   startCollectionRefinement = async (request, collectionFilename) => {
     const session = collectionRefinementSession;
     const service = collectionRefinementService;
@@ -1847,11 +1846,7 @@ this.initialized = true;
     selectorHost: AppControllerSupport.requiredElement('appScreenSwitcher'),
     initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
     screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
-    canLeaveScreen: current => {
-      if (current !== collectionRefineScreen || !collectionRefinementSession?.snapshot.extractionBatch) return true;
-      workflows.showProgressStatus('Wait for the collection clip to finish saving, or cancel extraction before leaving Refine.');
-      return false;
-    },
+    canLeaveScreen: current => refineScreenLeavePolicy.canLeave(current),
     onScreenChange: screen => keyboardMap?.render(screen),
     workspace: AppControllerSupport.optionalElement('workspaceRow') ?? undefined,
     center: AppControllerSupport.optionalElement('centralWorkspace') ?? undefined,
