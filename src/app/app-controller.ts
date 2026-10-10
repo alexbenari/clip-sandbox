@@ -66,6 +66,7 @@ import { UnsavedChangesDialogControl } from '../ui/unsaved-changes-dialog-contro
 import { LoadStatusControl } from '../ui/load-status-control.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
+import { ControlFailureReporting } from './control-failure-reporting.js';
 import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
 
 const ERROR_LOG_FILENAME = 'err.log';
@@ -172,25 +173,18 @@ export class AppController {
     });
     const loadStatusControl = new LoadStatusControl({ appText, reporter: activityReporter });
     const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: fullscreenAdapter });
-    grid.on('metadataFailed', ({ clip, error }) => {
-      void diagnostics.logVideoMetadataFailure({ filename: clip?.name || '', error });
-    });
     eventWiring.require('clipGrid', grid, [
       'cardCountChanged', 'selectionChanged', 'orderChanged', 'openClipRequested',
       'removeSelectedRequested', 'contextMenuRequested', 'metadataFailed',
     ]);
     const pipelineCatalogControl = PipelineCatalogControl.fromDocument(document, { catalog: fileSystem });
-    if (pipelineCatalogControl) {
-      pipelineCatalogControl.on('failed', ({ message, error }) => {
-        activityReporter.failure(message, {
-          affected: 'Pipelines',
-          recovery: 'Check the Pipelines top folder in Settings, then try again.',
-          technicalDetails: activityReporter.technicalDetailsOf(error),
-        });
-        void diagnostics.logRuntimeError(message, error);
-      });
-      eventWiring.require('pipelineCatalog', pipelineCatalogControl, ['loadRequested', 'failed']);
-    }
+    if (pipelineCatalogControl) eventWiring.require('pipelineCatalog', pipelineCatalogControl, ['loadRequested', 'failed']);
+    const controlFailureReporting = new ControlFailureReporting({
+      grid,
+      pipelineCatalog: pipelineCatalogControl,
+      reporter: activityReporter,
+      diagnostics,
+    });
     const settingsScreen = new SettingsScreen(settingsService, {
       progress: activityReporter.progress,
       success: activityReporter.success,
@@ -484,7 +478,7 @@ export class AppController {
       },
       disposeWorkflow: async () => {
         for (const workflow of [collectionView, collectionSave, addToCollection, folderSelection, deleteFromDisk,
-          zoom, collectionRefinement, gridContextMenu, gifRangeRefinement]) workflow.dispose();
+          zoom, collectionRefinement, gridContextMenu, gifRangeRefinement, controlFailureReporting]) workflow.dispose();
         await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
       },
       destroyControls: () => {
