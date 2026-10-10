@@ -32,7 +32,6 @@ import { GifRangeRefinementWorkflow } from './gif-range-refinement-workflow.js';
 import { FullScreenChangeWorkflow } from './full-screen-change-workflow.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
-import { OrderMenuController } from '../ui/order-menu-controller.js';
 import { AddToCollectionDialogController } from '../ui/add-to-collection-dialog-controller.js';
 import { CollectionSelectorControl } from '../ui/collection-selector-control.js';
 import { MainToolbarControl } from '../ui/main-toolbar-control.js';
@@ -97,22 +96,11 @@ export class AppController {
 
     // Page elements.
     const elements = new DocumentElements(document);
-    const pickBtn = elements.required<HTMLButtonElement>('pickBtn');
-    const saveBtn = elements.required<HTMLButtonElement>('saveBtn');
-    const saveAsNewBtn = elements.required<HTMLButtonElement>('saveAsNewBtn');
-    const addToCollectionBtn = elements.optional<HTMLButtonElement>('addToCollectionBtn');
-    const deleteFromDiskBtn = elements.optional<HTMLButtonElement>('deleteFromDiskBtn');
-    const orderMenu = elements.required('orderMenu');
-    const orderMenuBtn = elements.required<HTMLButtonElement>('orderMenuBtn');
-    const orderMenuPanel = elements.required('orderMenuPanel');
     const grid = elements.required('grid');
     const gridWrap = elements.required('gridWrap');
-    const countSpan = elements.required('count');
     const activeCollectionNameEl = elements.required<HTMLSelectElement>('activeCollectionName');
     const toolbar = elements.required('toolbar');
     const zoomLayerRoot = elements.required('zoomLayerRoot');
-    const toggleTitlesBtn = elements.required<HTMLButtonElement>('toggleTitlesBtn');
-    const fsBtn = elements.required<HTMLButtonElement>('fsBtn');
     const body = document.body;
 
     // Application services and adapters.
@@ -168,17 +156,7 @@ export class AppController {
       defaultTitle: appText.defaultAppTitle,
     });
     eventWiring.require('collectionSelector', collectionSelectorControl, ['selectionRequested']);
-    const mainToolbarControl = new MainToolbarControl({
-      appText,
-      browseButton: pickBtn,
-      fullscreenButton: fsBtn,
-      countEl: countSpan,
-      saveBtn,
-      saveAsNewBtn,
-      addToCollectionBtn,
-      deleteFromDiskBtn,
-      toggleTitlesBtn,
-    });
+    const mainToolbarControl = MainToolbarControl.fromDocument(document, { appText });
     eventWiring.require('mainToolbar', mainToolbarControl, [
       'browseRequested', 'saveRequested', 'saveAsNewRequested', 'addToCollectionRequested',
       'deleteFromDiskRequested', 'toggleTitlesRequested', 'toggleFullscreenRequested',
@@ -233,16 +211,6 @@ export class AppController {
       'removeSelectedRequested', 'contextMenuRequested', 'metadataFailed',
     ]);
     const { recomputeLayout, computeGrid, fsApplySlots, fsRestore } = gridController;
-    new OrderMenuController({
-      orderMenu,
-      orderMenuBtn,
-      orderMenuPanel,
-      loadOrderBtn: null,
-      saveBtn,
-      saveAsNewBtn,
-      addToCollectionBtn,
-      deleteFromDiskBtn,
-    });
     const pipelinesPanelHost = elements.optional('pipelinesPanelHost');
     const pipelineCatalogControl = pipelinesPanelHost
       ? new PipelineCatalogControl({ host: pipelinesPanelHost, catalog: fileSystem, document })

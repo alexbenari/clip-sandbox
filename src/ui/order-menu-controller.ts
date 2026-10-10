@@ -1,42 +1,29 @@
+import { DocumentElements } from './document-elements.js';
+
 type OrderMenuControllerOptions = {
   orderMenu?: HTMLElement | null;
   orderMenuBtn?: HTMLButtonElement | null;
   orderMenuPanel?: HTMLElement | null;
-  loadOrderBtn?: HTMLButtonElement | null;
-  saveBtn?: HTMLButtonElement | null;
-  saveAsNewBtn?: HTMLButtonElement | null;
-  addToCollectionBtn?: HTMLButtonElement | null;
-  deleteFromDiskBtn?: HTMLButtonElement | null;
 };
 
 export class OrderMenuController {
-  orderMenu: HTMLElement | null;
-  orderMenuBtn: HTMLButtonElement | null;
-  orderMenuPanel: HTMLElement | null;
-  loadOrderBtn: HTMLButtonElement | null;
-  saveBtn: HTMLButtonElement | null;
-  saveAsNewBtn: HTMLButtonElement | null;
-  addToCollectionBtn: HTMLButtonElement | null;
-  deleteFromDiskBtn: HTMLButtonElement | null;
+  private readonly orderMenu: HTMLElement | null;
+  private readonly orderMenuBtn: HTMLButtonElement | null;
+  private readonly orderMenuPanel: HTMLElement | null;
 
-  constructor({
-    orderMenu,
-    orderMenuBtn,
-    orderMenuPanel,
-    loadOrderBtn,
-    saveBtn,
-    saveAsNewBtn,
-    addToCollectionBtn,
-    deleteFromDiskBtn,
-  }: OrderMenuControllerOptions) {
+  static fromDocument(doc: Document): OrderMenuController {
+    const elements = new DocumentElements(doc);
+    return new OrderMenuController({
+      orderMenu: elements.required('orderMenu'),
+      orderMenuBtn: elements.required<HTMLButtonElement>('orderMenuBtn'),
+      orderMenuPanel: elements.required('orderMenuPanel'),
+    });
+  }
+
+  constructor({ orderMenu, orderMenuBtn, orderMenuPanel }: OrderMenuControllerOptions) {
     this.orderMenu = orderMenu || null;
     this.orderMenuBtn = orderMenuBtn || null;
     this.orderMenuPanel = orderMenuPanel || null;
-    this.loadOrderBtn = loadOrderBtn || null;
-    this.saveBtn = saveBtn || null;
-    this.saveAsNewBtn = saveAsNewBtn || null;
-    this.addToCollectionBtn = addToCollectionBtn || null;
-    this.deleteFromDiskBtn = deleteFromDiskBtn || null;
 
     if (!orderMenu || !orderMenuBtn || !orderMenuPanel) return;
 
@@ -46,10 +33,9 @@ export class OrderMenuController {
     });
     orderMenuBtn.addEventListener('keydown', (e) => this.handleButtonKeyDown(e));
     orderMenuPanel.addEventListener('keydown', (e) => this.handlePanelKeyDown(e));
-
-    for (const item of this.menuItems(loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn)) {
-      item.addEventListener('click', () => this.close());
-    }
+    orderMenuPanel.addEventListener('click', (e) => {
+      if (e.target instanceof Element && e.target.closest('[role="menuitem"]')) this.close();
+    });
 
     orderMenu.addEventListener('focusout', () => {
       setTimeout(() => {
@@ -88,24 +74,11 @@ export class OrderMenuController {
   }
 
   focusFirstItem(): void {
-    const first = this.focusableItems(
-      this.loadOrderBtn,
-      this.saveBtn,
-      this.saveAsNewBtn,
-      this.addToCollectionBtn,
-      this.deleteFromDiskBtn,
-    )[0];
-    if (first) first.focus();
+    this.focusableItems()[0]?.focus();
   }
 
   moveItemFocus(step: number): void {
-    const items = this.focusableItems(
-      this.loadOrderBtn,
-      this.saveBtn,
-      this.saveAsNewBtn,
-      this.addToCollectionBtn,
-      this.deleteFromDiskBtn,
-    );
+    const items = this.focusableItems();
     if (items.length === 0) return;
     const currentIndex = items.findIndex((el) => el === document.activeElement);
     const nextIndex = currentIndex < 0 ? 0 : (currentIndex + step + items.length) % items.length;
@@ -159,22 +132,12 @@ export class OrderMenuController {
     }
     if (e.key === 'End') {
       e.preventDefault();
-      const items = this.focusableItems(
-        this.loadOrderBtn,
-        this.saveBtn,
-        this.saveAsNewBtn,
-        this.addToCollectionBtn,
-        this.deleteFromDiskBtn,
-      );
-      if (items.length) items[items.length - 1].focus();
+      this.focusableItems().at(-1)?.focus();
     }
   }
 
-  private menuItems(...items: Array<HTMLElement | null | undefined>): HTMLButtonElement[] {
-    return items.filter((element): element is HTMLButtonElement => element instanceof HTMLButtonElement);
-  }
-
-  private focusableItems(...items: Array<HTMLElement | null | undefined>): HTMLButtonElement[] {
-    return this.menuItems(...items).filter(element => !element.disabled);
+  private focusableItems(): HTMLButtonElement[] {
+    return [...this.orderMenuPanel?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]') ?? []]
+      .filter(element => !element.disabled);
   }
 }

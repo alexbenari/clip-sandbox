@@ -23,20 +23,30 @@ function setupDom() {
   const saveAsNewBtn = document.getElementById('saveAsNewBtn');
   const addToCollectionBtn = document.getElementById('addToCollectionBtn');
   const deleteFromDiskBtn = document.getElementById('deleteFromDiskBtn');
-  new OrderMenuController({
-    orderMenu,
-    orderMenuBtn,
-    orderMenuPanel,
-    loadOrderBtn,
-    saveBtn,
-    saveAsNewBtn,
-    addToCollectionBtn,
-    deleteFromDiskBtn,
-  });
+  new OrderMenuController({ orderMenu, orderMenuBtn, orderMenuPanel });
   return { orderMenu, orderMenuBtn, loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn };
 }
 
 describe('order menu controller', () => {
+  test('choosing an item closes the menu', () => {
+    const { orderMenu, orderMenuBtn, saveAsNewBtn } = setupDom();
+    orderMenuBtn.click();
+
+    saveAsNewBtn.click();
+
+    expect(orderMenu.dataset.open).toBe('false');
+  });
+
+  test('keyboard navigation skips disabled items', () => {
+    const { orderMenuBtn, loadOrderBtn, saveBtn, saveAsNewBtn } = setupDom();
+    loadOrderBtn.disabled = true;
+    saveBtn.disabled = true;
+
+    orderMenuBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(saveAsNewBtn).toBe(document.activeElement);
+  });
+
   test('click toggles open state and aria-expanded', () => {
     const { orderMenu, orderMenuBtn } = setupDom();
     expect(orderMenu.dataset.open).toBe('false');

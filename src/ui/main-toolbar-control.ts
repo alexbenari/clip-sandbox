@@ -1,5 +1,7 @@
 import type { AppText } from '../app/app-text.js';
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { DocumentElements } from './document-elements.js';
+import { OrderMenuController } from './order-menu-controller.js';
 
 export interface IMainToolbarEvents {
   browseRequested: void;
@@ -23,6 +25,23 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents>, IEv
   addToCollectionBtn: HTMLButtonElement | null;
   deleteFromDiskBtn: HTMLButtonElement | null;
   toggleTitlesBtn: HTMLButtonElement | null;
+
+  // The Save, Save as, Add and Delete commands are items of the toolbar's Actions menu.
+  static fromDocument(doc: Document, { appText }: { appText: Pick<AppText, 'countText'> }): MainToolbarControl {
+    const elements = new DocumentElements(doc);
+    OrderMenuController.fromDocument(doc);
+    return new MainToolbarControl({
+      appText,
+      browseButton: elements.required<HTMLButtonElement>('pickBtn'),
+      fullscreenButton: elements.required<HTMLButtonElement>('fsBtn'),
+      countEl: elements.required('count'),
+      saveBtn: elements.required<HTMLButtonElement>('saveBtn'),
+      saveAsNewBtn: elements.required<HTMLButtonElement>('saveAsNewBtn'),
+      addToCollectionBtn: elements.optional<HTMLButtonElement>('addToCollectionBtn'),
+      deleteFromDiskBtn: elements.optional<HTMLButtonElement>('deleteFromDiskBtn'),
+      toggleTitlesBtn: elements.required<HTMLButtonElement>('toggleTitlesBtn'),
+    });
+  }
 
   constructor({
     appText,

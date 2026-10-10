@@ -9,6 +9,7 @@ import { AddToCollectionDialogController } from '../../../src/ui/add-to-collecti
 import { CollectionConflictController } from '../../../src/ui/collection-conflict-controller.js';
 import { ContextMenuController } from '../../../src/ui/context-menu-controller.js';
 import { DeleteFromDiskDialogController } from '../../../src/ui/delete-from-disk-dialog-controller.js';
+import { MainToolbarControl } from '../../../src/ui/main-toolbar-control.js';
 import { SaveAsNewDialogController } from '../../../src/ui/save-as-new-dialog-controller.js';
 import { UnsavedChangesDialogController } from '../../../src/ui/unsaved-changes-dialog-controller.js';
 
@@ -105,6 +106,23 @@ describe('controls built from the page markup', () => {
       panel: document.getElementById('activityIndicatorPanel'),
     });
     activity.destroy();
+  });
+
+  it('the main toolbar reports its commands and navigates its Actions menu', () => {
+    const toolbar = MainToolbarControl.fromDocument(document, { appText: new AppText() });
+    const saveAsNewRequested = vi.fn();
+    toolbar.on('saveAsNewRequested', saveAsNewRequested);
+
+    toolbar.render({ clipCount: 2, hasPipeline: true, hasSequence: true, isPipelineMode: true });
+    expect(text('count')).toBe('2 clips');
+    document.getElementById('orderMenuBtn')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.getElementById('orderMenu')!.dataset.open).toBe('true');
+    expect(document.activeElement).toBe(document.getElementById('saveAsNewBtn'));
+    click('saveAsNewBtn');
+
+    expect(saveAsNewRequested).toHaveBeenCalledOnce();
+    expect(document.getElementById('orderMenu')!.dataset.open).toBe('false');
+    toolbar.destroy();
   });
 
   it('reports a required part that is missing from the page', () => {
