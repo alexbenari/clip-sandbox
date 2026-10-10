@@ -1,7 +1,7 @@
 import type { AppText } from '../app/app-text.js';
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
-import { OrderMenuController } from './order-menu-controller.js';
+import { OrderMenuControl } from './order-menu-control.js';
 
 export interface IMainToolbarEvents {
   browseRequested: void;
@@ -29,7 +29,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents>, IEv
   // The Save, Save as, Add and Delete commands are items of the toolbar's Actions menu.
   static fromDocument(doc: Document, { appText }: { appText: Pick<AppText, 'countText'> }): MainToolbarControl {
     const elements = new DocumentElements(doc);
-    OrderMenuController.fromDocument(doc);
+    OrderMenuControl.fromDocument(doc);
     return new MainToolbarControl({
       appText,
       browseButton: elements.required<HTMLButtonElement>('pickBtn'),

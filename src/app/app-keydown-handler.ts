@@ -10,17 +10,17 @@ export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Close Zoom', group: 'Zoom', sequences: [['Escape']] },
 ];
 
-type DialogKeyController = {
+type KeyboardDialog = {
   isOpen(): boolean;
   handleGlobalKeyDown?: (event: KeyboardEvent) => boolean;
   close?: () => void;
 };
 
 export type AppKeyDownContext = {
-  saveAsNewDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'handleGlobalKeyDown'>>;
-  addToCollectionDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'close'>>;
-  deleteFromDiskDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'handleGlobalKeyDown'>>;
-  unsavedChangesDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'handleGlobalKeyDown'>>;
+  saveAsNewDialog: Required<Pick<KeyboardDialog, 'isOpen' | 'handleGlobalKeyDown'>>;
+  addToCollectionDialog: Required<Pick<KeyboardDialog, 'isOpen' | 'close'>>;
+  deleteFromDiskDialog: Required<Pick<KeyboardDialog, 'isOpen' | 'handleGlobalKeyDown'>>;
+  unsavedChangesDialog: Required<Pick<KeyboardDialog, 'isOpen' | 'handleGlobalKeyDown'>>;
   zoom: {
     isOpen(): boolean;
     close(): void;
@@ -28,7 +28,7 @@ export type AppKeyDownContext = {
     browseByOffset(offset: number): unknown;
     openClipById(clipId: string | null): unknown;
   };
-  gridController: {
+  grid: {
     handleKeyDown(event: KeyboardEvent): unknown;
     getSelectedClipId(): string | null;
   };
@@ -59,20 +59,20 @@ export class AppKeyDownHandler {
   handle(event: KeyboardEvent): boolean {
     const context = this.context;
 
-    if (context.saveAsNewDialogController.handleGlobalKeyDown(event)) {
+    if (context.saveAsNewDialog.handleGlobalKeyDown(event)) {
       event.preventDefault();
       return true;
     }
-    if (context.addToCollectionDialogController.isOpen() && event.key === 'Escape') {
+    if (context.addToCollectionDialog.isOpen() && event.key === 'Escape') {
       event.preventDefault();
-      context.addToCollectionDialogController.close();
+      context.addToCollectionDialog.close();
       return true;
     }
-    if (context.deleteFromDiskDialogController.handleGlobalKeyDown(event)) {
+    if (context.deleteFromDiskDialog.handleGlobalKeyDown(event)) {
       event.preventDefault();
       return true;
     }
-    if (context.unsavedChangesDialogController.handleGlobalKeyDown(event)) {
+    if (context.unsavedChangesDialog.handleGlobalKeyDown(event)) {
       event.preventDefault();
       return true;
     }
@@ -83,7 +83,7 @@ export class AppKeyDownHandler {
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
       if (context.zoom.isOpen()) event.preventDefault();
-      else context.gridController.handleKeyDown(event);
+      else context.grid.handleKeyDown(event);
       return true;
     }
     if (this.anyDialogOpen()) return true;
@@ -112,9 +112,9 @@ export class AppKeyDownHandler {
       && this.isKey(event, 'z')
       && !context.zoom.isOpen()
       && !context.fullScreen.isDocumentFullScreen()
-      && context.gridController.getSelectedClipId()
+      && context.grid.getSelectedClipId()
     ) {
-      context.zoom.openClipById(context.gridController.getSelectedClipId());
+      context.zoom.openClipById(context.grid.getSelectedClipId());
       event.preventDefault();
       return true;
     }
@@ -123,10 +123,10 @@ export class AppKeyDownHandler {
 
   private anyDialogOpen(): boolean {
     return (
-      this.context.saveAsNewDialogController.isOpen()
-      || this.context.addToCollectionDialogController.isOpen()
-      || this.context.deleteFromDiskDialogController.isOpen()
-      || this.context.unsavedChangesDialogController.isOpen()
+      this.context.saveAsNewDialog.isOpen()
+      || this.context.addToCollectionDialog.isOpen()
+      || this.context.deleteFromDiskDialog.isOpen()
+      || this.context.unsavedChangesDialog.isOpen()
     );
   }
 

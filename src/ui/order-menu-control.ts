@@ -1,26 +1,26 @@
 import { DocumentElements } from './document-elements.js';
 
-type OrderMenuControllerOptions = {
+type OrderMenuControlOptions = {
   orderMenu?: HTMLElement | null;
   orderMenuBtn?: HTMLButtonElement | null;
   orderMenuPanel?: HTMLElement | null;
 };
 
-export class OrderMenuController {
+export class OrderMenuControl {
   private readonly orderMenu: HTMLElement | null;
   private readonly orderMenuBtn: HTMLButtonElement | null;
   private readonly orderMenuPanel: HTMLElement | null;
 
-  static fromDocument(doc: Document): OrderMenuController {
+  static fromDocument(doc: Document): OrderMenuControl {
     const elements = new DocumentElements(doc);
-    return new OrderMenuController({
+    return new OrderMenuControl({
       orderMenu: elements.required('orderMenu'),
       orderMenuBtn: elements.required<HTMLButtonElement>('orderMenuBtn'),
       orderMenuPanel: elements.required('orderMenuPanel'),
     });
   }
 
-  constructor({ orderMenu, orderMenuBtn, orderMenuPanel }: OrderMenuControllerOptions) {
+  constructor({ orderMenu, orderMenuBtn, orderMenuPanel }: OrderMenuControlOptions) {
     this.orderMenu = orderMenu || null;
     this.orderMenuBtn = orderMenuBtn || null;
     this.orderMenuPanel = orderMenuPanel || null;

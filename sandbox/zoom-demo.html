@@ -74,9 +74,9 @@
   </main>
   <div id="zoomLayerRoot"></div>
   <script type="module">
-    import { createZoomOverlayController } from '../build/src/ui/zoom-overlay-controller.js';
+    import { createZoomOverlayControl } from '../build/src/ui/zoom-overlay-control.js';
 
-    const zoomOverlay = createZoomOverlayController({
+    const zoomOverlay = createZoomOverlayControl({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });

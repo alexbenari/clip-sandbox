@@ -1,4 +1,4 @@
-type FoldablePanelControllerOptions = {
+type FoldablePanelControlOptions = {
   root: HTMLElement;
   content: HTMLElement;
   foldButton: HTMLButtonElement;
@@ -12,7 +12,7 @@ type PanelAnimation = Animation & {
   effect?: KeyframeEffect | null;
 };
 
-export class FoldablePanelController {
+export class FoldablePanelControl {
   private readonly root: HTMLElement;
   private readonly content: HTMLElement;
   private readonly foldButton: HTMLButtonElement;
@@ -34,7 +34,7 @@ export class FoldablePanelController {
     }
   };
 
-  constructor(options: FoldablePanelControllerOptions) {
+  constructor(options: FoldablePanelControlOptions) {
     this.root = options.root;
     this.content = options.content;
     this.foldButton = options.foldButton;

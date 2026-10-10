@@ -1,18 +1,18 @@
 import type { VideoEdit, VideoEditCatalog } from '../business-logic/video-edit-catalog.js';
-import type { ContextMenuController, ContextMenuItem, ContextMenuPoint } from './context-menu-controller.js';
+import type { ContextMenuControl, ContextMenuItem, ContextMenuPoint } from './context-menu-control.js';
 
 export class ZoomEditMenuControl {
-  contextMenuController: Pick<ContextMenuController, 'open'> | null;
+  contextMenu: Pick<ContextMenuControl, 'open'> | null;
   private readonly videoEditCatalog: Pick<VideoEditCatalog, 'listZoomEdits'>;
 
   constructor({
-    contextMenuController,
+    contextMenu,
     videoEditCatalog,
   }: {
-    contextMenuController?: Pick<ContextMenuController, 'open'> | null;
+    contextMenu?: Pick<ContextMenuControl, 'open'> | null;
     videoEditCatalog: Pick<VideoEditCatalog, 'listZoomEdits'>;
   }) {
-    this.contextMenuController = contextMenuController || null;
+    this.contextMenu = contextMenu || null;
     this.videoEditCatalog = videoEditCatalog;
   }
 
@@ -34,7 +34,7 @@ export class ZoomEditMenuControl {
     isDisabled = false,
     onSelectEdit = () => {},
   }: { point?: ContextMenuPoint; isDisabled?: boolean; onSelectEdit?: (edit: VideoEdit) => void } = {}): void {
-    this.contextMenuController?.open({
+    this.contextMenu?.open({
       point,
       items: this.buildItems({
         isDisabled,

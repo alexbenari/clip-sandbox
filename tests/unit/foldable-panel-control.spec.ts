@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FoldablePanelController } from '../../src/ui/foldable-panel-controller.js';
+import { FoldablePanelControl } from '../../src/ui/foldable-panel-control.js';
 
 type MediaQueryStub = MediaQueryList & { setReduced(value: boolean): void };
 
@@ -33,9 +33,9 @@ function fixture() {
 
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); });
 
-describe('FoldablePanelController', () => {
+describe('FoldablePanelControl', () => {
   it('updates folded presentation, ARIA, and focus for an independent caller', () => {
-    const f = fixture(); const controller = new FoldablePanelController({ ...f, onChange: f.change, onSettled: f.settled });
+    const f = fixture(); const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
     expect(f.foldButton.getAttribute('aria-expanded')).toBe('true');
     expect(f.revealButton.getAttribute('aria-expanded')).toBe('true');
     f.content.append(document.createElement('input')); f.content.firstElementChild?.dispatchEvent(new Event('focus'));
@@ -51,8 +51,8 @@ describe('FoldablePanelController', () => {
 
   it('keeps two controller instances independent and responds to button clicks', () => {
     const first = fixture(); const second = fixture();
-    const firstController = new FoldablePanelController({ ...first, onChange: first.change, onSettled: first.settled });
-    const secondController = new FoldablePanelController({ ...second, onChange: second.change, onSettled: second.settled });
+    const firstController = new FoldablePanelControl({ ...first, onChange: first.change, onSettled: first.settled });
+    const secondController = new FoldablePanelControl({ ...second, onChange: second.change, onSettled: second.settled });
     first.foldButton.click();
     expect(firstController.folded).toBe(true); expect(secondController.folded).toBe(false);
     expect(first.change).toHaveBeenCalledOnce(); expect(second.change).not.toHaveBeenCalled();
@@ -60,7 +60,7 @@ describe('FoldablePanelController', () => {
 
   it('expands idempotently through the semantic operation', () => {
     const f = fixture();
-    const controller = new FoldablePanelController({ ...f, onChange: f.change, onSettled: f.settled });
+    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
     controller.setFolded(true);
     f.change.mockClear();
 
@@ -80,7 +80,7 @@ describe('FoldablePanelController', () => {
       { transitionProperty: 'width', effect: { target: f.root }, finished: second.promise },
     ];
     Object.defineProperty(f.root, 'getAnimations', { configurable: true, value: () => [animations.shift() as unknown as Animation] });
-    const controller = new FoldablePanelController({ ...f, onChange: f.change, onSettled: f.settled });
+    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
     controller.setFolded(true); controller.setFolded(false); first.resolve(); await Promise.resolve();
     expect(controller.moving).toBe(true); expect(f.settled).not.toHaveBeenCalled();
     second.resolve(); await Promise.resolve(); await Promise.resolve(); expect(controller.moving).toBe(false); expect(f.settled).toHaveBeenCalledOnce();
@@ -88,7 +88,7 @@ describe('FoldablePanelController', () => {
 
   it('settles immediately without animation or when reduced motion changes', async () => {
     const f = fixture(); const media = mediaQuery(); vi.spyOn(window, 'matchMedia').mockReturnValue(media);
-    const controller = new FoldablePanelController({ ...f, onChange: f.change, onSettled: f.settled });
+    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
     controller.setFolded(true); expect(f.settled).toHaveBeenCalledOnce();
     controller.setFolded(false); expect(f.settled).toHaveBeenCalledTimes(2); expect(f.change).toHaveBeenLastCalledWith(280);
     const pending = deferred();

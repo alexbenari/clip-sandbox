@@ -1,6 +1,6 @@
 import { Clip } from '../../src/domain/clip.ts';
 import { ClipSequence } from '../../src/domain/clip-sequence.ts';
-import { ClipCollectionGridController } from '../../src/ui/clip-collection-grid-controller.ts';
+import { ClipCollectionGridControl } from '../../src/ui/clip-collection-grid-control.ts';
 import { computeBestGrid } from '../../src/ui/display-layout-rules.ts';
 import { DomRendererAdapter } from '../../src/adapters/browser/dom-renderer-adapter.ts';
 
@@ -13,7 +13,7 @@ if (new URLSearchParams(location.search).get('grid') === '1') {
   gridRoot.append(grid);
   tiles.replaceWith(gridRoot);
   const renderer = new DomRendererAdapter();
-  const controller = new ClipCollectionGridController({
+  const controller = new ClipCollectionGridControl({
     grid, gridRoot, toolbar: document.querySelector('.app-bar'), computeBestGrid,
     applyGridLayout: (columns, height) => renderer.applyGridLayout(grid, columns, height),
   });

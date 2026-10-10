@@ -1,6 +1,6 @@
 import type { IAppScreen } from './app-screen.js';
 import { DocumentElements } from './document-elements.js';
-import { FoldablePanelController } from './foldable-panel-controller.js';
+import { FoldablePanelControl } from './foldable-panel-control.js';
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
 
 export interface IApplicationShellEvents {
@@ -32,13 +32,13 @@ type ShellElements = {
   canLeaveScreen?: (current: IAppScreen, incoming: IAppScreen) => boolean;
 };
 
-export class ApplicationShellController implements IEventSource<IApplicationShellEvents>, IEventSubscriberCount<IApplicationShellEvents> {
+export class ApplicationShellControl implements IEventSource<IApplicationShellEvents>, IEventSubscriberCount<IApplicationShellEvents> {
   private readonly screens = new Map<string, IAppScreen>();
   private readonly events = new EventSource<IApplicationShellEvents>();
   private current: IAppScreen;
   private readonly panels = new Map<string, {
     readonly shell: ShellPanel;
-    readonly controller: FoldablePanelController;
+    readonly controller: FoldablePanelControl;
   }>();
   private readonly panelStates = new Map<string, Map<string, boolean>>();
   private activated = false;
@@ -48,9 +48,9 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
   private readonly onSelectionChange = (): void => { this.activate(this.elements.selector.value); };
   private readonly onSettingsClick = (): void => { this.events.emit('settingsRequested'); };
 
-  static fromDocument(doc: Document, options: Pick<ShellElements, 'screens' | 'initialScreenId' | 'canLeaveScreen'>): ApplicationShellController {
+  static fromDocument(doc: Document, options: Pick<ShellElements, 'screens' | 'initialScreenId' | 'canLeaveScreen'>): ApplicationShellControl {
     const elements = new DocumentElements(doc);
-    return new ApplicationShellController({
+    return new ApplicationShellControl({
       ...options,
       screenHost: elements.required('mainScreenHost'),
       commandHost: elements.required('screenCommandHost'),
@@ -59,7 +59,7 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
       settingsButton: elements.optional<HTMLButtonElement>('settingsBtn'),
       workspace: elements.optional('workspaceRow') ?? undefined,
       center: elements.optional('centralWorkspace') ?? undefined,
-      panels: ApplicationShellController.sidePanelsIn(doc),
+      panels: ApplicationShellControl.sidePanelsIn(doc),
     });
   }
 
@@ -99,7 +99,7 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
     for (const panel of elements.panels ?? []) {
       this.panels.set(panel.id, {
         shell: panel,
-        controller: new FoldablePanelController({
+        controller: new FoldablePanelControl({
           ...panel,
           onChange: duration => this.prepareWorkspaceResize(duration),
           onSettled: () => this.settleWorkspaceResize(),

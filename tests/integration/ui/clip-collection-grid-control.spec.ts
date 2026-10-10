@@ -2,9 +2,9 @@
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
 import { Clip } from '../../../src/domain/clip.js';
 import { ClipSequence } from '../../../src/domain/clip-sequence.js';
-import { ClipCollectionGridController } from '../../../src/ui/clip-collection-grid-controller.js';
+import { ClipCollectionGridControl } from '../../../src/ui/clip-collection-grid-control.js';
 
-const createClipCollectionGridController = options => new ClipCollectionGridController(options);
+const createClipCollectionGridControl = options => new ClipCollectionGridControl(options);
 
 describe('clip collection grid controller', () => {
   let originalCreate;
@@ -50,7 +50,7 @@ describe('clip collection grid controller', () => {
     root.style.padding = '14px';
     Object.defineProperty(root, 'clientWidth', { configurable: true, value: 428 });
     const computeBestGrid = vi.fn(({ availW }) => ({ cols: availW >= 600 ? 2 : 1, cellH: 100 }));
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid,
       gridRoot: root,
       coordinateWorkspaceLayout: true,
@@ -86,7 +86,7 @@ describe('clip collection grid controller', () => {
     const grid = document.getElementById('grid');
     const collection = makeThreeClipCollection();
     const opened = vi.fn();
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid, isFullscreen: () => true,
       layoutRules: { computeFullscreenLayout: () => ({ cols: 2, cellH: 100, targetVisible: 2 }) },
     });
@@ -123,7 +123,7 @@ describe('clip collection grid controller', () => {
 
   test('view replacement, restart and disposal cancel pending fullscreen rotation', () => {
     const grid = document.getElementById('grid');
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid, isFullscreen: () => true,
       layoutRules: { computeFullscreenLayout: () => ({ cols: 2, cellH: 100, targetVisible: 2 }) },
     });
@@ -155,7 +155,7 @@ describe('clip collection grid controller', () => {
 
   test('tracks single and modifier-based multi-selection by clip id', () => {
     const selectionChanges = [];
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -190,7 +190,7 @@ describe('clip collection grid controller', () => {
   test('emits full order after drag-drop reorder and provides clip media source', () => {
     const orders = [];
     const openRequests = [];
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -231,7 +231,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('renders safe filename labels and updates duration text', () => {
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name, seconds) => `${name} (${seconds ?? '--:--:--'})`,
@@ -259,7 +259,7 @@ describe('clip collection grid controller', () => {
   test('batches initial card insertion and waits for metadata before starting preview playback', () => {
     const grid = document.getElementById('grid');
     const appendChildSpy = vi.spyOn(grid, 'appendChild');
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid,
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -283,7 +283,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('reuses cached card videos and resumes playback after switching back to an unchanged view', async () => {
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -342,7 +342,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('invalidates cached card videos when a view sequence changes', () => {
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -372,7 +372,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('does not reapply an unchanged cached grid layout when switching back', () => {
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -394,7 +394,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('owns title visibility on the grid surface', () => {
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -421,7 +421,7 @@ describe('clip collection grid controller', () => {
     try {
       const gridRoot = document.getElementById('gridWrap');
       const computeBestGrid = vi.fn(() => ({ cols: 1, cellH: 100 }));
-      const controller = createClipCollectionGridController({
+      const controller = createClipCollectionGridControl({
         grid: document.getElementById('grid'),
         gridRoot,
         coordinateWorkspaceLayout: true,
@@ -462,7 +462,7 @@ describe('clip collection grid controller', () => {
     const gridRoot = document.getElementById('gridWrap');
     Object.defineProperty(gridRoot, 'clientWidth', { value: 900, configurable: true });
     let fullscreen = false;
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid,
       gridRoot,
       formatLabel: (name) => name,
@@ -496,7 +496,7 @@ describe('clip collection grid controller', () => {
     const computeBestGrid = vi.fn()
       .mockReturnValueOnce({ cols: 1, cellH: 100 })
       .mockReturnValueOnce({ cols: 2, cellH: 180 });
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid,
       gridRoot,
       formatLabel: (name) => name,
@@ -522,7 +522,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('skips metadata-complete relayout when the column count is unchanged', async () => {
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -547,7 +547,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('defers metadata-complete relayout while dragging', async () => {
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -584,7 +584,7 @@ describe('clip collection grid controller', () => {
 
   test('reports metadata failure once and still completes relayout', async () => {
     const metadataFailures = [];
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -614,7 +614,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('revokes object urls and clears drag-over state when rerendering or destroying', () => {
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -649,7 +649,7 @@ describe('clip collection grid controller', () => {
 
   test('drops invalid selections on rerender and emits ordered selected ids for removal', () => {
     const removalRequests = [];
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -695,7 +695,7 @@ describe('clip collection grid controller', () => {
 
   test('emits context-menu requests without changing the current selection', () => {
     const contextMenuRequests = [];
-    const controller = createClipCollectionGridController({
+    const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -731,7 +731,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('injects default styles only once per document', () => {
-    createClipCollectionGridController({
+    createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       recomputeLayout: vi.fn(),
@@ -744,7 +744,7 @@ describe('clip collection grid controller', () => {
     otherRoot.appendChild(otherGrid);
     document.body.appendChild(otherRoot);
 
-    createClipCollectionGridController({
+    createClipCollectionGridControl({
       grid: otherGrid,
       gridRoot: otherRoot,
       recomputeLayout: vi.fn(),
@@ -764,7 +764,7 @@ test('focuses selected cards through the grid API without relying on selection C
   card.className = 'thumb';
   card.dataset.clipId = 'selected-clip';
   grid.append(card); root.append(grid); document.body.append(root);
-  const controller = createClipCollectionGridController({ grid, gridRoot: root });
+  const controller = createClipCollectionGridControl({ grid, gridRoot: root });
   expect(controller.focusSelectedClip()).toBe(false);
   controller.setSelectedClipId('selected-clip');
   card.classList.remove('selected');
@@ -780,7 +780,7 @@ test('measures allocated grid height using its own current padding', () => {
   Object.defineProperty(root, 'clientHeight', { value: 480 });
   root.style.padding = '10px 14px 22px';
   const computeBestGrid = vi.fn(() => ({ cols: 1, cellH: 100 }));
-  const controller = createClipCollectionGridController({
+  const controller = createClipCollectionGridControl({
     grid,
     gridRoot: root,
     coordinateWorkspaceLayout: true,

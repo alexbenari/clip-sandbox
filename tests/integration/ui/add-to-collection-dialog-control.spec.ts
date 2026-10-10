@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { AddToCollectionDialogController } from '../../../src/ui/add-to-collection-dialog-controller.js';
+import { AddToCollectionDialogControl } from '../../../src/ui/add-to-collection-dialog-control.js';
 
 function setup() {
   document.body.innerHTML = `
@@ -32,7 +32,7 @@ function setup() {
   const onConfirm = vi.fn();
   const onCancel = vi.fn();
 
-  const controller = new AddToCollectionDialogController({
+  const controller = new AddToCollectionDialogControl({
     dialog,
     destinationSelect,
     newCollectionNameLabel: nameLabel,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApplicationShellController } from '../../src/ui/application-shell-controller.js';
+import { ApplicationShellControl } from '../../src/ui/application-shell-control.js';
 import type { IAppScreen } from '../../src/ui/app-screen.js';
 
 afterEach(() => { document.body.replaceChildren(); });
@@ -76,7 +76,7 @@ describe('application shell side panel markup', () => {
         <button data-shell-panel-reveal></button>
       </aside>`;
 
-    const [pipelines, clips] = ApplicationShellController.sidePanelsIn(document);
+    const [pipelines, clips] = ApplicationShellControl.sidePanelsIn(document);
 
     expect(pipelines.id).toBe('pipelines');
     expect(pipelines.root.tagName).toBe('ASIDE');
@@ -92,11 +92,11 @@ describe('application shell side panel markup', () => {
   it('reports a marked side panel that is missing a required part', () => {
     document.body.innerHTML = '<aside data-shell-panel="clips"><div data-shell-panel-content></div></aside>';
 
-    expect(() => ApplicationShellController.sidePanelsIn(document)).toThrow('Side panel "clips" has no [data-shell-panel-contributions].');
+    expect(() => ApplicationShellControl.sidePanelsIn(document)).toThrow('Side panel "clips" has no [data-shell-panel-contributions].');
   });
 
   it('finds no side panels where none are marked', () => {
-    expect(ApplicationShellController.sidePanelsIn(document)).toEqual([]);
+    expect(ApplicationShellControl.sidePanelsIn(document)).toEqual([]);
   });
 });
 
@@ -104,7 +104,7 @@ describe('application shell screen ownership', () => {
   it('keeps the current workspace selected when a leave guard rejects navigation', () => {
     const f = fixture();
     const canLeaveScreen = vi.fn(() => false);
-    const shell = new ApplicationShellController({ ...f,
+    const shell = new ApplicationShellControl({ ...f,
       screens: [f.collection, f.settings], canLeaveScreen,
     });
     shell.start();
@@ -132,7 +132,7 @@ describe('application shell screen ownership', () => {
     document.body.append(workspace); workspace.append(center); center.append(f.commandHost, f.screenHost);
     const changed = vi.fn(); const settled = vi.fn();
     const collection = { ...f.collection, onBoundsChanging: changed, onBoundsSettled: settled } satisfies IAppScreen;
-    const shell = new ApplicationShellController({ ...f, workspace, center, panels, screens: [collection, f.settings] });
+    const shell = new ApplicationShellControl({ ...f, workspace, center, panels, screens: [collection, f.settings] });
     shell.start();
     settled.mockClear();
     panels[0].foldButton.click();
@@ -151,7 +151,7 @@ describe('application shell screen ownership', () => {
     const f = fixture();
     const collection = { ...f.collection, onKeyDown: vi.fn() } satisfies IAppScreen;
     const settings = { ...f.settings, onKeyDown: vi.fn() } satisfies IAppScreen;
-    const shell = new ApplicationShellController({ ...f, screens: [collection, settings] });
+    const shell = new ApplicationShellControl({ ...f, screens: [collection, settings] });
     const key = new KeyboardEvent('keydown', { key: 'z' });
 
     shell.handleKeyDown(key);
@@ -169,7 +169,7 @@ describe('application shell screen ownership', () => {
 
   it('mounts one screen and hides a redundant selector', () => {
     const f = fixture();
-    const shell = new ApplicationShellController({ ...f, screens: [f.collection] });
+    const shell = new ApplicationShellControl({ ...f, screens: [f.collection] });
     shell.start();
     expect(shell.activeScreen).toBe(f.collection);
     expect(f.selector.hidden).toBe(true);
@@ -181,7 +181,7 @@ describe('application shell screen ownership', () => {
 
   it('activates the explicit initial screen instead of relying on registration order', () => {
     const f = fixture();
-    const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings, f.extraction], initialScreenId: f.extraction.id });
+    const shell = new ApplicationShellControl({ ...f, screens: [f.collection, f.settings, f.extraction], initialScreenId: f.extraction.id });
     shell.start();
 
     expect(shell.activeScreen).toBe(f.extraction);
@@ -191,7 +191,7 @@ describe('application shell screen ownership', () => {
 
   it('switches to a commandless screen without stale commands or inactive focus', () => {
     const f = fixture();
-    const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings, f.extraction] });
+    const shell = new ApplicationShellControl({ ...f, screens: [f.collection, f.settings, f.extraction] });
     shell.start();
     shell.activate(f.settings.id);
     expect(f.commandHost.hidden).toBe(true);
@@ -218,7 +218,7 @@ describe('application shell screen ownership', () => {
     const settings = { ...f.settings, initiallyFoldedPanelIds: ['clips', 'pipelines'], onBoundsSettled: settled } satisfies IAppScreen;
     const extraction = { ...f.extraction, initiallyFoldedPanelIds: ['pipelines'], panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
     const refine = { ...f.refine, initiallyFoldedPanelIds: ['pipelines'], panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
-    const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips, pipelines], screens: [collection, settings, extraction, refine], initialScreenId: extraction.id });
+    const shell = new ApplicationShellControl({ ...f, ...workspace, panels: [clips, pipelines], screens: [collection, settings, extraction, refine], initialScreenId: extraction.id });
     shell.start();
     const folded = () => [clips.root, pipelines.root].map(root => root.classList.contains('folded'));
 
@@ -259,7 +259,7 @@ describe('application shell screen ownership', () => {
     extraction.onDeactivate = vi.fn(() => order.push('extraction:deactivate'));
     refine.onActivate = vi.fn(() => order.push('refine:activate'));
     refine.focusInitial = vi.fn(() => order.push('refine:focus'));
-    const shell = new ApplicationShellController({
+    const shell = new ApplicationShellControl({
       ...f,
       ...workspace,
       panels: [clips],
@@ -297,7 +297,7 @@ describe('application shell screen ownership', () => {
     const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);
     workspace.workspace.append(pipelines.root);
     const settings = { ...f.settings, initiallyFoldedPanelIds: ['clips'] } satisfies IAppScreen;
-    const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips, pipelines], screens: [settings, f.collection] });
+    const shell = new ApplicationShellControl({ ...f, ...workspace, panels: [clips, pipelines], screens: [settings, f.collection] });
     shell.start();
 
     expect(clips.root.classList.contains('folded')).toBe(true);
@@ -315,7 +315,7 @@ describe('application shell screen ownership', () => {
 
   it('settles rapid requests with matching commands, selector and focus', () => {
     const f = fixture();
-    const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings, f.extraction] });
+    const shell = new ApplicationShellControl({ ...f, screens: [f.collection, f.settings, f.extraction] });
     shell.start();
     shell.activate('Settings');
     shell.activate('Extraction');
@@ -330,7 +330,7 @@ describe('application shell screen ownership', () => {
 
   it('honors the selector and rejects an unknown screen without changing state', () => {
     const f = fixture();
-    const shell = new ApplicationShellController({ ...f, screens: [f.collection, f.settings] });
+    const shell = new ApplicationShellControl({ ...f, screens: [f.collection, f.settings] });
     shell.start();
     f.selector.value = 'Settings';
     f.selector.dispatchEvent(new Event('change'));
@@ -341,7 +341,7 @@ describe('application shell screen ownership', () => {
 
   it('rejects duplicate registration before moving caller-owned content', () => {
     const f = fixture();
-    expect(() => new ApplicationShellController({ ...f, screens: [f.collection, f.collection] })).toThrow('Duplicate app screen');
+    expect(() => new ApplicationShellControl({ ...f, screens: [f.collection, f.collection] })).toThrow('Duplicate app screen');
     expect(f.screenHost.childElementCount).toBe(0);
   });
 });

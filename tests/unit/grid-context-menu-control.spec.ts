@@ -47,8 +47,8 @@ describe('grid context menu control', () => {
   });
 
   test('delegates open with built items to the generic context menu controller', () => {
-    const contextMenuController = { open: vi.fn() };
-    const control = new GridContextMenuControl({ contextMenuController });
+    const contextMenu = { open: vi.fn() };
+    const control = new GridContextMenuControl({ contextMenu });
 
     control.open({
       point: { x: 12, y: 24 },
@@ -57,9 +57,9 @@ describe('grid context menu control', () => {
       targetCollections: [{ label: 'subset', value: 'subset.txt', collectionFilename: 'subset.txt' }],
     });
 
-    expect(contextMenuController.open).toHaveBeenCalledOnce();
-    expect(contextMenuController.open.mock.calls[0][0].point).toEqual({ x: 12, y: 24 });
-    expect(contextMenuController.open.mock.calls[0][0].items.map((item) => item.id)).toEqual([
+    expect(contextMenu.open).toHaveBeenCalledOnce();
+    expect(contextMenu.open.mock.calls[0][0].point).toEqual({ x: 12, y: 24 });
+    expect(contextMenu.open.mock.calls[0][0].items.map((item) => item.id)).toEqual([
       'add-to-subset.txt',
       'new-collection',
       'delete-from-disk',

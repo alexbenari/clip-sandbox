@@ -13,7 +13,7 @@ type DeleteRequestPreview = {
   affectedSavedCollectionCount: number;
 };
 
-export class DeleteFromDiskDialogController {
+export class DeleteFromDiskDialogControl {
   private readonly appText: Pick<AppText, 'deleteFromDiskConfirmationText' | 'deleteFromDiskPreviewOverflowText'>;
   private readonly preflightDialog: HTMLDialogElement | null;
   private readonly preflightTextEl: HTMLElement | null;
@@ -25,9 +25,9 @@ export class DeleteFromDiskDialogController {
 
   static fromDocument(doc: Document, { appText }: {
     appText: Pick<AppText, 'deleteFromDiskConfirmationText' | 'deleteFromDiskPreviewOverflowText'>;
-  }): DeleteFromDiskDialogController {
+  }): DeleteFromDiskDialogControl {
     const elements = new DocumentElements(doc);
-    return new DeleteFromDiskDialogController({
+    return new DeleteFromDiskDialogControl({
       appText,
       preflightDialog: elements.optional<HTMLDialogElement>('deletePreflightDialog'),
       preflightTextEl: elements.optional('deletePreflightText'),

@@ -5,19 +5,19 @@ import { EventSource } from '../../src/app/event-source.js';
 
 function createContext(overrides = {}) {
   return {
-    saveAsNewDialogController: {
+    saveAsNewDialog: {
       handleGlobalKeyDown: vi.fn(() => false),
       isOpen: vi.fn(() => false),
     },
-    addToCollectionDialogController: {
+    addToCollectionDialog: {
       isOpen: vi.fn(() => false),
       close: vi.fn(),
     },
-    deleteFromDiskDialogController: {
+    deleteFromDiskDialog: {
       handleGlobalKeyDown: vi.fn(() => false),
       isOpen: vi.fn(() => false),
     },
-    unsavedChangesDialogController: {
+    unsavedChangesDialog: {
       handleGlobalKeyDown: vi.fn(() => false),
       isOpen: vi.fn(() => false),
     },
@@ -28,7 +28,7 @@ function createContext(overrides = {}) {
       browseByOffset: vi.fn(),
       openClipById: vi.fn(),
     },
-    gridController: {
+    grid: {
       handleKeyDown: vi.fn(() => false),
       getSelectedClipId: vi.fn(() => null),
     },
@@ -43,7 +43,7 @@ function createContext(overrides = {}) {
 describe('app keydown handler', () => {
   test('handles Collection keys before full-screen keys, and none while a utility is open', () => {
     const context = createContext({
-      gridController: { handleKeyDown: vi.fn(() => false), getSelectedClipId: vi.fn(() => 'clip_7') },
+      grid: { handleKeyDown: vi.fn(() => false), getSelectedClipId: vi.fn(() => 'clip_7') },
     });
     const handler = new AppKeyDownHandler(context);
 
@@ -66,7 +66,7 @@ describe('app keydown handler', () => {
 
   test('honors handler precedence for dialog controllers before other shortcuts', () => {
     const context = createContext({
-      saveAsNewDialogController: {
+      saveAsNewDialog: {
         handleGlobalKeyDown: vi.fn(() => true),
         isOpen: vi.fn(() => true),
       },
@@ -81,11 +81,11 @@ describe('app keydown handler', () => {
 
   test('blocks non-dialog shortcuts while any dialog is open', () => {
     const context = createContext({
-      addToCollectionDialogController: {
+      addToCollectionDialog: {
         isOpen: vi.fn(() => true),
         close: vi.fn(),
       },
-      gridController: {
+      grid: {
         handleKeyDown: vi.fn(() => false),
         getSelectedClipId: vi.fn(() => 'clip_1'),
       },
@@ -101,7 +101,7 @@ describe('app keydown handler', () => {
   test('ignores grid shortcuts for editable targets', () => {
     const input = document.createElement('input');
     const context = createContext({
-      gridController: {
+      grid: {
         handleKeyDown: vi.fn(() => false),
         getSelectedClipId: vi.fn(() => 'clip_1'),
       },
@@ -137,7 +137,7 @@ describe('app keydown handler', () => {
 
   test('opens zoom for the current selection when the plain z shortcut applies', () => {
     const context = createContext({
-      gridController: {
+      grid: {
         handleKeyDown: vi.fn(() => false),
         getSelectedClipId: vi.fn(() => 'clip_7'),
       },

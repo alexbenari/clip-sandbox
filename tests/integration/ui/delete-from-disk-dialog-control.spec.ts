@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
-  DeleteFromDiskDialogController,
-} from '../../../src/ui/delete-from-disk-dialog-controller.js';
+  DeleteFromDiskDialogControl,
+} from '../../../src/ui/delete-from-disk-dialog-control.js';
 import { AppText } from '../../../src/app/app-text.js';
 
 const appText = new AppText();
@@ -60,7 +60,7 @@ describe('delete-from-disk dialog controller', () => {
     const onDiscard = vi.fn();
     const onCancel = vi.fn();
     const onConfirm = vi.fn();
-    const controller = new DeleteFromDiskDialogController(parts);
+    const controller = new DeleteFromDiskDialogControl(parts);
 
     controller.openPreflight({ text: 'Save first?', onSave, onDiscard, onCancel });
     expect(parts.preflightTextEl.textContent).toBe('Save first?');
@@ -85,7 +85,7 @@ describe('delete-from-disk dialog controller', () => {
   test('handles escape for whichever delete dialog is open', () => {
     const parts = setup();
     const onCancel = vi.fn();
-    const controller = new DeleteFromDiskDialogController(parts);
+    const controller = new DeleteFromDiskDialogControl(parts);
 
     controller.openPreflight({ text: 'Save first?', onCancel });
     expect(controller.handleGlobalKeyDown(new KeyboardEvent('keydown', { key: 'Escape' }))).toBe(true);
@@ -99,7 +99,7 @@ describe('delete-from-disk dialog controller', () => {
   test('builds confirmation copy from the delete request', () => {
     const parts = setup();
     const onConfirm = vi.fn();
-    const controller = new DeleteFromDiskDialogController(parts);
+    const controller = new DeleteFromDiskDialogControl(parts);
 
     controller.openConfirmForDeleteRequest({
       selectedClipNames: ['a.mp4', 'b.mp4', 'c.mp4', 'd.mp4', 'e.mp4', 'f.mp4'],

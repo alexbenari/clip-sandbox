@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { UnsavedChangesDialogController } from '../../../src/ui/unsaved-changes-dialog-controller.js';
+import { UnsavedChangesDialogControl } from '../../../src/ui/unsaved-changes-dialog-control.js';
 
 describe('unsaved changes dialog controller', () => {
   afterEach(() => {
@@ -37,7 +37,7 @@ describe('unsaved changes dialog controller', () => {
     const onSave = vi.fn();
     const onDiscard = vi.fn();
     const onCancel = vi.fn();
-    const controller = new UnsavedChangesDialogController({
+    const controller = new UnsavedChangesDialogControl({
       dialog,
       messageEl: message,
       confirmBtn,
@@ -69,7 +69,7 @@ describe('unsaved changes dialog controller', () => {
   test('handles escape through global keydown', () => {
     const { dialog, message, confirmBtn, discardBtn, cancelBtn } = setup();
     const onCancel = vi.fn();
-    const controller = new UnsavedChangesDialogController({
+    const controller = new UnsavedChangesDialogControl({
       dialog,
       messageEl: message,
       confirmBtn,

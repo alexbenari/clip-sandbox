@@ -17,7 +17,7 @@ export interface IAddToCollectionDialogEvents {
   cancelled: void;
 }
 
-export class AddToCollectionDialogController implements IEventSource<IAddToCollectionDialogEvents>, IEventSubscriberCount<IAddToCollectionDialogEvents> {
+export class AddToCollectionDialogControl implements IEventSource<IAddToCollectionDialogEvents>, IEventSubscriberCount<IAddToCollectionDialogEvents> {
   private readonly dialog: HTMLDialogElement | null;
   private readonly destinationSelect: HTMLSelectElement | null;
   private readonly newCollectionNameLabel: HTMLElement | null;
@@ -46,9 +46,9 @@ export class AddToCollectionDialogController implements IEventSource<IAddToColle
   static fromDocument(doc: Document, { newChoiceValue, validateNewName }: {
     newChoiceValue: string;
     validateNewName?: (name: string) => string;
-  }): AddToCollectionDialogController {
+  }): AddToCollectionDialogControl {
     const elements = new DocumentElements(doc);
-    return new AddToCollectionDialogController({
+    return new AddToCollectionDialogControl({
       dialog: elements.optional<HTMLDialogElement>('addToCollectionDialog'),
       destinationSelect: elements.optional<HTMLSelectElement>('addToCollectionSelect'),
       newCollectionNameLabel: elements.optional('addToCollectionNameLabel'),

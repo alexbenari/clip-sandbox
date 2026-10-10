@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from 'vitest';
-import { AddToCollectionDialogController } from '../../src/ui/add-to-collection-dialog-controller.js';
+import { AddToCollectionDialogControl } from '../../src/ui/add-to-collection-dialog-control.js';
 import { AppText } from '../../src/app/app-text.js';
 import { CollectionNameValidator } from '../../src/app/collection-name-validator.js';
 
@@ -20,7 +20,7 @@ describe('collection dialog view helpers', () => {
   });
 
   test('builds add-to-collection destination choices from the pipeline', () => {
-    expect(AddToCollectionDialogController.buildChoices({
+    expect(AddToCollectionDialogControl.buildChoices({
       pipeline,
       activeCollectionFilename: 'ignored.txt',
     })).toEqual([

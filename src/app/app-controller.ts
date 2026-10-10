@@ -31,10 +31,10 @@ import { GifRangeRefinementWorkflow } from './gif-range-refinement-workflow.js';
 import { FullScreenChangeWorkflow } from './full-screen-change-workflow.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
-import { AddToCollectionDialogController } from '../ui/add-to-collection-dialog-controller.js';
+import { AddToCollectionDialogControl } from '../ui/add-to-collection-dialog-control.js';
 import { CollectionSelectorControl } from '../ui/collection-selector-control.js';
 import { MainToolbarControl } from '../ui/main-toolbar-control.js';
-import { ApplicationShellController } from '../ui/application-shell-controller.js';
+import { ApplicationShellControl } from '../ui/application-shell-control.js';
 import { CollectionScreen } from '../ui/collection-screen.js';
 import { SettingsScreen } from '../ui/settings-screen.js';
 import { GifExtractionScreen } from '../ui/gif-extraction-screen.js';
@@ -54,15 +54,15 @@ import { ElectronAppSettingsService } from '../adapters/electron/electron-app-se
 import { ActivityIndicatorControl } from '../ui/activity-indicator-control.js';
 import { ActivityLogger } from './activity-logger.js';
 import { ActivityReporter } from './activity-reporter.js';
-import { ContextMenuController } from '../ui/context-menu-controller.js';
+import { ContextMenuControl } from '../ui/context-menu-control.js';
 import { GridContextMenuControl } from '../ui/grid-context-menu-control.js';
 import { ZoomEditMenuControl } from '../ui/zoom-edit-menu-control.js';
-import { ZoomOverlayController } from '../ui/zoom-overlay-controller.js';
-import { ClipCollectionGridController } from '../ui/clip-collection-grid-controller.js';
-import { CollectionConflictController } from '../ui/collection-conflict-controller.js';
-import { DeleteFromDiskDialogController } from '../ui/delete-from-disk-dialog-controller.js';
-import { SaveAsNewDialogController } from '../ui/save-as-new-dialog-controller.js';
-import { UnsavedChangesDialogController } from '../ui/unsaved-changes-dialog-controller.js';
+import { ZoomOverlayControl } from '../ui/zoom-overlay-control.js';
+import { ClipCollectionGridControl } from '../ui/clip-collection-grid-control.js';
+import { CollectionConflictControl } from '../ui/collection-conflict-control.js';
+import { DeleteFromDiskDialogControl } from '../ui/delete-from-disk-dialog-control.js';
+import { SaveAsNewDialogControl } from '../ui/save-as-new-dialog-control.js';
+import { UnsavedChangesDialogControl } from '../ui/unsaved-changes-dialog-control.js';
 import { LoadStatusControl } from '../ui/load-status-control.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
@@ -126,13 +126,13 @@ export class AppController {
       : null;
 
     // Controls.
-    const zoomOverlay = ZoomOverlayController.fromDocument(document, {
+    const zoomOverlay = ZoomOverlayControl.fromDocument(document, {
       audioDefault: () => settingsService.current.singleClipAudioDefault,
     });
     eventWiring.require('zoomOverlay', zoomOverlay, ['playbackFailed', 'contextMenuRequested']);
-    const clipContextMenuController = ContextMenuController.forClipMenu(document);
-    const gridContextMenuControl = new GridContextMenuControl({ contextMenuController: clipContextMenuController });
-    const zoomEditMenuControl = new ZoomEditMenuControl({ contextMenuController: clipContextMenuController, videoEditCatalog });
+    const clipContextMenu = ContextMenuControl.forClipMenu(document);
+    const gridContextMenuControl = new GridContextMenuControl({ contextMenu: clipContextMenu });
+    const zoomEditMenuControl = new ZoomEditMenuControl({ contextMenu: clipContextMenu, videoEditCatalog });
     const collectionSelectorControl = CollectionSelectorControl.fromDocument(document, { appText, defaultTitle: appText.defaultAppTitle });
     eventWiring.require('collectionSelector', collectionSelectorControl, ['selectionRequested']);
     const mainToolbarControl = MainToolbarControl.fromDocument(document, { appText });
@@ -140,23 +140,23 @@ export class AppController {
       'browseRequested', 'saveRequested', 'saveAsNewRequested', 'addToCollectionRequested',
       'deleteFromDiskRequested', 'toggleTitlesRequested', 'toggleFullscreenRequested',
     ]);
-    const addToCollectionDialogController = AddToCollectionDialogController.fromDocument(document, {
+    const addToCollectionDialog = AddToCollectionDialogControl.fromDocument(document, {
       newChoiceValue: NEW_COLLECTION_CHOICE_VALUE,
       validateNewName: name => newCollectionNameCheck.problemText(name),
     });
-    eventWiring.require('addToCollectionDialog', addToCollectionDialogController, ['confirmed']);
-    const collectionConflictController = CollectionConflictController.fromDocument(document, { appText });
-    const saveAsNewDialogController = SaveAsNewDialogController.fromDocument(document, {
+    eventWiring.require('addToCollectionDialog', addToCollectionDialog, ['confirmed']);
+    const collectionConflict = CollectionConflictControl.fromDocument(document, { appText });
+    const saveAsNewDialog = SaveAsNewDialogControl.fromDocument(document, {
       validateName: name => newCollectionNameCheck.problemText(name),
     });
-    eventWiring.require('saveAsNewDialog', saveAsNewDialogController, ['confirmed', 'cancelled']);
-    const unsavedChangesDialogController = UnsavedChangesDialogController.fromDocument(document);
-    const deleteFromDiskDialogController = DeleteFromDiskDialogController.fromDocument(document, { appText });
+    eventWiring.require('saveAsNewDialog', saveAsNewDialog, ['confirmed', 'cancelled']);
+    const unsavedChangesDialog = UnsavedChangesDialogControl.fromDocument(document);
+    const deleteFromDiskDialog = DeleteFromDiskDialogControl.fromDocument(document, { appText });
     const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
       fullScreen: fullscreenAdapter,
       zoom: zoomOverlay,
-      saveAsNewDialog: saveAsNewDialogController,
-      collectionConflict: collectionConflictController,
+      saveAsNewDialog,
+      collectionConflict,
       document,
     });
     // The Activity control and the utility coordinator each refer to the other, so these callbacks resolve `utilities` when called.
@@ -171,11 +171,11 @@ export class AppController {
       } : undefined,
     });
     const loadStatusControl = new LoadStatusControl({ appText, reporter: activityReporter });
-    const gridController = ClipCollectionGridController.fromDocument(document, { fullScreen: fullscreenAdapter });
-    gridController.on('metadataFailed', ({ clip, error }) => {
+    const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: fullscreenAdapter });
+    grid.on('metadataFailed', ({ clip, error }) => {
       void diagnostics.logVideoMetadataFailure({ filename: clip?.name || '', error });
     });
-    eventWiring.require('clipGrid', gridController, [
+    eventWiring.require('clipGrid', grid, [
       'cardCountChanged', 'selectionChanged', 'orderChanged', 'openClipRequested',
       'removeSelectedRequested', 'contextMenuRequested', 'metadataFailed',
     ]);
@@ -200,10 +200,10 @@ export class AppController {
     const keyboardMap = utilitiesAvailable
       ? KeyboardMapControl.fromDocument(document, { globalShortcuts: GLOBAL_UTILITY_SHORTCUTS, requestClose: () => utilities?.close() })
       : null;
-    const collectionScreen = CollectionScreen.fromDocument(document, { grid: gridController, toolbar: mainToolbarControl });
+    const collectionScreen = CollectionScreen.fromDocument(document, { grid, toolbar: mainToolbarControl });
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
-    const hasClipsPanel = ApplicationShellController.sidePanelsIn(document).some(panel => panel.id === 'clips');
+    const hasClipsPanel = ApplicationShellControl.sidePanelsIn(document).some(panel => panel.id === 'clips');
     const sessionReporting = {
       onProgress: activityReporter.progress,
       onSuccess: activityReporter.success,
@@ -267,7 +267,7 @@ export class AppController {
     eventWiring.require('collectionRefineScreen', collectionRefineScreen, ['backRequested']);
     const refineScreenLeavePolicy = new RefineScreenLeavePolicy(
       collectionRefineScreen.id, collectionRefinementSession, activityReporter.progress);
-    const shell = ApplicationShellController.fromDocument(document, {
+    const shell = ApplicationShellControl.fromDocument(document, {
       initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
       screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
       canLeaveScreen: current => refineScreenLeavePolicy.canLeave(current),
@@ -291,13 +291,13 @@ export class AppController {
     const collectionView = new CollectionViewWorkflow({
       pipelineSession,
       openFolder: state,
-      grid: gridController,
+      grid,
       toolbar: mainToolbarControl,
       selector: collectionSelectorControl,
       surfaces: {
-        collectionConflict: collectionConflictController,
-        contextMenu: clipContextMenuController,
-        addToCollectionDialog: addToCollectionDialogController,
+        collectionConflict,
+        contextMenu: clipContextMenu,
+        addToCollectionDialog,
         zoom: zoomOverlay,
       },
       reporter: activityReporter,
@@ -315,10 +315,10 @@ export class AppController {
     const collectionSave = new CollectionSaveWorkflow({
       pipelineSession,
       fileWriter: collectionFileWriter,
-      saveAsNewDialog: saveAsNewDialogController,
+      saveAsNewDialog,
       toolbar: mainToolbarControl,
       nameCheck: newCollectionNameCheck,
-      grid: gridController,
+      grid,
       collectionView,
       folderRefresh: openFolderRefreshSession,
       reporter: activityReporter,
@@ -326,9 +326,9 @@ export class AppController {
     });
     const addToCollection = new AddToCollectionWorkflow({
       pipelineSession,
-      grid: gridController,
-      dialog: addToCollectionDialogController,
-      destinationChoices: AddToCollectionDialogController,
+      grid,
+      dialog: addToCollectionDialog,
+      destinationChoices: AddToCollectionDialogControl,
       toolbar: mainToolbarControl,
       nameCheck: newCollectionNameCheck,
       fileWriter: collectionFileWriter,
@@ -343,10 +343,10 @@ export class AppController {
       pipelineFactory,
       collectionFileValidator: validator,
       diagnostics,
-      grid: gridController,
+      grid,
       collectionView,
-      missingClipsPrompt: collectionConflictController,
-      unsavedChangesPrompt: unsavedChangesDialogController,
+      missingClipsPrompt: collectionConflict,
+      unsavedChangesPrompt: unsavedChangesDialog,
       loadStatus: loadStatusControl,
       collectionSave,
       navigation: shell,
@@ -363,8 +363,8 @@ export class AppController {
       openFolder: state,
       files: fileSystem,
       fileWriter: collectionFileWriter,
-      dialog: deleteFromDiskDialogController,
-      grid: gridController,
+      dialog: deleteFromDiskDialog,
+      grid,
       toolbar: mainToolbarControl,
       zoom: zoomOverlay,
       collectionSave,
@@ -379,10 +379,10 @@ export class AppController {
       openFolder: state,
       folderFiles: fileSystem,
       zoom: zoomOverlay,
-      grid: gridController,
+      grid,
       screens: shell,
       collectionScreenId: collectionScreen.id,
-      contextMenu: clipContextMenuController,
+      contextMenu: clipContextMenu,
       editMenu: zoomEditMenuControl,
       clipEditor,
       fullScreen: fullscreenAdapter,
@@ -410,7 +410,7 @@ export class AppController {
       openFolder: state,
       folders: fileSystem,
       refinementAvailability: collectionRefinementService,
-      grid: gridController,
+      grid,
       menu: gridContextMenuControl,
       navigation: shell,
       collectionScreenId: collectionScreen.id,
@@ -430,7 +430,7 @@ export class AppController {
     });
     const fullscreenSession = new FullscreenSession({
       body,
-      grid: gridController,
+      grid,
       toolbar: mainToolbarControl,
       titles: collectionView,
       fullScreen: fullscreenAdapter,
@@ -449,12 +449,12 @@ export class AppController {
       collectionView,
     });
     const appKeyDownHandler = new AppKeyDownHandler({
-      saveAsNewDialogController,
-      addToCollectionDialogController,
-      deleteFromDiskDialogController,
-      unsavedChangesDialogController,
+      saveAsNewDialog,
+      addToCollectionDialog,
+      deleteFromDiskDialog,
+      unsavedChangesDialog,
       zoom,
-      gridController,
+      grid,
       fullScreen: fullscreenAdapter,
       keys: collectionScreen,
       utilities,
@@ -465,7 +465,7 @@ export class AppController {
 
     // Startup: show an empty Collection view, activate the first screen, then load settings.
     collectionView.clearLoadedView();
-    gridController.recomputeLayout();
+    grid.recomputeLayout();
     collectionView.setTitlesHidden(false);
     shell.start();
     const settingsReady = settingsScreen.load();
@@ -488,7 +488,7 @@ export class AppController {
         await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
       },
       destroyControls: () => {
-        gridController.dispose();
+        grid.dispose();
         gifExtractionScreen.destroy();
         refineGifScreen.destroy();
         collectionRefineScreen.destroy();

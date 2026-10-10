@@ -6,7 +6,7 @@ export interface ISaveAsNewDialogEvents {
   cancelled: void;
 }
 
-export class SaveAsNewDialogController implements IEventSource<ISaveAsNewDialogEvents>, IEventSubscriberCount<ISaveAsNewDialogEvents> {
+export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEvents>, IEventSubscriberCount<ISaveAsNewDialogEvents> {
   private readonly dialog: HTMLElement | null;
   private readonly titleEl: HTMLElement | null;
   private readonly textEl: HTMLElement | null;
@@ -18,10 +18,10 @@ export class SaveAsNewDialogController implements IEventSource<ISaveAsNewDialogE
   private readonly events = new EventSource<ISaveAsNewDialogEvents>();
   private externalError: string;
 
-  static fromDocument(doc: Document, { validateName }: { validateName?: (name: string) => string } = {}): SaveAsNewDialogController {
+  static fromDocument(doc: Document, { validateName }: { validateName?: (name: string) => string } = {}): SaveAsNewDialogControl {
     const elements = new DocumentElements(doc);
     const dialog = elements.required('saveAsNewDialog');
-    return new SaveAsNewDialogController({
+    return new SaveAsNewDialogControl({
       dialog,
       titleEl: dialog.querySelector<HTMLElement>('h2'),
       textEl: dialog.querySelector<HTMLElement>('p'),

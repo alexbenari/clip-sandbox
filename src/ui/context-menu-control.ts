@@ -1,6 +1,6 @@
 import { DocumentElements } from './document-elements.js';
 
-const CONTEXT_MENU_STYLE_ID = 'contextMenuControllerStyles';
+const CONTEXT_MENU_STYLE_ID = 'contextMenuControlStyles';
 const DEFAULT_CONTEXT_MENU_CSS = `
 .context-menu-root{
   position:fixed;
@@ -77,13 +77,13 @@ export type ContextMenuPoint = {
   y?: number;
 };
 
-type ContextMenuControllerOptions = {
+type ContextMenuControlOptions = {
   root?: HTMLElement | null;
   panel?: HTMLElement | null;
   document?: Document;
 };
 
-export class ContextMenuController {
+export class ContextMenuControl {
   private readonly root: HTMLElement | null;
   private readonly panel: HTMLElement | null;
   private readonly doc: Document;
@@ -92,9 +92,9 @@ export class ContextMenuController {
   private readonly onDocumentPointerDown: (event: MouseEvent) => void;
   private readonly onDocumentKeyDown: (event: KeyboardEvent) => void;
 
-  static forClipMenu(doc: Document): ContextMenuController {
+  static forClipMenu(doc: Document): ContextMenuControl {
     const elements = new DocumentElements(doc);
-    return new ContextMenuController({
+    return new ContextMenuControl({
       root: elements.required('clipContextMenu'),
       panel: elements.required('clipContextMenuPanel'),
       document: doc,
@@ -105,7 +105,7 @@ export class ContextMenuController {
     root,
     panel,
     document: doc = root?.ownerDocument || document,
-  }: ContextMenuControllerOptions = {}) {
+  }: ContextMenuControlOptions = {}) {
     this.root = root || null;
     this.panel = panel || null;
     this.doc = doc;

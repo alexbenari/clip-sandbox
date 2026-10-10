@@ -33,7 +33,7 @@ type ZoomItem = {
   name: string;
 };
 
-export class ZoomOverlayController implements IEventSource<IZoomOverlayEvents>, IEventSubscriberCount<IZoomOverlayEvents> {
+export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents>, IEventSubscriberCount<IZoomOverlayEvents> {
   private readonly mountEl: HTMLElement | null;
   private readonly doc: Document;
   private readonly events = new EventSource<IZoomOverlayEvents>();
@@ -46,8 +46,8 @@ export class ZoomOverlayController implements IEventSource<IZoomOverlayEvents>, 
   private playbackAttempt = 0;
   private playbackFailureReported = false;
 
-  static fromDocument(doc: Document, { audioDefault }: { audioDefault: () => boolean }): ZoomOverlayController {
-    return new ZoomOverlayController({ mountEl: new DocumentElements(doc).required('zoomLayerRoot'), document: doc, audioDefault });
+  static fromDocument(doc: Document, { audioDefault }: { audioDefault: () => boolean }): ZoomOverlayControl {
+    return new ZoomOverlayControl({ mountEl: new DocumentElements(doc).required('zoomLayerRoot'), document: doc, audioDefault });
   }
 
   constructor({ mountEl, document: doc = document, audioDefault = () => false }: {

@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
-import { ZoomOverlayController } from '../../../src/ui/zoom-overlay-controller.js';
+import { ZoomOverlayControl } from '../../../src/ui/zoom-overlay-control.js';
 
-const createZoomOverlayController = options => new ZoomOverlayController(options);
+const createZoomOverlayControl = options => new ZoomOverlayControl(options);
 
 describe('zoom overlay controller', () => {
   let originalPlay;
@@ -30,7 +30,7 @@ describe('zoom overlay controller', () => {
     const failure = new DOMException('Unsupported media', 'NotSupportedError');
     HTMLMediaElement.prototype.play = vi.fn(() => Promise.reject(failure));
     const onPlaybackFailure = vi.fn();
-    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot') });
+    const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot') });
     controller.on('playbackFailed', onPlaybackFailure);
     controller.open({ clipId: 'clip_1', src: 'file:///damaged.mp4', name: 'damaged.mp4' });
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -47,7 +47,7 @@ describe('zoom overlay controller', () => {
     const rejectors = [];
     HTMLMediaElement.prototype.play = vi.fn(() => new Promise((resolve, reject) => rejectors.push(reject)));
     const onPlaybackFailure = vi.fn();
-    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot') });
+    const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot') });
     controller.on('playbackFailed', onPlaybackFailure);
     controller.open({ clipId: 'a', src: 'file:///a.mp4', name: 'a.mp4' });
     const oldVideo = document.getElementById('zoomVideo');
@@ -71,7 +71,7 @@ describe('zoom overlay controller', () => {
     let rejectPlay;
     HTMLMediaElement.prototype.play = vi.fn(() => new Promise((resolve, reject) => { rejectPlay = reject; }));
     const onPlaybackFailure = vi.fn();
-    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot') });
+    const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot') });
     controller.on('playbackFailed', onPlaybackFailure);
     controller.open({ clipId: 'a', src: 'file:///a.mp4', name: 'a.mp4' });
     document.getElementById('zoomVideo').dispatchEvent(new Event('playing'));
@@ -83,7 +83,7 @@ describe('zoom overlay controller', () => {
 
   test('reports decode failure after playback starts and permits a report after reopening', () => {
     const onPlaybackFailure = vi.fn();
-    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot') });
+    const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot') });
     controller.on('playbackFailed', onPlaybackFailure);
     const clip = { clipId: 'a', src: 'file:///a.mp4', name: 'a.mp4' };
     controller.open(clip);
@@ -101,7 +101,7 @@ describe('zoom overlay controller', () => {
   });
 
   test('installs default styles when the overlay is first opened', () => {
-    const controller = createZoomOverlayController({
+    const controller = createZoomOverlayControl({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });
@@ -117,14 +117,14 @@ describe('zoom overlay controller', () => {
   });
 
   test('installs default styles only once per document', () => {
-    const first = createZoomOverlayController({
+    const first = createZoomOverlayControl({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });
     const secondMount = document.createElement('div');
     secondMount.id = 'zoomLayerRootSecond';
     document.body.appendChild(secondMount);
-    const second = createZoomOverlayController({
+    const second = createZoomOverlayControl({
       mountEl: secondMount,
       document,
     });
@@ -136,7 +136,7 @@ describe('zoom overlay controller', () => {
   });
 
   test('opens a zoom overlay with audio muted by default', () => {
-    const controller = createZoomOverlayController({
+    const controller = createZoomOverlayControl({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });
@@ -159,7 +159,7 @@ describe('zoom overlay controller', () => {
 
   test('uses the current preference only when opening a new video', () => {
     let audioDefault = true;
-    const controller = createZoomOverlayController({ mountEl: document.getElementById('zoomLayerRoot'), document, audioDefault: () => audioDefault });
+    const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot'), document, audioDefault: () => audioDefault });
     controller.open({ src: 'blob:first', name: 'first.mp4' });
     const first = document.getElementById('zoomVideo');
     expect(first.muted).toBe(false);
@@ -176,7 +176,7 @@ describe('zoom overlay controller', () => {
   });
 
   test('toggles zoom audio for the current session only', () => {
-    const controller = createZoomOverlayController({
+    const controller = createZoomOverlayControl({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });
@@ -196,7 +196,7 @@ describe('zoom overlay controller', () => {
   });
 
   test('replaces the current zoomed clip when reopened', () => {
-    const controller = createZoomOverlayController({
+    const controller = createZoomOverlayControl({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });
@@ -214,7 +214,7 @@ describe('zoom overlay controller', () => {
   });
 
   test('closes on outside click but not on frame click', () => {
-    const controller = createZoomOverlayController({
+    const controller = createZoomOverlayControl({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });
@@ -231,7 +231,7 @@ describe('zoom overlay controller', () => {
 
   test('forwards right-clicks on the zoomed video through the context-menu seam', () => {
     const onContextMenu = vi.fn();
-    const controller = createZoomOverlayController({
+    const controller = createZoomOverlayControl({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });

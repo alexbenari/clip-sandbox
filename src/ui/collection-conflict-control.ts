@@ -12,7 +12,7 @@ type CollectionConflict = {
   missingNames?: string[];
 };
 
-export class CollectionConflictController {
+export class CollectionConflictControl {
   private readonly appText: Pick<AppText, 'collectionConflictSummaryText' | 'collectionConflictListText'>;
   private readonly root: HTMLElement | null;
   private readonly summaryEl: HTMLElement | null;
@@ -21,9 +21,9 @@ export class CollectionConflictController {
 
   static fromDocument(doc: Document, { appText }: {
     appText: Pick<AppText, 'collectionConflictSummaryText' | 'collectionConflictListText'>;
-  }): CollectionConflictController {
+  }): CollectionConflictControl {
     const elements = new DocumentElements(doc);
-    return new CollectionConflictController({
+    return new CollectionConflictControl({
       appText,
       root: elements.required('collectionConflict'),
       summaryEl: elements.required('collectionConflictSummary'),

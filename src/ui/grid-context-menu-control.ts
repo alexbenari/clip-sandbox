@@ -1,4 +1,4 @@
-import type { ContextMenuController, ContextMenuItem, ContextMenuPoint } from './context-menu-controller.js';
+import type { ContextMenuControl, ContextMenuItem, ContextMenuPoint } from './context-menu-control.js';
 
 type TargetCollectionChoice = {
   value: string;
@@ -7,7 +7,7 @@ type TargetCollectionChoice = {
 };
 
 type GridContextMenuOptions = {
-  contextMenuController?: Pick<ContextMenuController, 'open' | 'close'> | null;
+  contextMenu?: Pick<ContextMenuControl, 'open' | 'close'> | null;
 };
 
 type GridContextMenuRequest = {
@@ -24,12 +24,12 @@ type GridContextMenuRequest = {
 };
 
 export class GridContextMenuControl {
-  contextMenuController: Pick<ContextMenuController, 'open' | 'close'> | null;
+  contextMenu: Pick<ContextMenuControl, 'open' | 'close'> | null;
 
   constructor({
-    contextMenuController,
+    contextMenu,
   }: GridContextMenuOptions = {}) {
-    this.contextMenuController = contextMenuController || null;
+    this.contextMenu = contextMenu || null;
   }
 
   buildItems({
@@ -92,7 +92,7 @@ export class GridContextMenuControl {
     canRefine = false,
     onRefine = () => {},
   }: GridContextMenuRequest = {}): void {
-    this.contextMenuController?.open({
+    this.contextMenu?.open({
       point,
       items: this.buildItems({
         hasSelection,
@@ -109,6 +109,6 @@ export class GridContextMenuControl {
   }
 
   close(options?: { restoreFocus?: boolean }): void {
-    this.contextMenuController?.close(options);
+    this.contextMenu?.close(options);
   }
 }

@@ -104,14 +104,14 @@
     <div id="sandboxContextMenuPanel"></div>
   </div>
   <script type="module">
-    import { createContextMenuController } from '../build/src/ui/context-menu-controller.js';
+    import { createContextMenuControl } from '../build/src/ui/context-menu-control.js';
 
     const root = document.getElementById('sandboxContextMenu');
     const panel = document.getElementById('sandboxContextMenuPanel');
     const openBtn = document.getElementById('openBtn');
     const demoSurface = document.getElementById('demoSurface');
     const resultLog = document.getElementById('resultLog');
-    const controller = createContextMenuController({ root, panel, document });
+    const controller = createContextMenuControl({ root, panel, document });
 
     function writeLog(text) {
       resultLog.textContent = text;

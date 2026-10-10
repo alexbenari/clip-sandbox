@@ -6,14 +6,14 @@ type DialogHandlers = {
   onCancel?: (() => void) | null;
 };
 
-export class UnsavedChangesDialogController {
+export class UnsavedChangesDialogControl {
   private readonly dialog: HTMLDialogElement | null;
   private readonly messageEl: HTMLElement | null;
   private handlers: DialogHandlers;
 
-  static fromDocument(doc: Document): UnsavedChangesDialogController {
+  static fromDocument(doc: Document): UnsavedChangesDialogControl {
     const elements = new DocumentElements(doc);
-    return new UnsavedChangesDialogController({
+    return new UnsavedChangesDialogControl({
       dialog: elements.required<HTMLDialogElement>('unsavedChangesDialog'),
       messageEl: elements.required('unsavedChangesText'),
       confirmBtn: elements.required<HTMLButtonElement>('confirmUnsavedChangesBtn'),

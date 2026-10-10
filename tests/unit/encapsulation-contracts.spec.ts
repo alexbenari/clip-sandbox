@@ -1,13 +1,13 @@
 import { expect, test } from 'vitest';
-import type { ClipCollectionGridController } from '../../src/ui/clip-collection-grid-controller.js';
+import type { ClipCollectionGridControl } from '../../src/ui/clip-collection-grid-control.js';
 import type { FullscreenSession } from '../../src/app/fullscreen-session.js';
-import type { ContextMenuController } from '../../src/ui/context-menu-controller.js';
+import type { ContextMenuControl } from '../../src/ui/context-menu-control.js';
 import type { GridVideoMetadataTracker } from '../../src/ui/grid-video-metadata-tracker.js';
-import type { ZoomOverlayController } from '../../src/ui/zoom-overlay-controller.js';
+import type { ZoomOverlayControl } from '../../src/ui/zoom-overlay-control.js';
 import type { Clip } from '../../src/domain/clip.js';
 
-function rejectedConsumerAccess(grid: ClipCollectionGridController, fullscreen: FullscreenSession,
-  menu: ContextMenuController, tracker: GridVideoMetadataTracker, zoom: ZoomOverlayController, clip: Clip): void {
+function rejectedConsumerAccess(grid: ClipCollectionGridControl, fullscreen: FullscreenSession,
+  menu: ContextMenuControl, tracker: GridVideoMetadataTracker, zoom: ZoomOverlayControl, clip: Clip): void {
   // @ts-expect-error Selection mutations belong to the grid owner.
   grid.selectedClipIds.clear();
   // @ts-expect-error Cached views cannot escape to consumers.

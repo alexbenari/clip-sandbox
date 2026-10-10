@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
-  CollectionConflictController,
-} from '../../../src/ui/collection-conflict-controller.js';
+  CollectionConflictControl,
+} from '../../../src/ui/collection-conflict-control.js';
 import { AppText } from '../../../src/app/app-text.js';
 
 const appText = new AppText();
@@ -24,7 +24,7 @@ describe('collection conflict controller', () => {
 
     const onApply = vi.fn();
     const onCancel = vi.fn();
-    const controller = new CollectionConflictController({
+    const controller = new CollectionConflictControl({
       appText,
       root: document.getElementById('root'),
       summaryEl: document.getElementById('summary'),
@@ -68,7 +68,7 @@ describe('collection conflict controller', () => {
       </section>
     `;
 
-    const controller = new CollectionConflictController({
+    const controller = new CollectionConflictControl({
       appText,
       root: document.getElementById('root'),
       summaryEl: document.getElementById('summary'),

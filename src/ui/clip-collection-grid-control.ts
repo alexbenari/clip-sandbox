@@ -86,7 +86,7 @@ type GridViewCacheEntry = {
   signature: string;
 };
 
-type ClipCollectionGridControllerOptions = {
+type ClipCollectionGridControlOptions = {
   grid?: HTMLElement | null;
   gridRoot?: HTMLElement | null;
   getAvailableHeight?: () => number;
@@ -99,7 +99,7 @@ type ClipCollectionGridControllerOptions = {
   metadataRelayoutDebounceMs?: number;
 };
 
-export class ClipCollectionGridController implements IEventSource<IClipGridEvents>, IEventSubscriberCount<IClipGridEvents> {
+export class ClipCollectionGridControl implements IEventSource<IClipGridEvents>, IEventSubscriberCount<IClipGridEvents> {
   private asClipCard(element: Element | null | undefined): ClipCard | null {
   return element instanceof HTMLElement ? element as ClipCard : null;
 }
@@ -295,7 +295,7 @@ export class ClipCollectionGridController implements IEventSource<IClipGridEvent
   private readonly previewPlayback = new GridPreviewPlaybackController();
   private workspaceBounds: { width: number; height: number } | null = null;
 
-  constructor(options: ClipCollectionGridControllerOptions = {}) {
+  constructor(options: ClipCollectionGridControlOptions = {}) {
     if (!options.grid) throw new Error('A grid element is required.');
     this.grid = options.grid;
     this.gridRoot = options.gridRoot ?? this.grid?.parentElement ?? null;
@@ -360,9 +360,9 @@ export class ClipCollectionGridController implements IEventSource<IClipGridEvent
     }
   }
 
-  static fromDocument(doc: Document, { fullScreen }: { fullScreen: { isDocumentFullScreen(): boolean } }): ClipCollectionGridController {
+  static fromDocument(doc: Document, { fullScreen }: { fullScreen: { isDocumentFullScreen(): boolean } }): ClipCollectionGridControl {
     const elements = new DocumentElements(doc);
-    return new ClipCollectionGridController({
+    return new ClipCollectionGridControl({
       grid: elements.required('grid'),
       gridRoot: elements.required('gridWrap'),
       coordinateWorkspaceLayout: true,

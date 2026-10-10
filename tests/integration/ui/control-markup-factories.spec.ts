@@ -4,24 +4,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ActivityLogger } from '../../../src/app/activity-logger.js';
 import { AppText } from '../../../src/app/app-text.js';
-import { ClipCollectionGridController } from '../../../src/ui/clip-collection-grid-controller.js';
+import { ClipCollectionGridControl } from '../../../src/ui/clip-collection-grid-control.js';
 import { CollectionScreen } from '../../../src/ui/collection-screen.js';
 import { CollectionSelectorControl } from '../../../src/ui/collection-selector-control.js';
 import { GifRangesPanelControl } from '../../../src/ui/gif-ranges-panel-control.js';
 import { GlobalUtilityCoordinator } from '../../../src/ui/global-utility-coordinator.js';
 import { PipelineCatalogControl } from '../../../src/ui/pipeline-catalog-control.js';
-import { ZoomOverlayController } from '../../../src/ui/zoom-overlay-controller.js';
+import { ZoomOverlayControl } from '../../../src/ui/zoom-overlay-control.js';
 import { ActivityIndicatorControl } from '../../../src/ui/activity-indicator-control.js';
 import type { IAppScreen } from '../../../src/ui/app-screen.js';
-import { ApplicationShellController } from '../../../src/ui/application-shell-controller.js';
+import { ApplicationShellControl } from '../../../src/ui/application-shell-control.js';
 import { KeyboardMapControl } from '../../../src/ui/keyboard-map-control.js';
-import { AddToCollectionDialogController } from '../../../src/ui/add-to-collection-dialog-controller.js';
-import { CollectionConflictController } from '../../../src/ui/collection-conflict-controller.js';
-import { ContextMenuController } from '../../../src/ui/context-menu-controller.js';
-import { DeleteFromDiskDialogController } from '../../../src/ui/delete-from-disk-dialog-controller.js';
+import { AddToCollectionDialogControl } from '../../../src/ui/add-to-collection-dialog-control.js';
+import { CollectionConflictControl } from '../../../src/ui/collection-conflict-control.js';
+import { ContextMenuControl } from '../../../src/ui/context-menu-control.js';
+import { DeleteFromDiskDialogControl } from '../../../src/ui/delete-from-disk-dialog-control.js';
 import { MainToolbarControl } from '../../../src/ui/main-toolbar-control.js';
-import { SaveAsNewDialogController } from '../../../src/ui/save-as-new-dialog-controller.js';
-import { UnsavedChangesDialogController } from '../../../src/ui/unsaved-changes-dialog-controller.js';
+import { SaveAsNewDialogControl } from '../../../src/ui/save-as-new-dialog-control.js';
+import { UnsavedChangesDialogControl } from '../../../src/ui/unsaved-changes-dialog-control.js';
 
 // Each control finds its own parts; these tests run the factories against the shipped page markup.
 const indexHtml = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
@@ -33,7 +33,7 @@ describe('controls built from the page markup', () => {
   beforeEach(() => { document.body.innerHTML = pageBody; });
 
   it('Save as Collection reports the entered name', () => {
-    const dialog = SaveAsNewDialogController.fromDocument(document, { validateName: () => '' });
+    const dialog = SaveAsNewDialogControl.fromDocument(document, { validateName: () => '' });
     const confirmed = vi.fn();
     dialog.on('confirmed', confirmed);
 
@@ -47,7 +47,7 @@ describe('controls built from the page markup', () => {
   });
 
   it('Add to Collection reports the chosen collection', () => {
-    const dialog = AddToCollectionDialogController.fromDocument(document, { newChoiceValue: '__new__' });
+    const dialog = AddToCollectionDialogControl.fromDocument(document, { newChoiceValue: '__new__' });
     const confirmed = vi.fn();
     dialog.on('confirmed', confirmed);
 
@@ -59,7 +59,7 @@ describe('controls built from the page markup', () => {
 
   it('the unsaved-changes prompt shows its message and answers Save', () => {
     const onSave = vi.fn();
-    UnsavedChangesDialogController.fromDocument(document).open({ message: 'Save first?', onSave });
+    UnsavedChangesDialogControl.fromDocument(document).open({ message: 'Save first?', onSave });
 
     expect(text('unsavedChangesText')).toBe('Save first?');
     click('confirmUnsavedChangesBtn');
@@ -67,7 +67,7 @@ describe('controls built from the page markup', () => {
   });
 
   it('the delete dialogs show their text and answer Save and Delete', () => {
-    const dialogs = DeleteFromDiskDialogController.fromDocument(document, { appText: new AppText() });
+    const dialogs = DeleteFromDiskDialogControl.fromDocument(document, { appText: new AppText() });
     const onSave = vi.fn();
     const onConfirm = vi.fn();
 
@@ -85,7 +85,7 @@ describe('controls built from the page markup', () => {
 
   it('the collection conflict shows its summary and answers Apply', () => {
     const onApply = vi.fn();
-    const conflict = CollectionConflictController.fromDocument(document, { appText: new AppText() });
+    const conflict = CollectionConflictControl.fromDocument(document, { appText: new AppText() });
 
     conflict.show({ summary: '1 clip is missing.', list: 'alpha.mp4', onApply });
     expect(conflict.isVisible()).toBe(true);
@@ -97,7 +97,7 @@ describe('controls built from the page markup', () => {
 
   it('the clip context menu renders its items in the clip menu', () => {
     const onSelect = vi.fn();
-    const menu = ContextMenuController.forClipMenu(document);
+    const menu = ContextMenuControl.forClipMenu(document);
 
     menu.renderItems([{ id: 'refine', label: 'Refine', onSelect }]);
     menu.setOpen(true);
@@ -141,7 +141,7 @@ describe('controls built from the page markup', () => {
       panelContributions: [], focusInitial: vi.fn(),
     });
     const screens: [IAppScreen, IAppScreen] = [screen('collection'), screen('settings')];
-    const shell = ApplicationShellController.fromDocument(document, { screens });
+    const shell = ApplicationShellControl.fromDocument(document, { screens });
     const settingsRequested = vi.fn();
     shell.on('settingsRequested', settingsRequested);
 
@@ -166,7 +166,7 @@ describe('controls built from the page markup', () => {
   });
 
   it('the clip grid takes over the page grid and owns its layout rules', () => {
-    const grid = ClipCollectionGridController.fromDocument(document, { fullScreen: { isDocumentFullScreen: () => false } });
+    const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: { isDocumentFullScreen: () => false } });
 
     expect(document.getElementById('gridWrap')!.classList.contains('clip-collection-grid-root')).toBe(true);
     expect(document.getElementById('grid')!.classList.contains('clip-collection-grid')).toBe(true);
@@ -189,9 +189,9 @@ describe('controls built from the page markup', () => {
     (document.getElementById('saveAsNewDialog') as HTMLElement).hidden = false;
     document.getElementById('unsavedChangesDialog')!.setAttribute('open', '');
 
-    const conflict = CollectionConflictController.fromDocument(document, { appText: new AppText() });
-    const saveAsNew = SaveAsNewDialogController.fromDocument(document);
-    const unsavedChanges = UnsavedChangesDialogController.fromDocument(document);
+    const conflict = CollectionConflictControl.fromDocument(document, { appText: new AppText() });
+    const saveAsNew = SaveAsNewDialogControl.fromDocument(document);
+    const unsavedChanges = UnsavedChangesDialogControl.fromDocument(document);
 
     expect(conflict.isVisible()).toBe(false);
     expect(saveAsNew.isOpen()).toBe(false);
@@ -219,7 +219,7 @@ describe('controls built from the page markup', () => {
       vi.spyOn(HTMLMediaElement.prototype, 'pause').mockReturnValue(undefined),
       vi.spyOn(HTMLMediaElement.prototype, 'load').mockReturnValue(undefined),
     ];
-    const zoom = ZoomOverlayController.fromDocument(document, { audioDefault: () => false });
+    const zoom = ZoomOverlayControl.fromDocument(document, { audioDefault: () => false });
 
     zoom.open({ clipId: 'clip_1', src: 'file:///C:/clips/alpha.mp4', name: 'alpha.mp4' });
 
@@ -262,6 +262,6 @@ describe('controls built from the page markup', () => {
   it('reports a required part that is missing from the page', () => {
     document.body.innerHTML = '';
 
-    expect(() => UnsavedChangesDialogController.fromDocument(document)).toThrow('Required element #unsavedChangesDialog was not found.');
+    expect(() => UnsavedChangesDialogControl.fromDocument(document)).toThrow('Required element #unsavedChangesDialog was not found.');
   });
 });

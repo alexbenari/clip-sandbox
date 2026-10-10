@@ -1,6 +1,6 @@
 import { Clip } from '../../src/domain/clip.ts';
 import { ClipSequence } from '../../src/domain/clip-sequence.ts';
-import { ClipCollectionGridController } from '../../src/ui/clip-collection-grid-controller.ts';
+import { ClipCollectionGridControl } from '../../src/ui/clip-collection-grid-control.ts';
 import { computeBestGrid } from '../../src/ui/display-layout-rules.ts';
 
 const root = document.createElement('div');
@@ -24,7 +24,7 @@ function layout(width = root.clientWidth - 28, duration = 0) {
     Object.assign(card.style, { left: `${index % cols * (cellW + 10)}px`, top: `${Math.floor(index / cols) * (cellH + 10)}px`, width: `${cellW}px`, height: `${cellH}px` });
   });
 }
-const controller = new ClipCollectionGridController({ grid, gridRoot: root, toolbar: document.querySelector('.app-bar'), computeBestGrid, applyGridLayout: () => { if (performance.now() >= movingUntil) layout(); } });
+const controller = new ClipCollectionGridControl({ grid, gridRoot: root, toolbar: document.querySelector('.app-bar'), computeBestGrid, applyGridLayout: () => { if (performance.now() >= movingUntil) layout(); } });
 controller.renderCollection(new ClipSequence({ name: 'Shell motion fixture', clips }));
 const onPanel = event => {
   const duration = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : event.detail.duration;
