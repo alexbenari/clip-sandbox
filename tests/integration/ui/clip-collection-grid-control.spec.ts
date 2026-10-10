@@ -118,7 +118,7 @@ describe('clip collection grid controller', () => {
     expect(cards.every(card => card.style.display === '' && card.style.order === '')).toBe(true);
     expect(cards.every(card => card.querySelector('video').loop)).toBe(true);
     random.mockRestore();
-    controller.destroy();
+    controller.dispose();
   });
 
   test('view replacement, restart and disposal cancel pending fullscreen rotation', () => {
@@ -146,7 +146,7 @@ describe('clip collection grid controller', () => {
     expect(active.children[1].style.display).toBe('none');
     controller.rotateVisibleClip();
     const finalVideo = active.children[0].querySelector('video');
-    controller.destroy();
+    controller.dispose();
     finalVideo.dispatchEvent(new Event('ended'));
     expect(active.children).toHaveLength(0);
     expect(finalVideo.loop).toBe(true);
@@ -338,7 +338,7 @@ describe('clip collection grid controller', () => {
       'clip_2',
       'clip_3',
     ]);
-    controller.destroy();
+    controller.dispose();
   });
 
   test('invalidates cached card videos when a view sequence changes', () => {
@@ -443,7 +443,7 @@ describe('clip collection grid controller', () => {
       expect(computeBestGrid).not.toHaveBeenCalled();
 
       controller.endWorkspaceResize();
-      controller.destroy();
+      controller.clear();
       controller.renderCollection(makeCollection());
       computeBestGrid.mockClear();
       observer.callback();
@@ -642,7 +642,7 @@ describe('clip collection grid controller', () => {
     controller.renderCollection(makeCollection());
     expect(URL.revokeObjectURL).toHaveBeenCalled();
     controller.setTitlesHidden(true);
-    controller.destroy();
+    controller.dispose();
     expect(document.getElementById('grid').children).toHaveLength(0);
     expect(document.getElementById('gridWrap').classList.contains('titles-hidden')).toBe(false);
   });
@@ -770,7 +770,7 @@ test('focuses selected cards through the grid API without relying on selection C
   card.classList.remove('selected');
   expect(controller.focusSelectedClip()).toBe(true);
   expect(document.activeElement).toBe(card);
-  controller.destroy(); root.remove();
+  controller.dispose(); root.remove();
 });
 
 test('measures allocated grid height using its own current padding', () => {
@@ -791,5 +791,5 @@ test('measures allocated grid height using its own current padding', () => {
   root.style.paddingBottom = '30px';
   controller.beginWorkspaceResize(800, 0);
   expect(computeBestGrid).toHaveBeenLastCalledWith(expect.objectContaining({ availH: 440 }));
-  controller.destroy(); root.remove();
+  controller.dispose(); root.remove();
 });

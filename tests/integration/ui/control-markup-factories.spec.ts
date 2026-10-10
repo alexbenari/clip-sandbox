@@ -171,7 +171,7 @@ describe('controls built from the page markup', () => {
     expect(document.getElementById('gridWrap')!.classList.contains('clip-collection-grid-root')).toBe(true);
     expect(document.getElementById('grid')!.classList.contains('clip-collection-grid')).toBe(true);
     expect(grid.normalizeFullscreenSlots(1)).toBe(2);
-    grid.destroy();
+    grid.dispose();
   });
 
   it('the Collection screen finds its root and command bar', () => {

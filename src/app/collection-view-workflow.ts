@@ -21,7 +21,7 @@ export interface ICollectionGridView extends IEventSource<ICollectionGridEvents>
   getSelectedClipIds(): string[];
   areTitlesHidden(): boolean;
   setTitlesHidden(hidden: boolean): void;
-  destroy(): void;
+  clear(): void;
 }
 
 export interface ICollectionToolbarView extends IEventSource<{ toggleTitlesRequested: void }> {
@@ -128,7 +128,7 @@ export class CollectionViewWorkflow {
   }
 
   clearLoadedView(): void {
-    this.view.grid.destroy();
+    this.view.grid.clear();
     this.view.pipelineSession.reset();
     this.view.openFolder.setCurrentFolderSession(null);
     this.refreshSelector();

@@ -39,4 +39,4 @@ window.addEventListener('shell-panel-request', onPanel);
 window.addEventListener('shell-screen-change', () => { if (performance.now() >= movingUntil) layout(); });
 const resize = new ResizeObserver(() => { if (performance.now() >= movingUntil) layout(); });
 resize.observe(root);
-window.addEventListener('pagehide', () => { clearTimeout(settleTimer); resize.disconnect(); controller.destroy(); window.removeEventListener('shell-panel-request', onPanel); }, { once: true });
+window.addEventListener('pagehide', () => { clearTimeout(settleTimer); resize.disconnect(); controller.dispose(); window.removeEventListener('shell-panel-request', onPanel); }, { once: true });

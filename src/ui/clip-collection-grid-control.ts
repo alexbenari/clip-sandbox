@@ -322,7 +322,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents>,
     });
 
     this.renderCollection = this.renderCollection.bind(this);
-    this.destroy = this.destroy.bind(this);
+    this.clear = this.clear.bind(this);
     this.clearSelection = this.clearSelection.bind(this);
     this.getSelectedClipId = this.getSelectedClipId.bind(this);
     this.getSelectedClipIds = this.getSelectedClipIds.bind(this);
@@ -1016,14 +1016,13 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents>,
     return this.getCardByClipId(clipId)?.dataset.objectUrl || '';
   }
 
-  // destroy() only clears the loaded view and is also used for that while the app runs; dispose() ends the grid.
   dispose(): void {
     this.rootResizeObserver?.disconnect();
     this.rootResizeObserver = null;
-    this.destroy();
+    this.clear();
   }
 
-  destroy(): void {
+  clear(): void {
     this.fsRestore();
     this.previewPlayback.cancel(this.grid);
     this.clearGridCards(this.grid);

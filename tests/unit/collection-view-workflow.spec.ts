@@ -13,7 +13,7 @@ class FakeGrid extends EventSource<ICollectionGridEvents> {
   invalidated: string[] = [];
   selectedClipIds: string[] = [];
   titlesHidden = false;
-  destroyed = false;
+  cleared = false;
   renderCollection(sequence: { clipNamesInOrder(): string[] } | null, { cacheKey }: { cacheKey: string }) {
     this.renders.push({ names: sequence?.clipNamesInOrder() ?? [], cacheKey });
   }
@@ -22,7 +22,7 @@ class FakeGrid extends EventSource<ICollectionGridEvents> {
   getSelectedClipIds() { return this.selectedClipIds; }
   areTitlesHidden() { return this.titlesHidden; }
   setTitlesHidden(hidden: boolean) { this.titlesHidden = hidden; }
-  destroy() { this.destroyed = true; }
+  clear() { this.cleared = true; }
 }
 
 class FakeToolbar extends EventSource<{ toggleTitlesRequested: void }> {
@@ -156,7 +156,7 @@ describe('CollectionViewWorkflow', () => {
 
     workflow.clearLoadedView();
 
-    expect(grid.destroyed).toBe(true);
+    expect(grid.cleared).toBe(true);
     expect(pipelineSession.pipeline).toBeNull();
     expect(openFolder.currentFolderSession).toBeNull();
     expect(toolbar.render).toHaveBeenLastCalledWith(expect.objectContaining({ hasPipeline: false, hasSequence: false }));

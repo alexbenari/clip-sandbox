@@ -24,5 +24,5 @@ if (new URLSearchParams(location.search).get('grid') === '1') {
   controller.renderCollection(new ClipSequence({ name: 'Panel grid fixture', clips }));
   const resize = new ResizeObserver(() => controller.recomputeLayout());
   resize.observe(gridRoot);
-  window.addEventListener('pagehide', () => { resize.disconnect(); controller.destroy(); }, { once: true });
+  window.addEventListener('pagehide', () => { resize.disconnect(); controller.dispose(); }, { once: true });
 }
