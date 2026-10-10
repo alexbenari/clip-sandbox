@@ -16,6 +16,7 @@ class FakeZoomView extends EventSource<{ playbackFailed: { name: string; error: 
   currentClipId: string | null = null;
   open = vi.fn(({ clipId }: { clipId: string }) => { this.currentClipId = clipId; return true; });
   close = vi.fn(() => { this.currentClipId = null; });
+  toggleMuted = vi.fn();
   isOpen() { return this.currentClipId !== null; }
   getCurrentClipId() { return this.currentClipId; }
 }

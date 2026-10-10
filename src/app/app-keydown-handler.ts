@@ -20,18 +20,18 @@ export type AppKeyDownContext = {
   addToCollectionDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'close'>>;
   deleteFromDiskDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'handleGlobalKeyDown'>>;
   unsavedChangesDialogController: Required<Pick<DialogKeyController, 'isOpen' | 'handleGlobalKeyDown'>>;
-  zoomOverlay: {
+  zoom: {
     isOpen(): boolean;
+    close(): void;
     toggleMuted(): void;
+    browseByOffset(offset: number): unknown;
+    openClipById(clipId: string | null): unknown;
   };
   gridController: {
     handleKeyDown(event: KeyboardEvent): unknown;
     getSelectedClipId(): string | null;
   };
-  isFullscreen(): boolean;
-  closeZoom(): void;
-  browseZoomByOffset(offset: number): void;
-  openZoomForClipId(clipId: string | null): void;
+  fullScreen: { isDocumentFullScreen(): boolean };
 };
 
 export class AppKeyDownHandler {
@@ -57,45 +57,45 @@ export class AppKeyDownHandler {
       event.preventDefault();
       return true;
     }
-    if (event.key === 'Escape' && context.zoomOverlay.isOpen()) {
-      context.closeZoom();
+    if (event.key === 'Escape' && context.zoom.isOpen()) {
+      context.zoom.close();
       event.preventDefault();
       return true;
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      if (context.zoomOverlay.isOpen()) event.preventDefault();
+      if (context.zoom.isOpen()) event.preventDefault();
       else context.gridController.handleKeyDown(event);
       return true;
     }
     if (this.anyDialogOpen()) return true;
     if (this.isEditableTarget(event.target)) return true;
 
-    if (this.isPlainKeyPress(event) && context.zoomOverlay.isOpen() && this.isKey(event, 'f')) {
-      context.closeZoom();
+    if (this.isPlainKeyPress(event) && context.zoom.isOpen() && this.isKey(event, 'f')) {
+      context.zoom.close();
       return true;
     }
-    if (this.isPlainKeyPress(event) && context.zoomOverlay.isOpen() && this.isKey(event, 'a')) {
-      context.zoomOverlay.toggleMuted();
+    if (this.isPlainKeyPress(event) && context.zoom.isOpen() && this.isKey(event, 'a')) {
+      context.zoom.toggleMuted();
       event.preventDefault();
       return true;
     }
     if (
       this.isPlainKeyPress(event)
-      && context.zoomOverlay.isOpen()
+      && context.zoom.isOpen()
       && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
     ) {
-      context.browseZoomByOffset(event.key === 'ArrowRight' ? 1 : -1);
+      context.zoom.browseByOffset(event.key === 'ArrowRight' ? 1 : -1);
       event.preventDefault();
       return true;
     }
     if (
       this.isPlainKeyPress(event)
       && this.isKey(event, 'z')
-      && !context.zoomOverlay.isOpen()
-      && !context.isFullscreen()
+      && !context.zoom.isOpen()
+      && !context.fullScreen.isDocumentFullScreen()
       && context.gridController.getSelectedClipId()
     ) {
-      context.openZoomForClipId(context.gridController.getSelectedClipId());
+      context.zoom.openClipById(context.gridController.getSelectedClipId());
       event.preventDefault();
       return true;
     }

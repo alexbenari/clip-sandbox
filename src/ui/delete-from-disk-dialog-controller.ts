@@ -102,6 +102,7 @@ export class DeleteFromDiskDialogController {
       event.preventDefault();
       this.cancelConfirm();
     });
+    this.closeAll();
   }
 
   isPreflightOpen(): boolean {

@@ -65,6 +65,7 @@ export class CollectionConflictController {
       this.hide();
       onCancel?.();
     });
+    this.hide();
   }
 
   isVisible(): boolean {

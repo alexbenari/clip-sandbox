@@ -131,21 +131,19 @@ describe('application shell screen ownership', () => {
     });
     document.body.append(workspace); workspace.append(center); center.append(f.commandHost, f.screenHost);
     const changed = vi.fn(); const settled = vi.fn();
-    const shell = new ApplicationShellController({ ...f, workspace, center, panels, screens: [f.collection, f.settings] });
-    shell.on('boundsChanging', ({ screen, width, durationMs }) => changed(screen, width, durationMs));
-    shell.on('boundsSettled', settled);
+    const collection = { ...f.collection, onBoundsChanging: changed, onBoundsSettled: settled } satisfies IAppScreen;
+    const shell = new ApplicationShellController({ ...f, workspace, center, panels, screens: [collection, f.settings] });
     shell.start();
     settled.mockClear();
     panels[0].foldButton.click();
-    expect(changed).toHaveBeenLastCalledWith(f.collection, 924, 240);
+    expect(changed).toHaveBeenLastCalledWith(924, 240);
     panels[1].foldButton.click();
-    expect(changed).toHaveBeenLastCalledWith(f.collection, 1128, 240);
+    expect(changed).toHaveBeenLastCalledWith(1128, 240);
     finishes[0](); await Promise.resolve(); await Promise.resolve();
     expect(shell.workspaceMoving).toBe(true);
     expect(settled).not.toHaveBeenCalled();
     finishes[1](); await Promise.resolve(); await Promise.resolve();
     expect(settled).toHaveBeenCalledOnce();
-    expect(settled).toHaveBeenCalledWith(f.collection);
     expect(shell.workspaceMoving).toBe(false);
     shell.destroy();
   });
@@ -196,12 +194,11 @@ describe('application shell screen ownership', () => {
     workspace.workspace.append(pipelines.root);
     const sharedRanges = panelContentFixture();
     const collection = { ...f.collection, initiallyFoldedPanelIds: ['clips'] } satisfies IAppScreen;
-    const settings = { ...f.settings, initiallyFoldedPanelIds: ['clips', 'pipelines'] } satisfies IAppScreen;
+    const settled = vi.fn();
+    const settings = { ...f.settings, initiallyFoldedPanelIds: ['clips', 'pipelines'], onBoundsSettled: settled } satisfies IAppScreen;
     const extraction = { ...f.extraction, initiallyFoldedPanelIds: ['pipelines'], panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
     const refine = { ...f.refine, initiallyFoldedPanelIds: ['pipelines'], panelContributions: [{ panelId: 'clips', content: sharedRanges }] } satisfies IAppScreen;
-    const settled = vi.fn();
     const shell = new ApplicationShellController({ ...f, ...workspace, panels: [clips, pipelines], screens: [collection, settings, extraction, refine], initialScreenId: extraction.id });
-    shell.on('boundsSettled', settled);
     shell.start();
     const folded = () => [clips.root, pipelines.root].map(root => root.classList.contains('folded'));
 
@@ -221,7 +218,6 @@ describe('application shell screen ownership', () => {
     shell.activate(settings.id);
     expect(folded()).toEqual([true, true]);
     expect(settled).toHaveBeenCalledOnce();
-    expect(settled).toHaveBeenCalledWith(settings);
     shell.activate(extraction.id);
     expect(folded()).toEqual([false, true]);
     shell.activate(refine.id);

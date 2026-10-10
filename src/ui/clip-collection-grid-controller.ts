@@ -1,8 +1,9 @@
 import type { Clip } from '../domain/clip.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
 import { GridVideoMetadataTracker } from './grid-video-metadata-tracker.js';
-import type { DisplayLayoutRules } from './display-layout-rules.js';
+import { DisplayLayoutRules } from './display-layout-rules.js';
 import { ClipLabelFormatter } from './clip-label-formatter.js';
+import { DocumentElements } from './document-elements.js';
 import { GridPreviewPlaybackController } from './grid-preview-playback-controller.js';
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
 
@@ -91,8 +92,9 @@ type ClipCollectionGridControllerOptions = {
   getAvailableHeight?: () => number;
   coordinateWorkspaceLayout?: boolean;
   formatLabel?: ClipLabelFormatterFn;
-  layoutRules?: Pick<DisplayLayoutRules, 'computeBestGrid' | 'computeFullscreenLayout'> | null;
+  layoutRules?: Pick<DisplayLayoutRules, 'computeBestGrid' | 'computeFullscreenLayout' | 'normalizeFullscreenSlots'> | null;
   isFullscreen?: (() => boolean) | null;
+  observeRootResize?: boolean;
   metadataTracker?: GridVideoMetadataTracker;
   metadataRelayoutDebounceMs?: number;
 };
@@ -275,8 +277,9 @@ export class ClipCollectionGridController implements IEventSource<IClipGridEvent
   private fullscreenSlots = 12;
   private cancelPendingRotation: (() => void) | null = null;
   private formatClipLabel: ClipLabelFormatterFn;
-  private layoutRules: Pick<DisplayLayoutRules, 'computeBestGrid' | 'computeFullscreenLayout'> | null;
+  private layoutRules: Pick<DisplayLayoutRules, 'computeBestGrid' | 'computeFullscreenLayout' | 'normalizeFullscreenSlots'> | null;
   private isFullscreen: (() => boolean) | null;
+  private rootResizeObserver: ResizeObserver | null = null;
   private readonly events = new EventSource<IClipGridEvents>();
   private doc: Document;
   private currentCollection: ClipSequence | null;
@@ -349,6 +352,28 @@ export class ClipCollectionGridController implements IEventSource<IClipGridEvent
     this.gridRoot?.classList.add('clip-collection-grid-root');
     this.grid?.classList.add('clip-collection-grid');
     this.gridRoot?.addEventListener('contextmenu', this.onGridContextMenu);
+    const ResizeObserverClass = this.doc.defaultView?.ResizeObserver;
+    if (options.observeRootResize && this.gridRoot && ResizeObserverClass) {
+      // During a workspace resize the grid lays out from the destination bounds instead.
+      this.rootResizeObserver = new ResizeObserverClass(() => { if (!this.workspaceBounds) this.recomputeLayout(); });
+      this.rootResizeObserver.observe(this.gridRoot);
+    }
+  }
+
+  static fromDocument(doc: Document, { fullScreen }: { fullScreen: { isDocumentFullScreen(): boolean } }): ClipCollectionGridController {
+    const elements = new DocumentElements(doc);
+    return new ClipCollectionGridController({
+      grid: elements.required('grid'),
+      gridRoot: elements.required('gridWrap'),
+      coordinateWorkspaceLayout: true,
+      layoutRules: new DisplayLayoutRules(),
+      isFullscreen: () => fullScreen.isDocumentFullScreen(),
+      observeRootResize: true,
+    });
+  }
+
+  normalizeFullscreenSlots(slots: number): number {
+    return this.layoutRules ? this.layoutRules.normalizeFullscreenSlots(slots) : slots;
   }
 
   private hiddenCardBuffer(): ClipCard[] {
@@ -992,6 +1017,8 @@ export class ClipCollectionGridController implements IEventSource<IClipGridEvent
   }
 
   destroy(): void {
+    this.rootResizeObserver?.disconnect();
+    this.rootResizeObserver = null;
     this.fsRestore();
     this.previewPlayback.cancel(this.grid);
     this.clearGridCards(this.grid);

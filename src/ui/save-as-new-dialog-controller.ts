@@ -81,6 +81,7 @@ export class SaveAsNewDialogController implements IEventSource<ISaveAsNewDialogE
       this.close();
       this.events.emit('cancelled');
     });
+    this.close();
   }
 
   on<TName extends keyof ISaveAsNewDialogEvents>(name: TName, handler: EventHandler<ISaveAsNewDialogEvents[TName]>): () => void {

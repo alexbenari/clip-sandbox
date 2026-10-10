@@ -27,5 +27,7 @@ export interface IAppScreen {
   readonly openPanelIdsOnEntry?: readonly string[];
   onActivate?(): void;
   onDeactivate?(): void;
+  onBoundsChanging?(width: number, durationMs: number): void;
+  onBoundsSettled?(): void;
   focusInitial(): void;
 }

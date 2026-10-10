@@ -122,6 +122,7 @@ export class AddToCollectionDialogController implements IEventSource<IAddToColle
       this.close();
       this.events.emit('cancelled');
     });
+    this.close();
   }
 
   on<TName extends keyof IAddToCollectionDialogEvents>(name: TName, handler: EventHandler<IAddToCollectionDialogEvents[TName]>): () => void {

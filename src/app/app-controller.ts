@@ -14,7 +14,6 @@ import { AppDiagnostics } from './app-diagnostics.js';
 import { AppKeyDownHandler } from './app-keydown-handler.js';
 import { ApplicationEventController } from './application-event-controller.js';
 import { ApplicationShutdownCoordinator } from './application-shutdown-coordinator.js';
-import { DisplayLayoutRules } from '../ui/display-layout-rules.js';
 import { AppText } from './app-text.js';
 import { CollectionNameValidator } from './collection-name-validator.js';
 import { NewCollectionNameCheck } from './new-collection-name-check.js';
@@ -60,7 +59,6 @@ import { GridContextMenuControl } from '../ui/grid-context-menu-control.js';
 import { ZoomEditMenuControl } from '../ui/zoom-edit-menu-control.js';
 import { ZoomOverlayController } from '../ui/zoom-overlay-controller.js';
 import { ClipCollectionGridController } from '../ui/clip-collection-grid-controller.js';
-import { ClipLabelFormatter } from '../ui/clip-label-formatter.js';
 import { CollectionConflictController } from '../ui/collection-conflict-controller.js';
 import { DeleteFromDiskDialogController } from '../ui/delete-from-disk-dialog-controller.js';
 import { SaveAsNewDialogController } from '../ui/save-as-new-dialog-controller.js';
@@ -96,10 +94,7 @@ export class AppController {
 
     // Page elements.
     const elements = new DocumentElements(document);
-    const grid = elements.required('grid');
-    const gridWrap = elements.required('gridWrap');
     const activeCollectionNameEl = elements.required<HTMLSelectElement>('activeCollectionName');
-    const toolbar = elements.required('toolbar');
     const zoomLayerRoot = elements.required('zoomLayerRoot');
     const body = document.body;
 
@@ -108,11 +103,9 @@ export class AppController {
     const eventWiring = new EventWiringCheck();
     const pipelineSession = new PipelineSession();
     const appText = new AppText();
-    const displayLayoutRules = new DisplayLayoutRules();
     const collectionNameValidator = new CollectionNameValidator(appText);
     const newCollectionNameCheck = new NewCollectionNameCheck(pipelineSession, collectionNameValidator);
     const videoEditCatalog = new VideoEditCatalog();
-    const clipLabelFormatter = new ClipLabelFormatter();
     const validator = new CollectionDescriptionValidator();
     const settingsParser = new AppSettingsParser();
     const settingsService = new AppSettingsService(ElectronAppSettingsService.fromWindow(window, settingsParser));
@@ -194,14 +187,7 @@ export class AppController {
     const loadStatusControl = new LoadStatusControl({ appText, statusControl: {
       show: (message, timeout) => activityLogger.log({ kind: 'success', message, timeoutMs: timeout }),
     } });
-    const gridController = new ClipCollectionGridController({
-      grid,
-      gridRoot: gridWrap,
-      coordinateWorkspaceLayout: true,
-      formatLabel: clipLabelFormatter.formatLabel.bind(clipLabelFormatter),
-      layoutRules: displayLayoutRules,
-      isFullscreen: () => fullscreenAdapter.isDocumentFullScreen(),
-    });
+    const gridController = ClipCollectionGridController.fromDocument(document, { fullScreen: fullscreenAdapter });
     gridController.on('metadataFailed', ({ clip, error }) => {
       void diagnostics.logVideoMetadataFailure({ filename: clip?.name || '', error });
     });
@@ -209,7 +195,6 @@ export class AppController {
       'cardCountChanged', 'selectionChanged', 'orderChanged', 'openClipRequested',
       'removeSelectedRequested', 'contextMenuRequested', 'metadataFailed',
     ]);
-    const { recomputeLayout, computeGrid, fsApplySlots, fsRestore } = gridController;
     const pipelinesPanelHost = elements.optional('pipelinesPanelHost');
     const pipelineCatalogControl = pipelinesPanelHost
       ? new PipelineCatalogControl({ host: pipelinesPanelHost, catalog: fileSystem, document })
@@ -234,7 +219,7 @@ export class AppController {
     const keyboardMap = utilityHost
       ? KeyboardMapControl.fromDocument(document, { globalShortcuts: GLOBAL_UTILITY_SHORTCUTS, requestClose: () => utilities?.close() })
       : null;
-    const collectionScreen = new CollectionScreen(elements.required('collectionScreen'), toolbar, gridController, mainToolbarControl);
+    const collectionScreen = CollectionScreen.fromDocument(document, { grid: gridController, toolbar: mainToolbarControl });
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
     const gifRangesPanel = elements.optional('gifRangesPanel');
@@ -312,13 +297,7 @@ export class AppController {
       utilities?.close(false);
       shell.activate(settingsScreen.id);
     });
-    shell.on('boundsChanging', ({ screen, width, durationMs }) => {
-      if (screen === collectionScreen) gridController.beginWorkspaceResize(width, durationMs);
-    });
-    shell.on('boundsSettled', screen => {
-      if (screen === collectionScreen) gridController.endWorkspaceResize();
-    });
-    eventWiring.require('applicationShell', shell, ['screenChanged', 'boundsChanging', 'boundsSettled', 'settingsRequested']);
+    eventWiring.require('applicationShell', shell, ['screenChanged', 'settingsRequested']);
     const keyboardUtility = keyboardMap?.utilitySurface();
     const activityUtility = activityIndicatorControl.utilitySurface();
     const utilities = utilityHost && keyboardUtility && activityUtility
@@ -476,22 +455,13 @@ export class AppController {
     });
     const fullscreenSession = new FullscreenSession({
       body,
-      setFullscreenButtonState: active => mainToolbarControl.setFullscreenButtonState(active),
-      isTitlesHidden: () => gridController.areTitlesHidden(),
-      setTitlesHidden: hidden => collectionView.setTitlesHidden(hidden),
-      enterFullScreenAdapter: fullscreenAdapter.enterFullScreen.bind(fullscreenAdapter),
-      exitFullScreenAdapter: fullscreenAdapter.exitFullScreen.bind(fullscreenAdapter),
-      isFullscreen: () => fullscreenAdapter.isDocumentFullScreen(),
-      fsApplySlots,
-      rotateVisibleClip: () => gridController.rotateVisibleClip(),
-      cancelRotation: () => gridController.cancelRotation(),
-      fsRestore,
-      computeGrid,
-      showStatus: activityReporter.success,
-      layoutRules: displayLayoutRules,
+      grid: gridController,
+      toolbar: mainToolbarControl,
+      titles: collectionView,
+      fullScreen: fullscreenAdapter,
+      clock,
+      reporter: activityReporter,
       appText,
-      every: clock.every.bind(clock),
-      clearClock: clock.clear.bind(clock),
     });
     mainToolbarControl.on('toggleFullscreenRequested', () => {
       if (zoom.isOpen()) zoom.close();
@@ -512,24 +482,15 @@ export class AppController {
       addToCollectionDialogController,
       deleteFromDiskDialogController,
       unsavedChangesDialogController,
-      zoomOverlay,
+      zoom,
       gridController,
-      isFullscreen: () => fullscreenAdapter.isDocumentFullScreen(),
-      closeZoom: () => zoom.close(),
-      browseZoomByOffset: offset => zoom.browseByOffset(offset),
-      openZoomForClipId: clipId => zoom.openClipById(clipId),
+      fullScreen: fullscreenAdapter,
     });
     eventWiring.assertComplete();
 
     // Startup: show an empty Collection view, activate the first screen, then load settings.
-    collectionConflictController.hide();
-    deleteFromDisk.discardPendingRequest();
-    collectionSave.cancelSaveAsNew();
-    addToCollectionDialogController.close();
-    unsavedChangesDialogController.close();
-    zoom.close();
     collectionView.clearLoadedView();
-    recomputeLayout();
+    gridController.recomputeLayout();
     collectionView.setTitlesHidden(false);
     shell.start();
     const settingsReady = settingsScreen.load();
@@ -540,12 +501,9 @@ export class AppController {
         shell.activate(settingsService.current.startupScreenId);
       }
     });
-    const workspaceResize = new ResizeObserver(() => { if (!shell.workspaceMoving) recomputeLayout(); });
-    workspaceResize.observe(gridWrap);
     const shutdown = new ApplicationShutdownCoordinator({
       stopActions: () => {
         fullscreenSession.destroy();
-        workspaceResize.disconnect();
         shell.destroy();
       },
       disposeWorkflow: async () => {
@@ -576,7 +534,7 @@ export class AppController {
       document,
       window,
       onFullscreenChange: () => fullScreenChange.handleFullScreenChange(),
-      onResize: recomputeLayout,
+      onResize: () => gridController.recomputeLayout(),
       onKeyDown: event => {
         if (!utilities?.isOpen && !event.defaultPrevented && shell.activeScreen === collectionScreen) appKeyDownHandler.handle(event);
         if (!event.defaultPrevented && shell.activeScreen !== collectionScreen) gifWorkflowKeyboard.handleKeyDown(event);

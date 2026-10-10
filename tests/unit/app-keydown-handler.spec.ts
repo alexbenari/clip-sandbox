@@ -20,18 +20,18 @@ function createContext(overrides = {}) {
       handleGlobalKeyDown: vi.fn(() => false),
       isOpen: vi.fn(() => false),
     },
-    zoomOverlay: {
+    zoom: {
       isOpen: vi.fn(() => false),
+      close: vi.fn(),
       toggleMuted: vi.fn(),
+      browseByOffset: vi.fn(),
+      openClipById: vi.fn(),
     },
     gridController: {
       handleKeyDown: vi.fn(() => false),
       getSelectedClipId: vi.fn(() => null),
     },
-    isFullscreen: vi.fn(() => false),
-    closeZoom: vi.fn(),
-    browseZoomByOffset: vi.fn(),
-    openZoomForClipId: vi.fn(),
+    fullScreen: { isDocumentFullScreen: vi.fn(() => false) },
     ...overrides,
   };
 }
@@ -49,7 +49,7 @@ describe('app keydown handler', () => {
 
     expect(handler.handle(event)).toBe(true);
     expect(event.defaultPrevented).toBe(true);
-    expect(context.openZoomForClipId).not.toHaveBeenCalled();
+    expect(context.zoom.openClipById).not.toHaveBeenCalled();
   });
 
   test('blocks non-dialog shortcuts while any dialog is open', () => {
@@ -67,7 +67,7 @@ describe('app keydown handler', () => {
     const event = new KeyboardEvent('keydown', { key: 'z', cancelable: true });
 
     expect(handler.handle(event)).toBe(true);
-    expect(context.openZoomForClipId).not.toHaveBeenCalled();
+    expect(context.zoom.openClipById).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
   });
 
@@ -84,14 +84,17 @@ describe('app keydown handler', () => {
     Object.defineProperty(event, 'target', { value: input });
 
     expect(handler.handle(event)).toBe(true);
-    expect(context.openZoomForClipId).not.toHaveBeenCalled();
+    expect(context.zoom.openClipById).not.toHaveBeenCalled();
   });
 
   test('routes zoom navigation shortcuts through the ordered rule set', () => {
     const context = createContext({
-      zoomOverlay: {
+      zoom: {
         isOpen: vi.fn(() => true),
+        close: vi.fn(),
         toggleMuted: vi.fn(),
+        browseByOffset: vi.fn(),
+        openClipById: vi.fn(),
       },
     });
     const handler = new AppKeyDownHandler(context);
@@ -101,7 +104,7 @@ describe('app keydown handler', () => {
     });
 
     expect(handler.handle(event)).toBe(true);
-    expect(context.browseZoomByOffset).toHaveBeenCalledWith(1);
+    expect(context.zoom.browseByOffset).toHaveBeenCalledWith(1);
     expect(event.defaultPrevented).toBe(true);
   });
 
@@ -116,7 +119,7 @@ describe('app keydown handler', () => {
     const event = new KeyboardEvent('keydown', { key: 'z', cancelable: true });
 
     expect(handler.handle(event)).toBe(true);
-    expect(context.openZoomForClipId).toHaveBeenCalledWith('clip_7');
+    expect(context.zoom.openClipById).toHaveBeenCalledWith('clip_7');
     expect(event.defaultPrevented).toBe(true);
   });
 });

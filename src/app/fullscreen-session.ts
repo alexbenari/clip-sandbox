@@ -1,6 +1,6 @@
 import type { IShortcutDescriptor } from '../ui/app-screen.js';
+import type { ActivityReporter } from './activity-reporter.js';
 import type { AppText } from './app-text.js';
-import type { DisplayLayoutRules } from '../ui/display-layout-rules.js';
 
 export const FULLSCREEN_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Toggle fullscreen review', group: 'Fullscreen', sequences: [['F']] },
@@ -15,91 +15,59 @@ type FullscreenState = {
   randInterval: ReturnType<typeof setInterval> | null;
 };
 
+export interface IFullscreenGrid {
+  areTitlesHidden(): boolean;
+  normalizeFullscreenSlots(slots: number): number;
+  fsApplySlots(slots: number): void;
+  rotateVisibleClip(): void;
+  cancelRotation(): void;
+  fsRestore(): void;
+  computeGrid(): void;
+}
+
+export interface IFullscreenButton {
+  setFullscreenButtonState(active: boolean): void;
+}
+
+export interface ITitlesVisibility {
+  setTitlesHidden(hidden: boolean): void;
+}
+
+export interface IDocumentFullScreen {
+  enterFullScreen(): Promise<void> | void;
+  exitFullScreen(): Promise<void> | void;
+  isDocumentFullScreen(): boolean;
+}
+
+export interface IRepeatingClock {
+  every(ms: number, fn: () => void): ReturnType<typeof setInterval>;
+  clear(id: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout>): void;
+}
+
 type FullscreenSessionOptions = {
   body: HTMLElement;
-  setFullscreenButtonState: (active: boolean) => void;
-  isTitlesHidden: () => boolean;
-  setTitlesHidden: (hidden: boolean) => void;
-  enterFullScreenAdapter: (doc: Document) => Promise<void> | void;
-  exitFullScreenAdapter: (doc: Document) => Promise<void> | void;
-  isFullscreen: () => boolean;
-  fsApplySlots: (slots: number) => void;
-  rotateVisibleClip: () => void;
-  cancelRotation: () => void;
-  fsRestore: () => void;
-  computeGrid: () => void;
-  showStatus: (message: string, durationMs?: number) => void;
-  layoutRules: Pick<DisplayLayoutRules, 'normalizeFullscreenSlots'>;
+  grid: IFullscreenGrid;
+  toolbar: IFullscreenButton;
+  titles: ITitlesVisibility;
+  fullScreen: IDocumentFullScreen;
+  clock: IRepeatingClock;
+  reporter: Pick<ActivityReporter, 'success'>;
   appText: Pick<AppText, 'fullscreenSlotsText'>;
-  every: (ms: number, fn: () => void) => ReturnType<typeof setInterval>;
-  clearClock: (id: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout>) => void;
 };
 
 export class FullscreenSession {
   private readonly fullscreenState: FullscreenState = { savedTitlesHidden: null, digitBuffer: '', digitTimer: null, slots: 12, randInterval: null };
-  private readonly body: HTMLElement;
-  private readonly setFullscreenButtonState: (active: boolean) => void;
-  private readonly isTitlesHidden: () => boolean;
-  private readonly setTitlesHidden: (hidden: boolean) => void;
-  private readonly enterFullScreenAdapter: (doc: Document) => Promise<void> | void;
-  private readonly exitFullScreenAdapter: (doc: Document) => Promise<void> | void;
-  private readonly isFullscreen: () => boolean;
-  private readonly fsApplySlots: (slots: number) => void;
-  private readonly rotateVisibleClip: () => void;
-  private readonly cancelRotation: () => void;
-  private readonly fsRestore: () => void;
-  private readonly computeGrid: () => void;
-  private readonly showStatus: (message: string, durationMs?: number) => void;
-  private readonly layoutRules: Pick<DisplayLayoutRules, 'normalizeFullscreenSlots'>;
-  private readonly appText: Pick<AppText, 'fullscreenSlotsText'>;
-  private readonly every: (ms: number, fn: () => void) => ReturnType<typeof setInterval>;
-  private readonly clearClock: (id: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout>) => void;
 
-  constructor({
-    body,
-    setFullscreenButtonState,
-    isTitlesHidden,
-    setTitlesHidden,
-    enterFullScreenAdapter,
-    exitFullScreenAdapter,
-    isFullscreen,
-    fsApplySlots,
-    rotateVisibleClip,
-    cancelRotation,
-    fsRestore,
-    computeGrid,
-    showStatus,
-    layoutRules,
-    appText,
-    every,
-    clearClock,
-  }: FullscreenSessionOptions) {
-    this.body = body;
-    this.setFullscreenButtonState = setFullscreenButtonState;
-    this.isTitlesHidden = isTitlesHidden;
-    this.setTitlesHidden = setTitlesHidden;
-    this.enterFullScreenAdapter = enterFullScreenAdapter;
-    this.exitFullScreenAdapter = exitFullScreenAdapter;
-    this.isFullscreen = isFullscreen;
-    this.fsApplySlots = fsApplySlots;
-    this.rotateVisibleClip = rotateVisibleClip;
-    this.cancelRotation = cancelRotation;
-    this.fsRestore = fsRestore;
-    this.computeGrid = computeGrid;
-    this.showStatus = showStatus;
-    this.layoutRules = layoutRules;
-    this.appText = appText;
-    this.every = every;
-    this.clearClock = clearClock;
-  }
+  constructor(private readonly session: FullscreenSessionOptions) {}
 
   async enterFullScreen(): Promise<void> {
+    const { grid, titles, fullScreen, toolbar } = this.session;
     try {
-      this.fullscreenState.savedTitlesHidden = this.isTitlesHidden();
-      this.setTitlesHidden(true);
-      await this.enterFullScreenAdapter(document);
-      this.setFullscreenButtonState(true);
-      this.fsApplySlots(this.fullscreenState.slots);
+      this.fullscreenState.savedTitlesHidden = grid.areTitlesHidden();
+      titles.setTitlesHidden(true);
+      await fullScreen.enterFullScreen();
+      toolbar.setFullscreenButtonState(true);
+      grid.fsApplySlots(this.fullscreenState.slots);
     } catch (e) {
       console.warn(e);
     }
@@ -108,14 +76,14 @@ export class FullscreenSession {
   async exitFullScreen(): Promise<void> {
     this.stopFsRandomizer();
     try {
-      await this.exitFullScreenAdapter(document);
+      await this.session.fullScreen.exitFullScreen();
     } catch (e) {
       console.warn(e);
     }
   }
 
   onFsToggle(): void {
-    if (!this.isFullscreen()) void this.enterFullScreen();
+    if (!this.session.fullScreen.isDocumentFullScreen()) void this.enterFullScreen();
     else void this.exitFullScreen();
   }
 
@@ -127,7 +95,7 @@ export class FullscreenSession {
       e.preventDefault();
       return;
     }
-    if (!this.isFullscreen()) return;
+    if (!this.session.fullScreen.isDocumentFullScreen()) return;
     if (key >= '0' && key <= '9') {
       this.fullscreenState.digitBuffer += key;
       if (this.fullscreenState.digitTimer) clearTimeout(this.fullscreenState.digitTimer);
@@ -135,9 +103,10 @@ export class FullscreenSession {
         const v = parseInt(this.fullscreenState.digitBuffer, 10);
         this.fullscreenState.digitBuffer = '';
         if (!Number.isNaN(v)) {
-          this.fullscreenState.slots = this.layoutRules.normalizeFullscreenSlots(v);
-          this.fsApplySlots(this.fullscreenState.slots);
-          this.showStatus(this.appText.fullscreenSlotsText(this.fullscreenState.slots), 1500);
+          const { grid, reporter, appText } = this.session;
+          this.fullscreenState.slots = grid.normalizeFullscreenSlots(v);
+          grid.fsApplySlots(this.fullscreenState.slots);
+          reporter.success(appText.fullscreenSlotsText(this.fullscreenState.slots), 1500);
         }
       }, 600);
       e.preventDefault();
@@ -146,17 +115,17 @@ export class FullscreenSession {
 
   private startFsRandomizer(): void {
     if (this.fullscreenState.randInterval) return;
-    this.fullscreenState.randInterval = this.every(3000, () => {
-      if (this.isFullscreen()) this.rotateVisibleClip();
+    this.fullscreenState.randInterval = this.session.clock.every(3000, () => {
+      if (this.session.fullScreen.isDocumentFullScreen()) this.session.grid.rotateVisibleClip();
     });
   }
 
   private stopFsRandomizer(): void {
     if (this.fullscreenState.randInterval) {
-      this.clearClock(this.fullscreenState.randInterval);
+      this.session.clock.clear(this.fullscreenState.randInterval);
       this.fullscreenState.randInterval = null;
     }
-    this.cancelRotation();
+    this.session.grid.cancelRotation();
   }
 
   destroy(): void {
@@ -167,24 +136,25 @@ export class FullscreenSession {
   }
 
   onFsChange(): void {
-    const active = this.isFullscreen();
-    this.body.classList.toggle('fs-active', active);
+    const { body, fullScreen, grid, titles, toolbar } = this.session;
+    const active = fullScreen.isDocumentFullScreen();
+    body.classList.toggle('fs-active', active);
     if (!active) {
       if (this.fullscreenState.digitTimer) clearTimeout(this.fullscreenState.digitTimer);
       this.fullscreenState.digitTimer = null;
       this.fullscreenState.digitBuffer = '';
-      this.fsRestore();
+      grid.fsRestore();
       this.stopFsRandomizer();
       if (this.fullscreenState.savedTitlesHidden !== null) {
-        this.setTitlesHidden(this.fullscreenState.savedTitlesHidden);
+        titles.setTitlesHidden(this.fullscreenState.savedTitlesHidden);
         this.fullscreenState.savedTitlesHidden = null;
       }
-      this.setFullscreenButtonState(false);
-      this.computeGrid();
+      toolbar.setFullscreenButtonState(false);
+      grid.computeGrid();
     } else {
-      this.fsApplySlots(this.fullscreenState.slots);
+      grid.fsApplySlots(this.fullscreenState.slots);
       this.startFsRandomizer();
-      this.setFullscreenButtonState(true);
+      toolbar.setFullscreenButtonState(true);
     }
   }
 }

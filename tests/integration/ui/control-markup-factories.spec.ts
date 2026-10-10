@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ActivityLogger } from '../../../src/app/activity-logger.js';
 import { AppText } from '../../../src/app/app-text.js';
+import { ClipCollectionGridController } from '../../../src/ui/clip-collection-grid-controller.js';
+import { CollectionScreen } from '../../../src/ui/collection-screen.js';
 import { ActivityIndicatorControl } from '../../../src/ui/activity-indicator-control.js';
 import type { IAppScreen } from '../../../src/ui/app-screen.js';
 import { ApplicationShellController } from '../../../src/ui/application-shell-controller.js';
@@ -156,6 +158,39 @@ describe('controls built from the page markup', () => {
       trigger: document.getElementById('keyboardMapBtn'),
       panel: document.getElementById('keyboardMapPanel'),
     });
+  });
+
+  it('the clip grid takes over the page grid and owns its layout rules', () => {
+    const grid = ClipCollectionGridController.fromDocument(document, { fullScreen: { isDocumentFullScreen: () => false } });
+
+    expect(document.getElementById('gridWrap')!.classList.contains('clip-collection-grid-root')).toBe(true);
+    expect(document.getElementById('grid')!.classList.contains('clip-collection-grid')).toBe(true);
+    expect(grid.normalizeFullscreenSlots(1)).toBe(2);
+    grid.destroy();
+  });
+
+  it('the Collection screen finds its root and command bar', () => {
+    const screen = CollectionScreen.fromDocument(document, {
+      grid: { focusSelectedClip: () => false, beginWorkspaceResize: vi.fn(), endWorkspaceResize: vi.fn() },
+      toolbar: { focusBrowse: vi.fn() },
+    });
+
+    expect(screen.root).toBe(document.getElementById('collectionScreen'));
+    expect(screen.commands).toBe(document.getElementById('toolbar'));
+  });
+
+  it('dialogs and the collection conflict start closed', () => {
+    document.getElementById('collectionConflict')!.hidden = false;
+    (document.getElementById('saveAsNewDialog') as HTMLElement).hidden = false;
+    document.getElementById('unsavedChangesDialog')!.setAttribute('open', '');
+
+    const conflict = CollectionConflictController.fromDocument(document, { appText: new AppText() });
+    const saveAsNew = SaveAsNewDialogController.fromDocument(document);
+    const unsavedChanges = UnsavedChangesDialogController.fromDocument(document);
+
+    expect(conflict.isVisible()).toBe(false);
+    expect(saveAsNew.isOpen()).toBe(false);
+    expect(unsavedChanges.isOpen()).toBe(false);
   });
 
   it('reports a required part that is missing from the page', () => {

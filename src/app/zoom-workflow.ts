@@ -20,6 +20,7 @@ export interface IZoomView extends IEventSource<{
   open(item: { clipId: string; src: string; name: string }): boolean;
   close(): void;
   isOpen(): boolean;
+  toggleMuted(): unknown;
   getCurrentClipId(): string | null;
 }
 
@@ -108,6 +109,10 @@ export class ZoomWorkflow {
   close(): void {
     this.zoom.contextMenu.close({ restoreFocus: false });
     this.zoom.zoom.close();
+  }
+
+  toggleMuted(): void {
+    this.zoom.zoom.toggleMuted();
   }
 
   openClip(clip: Clip | null): boolean {

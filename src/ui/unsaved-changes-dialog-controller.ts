@@ -54,6 +54,7 @@ export class UnsavedChangesDialogController {
       event.preventDefault();
       this.cancelFlow();
     });
+    this.close();
   }
 
   isOpen(): boolean {

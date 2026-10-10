@@ -5,8 +5,6 @@ import { EventSource, type EventHandler, type IEventSource, type IEventSubscribe
 
 export interface IApplicationShellEvents {
   screenChanged: IAppScreen;
-  boundsChanging: Readonly<{ screen: IAppScreen; width: number; durationMs: number }>;
-  boundsSettled: IAppScreen;
   settingsRequested: void;
 }
 
@@ -157,7 +155,7 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
     center.style.flex = 'none';
     center.style.width = `${width}px`;
     const targetCommandHeight = commandHost.getBoundingClientRect().height;
-    this.events.emit('boundsChanging', { screen: this.current, width, durationMs: duration });
+    this.current.onBoundsChanging?.(width, duration);
     center.style.flex = '';
     center.style.width = '';
     commandHost.style.height = `${currentCommandHeight}px`;
@@ -172,7 +170,7 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
     if (this.elements.workspace) this.elements.workspace.dataset.moving = 'false';
     this.elements.commandHost.style.transition = '';
     this.elements.commandHost.style.height = '';
-    this.events.emit('boundsSettled', this.current);
+    this.current.onBoundsSettled?.();
   }
 
   activate(id: string): void {
@@ -221,7 +219,7 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
     if (this.motionPending) {
       this.prepareWorkspaceResize(0);
       this.settleWorkspaceResize();
-    } else this.events.emit('boundsSettled', incoming);
+    } else incoming.onBoundsSettled?.();
   }
 
   destroy(): void {

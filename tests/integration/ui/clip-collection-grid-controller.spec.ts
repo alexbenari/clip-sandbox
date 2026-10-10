@@ -410,6 +410,45 @@ describe('clip collection grid controller', () => {
     expect(document.getElementById('gridWrap').classList.contains('titles-hidden')).toBe(true);
   });
 
+  test('lays out again when its root resizes, except during a workspace resize', () => {
+    const observers = [];
+    const originalResizeObserver = window.ResizeObserver;
+    window.ResizeObserver = class {
+      constructor(callback) { this.callback = callback; observers.push(this); }
+      observe(element) { this.element = element; }
+      disconnect() { this.disconnected = true; }
+    };
+    try {
+      const gridRoot = document.getElementById('gridWrap');
+      const computeBestGrid = vi.fn(() => ({ cols: 1, cellH: 100 }));
+      const controller = createClipCollectionGridController({
+        grid: document.getElementById('grid'),
+        gridRoot,
+        coordinateWorkspaceLayout: true,
+        getAvailableHeight: () => 400,
+        layoutRules: { computeBestGrid },
+        observeRootResize: true,
+      });
+      controller.renderCollection(makeCollection());
+      const [observer] = observers;
+      expect(observer.element).toBe(gridRoot);
+
+      computeBestGrid.mockClear();
+      observer.callback();
+      expect(computeBestGrid).toHaveBeenCalled();
+
+      controller.beginWorkspaceResize(800, 240);
+      computeBestGrid.mockClear();
+      observer.callback();
+      expect(computeBestGrid).not.toHaveBeenCalled();
+
+      controller.destroy();
+      expect(observer.disconnected).toBe(true);
+    } finally {
+      window.ResizeObserver = originalResizeObserver;
+    }
+  });
+
   test('owns normal and fullscreen layout application for grid cards', () => {
     const grid = document.getElementById('grid');
     const gridRoot = document.getElementById('gridWrap');
