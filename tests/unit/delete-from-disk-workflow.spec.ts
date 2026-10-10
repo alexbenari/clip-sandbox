@@ -86,6 +86,23 @@ describe('DeleteFromDiskWorkflow', () => {
     expect(context.folderSelection.reloadSelection).toHaveBeenCalledOnce();
   });
 
+  it('reloads a collection view from the collection as rewritten without the deleted clip', async () => {
+    const context = deleteWorkflow();
+    const picks = context.pipeline.getCollectionByFilename('picks.txt');
+    const loaded = context.pipelineSession.materializeSelection(picks);
+    if (loaded?.materialization.kind !== 'loaded') throw new Error('picks.txt should materialize');
+    context.pipelineSession.activateSelection({ collection: picks, sequence: loaded.materialization.sequence });
+    context.grid.selectedClipIds = [loaded.materialization.sequence.orderedClips()[0].id];
+
+    context.workflow.start();
+    context.confirmations[0].onConfirm();
+
+    await vi.waitFor(() => expect(context.folderSelection.reloadSelection).toHaveBeenCalledOnce());
+    const [{ collection }] = context.folderSelection.reloadSelection.mock.calls[0] as unknown as [{ collection: Collection | null }];
+    expect(collection?.orderedClipNames).toEqual(['bravo.mp4']);
+    expect(collection).toBe(context.pipeline.getCollectionByFilename('picks.txt'));
+  });
+
   it('offers to save unsaved changes first, then confirms once the save succeeds', async () => {
     const context = deleteWorkflow({ saveOutcome: 'saved' });
     context.makeViewDirty();

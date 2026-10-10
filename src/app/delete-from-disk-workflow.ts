@@ -42,7 +42,7 @@ export interface IFileDeleter {
 }
 
 type DeleteFromDiskDependencies = Readonly<{
-  pipelineSession: Pick<PipelineSession, 'pipeline' | 'activeCollection' | 'currentClipSequence' | 'isPipelineMode'
+  pipelineSession: Pick<PipelineSession, 'pipeline' | 'activeCollectionFilename' | 'currentClipSequence' | 'isPipelineMode'
     | 'hasDirtyClipSequenceChanges' | 'clipNamesForIdsInOrder'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   files: IFileDeleter;
@@ -177,8 +177,9 @@ export class DeleteFromDiskWorkflow {
     if (outcome.deletedClipIds.length > 0) {
       this.deletion.grid.invalidateAllViews();
       await this.deletion.folderSelection.reloadSelection({
-        pipeline: pipelineSession.pipeline,
-        collection: pipelineSession.activeCollection,
+        pipeline,
+        // Removing videos replaced each affected collection; the session still holds the version with the deleted clips.
+        collection: pipeline.getCollectionByFilename(pipelineSession.activeCollectionFilename()),
         folderSession: this.deletion.openFolder.currentFolderSession,
       });
     } else {
