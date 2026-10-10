@@ -29,6 +29,9 @@ for (const nativeFrame of [false, true]) {
       expect((await readOverlay()).visible).toBe(process.platform === 'win32' && !nativeFrame);
       for (const width of [1440, 800]) {
         await app.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, width === 1440 ? 900 : 650), width);
+        // The native resize reaches the page asynchronously; measure only after the page has the new width and laid out once.
+        await expect.poll(() => page.evaluate(() => innerWidth)).toBe(width);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
         await expect(page.locator('#activityIndicatorBtn')).toBeInViewport();
         const target = await page.locator('#activityIndicatorBtn').boundingBox();
         expect(target!.height).toBeGreaterThanOrEqual(32);
