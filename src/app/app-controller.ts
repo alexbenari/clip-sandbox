@@ -197,7 +197,6 @@ export class AppController {
     const gridController = new ClipCollectionGridController({
       grid,
       gridRoot: gridWrap,
-      toolbar,
       coordinateWorkspaceLayout: true,
       formatLabel: clipLabelFormatter.formatLabel.bind(clipLabelFormatter),
       layoutRules: displayLayoutRules,

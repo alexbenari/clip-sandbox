@@ -413,15 +413,11 @@ describe('clip collection grid controller', () => {
   test('owns normal and fullscreen layout application for grid cards', () => {
     const grid = document.getElementById('grid');
     const gridRoot = document.getElementById('gridWrap');
-    const toolbar = document.createElement('div');
-    document.body.appendChild(toolbar);
     Object.defineProperty(gridRoot, 'clientWidth', { value: 900, configurable: true });
-    toolbar.getBoundingClientRect = () => ({ height: 48 });
     let fullscreen = false;
     const controller = createClipCollectionGridController({
       grid,
       gridRoot,
-      toolbar,
       formatLabel: (name) => name,
       layoutRules: {
         computeBestGrid: vi.fn(() => ({ cols: 2, cellH: 180 })),

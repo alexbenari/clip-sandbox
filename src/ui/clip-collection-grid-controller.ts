@@ -88,7 +88,6 @@ type GridViewCacheEntry = {
 type ClipCollectionGridControllerOptions = {
   grid?: HTMLElement | null;
   gridRoot?: HTMLElement | null;
-  toolbar?: HTMLElement | null;
   getAvailableHeight?: () => number;
   coordinateWorkspaceLayout?: boolean;
   formatLabel?: ClipLabelFormatterFn;
@@ -272,7 +271,6 @@ export class ClipCollectionGridController implements IEventSource<IClipGridEvent
 
   private grid: HTMLElement;
   private gridRoot: HTMLElement | null;
-  private toolbar: HTMLElement | null;
   private readonly getAvailableHeight?: () => number;
   private fullscreenSlots = 12;
   private cancelPendingRotation: (() => void) | null = null;
@@ -298,7 +296,6 @@ export class ClipCollectionGridController implements IEventSource<IClipGridEvent
     if (!options.grid) throw new Error('A grid element is required.');
     this.grid = options.grid;
     this.gridRoot = options.gridRoot ?? this.grid?.parentElement ?? null;
-    this.toolbar = options.toolbar ?? null;
     this.getAvailableHeight = options.getAvailableHeight;
     this.coordinateWorkspaceLayout = options.coordinateWorkspaceLayout ?? false;
     const defaultLabelFormatter = new ClipLabelFormatter();
@@ -497,8 +494,7 @@ export class ClipCollectionGridController implements IEventSource<IClipGridEvent
     const padding = this.coordinateWorkspaceLayout && this.gridRoot ? view.getComputedStyle(this.gridRoot) : null;
     const horizontalPadding = padding ? (parseFloat(padding.paddingLeft) || 0) + (parseFloat(padding.paddingRight) || 0) : 0;
     const availW = mode === 'normal' && this.workspaceBounds ? this.workspaceBounds.width : rootWidth - horizontalPadding;
-    const toolbarHeight = this.toolbar ? Math.ceil(this.toolbar.getBoundingClientRect().height) : 0;
-    const chromeH = mode === 'fullscreen' ? 28 : toolbarHeight + 28;
+    const chromeH = 28;
     const availH = mode === 'normal' && this.workspaceBounds ? this.workspaceBounds.height : mode === 'normal' ? this.allocatedHeight() ?? view.innerHeight - chromeH : view.innerHeight - chromeH;
     return { gap, availW, availH };
   }
