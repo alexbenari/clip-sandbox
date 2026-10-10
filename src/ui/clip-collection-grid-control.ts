@@ -192,7 +192,6 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private createThumbCard({
   doc = document,
   clip,
-  cardId,
   mediaSource,
   formatLabel,
   onSelect,
@@ -208,7 +207,6 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
 }: {
   doc?: Document;
   clip: Clip;
-  cardId: string;
   mediaSource: string;
   formatLabel: ClipLabelFormatterFn;
   onSelect: (card: ClipCard, event: MouseEvent) => void;
@@ -225,7 +223,6 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   const card = doc.createElement('div');
   card.className = 'thumb';
   card.tabIndex = 0;
-  card.id = cardId;
   card.draggable = true;
   card.dataset.clipId = clip.id;
   card.dataset.name = clip.name;
@@ -284,7 +281,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private doc: Document;
   private currentCollection: ClipSequence | null;
   private selectedClipIds: Set<string>;
-  private dragSourceCardId: string | null;
+  private dragSourceCard: ClipCard | null;
   private hiddenCards: ClipCard[];
   private currentAppliedCols: number | null;
   private pendingMetadataRelayout: boolean;
@@ -309,7 +306,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     this.doc = this.grid?.ownerDocument || document;
     this.currentCollection = null;
     this.selectedClipIds = new Set();
-    this.dragSourceCardId = null;
+    this.dragSourceCard = null;
     this.hiddenCards = [];
     this.currentAppliedCols = null;
     this.pendingMetadataRelayout = false;
@@ -576,7 +573,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private onMetadataComplete(): void {
     if (this.isFullscreen?.()) return;
     if (this.workspaceBounds) return;
-    if (this.dragSourceCardId) {
+    if (this.dragSourceCard) {
       this.pendingMetadataRelayout = true;
       return;
     }
@@ -876,16 +873,16 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   }
 
   private onDragStart(card: ClipCard, event: DragEvent): void {
-    this.dragSourceCardId = card.id;
+    this.dragSourceCard = card;
     card.classList.add('dragging');
     if (!event.dataTransfer) return;
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', card.id);
+    event.dataTransfer.setData('text/plain', card.dataset.clipId || '');
   }
 
   private onDragEnd(card: ClipCard): void {
     card.classList.remove('dragging');
-    this.dragSourceCardId = null;
+    this.dragSourceCard = null;
     this.removeDragOverClasses(this.grid);
     if (this.pendingMetadataRelayout) {
       this.pendingMetadataRelayout = false;
@@ -895,7 +892,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
 
   private onDragOver(card: ClipCard, event: DragEvent): void {
     event.preventDefault();
-    if (!this.dragSourceCardId || card.id === this.dragSourceCardId) return;
+    if (!this.dragSourceCard || card === this.dragSourceCard) return;
     card.classList.add('drag-over');
   }
 
@@ -906,9 +903,9 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private onDrop(card: ClipCard, event: DragEvent): void {
     event.preventDefault();
     card.classList.remove('drag-over');
-    const srcId = event.dataTransfer?.getData('text/plain') || this.dragSourceCardId;
-    const srcEl = srcId ? this.doc.getElementById(srcId) : null;
-    if (!srcEl || srcEl === card) return;
+    // Cached views of the same clips stay mounted, so only a card of the active grid may move.
+    const srcEl = this.dragSourceCard;
+    if (!srcEl || srcEl === card || srcEl.parentElement !== this.grid) return;
     const rect = card.getBoundingClientRect();
     const before = event.clientY - rect.top < rect.height / 2;
     if (before) this.grid.insertBefore(srcEl, card);
@@ -982,7 +979,6 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
       const card = this.createThumbCard({
         doc: this.doc,
         clip,
-        cardId: `card-${clip.id}`,
         mediaSource,
         formatLabel: this.formatClipLabel,
         onLoadedMetadata: (element, video, nextClip, token) => this.onLoadedMetadata(element, video, nextClip, token),
@@ -1024,7 +1020,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     this.clearGridCards(this.grid);
     this.invalidateAllViews();
     this.selectedClipIds = new Set();
-    this.dragSourceCardId = null;
+    this.dragSourceCard = null;
     this.activeCacheKey = null;
     this.setTitlesHidden(false);
     this.metadataTracker.reset();

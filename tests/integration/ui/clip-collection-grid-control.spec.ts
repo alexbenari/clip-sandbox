@@ -187,6 +187,45 @@ describe('clip collection grid controller', () => {
     expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
   });
 
+  test('reorders a collection view without pulling cards from a cached view of the same clips', () => {
+    const orders = [];
+    const controller = createClipCollectionGridControl({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      recomputeLayout: vi.fn(),
+    });
+    controller.on('orderChanged', (ids) => orders.push(ids));
+    const pipeline = makeThreeClipCollection();
+    const [alpha, bravo, charlie] = pipeline.orderedClips();
+    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    const pipelineGrid = document.getElementById('grid');
+    controller.renderCollection(new ClipSequence({ name: 'subset', clips: [charlie, alpha] }), { cacheKey: 'subset.txt' });
+    const collectionGrid = document.getElementById('grid');
+    expect(collectionGrid).not.toBe(pipelineGrid);
+    const cards = [...collectionGrid.children];
+    const dataTransfer = {
+      effectAllowed: '',
+      store: new Map(),
+      setData(type, value) { this.store.set(type, value); },
+      getData(type) { return this.store.get(type) || ''; },
+    };
+
+    const dragStartEvent = new Event('dragstart', { bubbles: true });
+    Object.defineProperty(dragStartEvent, 'dataTransfer', { value: dataTransfer });
+    cards[1].dispatchEvent(dragStartEvent);
+    cards[0].getBoundingClientRect = () => ({ top: 0, height: 100 });
+    const dropEvent = new Event('drop', { bubbles: true });
+    Object.defineProperty(dropEvent, 'dataTransfer', { value: dataTransfer });
+    Object.defineProperty(dropEvent, 'clientY', { value: 10 });
+    cards[0].dispatchEvent(dropEvent);
+
+    expect(orders.at(-1)).toEqual([alpha.id, charlie.id]);
+    expect([...collectionGrid.children].map(card => card.dataset.clipId)).toEqual([alpha.id, charlie.id]);
+    expect([...pipelineGrid.children].map(card => card.dataset.clipId)).toEqual([alpha.id, bravo.id, charlie.id]);
+    expect(controller.getCardCount()).toBe(2);
+  });
+
   test('emits full order after drag-drop reorder and provides clip media source', () => {
     const orders = [];
     const openRequests = [];
