@@ -28,6 +28,12 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
   private readonly keydownListener = (event: KeyboardEvent): void => this.onKeyDown(event);
   private latestSnapshot: IGifExtractionSessionSnapshot | null = null;
 
+  static forCollectionRefinement(session: GifExtractionSession, options: GifRangesPanelControlOptions = {}): GifRangesPanelControl {
+    const root = (options.document ?? document).createElement('section');
+    root.setAttribute('aria-label', 'Refined collection clip');
+    return new GifRangesPanelControl(root, session, options);
+  }
+
   constructor(
     private readonly root: HTMLElement,
     private readonly session: GifExtractionSession,

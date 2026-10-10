@@ -112,12 +112,6 @@ class AppControllerSupport {
       }];
     });
   }
-
-  static refinedClipPanel(doc: Document): HTMLElement {
-    const panel = doc.createElement('section');
-    panel.setAttribute('aria-label', 'Refined collection clip');
-    return panel;
-  }
 }
 
 // The composition root: builds services, controls and workflows in dependency order, then starts the app.
@@ -386,6 +380,7 @@ export class AppController {
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
     const gifRangesPanel = AppControllerSupport.optionalElement('gifRangesPanel');
+    const shellPanels = AppControllerSupport.shellPanels();
     const sessionReporting = {
       onProgress: activityReporter.progress,
       onSuccess: activityReporter.success,
@@ -414,10 +409,9 @@ export class AppController {
     const gifRangesPanelControl = gifExtractionSession && gifRangesPanel
       ? new GifRangesPanelControl(gifRangesPanel, gifExtractionSession, { document, player: frameReviewPlayer })
       : null;
-    const collectionRangesPanelControl = collectionRefinementSession && gifRangesPanel
-      ? new GifRangesPanelControl(AppControllerSupport.refinedClipPanel(document), collectionRefinementSession, {
-        document, player: frameReviewPlayer,
-      })
+    // The refined-clip panel mounts into the shell's Clips panel, so it exists only where that panel does.
+    const collectionRangesPanelControl = collectionRefinementSession && shellPanels.some(panel => panel.id === 'clips')
+      ? GifRangesPanelControl.forCollectionRefinement(collectionRefinementSession, { document, player: frameReviewPlayer })
       : null;
     if (gifRangesPanelControl) eventWiring.require('gifRangesPanel', gifRangesPanelControl, ['refineRequested']);
     if (collectionRangesPanelControl) eventWiring.require('collectionRangesPanel', collectionRangesPanelControl, ['refineRequested']);
@@ -460,7 +454,7 @@ export class AppController {
       canLeaveScreen: current => refineScreenLeavePolicy.canLeave(current),
       workspace: AppControllerSupport.optionalElement('workspaceRow') ?? undefined,
       center: AppControllerSupport.optionalElement('centralWorkspace') ?? undefined,
-      panels: AppControllerSupport.shellPanels(),
+      panels: shellPanels,
     });
     shell.on('screenChanged', screen => keyboardMap?.render(screen));
     shell.on('boundsChanging', ({ screen, width, durationMs }) => {

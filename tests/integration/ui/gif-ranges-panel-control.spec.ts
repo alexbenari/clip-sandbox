@@ -4,6 +4,20 @@ import type { IGifExtractionSessionSnapshot } from '../../../src/app/gif-extract
 import { GifRangesPanelControl } from '../../../src/ui/gif-ranges-panel-control.js';
 
 describe('GifRangesPanelControl', () => {
+  it('builds its own labelled panel for collection refinement and mounts it', () => {
+    const session = { subscribe: vi.fn(() => vi.fn()) };
+    const control = GifRangesPanelControl.forCollectionRefinement(session as never, { document });
+    const host = document.createElement('div');
+
+    control.mount(host);
+
+    const panel = host.firstElementChild;
+    expect(panel?.tagName).toBe('SECTION');
+    expect(panel?.getAttribute('aria-label')).toBe('Refined collection clip');
+    expect(session.subscribe).toHaveBeenCalledOnce();
+    control.destroy();
+  });
+
   it('shows batch progress and keeps Cancel keyboard focus through updates', () => {
     let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
     const snapshot: IGifExtractionSessionSnapshot = {
