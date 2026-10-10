@@ -232,13 +232,14 @@ export class AppController {
       error: activityReporter.failure,
       pipelinesRootChanged: () => { void pipelineCatalogControl?.load(); },
     });
-    const keyboardPanel = utilityHost ? elements.required('keyboardMapPanel') : null;
-    const keyboardMap = keyboardPanel ? new KeyboardMapControl(keyboardPanel, GLOBAL_UTILITY_SHORTCUTS, () => utilities?.close()) : null;
+    const keyboardMap = utilityHost
+      ? KeyboardMapControl.fromDocument(document, { globalShortcuts: GLOBAL_UTILITY_SHORTCUTS, requestClose: () => utilities?.close() })
+      : null;
     const collectionScreen = new CollectionScreen(elements.required('collectionScreen'), toolbar, gridController, mainToolbarControl);
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
     const gifRangesPanel = elements.optional('gifRangesPanel');
-    const shellPanels = ApplicationShellController.sidePanelsIn(document);
+    const hasClipsPanel = ApplicationShellController.sidePanelsIn(document).some(panel => panel.id === 'clips');
     const sessionReporting = {
       onProgress: activityReporter.progress,
       onSuccess: activityReporter.success,
@@ -268,7 +269,7 @@ export class AppController {
       ? new GifRangesPanelControl(gifRangesPanel, gifExtractionSession, { document, player: frameReviewPlayer })
       : null;
     // The refined-clip panel mounts into the shell's Clips panel, so it exists only where that panel does.
-    const collectionRangesPanelControl = collectionRefinementSession && shellPanels.some(panel => panel.id === 'clips')
+    const collectionRangesPanelControl = collectionRefinementSession && hasClipsPanel
       ? GifRangesPanelControl.forCollectionRefinement(collectionRefinementSession, { document, player: frameReviewPlayer })
       : null;
     if (gifRangesPanelControl) eventWiring.require('gifRangesPanel', gifRangesPanelControl, ['refineRequested']);
@@ -302,30 +303,28 @@ export class AppController {
     eventWiring.require('collectionRefineScreen', collectionRefineScreen, ['backRequested']);
     const refineScreenLeavePolicy = new RefineScreenLeavePolicy(
       collectionRefineScreen.id, collectionRefinementSession, activityReporter.progress);
-    const shell = new ApplicationShellController({
-      screenHost: elements.required('mainScreenHost'),
-      commandHost: elements.required('screenCommandHost'),
-      selector: elements.required<HTMLSelectElement>('appScreenSelector'),
-      selectorHost: elements.required('appScreenSwitcher'),
+    const shell = ApplicationShellController.fromDocument(document, {
       initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
       screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
       canLeaveScreen: current => refineScreenLeavePolicy.canLeave(current),
-      workspace: elements.optional('workspaceRow') ?? undefined,
-      center: elements.optional('centralWorkspace') ?? undefined,
-      panels: shellPanels,
     });
     shell.on('screenChanged', screen => keyboardMap?.render(screen));
+    shell.on('settingsRequested', () => {
+      utilities?.close(false);
+      shell.activate(settingsScreen.id);
+    });
     shell.on('boundsChanging', ({ screen, width, durationMs }) => {
       if (screen === collectionScreen) gridController.beginWorkspaceResize(width, durationMs);
     });
     shell.on('boundsSettled', screen => {
       if (screen === collectionScreen) gridController.endWorkspaceResize();
     });
-    eventWiring.require('applicationShell', shell, ['screenChanged', 'boundsChanging', 'boundsSettled']);
+    eventWiring.require('applicationShell', shell, ['screenChanged', 'boundsChanging', 'boundsSettled', 'settingsRequested']);
+    const keyboardUtility = keyboardMap?.utilitySurface();
     const activityUtility = activityIndicatorControl.utilitySurface();
-    const utilities = utilityHost && keyboardPanel && keyboardMap && activityUtility
+    const utilities = utilityHost && keyboardUtility && activityUtility
       ? new GlobalUtilityCoordinator(utilityHost, [
-        { id: 'keyboard', label: 'Keyboard shortcuts', trigger: elements.required<HTMLButtonElement>('keyboardMapBtn'), panel: keyboardPanel, focusInitial: () => keyboardMap.focusInitial() },
+        { id: 'keyboard', ...keyboardUtility },
         { id: 'activity', ...activityUtility },
       ])
       : null;
@@ -428,6 +427,8 @@ export class AppController {
       folderFiles: fileSystem,
       zoom: zoomOverlay,
       grid: gridController,
+      screens: shell,
+      collectionScreenId: collectionScreen.id,
       contextMenu: clipContextMenuController,
       editMenu: zoomEditMenuControl,
       clipEditor,
@@ -532,14 +533,6 @@ export class AppController {
     recomputeLayout();
     collectionView.setTitlesHidden(false);
     shell.start();
-    elements.required<HTMLSelectElement>('appScreenSelector').addEventListener('change', () => {
-      if (zoom.isOpen()) zoom.close();
-    });
-    elements.optional<HTMLButtonElement>('settingsBtn')?.addEventListener('click', () => {
-      utilities?.close(false);
-      if (zoom.isOpen()) zoom.close();
-      shell.activate(settingsScreen.id);
-    });
     const settingsReady = settingsScreen.load();
     const initialScreenId = shell.activeScreen.id;
     void settingsReady.then(() => {

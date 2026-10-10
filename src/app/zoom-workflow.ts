@@ -33,6 +33,8 @@ export interface IZoomGrid extends IEventSource<{ openClipRequested: string }> {
   renderCollection(sequence: ClipSequence, options: { cacheKey: string }): void;
 }
 
+export interface IScreenChanges extends IEventSource<{ screenChanged: Readonly<{ id: string }> }> {}
+
 export interface IZoomEditMenu {
   open(request: { point: MenuPoint; isDisabled: boolean; onSelectEdit: (edit: VideoEdit) => void }): void;
 }
@@ -49,6 +51,8 @@ type ZoomDependencies = Readonly<{
   folderFiles: IZoomFolderFiles;
   zoom: IZoomView;
   grid: IZoomGrid;
+  screens: IScreenChanges;
+  collectionScreenId: string;
   contextMenu: { close(options: { restoreFocus: boolean }): void };
   editMenu: IZoomEditMenu;
   clipEditor: Pick<ClipEditor, 'createVideoEdit'>;
@@ -89,6 +93,10 @@ export class ZoomWorkflow {
       zoom.zoom.on('contextMenuRequested', ({ point }) => {
         if (zoom.fullScreen.isDocumentFullScreen()) return;
         this.openEditMenu(point);
+      }),
+      // Zoom overlays the Collection screen, so it closes when another screen becomes active.
+      zoom.screens.on('screenChanged', screen => {
+        if (screen.id !== zoom.collectionScreenId && this.isOpen()) this.close();
       }),
     ];
   }

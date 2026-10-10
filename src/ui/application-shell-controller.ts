@@ -1,4 +1,5 @@
 import type { IAppScreen } from './app-screen.js';
+import { DocumentElements } from './document-elements.js';
 import { FoldablePanelController } from './foldable-panel-controller.js';
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
 
@@ -6,6 +7,7 @@ export interface IApplicationShellEvents {
   screenChanged: IAppScreen;
   boundsChanging: Readonly<{ screen: IAppScreen; width: number; durationMs: number }>;
   boundsSettled: IAppScreen;
+  settingsRequested: void;
 }
 
 type ShellPanel = {
@@ -23,6 +25,7 @@ type ShellElements = {
   commandHost: HTMLElement;
   selector: HTMLSelectElement;
   selectorHost?: HTMLElement;
+  settingsButton?: HTMLButtonElement | null;
   screens: readonly [IAppScreen, ...IAppScreen[]];
   initialScreenId?: string;
   workspace?: HTMLElement;
@@ -45,6 +48,22 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
   private motionPending = false;
   private applyingPanelState = false;
   private readonly onSelectionChange = (): void => { this.activate(this.elements.selector.value); };
+  private readonly onSettingsClick = (): void => { this.events.emit('settingsRequested'); };
+
+  static fromDocument(doc: Document, options: Pick<ShellElements, 'screens' | 'initialScreenId' | 'canLeaveScreen'>): ApplicationShellController {
+    const elements = new DocumentElements(doc);
+    return new ApplicationShellController({
+      ...options,
+      screenHost: elements.required('mainScreenHost'),
+      commandHost: elements.required('screenCommandHost'),
+      selector: elements.required<HTMLSelectElement>('appScreenSelector'),
+      selectorHost: elements.required('appScreenSwitcher'),
+      settingsButton: elements.optional<HTMLButtonElement>('settingsBtn'),
+      workspace: elements.optional('workspaceRow') ?? undefined,
+      center: elements.optional('centralWorkspace') ?? undefined,
+      panels: ApplicationShellController.sidePanelsIn(doc),
+    });
+  }
 
   static sidePanelsIn(root: ParentNode): ShellPanel[] {
     return [...root.querySelectorAll<HTMLElement>('[data-shell-panel]')].map(panelRoot => {
@@ -105,6 +124,7 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
     }));
     for (const screen of elements.screens) elements.screenHost.append(screen.root);
     elements.selector.addEventListener('change', this.onSelectionChange);
+    elements.settingsButton?.addEventListener('click', this.onSettingsClick);
   }
 
   // Activation is separate from construction so subscribers also receive the initial screen's events.
@@ -208,6 +228,7 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
     if (this.destroyed) return;
     this.destroyed = true;
     this.elements.selector.removeEventListener('change', this.onSelectionChange);
+    this.elements.settingsButton?.removeEventListener('click', this.onSettingsClick);
     if (this.activated) this.current.onDeactivate?.();
     for (const panel of this.panels.values()) panel.controller.destroy();
   }

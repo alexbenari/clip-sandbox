@@ -42,6 +42,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
   const boundaryFeedback = { playBoundaryClank: vi.fn() };
   const entries: { kind: string; message: string }[] = [];
   const collectionView = { applySelection: vi.fn(), activeCacheKey: () => 'pipeline', refreshSelector: vi.fn(), refreshToolbar: vi.fn() };
+  const screens = new EventSource<{ screenChanged: { id: string } }>();
   const workflow = new ZoomWorkflow({
     pipelineSession,
     openFolder,
@@ -51,6 +52,8 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
     },
     zoom: zoomView,
     grid,
+    screens,
+    collectionScreenId: 'collection',
     contextMenu: { close: vi.fn() },
     editMenu,
     clipEditor: { createVideoEdit: vi.fn(async () => editResult ?? { ok: false, code: 'edit-failed', edit: loopify } as ClipEditorResult) },
@@ -61,10 +64,22 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
     reporter: new ActivityReporter({ log: entry => { entries.push(entry); } }),
     appText: new AppText(),
   });
-  return { workflow, zoomView, grid, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineSession };
+  return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineSession };
 }
 
 describe('ZoomWorkflow', () => {
+  it('closes when another screen becomes active, and stays open on Collection', () => {
+    const { workflow, zoomView, screens, alpha } = zoomWorkflow();
+    workflow.openClip(alpha);
+
+    screens.emit('screenChanged', { id: 'collection' });
+    expect(workflow.isOpen()).toBe(true);
+    screens.emit('screenChanged', { id: 'settings' });
+
+    expect(workflow.isOpen()).toBe(false);
+    expect(zoomView.close).toHaveBeenCalledOnce();
+  });
+
   it('opens the clip the grid asks for and selects it', () => {
     const { zoomView, grid, alpha } = zoomWorkflow();
 

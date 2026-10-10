@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityLogger } from '../../../src/app/activity-logger.js';
 import { AppText } from '../../../src/app/app-text.js';
 import { ActivityIndicatorControl } from '../../../src/ui/activity-indicator-control.js';
+import type { IAppScreen } from '../../../src/ui/app-screen.js';
+import { ApplicationShellController } from '../../../src/ui/application-shell-controller.js';
+import { KeyboardMapControl } from '../../../src/ui/keyboard-map-control.js';
 import { AddToCollectionDialogController } from '../../../src/ui/add-to-collection-dialog-controller.js';
 import { CollectionConflictController } from '../../../src/ui/collection-conflict-controller.js';
 import { ContextMenuController } from '../../../src/ui/context-menu-controller.js';
@@ -123,6 +126,36 @@ describe('controls built from the page markup', () => {
     expect(saveAsNewRequested).toHaveBeenCalledOnce();
     expect(document.getElementById('orderMenu')!.dataset.open).toBe('false');
     toolbar.destroy();
+  });
+
+  it('the application shell mounts its screens and reports the Settings button', () => {
+    const screen = (id: string): IAppScreen => ({
+      id, label: id, selectorStatus: 'fixed', root: document.createElement('section'), commands: null, shortcuts: [],
+      panelContributions: [], focusInitial: vi.fn(),
+    });
+    const screens: [IAppScreen, IAppScreen] = [screen('collection'), screen('settings')];
+    const shell = ApplicationShellController.fromDocument(document, { screens });
+    const settingsRequested = vi.fn();
+    shell.on('settingsRequested', settingsRequested);
+
+    shell.start();
+    click('settingsBtn');
+
+    expect(screens.every(({ root }) => root.parentElement === document.getElementById('mainScreenHost'))).toBe(true);
+    expect([...(document.getElementById('appScreenSelector') as HTMLSelectElement).options].map(option => option.value))
+      .toEqual(['collection', 'settings']);
+    expect(settingsRequested).toHaveBeenCalledOnce();
+    shell.destroy();
+  });
+
+  it('the keyboard map describes its own utility surface', () => {
+    const keyboardMap = KeyboardMapControl.fromDocument(document, { globalShortcuts: [] });
+
+    expect(keyboardMap.utilitySurface()).toMatchObject({
+      label: 'Keyboard shortcuts',
+      trigger: document.getElementById('keyboardMapBtn'),
+      panel: document.getElementById('keyboardMapPanel'),
+    });
   });
 
   it('reports a required part that is missing from the page', () => {

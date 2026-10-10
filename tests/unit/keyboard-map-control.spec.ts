@@ -14,7 +14,7 @@ function createControl(
   const root = document.createElement('section');
   root.id = 'keyboardMapPanel';
   document.body.append(root);
-  return { root, control: new KeyboardMapControl(root, globalShortcuts) };
+  return { root, control: new KeyboardMapControl({ root, globalShortcuts }) };
 }
 
 describe('KeyboardMapControl', () => {

@@ -22,7 +22,7 @@ function fixture() {
 describe('global utility coordination', () => {
   it('returns focus to the invoker when the visible close control is clicked', () => {
     const { coordinator, host, keyboard } = fixture();
-    const content = new KeyboardMapControl(keyboard.panel, [], () => coordinator.close());
+    const content = new KeyboardMapControl({ root: keyboard.panel, globalShortcuts: [], requestClose: () => coordinator.close() });
     content.render({ label: 'Collection', shortcuts: [] });
     const close = keyboard.panel.querySelector<HTMLButtonElement>('button')!;
     coordinator.open('keyboard');

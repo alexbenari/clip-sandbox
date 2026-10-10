@@ -1,26 +1,53 @@
 import type { IAppScreen, IShortcutDescriptor } from './app-screen.js';
+import { DocumentElements } from './document-elements.js';
+import type { GlobalUtility } from './global-utility-coordinator.js';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+const KEYBOARD_MAP_TITLE = 'Keyboard shortcuts';
+
+type KeyboardMapBehavior = {
+  globalShortcuts: readonly IShortcutDescriptor[];
+  requestClose?: () => void;
+};
 
 export class KeyboardMapControl {
+  private readonly root: HTMLElement;
+  private readonly trigger: HTMLButtonElement | null;
   private readonly document: Document;
   private readonly globalShortcuts: readonly IShortcutDescriptor[];
+  private readonly requestClose: () => void;
 
-  constructor(
-    private readonly root: HTMLElement,
-    globalShortcuts: readonly IShortcutDescriptor[],
-    private readonly requestClose: () => void = () => {},
-  ) {
+  static fromDocument(doc: Document, behavior: KeyboardMapBehavior): KeyboardMapControl {
+    const elements = new DocumentElements(doc);
+    return new KeyboardMapControl({
+      ...behavior,
+      root: elements.required('keyboardMapPanel'),
+      trigger: elements.required<HTMLButtonElement>('keyboardMapBtn'),
+    });
+  }
+
+  constructor({ root, trigger = null, globalShortcuts, requestClose = () => {} }: KeyboardMapBehavior & {
+    root: HTMLElement;
+    trigger?: HTMLButtonElement | null;
+  }) {
+    this.root = root;
+    this.trigger = trigger;
     this.document = root.ownerDocument;
     this.globalShortcuts = globalShortcuts;
+    this.requestClose = requestClose;
     this.root.setAttribute('aria-labelledby', 'keyboardMapHeading');
+  }
+
+  utilitySurface(): Omit<GlobalUtility, 'id'> | null {
+    if (!this.trigger) return null;
+    return { label: KEYBOARD_MAP_TITLE, trigger: this.trigger, panel: this.root, focusInitial: () => this.focusInitial() };
   }
 
   render(screen: Pick<IAppScreen, 'label' | 'shortcuts'>): void {
     const heading = this.document.createElement('h2');
     heading.id = 'keyboardMapHeading';
     heading.tabIndex = -1;
-    heading.textContent = 'Keyboard shortcuts';
+    heading.textContent = KEYBOARD_MAP_TITLE;
 
     const header = this.document.createElement('div');
     header.className = 'utility-header';
