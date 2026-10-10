@@ -1,4 +1,5 @@
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { DocumentElements } from './document-elements.js';
 
 export interface ISaveAsNewDialogEvents {
   confirmed: string;
@@ -16,6 +17,21 @@ export class SaveAsNewDialogController implements IEventSource<ISaveAsNewDialogE
   private readonly validateName: (name: string) => string;
   private readonly events = new EventSource<ISaveAsNewDialogEvents>();
   private externalError: string;
+
+  static fromDocument(doc: Document, { validateName }: { validateName?: (name: string) => string } = {}): SaveAsNewDialogController {
+    const elements = new DocumentElements(doc);
+    const dialog = elements.required('saveAsNewDialog');
+    return new SaveAsNewDialogController({
+      dialog,
+      titleEl: dialog.querySelector<HTMLElement>('h2'),
+      textEl: dialog.querySelector<HTMLElement>('p'),
+      nameInput: elements.required<HTMLInputElement>('saveAsNewNameInput'),
+      errorMessageEl: elements.required('saveAsNewError'),
+      confirmBtn: elements.required<HTMLButtonElement>('confirmSaveAsNewBtn'),
+      cancelBtn: elements.required<HTMLButtonElement>('cancelSaveAsNewBtn'),
+      validateName,
+    });
+  }
 
   constructor({
     dialog,

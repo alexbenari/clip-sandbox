@@ -1,4 +1,5 @@
 import type { AppText } from '../app/app-text.js';
+import { DocumentElements } from './document-elements.js';
 
 type DeleteDialogHandlers = {
   onSave?: (() => void) | null;
@@ -21,6 +22,25 @@ export class DeleteFromDiskDialogController {
   private readonly confirmPreviewEl: HTMLElement | null;
   private preflightHandlers: DeleteDialogHandlers;
   private confirmHandlers: DeleteDialogHandlers;
+
+  static fromDocument(doc: Document, { appText }: {
+    appText: Pick<AppText, 'deleteFromDiskConfirmationText' | 'deleteFromDiskPreviewOverflowText'>;
+  }): DeleteFromDiskDialogController {
+    const elements = new DocumentElements(doc);
+    return new DeleteFromDiskDialogController({
+      appText,
+      preflightDialog: elements.optional<HTMLDialogElement>('deletePreflightDialog'),
+      preflightTextEl: elements.optional('deletePreflightText'),
+      confirmPreflightBtn: elements.optional<HTMLButtonElement>('confirmDeletePreflightBtn'),
+      discardPreflightBtn: elements.optional<HTMLButtonElement>('discardDeletePreflightBtn'),
+      cancelPreflightBtn: elements.optional<HTMLButtonElement>('cancelDeletePreflightBtn'),
+      confirmDialog: elements.optional<HTMLDialogElement>('deleteFromDiskDialog'),
+      confirmSummaryEl: elements.optional('deleteFromDiskSummary'),
+      confirmPreviewEl: elements.optional('deleteFromDiskPreview'),
+      confirmDeleteBtn: elements.optional<HTMLButtonElement>('confirmDeleteFromDiskBtn'),
+      cancelDeleteBtn: elements.optional<HTMLButtonElement>('cancelDeleteFromDiskBtn'),
+    });
+  }
 
   constructor({
     appText,

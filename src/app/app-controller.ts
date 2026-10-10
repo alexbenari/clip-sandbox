@@ -67,6 +67,7 @@ import { DeleteFromDiskDialogController } from '../ui/delete-from-disk-dialog-co
 import { SaveAsNewDialogController } from '../ui/save-as-new-dialog-controller.js';
 import { UnsavedChangesDialogController } from '../ui/unsaved-changes-dialog-controller.js';
 import { LoadStatusControl } from '../ui/load-status-control.js';
+import { DocumentElements } from '../ui/document-elements.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
 import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
@@ -76,16 +77,6 @@ const NEW_COLLECTION_CHOICE_VALUE = '__new_collection__';
 const PIPELINE_SELECTION_VALUE = '__pipeline__';
 
 class AppControllerSupport {
-  static requiredElement<T extends HTMLElement = HTMLElement>(id: string): T {
-    const element = document.getElementById(id);
-    if (!element) throw new Error(`Required element #${id} was not found.`);
-    return element as T;
-  }
-
-  static optionalElement<T extends HTMLElement = HTMLElement>(id: string): T | null {
-    return document.getElementById(id) as T | null;
-  }
-
   static gifSessionServices(win: Window) {
     const frameReview = ElectronFrameReviewService.tryCreate(win);
     const thumbnails = ElectronThumbnailCacheService.tryCreate(win);
@@ -105,62 +96,23 @@ export class AppController {
     this.initialized = true;
 
     // Page elements.
-    const pickBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('pickBtn');
-    const saveBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('saveBtn');
-    const saveAsNewBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('saveAsNewBtn');
-    const addToCollectionBtn = AppControllerSupport.optionalElement<HTMLButtonElement>('addToCollectionBtn');
-    const deleteFromDiskBtn = AppControllerSupport.optionalElement<HTMLButtonElement>('deleteFromDiskBtn');
-    const orderMenu = AppControllerSupport.requiredElement('orderMenu');
-    const orderMenuBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('orderMenuBtn');
-    const orderMenuPanel = AppControllerSupport.requiredElement('orderMenuPanel');
-    const grid = AppControllerSupport.requiredElement('grid');
-    const gridWrap = AppControllerSupport.requiredElement('gridWrap');
-    const countSpan = AppControllerSupport.requiredElement('count');
-    const activeCollectionNameEl = AppControllerSupport.requiredElement<HTMLSelectElement>('activeCollectionName');
-    const toolbar = AppControllerSupport.requiredElement('toolbar');
-    const activityIndicatorRoot = AppControllerSupport.requiredElement('activityIndicatorRoot');
-    const activityIndicatorBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('activityIndicatorBtn');
-    const activityIndicatorPanel = AppControllerSupport.requiredElement('activityIndicatorPanel');
-    const activityIndicatorList = AppControllerSupport.requiredElement<HTMLUListElement>('activityIndicatorList');
-    const zoomLayerRoot = AppControllerSupport.requiredElement('zoomLayerRoot');
-    const toggleTitlesBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('toggleTitlesBtn');
-    const fsBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('fsBtn');
-    const collectionConflict = AppControllerSupport.requiredElement('collectionConflict');
-    const collectionConflictSummary = AppControllerSupport.requiredElement('collectionConflictSummary');
-    const collectionConflictList = AppControllerSupport.requiredElement('collectionConflictList');
-    const applyCollectionConflictBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('applyCollectionConflictBtn');
-    const cancelCollectionConflictBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('cancelCollectionConflictBtn');
-    const saveAsNewDialog = AppControllerSupport.requiredElement('saveAsNewDialog');
-    const saveAsNewDialogTitle = saveAsNewDialog.querySelector<HTMLElement>('h2');
-    const saveAsNewDialogText = saveAsNewDialog.querySelector<HTMLElement>('p');
-    const saveAsNewNameInput = AppControllerSupport.requiredElement<HTMLInputElement>('saveAsNewNameInput');
-    const saveAsNewError = AppControllerSupport.requiredElement('saveAsNewError');
-    const confirmSaveAsNewBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('confirmSaveAsNewBtn');
-    const cancelSaveAsNewBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('cancelSaveAsNewBtn');
-    const addToCollectionDialog = AppControllerSupport.optionalElement<HTMLDialogElement>('addToCollectionDialog');
-    const addToCollectionSelect = AppControllerSupport.optionalElement<HTMLSelectElement>('addToCollectionSelect');
-    const addToCollectionNameLabel = AppControllerSupport.optionalElement('addToCollectionNameLabel');
-    const addToCollectionNameInput = AppControllerSupport.optionalElement<HTMLInputElement>('addToCollectionNameInput');
-    const addToCollectionError = AppControllerSupport.optionalElement('addToCollectionError');
-    const confirmAddToCollectionBtn = AppControllerSupport.optionalElement<HTMLButtonElement>('confirmAddToCollectionBtn');
-    const cancelAddToCollectionBtn = AppControllerSupport.optionalElement<HTMLButtonElement>('cancelAddToCollectionBtn');
-    const unsavedChangesDialog = AppControllerSupport.requiredElement<HTMLDialogElement>('unsavedChangesDialog');
-    const unsavedChangesText = AppControllerSupport.requiredElement('unsavedChangesText');
-    const confirmUnsavedChangesBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('confirmUnsavedChangesBtn');
-    const discardUnsavedChangesBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('discardUnsavedChangesBtn');
-    const cancelUnsavedChangesBtn = AppControllerSupport.requiredElement<HTMLButtonElement>('cancelUnsavedChangesBtn');
-    const deletePreflightDialog = AppControllerSupport.optionalElement<HTMLDialogElement>('deletePreflightDialog');
-    const deletePreflightText = AppControllerSupport.optionalElement('deletePreflightText');
-    const confirmDeletePreflightBtn = AppControllerSupport.optionalElement<HTMLButtonElement>('confirmDeletePreflightBtn');
-    const discardDeletePreflightBtn = AppControllerSupport.optionalElement<HTMLButtonElement>('discardDeletePreflightBtn');
-    const cancelDeletePreflightBtn = AppControllerSupport.optionalElement<HTMLButtonElement>('cancelDeletePreflightBtn');
-    const deleteFromDiskDialog = AppControllerSupport.optionalElement<HTMLDialogElement>('deleteFromDiskDialog');
-    const deleteFromDiskSummary = AppControllerSupport.optionalElement('deleteFromDiskSummary');
-    const deleteFromDiskPreview = AppControllerSupport.optionalElement('deleteFromDiskPreview');
-    const confirmDeleteFromDiskBtn = AppControllerSupport.optionalElement<HTMLButtonElement>('confirmDeleteFromDiskBtn');
-    const cancelDeleteFromDiskBtn = AppControllerSupport.optionalElement<HTMLButtonElement>('cancelDeleteFromDiskBtn');
-    const clipContextMenu = AppControllerSupport.requiredElement('clipContextMenu');
-    const clipContextMenuPanel = AppControllerSupport.requiredElement('clipContextMenuPanel');
+    const elements = new DocumentElements(document);
+    const pickBtn = elements.required<HTMLButtonElement>('pickBtn');
+    const saveBtn = elements.required<HTMLButtonElement>('saveBtn');
+    const saveAsNewBtn = elements.required<HTMLButtonElement>('saveAsNewBtn');
+    const addToCollectionBtn = elements.optional<HTMLButtonElement>('addToCollectionBtn');
+    const deleteFromDiskBtn = elements.optional<HTMLButtonElement>('deleteFromDiskBtn');
+    const orderMenu = elements.required('orderMenu');
+    const orderMenuBtn = elements.required<HTMLButtonElement>('orderMenuBtn');
+    const orderMenuPanel = elements.required('orderMenuPanel');
+    const grid = elements.required('grid');
+    const gridWrap = elements.required('gridWrap');
+    const countSpan = elements.required('count');
+    const activeCollectionNameEl = elements.required<HTMLSelectElement>('activeCollectionName');
+    const toolbar = elements.required('toolbar');
+    const zoomLayerRoot = elements.required('zoomLayerRoot');
+    const toggleTitlesBtn = elements.required<HTMLButtonElement>('toggleTitlesBtn');
+    const fsBtn = elements.required<HTMLButtonElement>('fsBtn');
     const body = document.body;
 
     // Application services and adapters.
@@ -205,7 +157,7 @@ export class AppController {
       document,
     });
     eventWiring.require('zoomOverlay', zoomOverlay, ['playbackFailed', 'contextMenuRequested']);
-    const clipContextMenuController = new ContextMenuController({ root: clipContextMenu, panel: clipContextMenuPanel, document });
+    const clipContextMenuController = ContextMenuController.forClipMenu(document);
     const gridContextMenuControl = new GridContextMenuControl({ contextMenuController: clipContextMenuController });
     const zoomEditMenuControl = new ZoomEditMenuControl({ contextMenuController: clipContextMenuController, videoEditCatalog });
     const collectionSelectorControl = new CollectionSelectorControl({
@@ -231,57 +183,18 @@ export class AppController {
       'browseRequested', 'saveRequested', 'saveAsNewRequested', 'addToCollectionRequested',
       'deleteFromDiskRequested', 'toggleTitlesRequested', 'toggleFullscreenRequested',
     ]);
-    const addToCollectionDialogController = new AddToCollectionDialogController({
-      dialog: addToCollectionDialog,
-      destinationSelect: addToCollectionSelect,
-      newCollectionNameLabel: addToCollectionNameLabel,
-      newCollectionNameInput: addToCollectionNameInput,
-      errorMessageEl: addToCollectionError,
-      confirmBtn: confirmAddToCollectionBtn,
-      cancelBtn: cancelAddToCollectionBtn,
+    const addToCollectionDialogController = AddToCollectionDialogController.fromDocument(document, {
       newChoiceValue: NEW_COLLECTION_CHOICE_VALUE,
       validateNewName: name => newCollectionNameCheck.problemText(name),
     });
     eventWiring.require('addToCollectionDialog', addToCollectionDialogController, ['confirmed']);
-    const collectionConflictController = new CollectionConflictController({
-      appText,
-      root: collectionConflict,
-      summaryEl: collectionConflictSummary,
-      listEl: collectionConflictList,
-      applyBtn: applyCollectionConflictBtn,
-      cancelBtn: cancelCollectionConflictBtn,
-    });
-    const saveAsNewDialogController = new SaveAsNewDialogController({
-      dialog: saveAsNewDialog,
-      titleEl: saveAsNewDialogTitle,
-      textEl: saveAsNewDialogText,
-      nameInput: saveAsNewNameInput,
-      errorMessageEl: saveAsNewError,
-      confirmBtn: confirmSaveAsNewBtn,
-      cancelBtn: cancelSaveAsNewBtn,
+    const collectionConflictController = CollectionConflictController.fromDocument(document, { appText });
+    const saveAsNewDialogController = SaveAsNewDialogController.fromDocument(document, {
       validateName: name => newCollectionNameCheck.problemText(name),
     });
     eventWiring.require('saveAsNewDialog', saveAsNewDialogController, ['confirmed', 'cancelled']);
-    const unsavedChangesDialogController = new UnsavedChangesDialogController({
-      dialog: unsavedChangesDialog,
-      messageEl: unsavedChangesText,
-      confirmBtn: confirmUnsavedChangesBtn,
-      discardBtn: discardUnsavedChangesBtn,
-      cancelBtn: cancelUnsavedChangesBtn,
-    });
-    const deleteFromDiskDialogController = new DeleteFromDiskDialogController({
-      appText,
-      preflightDialog: deletePreflightDialog,
-      preflightTextEl: deletePreflightText,
-      confirmPreflightBtn: confirmDeletePreflightBtn,
-      discardPreflightBtn: discardDeletePreflightBtn,
-      cancelPreflightBtn: cancelDeletePreflightBtn,
-      confirmDialog: deleteFromDiskDialog,
-      confirmSummaryEl: deleteFromDiskSummary,
-      confirmPreviewEl: deleteFromDiskPreview,
-      confirmDeleteBtn: confirmDeleteFromDiskBtn,
-      cancelDeleteBtn: cancelDeleteFromDiskBtn,
-    });
+    const unsavedChangesDialogController = UnsavedChangesDialogController.fromDocument(document);
+    const deleteFromDiskDialogController = DeleteFromDiskDialogController.fromDocument(document, { appText });
     const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
       fullScreen: fullscreenAdapter,
       zoom: zoomOverlay,
@@ -290,16 +203,11 @@ export class AppController {
       document,
     });
     // The Activity control and the utility coordinator each refer to the other, so these callbacks resolve `utilities` when called.
-    const utilityHost = AppControllerSupport.optionalElement('globalUtilityHost');
-    const activityIndicatorControl = new ActivityIndicatorControl({
+    const utilityHost = elements.optional('globalUtilityHost');
+    const activityIndicatorControl = ActivityIndicatorControl.fromDocument(document, {
       logger: activityLogger,
       requestPanelClose: () => utilities?.close(),
       writeClipboard: text => navigator.clipboard.writeText(text),
-      root: activityIndicatorRoot,
-      button: activityIndicatorBtn,
-      panel: activityIndicatorPanel,
-      listEl: activityIndicatorList,
-      document,
       win: window,
       requestPanelOpen: utilityHost ? () => {
         if (activityPanelAutoOpenPolicy.mayOpenAutomatically()) utilities?.open('activity');
@@ -335,7 +243,7 @@ export class AppController {
       addToCollectionBtn,
       deleteFromDiskBtn,
     });
-    const pipelinesPanelHost = AppControllerSupport.optionalElement('pipelinesPanelHost');
+    const pipelinesPanelHost = elements.optional('pipelinesPanelHost');
     const pipelineCatalogControl = pipelinesPanelHost
       ? new PipelineCatalogControl({ host: pipelinesPanelHost, catalog: fileSystem, document })
       : null;
@@ -356,12 +264,12 @@ export class AppController {
       error: activityReporter.failure,
       pipelinesRootChanged: () => { void pipelineCatalogControl?.load(); },
     });
-    const keyboardPanel = utilityHost ? AppControllerSupport.requiredElement('keyboardMapPanel') : null;
+    const keyboardPanel = utilityHost ? elements.required('keyboardMapPanel') : null;
     const keyboardMap = keyboardPanel ? new KeyboardMapControl(keyboardPanel, GLOBAL_UTILITY_SHORTCUTS, () => utilities?.close()) : null;
-    const collectionScreen = new CollectionScreen(AppControllerSupport.requiredElement('collectionScreen'), toolbar, gridController, mainToolbarControl);
+    const collectionScreen = new CollectionScreen(elements.required('collectionScreen'), toolbar, gridController, mainToolbarControl);
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
-    const gifRangesPanel = AppControllerSupport.optionalElement('gifRangesPanel');
+    const gifRangesPanel = elements.optional('gifRangesPanel');
     const shellPanels = ApplicationShellController.sidePanelsIn(document);
     const sessionReporting = {
       onProgress: activityReporter.progress,
@@ -427,15 +335,15 @@ export class AppController {
     const refineScreenLeavePolicy = new RefineScreenLeavePolicy(
       collectionRefineScreen.id, collectionRefinementSession, activityReporter.progress);
     const shell = new ApplicationShellController({
-      screenHost: AppControllerSupport.requiredElement('mainScreenHost'),
-      commandHost: AppControllerSupport.requiredElement('screenCommandHost'),
-      selector: AppControllerSupport.requiredElement<HTMLSelectElement>('appScreenSelector'),
-      selectorHost: AppControllerSupport.requiredElement('appScreenSwitcher'),
+      screenHost: elements.required('mainScreenHost'),
+      commandHost: elements.required('screenCommandHost'),
+      selector: elements.required<HTMLSelectElement>('appScreenSelector'),
+      selectorHost: elements.required('appScreenSwitcher'),
       initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
       screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
       canLeaveScreen: current => refineScreenLeavePolicy.canLeave(current),
-      workspace: AppControllerSupport.optionalElement('workspaceRow') ?? undefined,
-      center: AppControllerSupport.optionalElement('centralWorkspace') ?? undefined,
+      workspace: elements.optional('workspaceRow') ?? undefined,
+      center: elements.optional('centralWorkspace') ?? undefined,
       panels: shellPanels,
     });
     shell.on('screenChanged', screen => keyboardMap?.render(screen));
@@ -446,10 +354,11 @@ export class AppController {
       if (screen === collectionScreen) gridController.endWorkspaceResize();
     });
     eventWiring.require('applicationShell', shell, ['screenChanged', 'boundsChanging', 'boundsSettled']);
-    const utilities = utilityHost && keyboardPanel && keyboardMap
+    const activityUtility = activityIndicatorControl.utilitySurface();
+    const utilities = utilityHost && keyboardPanel && keyboardMap && activityUtility
       ? new GlobalUtilityCoordinator(utilityHost, [
-        { id: 'keyboard', label: 'Keyboard shortcuts', trigger: AppControllerSupport.requiredElement<HTMLButtonElement>('keyboardMapBtn'), panel: keyboardPanel, focusInitial: () => keyboardMap.focusInitial() },
-        { id: 'activity', label: 'Activity and Errors', trigger: activityIndicatorBtn, panel: activityIndicatorPanel, focusInitial: () => activityIndicatorControl.focusInitial() },
+        { id: 'keyboard', label: 'Keyboard shortcuts', trigger: elements.required<HTMLButtonElement>('keyboardMapBtn'), panel: keyboardPanel, focusInitial: () => keyboardMap.focusInitial() },
+        { id: 'activity', ...activityUtility },
       ])
       : null;
 
@@ -655,10 +564,10 @@ export class AppController {
     recomputeLayout();
     collectionView.setTitlesHidden(false);
     shell.start();
-    AppControllerSupport.requiredElement<HTMLSelectElement>('appScreenSelector').addEventListener('change', () => {
+    elements.required<HTMLSelectElement>('appScreenSelector').addEventListener('change', () => {
       if (zoom.isOpen()) zoom.close();
     });
-    AppControllerSupport.optionalElement<HTMLButtonElement>('settingsBtn')?.addEventListener('click', () => {
+    elements.optional<HTMLButtonElement>('settingsBtn')?.addEventListener('click', () => {
       utilities?.close(false);
       if (zoom.isOpen()) zoom.close();
       shell.activate(settingsScreen.id);

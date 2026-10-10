@@ -1,3 +1,5 @@
+import { DocumentElements } from './document-elements.js';
+
 type DialogHandlers = {
   onSave?: (() => void) | null;
   onDiscard?: (() => void) | null;
@@ -8,6 +10,17 @@ export class UnsavedChangesDialogController {
   private readonly dialog: HTMLDialogElement | null;
   private readonly messageEl: HTMLElement | null;
   private handlers: DialogHandlers;
+
+  static fromDocument(doc: Document): UnsavedChangesDialogController {
+    const elements = new DocumentElements(doc);
+    return new UnsavedChangesDialogController({
+      dialog: elements.required<HTMLDialogElement>('unsavedChangesDialog'),
+      messageEl: elements.required('unsavedChangesText'),
+      confirmBtn: elements.required<HTMLButtonElement>('confirmUnsavedChangesBtn'),
+      discardBtn: elements.required<HTMLButtonElement>('discardUnsavedChangesBtn'),
+      cancelBtn: elements.required<HTMLButtonElement>('cancelUnsavedChangesBtn'),
+    });
+  }
 
   constructor({
     dialog,

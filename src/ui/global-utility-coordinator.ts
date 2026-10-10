@@ -4,7 +4,7 @@ export const GLOBAL_UTILITY_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Close the open app-bar utility', sequences: [['Escape']] },
 ];
 
-type GlobalUtility = {
+export type GlobalUtility = {
   id: string;
   label: string;
   trigger: HTMLButtonElement;

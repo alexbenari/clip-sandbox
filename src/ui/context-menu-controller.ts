@@ -1,3 +1,5 @@
+import { DocumentElements } from './document-elements.js';
+
 const CONTEXT_MENU_STYLE_ID = 'contextMenuControllerStyles';
 const DEFAULT_CONTEXT_MENU_CSS = `
 .context-menu-root{
@@ -89,6 +91,15 @@ export class ContextMenuController {
   private restoreFocusEl: Element | null;
   private readonly onDocumentPointerDown: (event: MouseEvent) => void;
   private readonly onDocumentKeyDown: (event: KeyboardEvent) => void;
+
+  static forClipMenu(doc: Document): ContextMenuController {
+    const elements = new DocumentElements(doc);
+    return new ContextMenuController({
+      root: elements.required('clipContextMenu'),
+      panel: elements.required('clipContextMenuPanel'),
+      document: doc,
+    });
+  }
 
   constructor({
     root,

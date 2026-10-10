@@ -1,4 +1,6 @@
 import { ActivityLogger, type ActivityEntry, type ActivityErrorEntry } from '../app/activity-logger.js';
+import { DocumentElements } from './document-elements.js';
+import type { GlobalUtility } from './global-utility-coordinator.js';
 
 const ACTIVITY_INDICATOR_STYLE_ID = 'activityIndicatorStyles';
 const DEFAULT_ACTIVITY_INDICATOR_CSS = `
@@ -37,6 +39,14 @@ type EntryView = { node: HTMLLIElement; error?: {
   status: HTMLElement; feedback: HTMLElement; clear: HTMLButtonElement; retry?: HTMLButtonElement; copy?: HTMLButtonElement;
 } };
 type ActivityWindow = Window & typeof globalThis;
+type ActivityIndicatorParts = {
+  root?: HTMLElement | null; button?: HTMLButtonElement | null; panel?: HTMLElement | null; listEl?: HTMLElement | null;
+  document?: Document;
+};
+type ActivityIndicatorBehavior = {
+  logger: ActivityLogger; win?: ActivityWindow;
+  requestPanelClose?: () => void; requestPanelOpen?: () => void; writeClipboard?: (text: string) => Promise<void>;
+};
 
 export class ActivityIndicatorControl {
   private readonly button: HTMLButtonElement | null;
@@ -59,17 +69,24 @@ export class ActivityIndicatorControl {
   private resizeObserver?: ResizeObserver;
   private destroyed = false;
 
+  static fromDocument(doc: Document, behavior: ActivityIndicatorBehavior): ActivityIndicatorControl {
+    const elements = new DocumentElements(doc);
+    return new ActivityIndicatorControl({
+      ...behavior,
+      root: elements.required('activityIndicatorRoot'),
+      button: elements.required<HTMLButtonElement>('activityIndicatorBtn'),
+      panel: elements.required('activityIndicatorPanel'),
+      listEl: elements.required<HTMLUListElement>('activityIndicatorList'),
+      document: doc,
+    });
+  }
+
   constructor({
     root, button, panel, listEl,
     document: doc = root?.ownerDocument || document,
     win = doc.defaultView || window,
     logger, requestPanelOpen, requestPanelClose, writeClipboard,
-  }: {
-    logger: ActivityLogger;
-    root?: HTMLElement | null; button?: HTMLButtonElement | null; panel?: HTMLElement | null; listEl?: HTMLElement | null;
-    document?: Document; win?: ActivityWindow;
-    requestPanelClose?: () => void; requestPanelOpen?: () => void; writeClipboard?: (text: string) => Promise<void>;
-  }) {
+  }: ActivityIndicatorParts & ActivityIndicatorBehavior) {
     this.button = button || null;
     this.panel = panel || null;
     this.listEl = listEl || null;
@@ -111,6 +128,11 @@ export class ActivityIndicatorControl {
   focusInitial(): void {
     (this.historyRegion || this.panel)?.focus({ preventScroll: true });
     this.updateOverflow();
+  }
+
+  utilitySurface(): Omit<GlobalUtility, 'id'> | null {
+    if (!this.button || !this.panel) return null;
+    return { label: 'Activity and Errors', trigger: this.button, panel: this.panel, focusInitial: () => this.focusInitial() };
   }
 
   destroy(): void {

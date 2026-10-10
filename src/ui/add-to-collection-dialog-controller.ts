@@ -1,5 +1,6 @@
 import type { Pipeline } from '../domain/pipeline.js';
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { DocumentElements } from './document-elements.js';
 
 export type AddToCollectionChoice = {
   label: string;
@@ -40,6 +41,24 @@ export class AddToCollectionDialogController implements IEventSource<IAddToColle
         value: collection.filename || '',
         collectionFilename: collection.filename,
       }));
+  }
+
+  static fromDocument(doc: Document, { newChoiceValue, validateNewName }: {
+    newChoiceValue: string;
+    validateNewName?: (name: string) => string;
+  }): AddToCollectionDialogController {
+    const elements = new DocumentElements(doc);
+    return new AddToCollectionDialogController({
+      dialog: elements.optional<HTMLDialogElement>('addToCollectionDialog'),
+      destinationSelect: elements.optional<HTMLSelectElement>('addToCollectionSelect'),
+      newCollectionNameLabel: elements.optional('addToCollectionNameLabel'),
+      newCollectionNameInput: elements.optional<HTMLInputElement>('addToCollectionNameInput'),
+      errorMessageEl: elements.optional('addToCollectionError'),
+      confirmBtn: elements.optional<HTMLButtonElement>('confirmAddToCollectionBtn'),
+      cancelBtn: elements.optional<HTMLButtonElement>('cancelAddToCollectionBtn'),
+      newChoiceValue,
+      validateNewName,
+    });
   }
 
   constructor({

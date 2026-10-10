@@ -1,4 +1,5 @@
 import type { AppText } from '../app/app-text.js';
+import { DocumentElements } from './document-elements.js';
 
 type ConflictHandlers = {
   onApply?: (() => void) | null;
@@ -17,6 +18,20 @@ export class CollectionConflictController {
   private readonly summaryEl: HTMLElement | null;
   private readonly listEl: HTMLElement | null;
   private handlers: ConflictHandlers;
+
+  static fromDocument(doc: Document, { appText }: {
+    appText: Pick<AppText, 'collectionConflictSummaryText' | 'collectionConflictListText'>;
+  }): CollectionConflictController {
+    const elements = new DocumentElements(doc);
+    return new CollectionConflictController({
+      appText,
+      root: elements.required('collectionConflict'),
+      summaryEl: elements.required('collectionConflictSummary'),
+      listEl: elements.required('collectionConflictList'),
+      applyBtn: elements.required<HTMLButtonElement>('applyCollectionConflictBtn'),
+      cancelBtn: elements.required<HTMLButtonElement>('cancelCollectionConflictBtn'),
+    });
+  }
 
   constructor({
     appText,
