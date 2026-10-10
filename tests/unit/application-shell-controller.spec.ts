@@ -63,6 +63,43 @@ function panelContentFixture() {
   return { root, mount };
 }
 
+describe('application shell side panel markup', () => {
+  it('finds each marked side panel and its parts, in document order', () => {
+    document.body.innerHTML = `
+      <aside data-shell-panel="pipelines">
+        <div data-shell-panel-content><button data-shell-panel-fold></button>
+          <div data-shell-panel-contributions><div data-shell-panel-fallback></div></div></div>
+        <button data-shell-panel-reveal></button>
+      </aside>
+      <aside data-shell-panel="clips">
+        <div data-shell-panel-content><button data-shell-panel-fold></button><div data-shell-panel-contributions></div></div>
+        <button data-shell-panel-reveal></button>
+      </aside>`;
+
+    const [pipelines, clips] = ApplicationShellController.sidePanelsIn(document);
+
+    expect(pipelines.id).toBe('pipelines');
+    expect(pipelines.root.tagName).toBe('ASIDE');
+    expect(pipelines.content.hasAttribute('data-shell-panel-content')).toBe(true);
+    expect(pipelines.contributionHost.hasAttribute('data-shell-panel-contributions')).toBe(true);
+    expect(pipelines.fallbackContent?.hasAttribute('data-shell-panel-fallback')).toBe(true);
+    expect(pipelines.foldButton.hasAttribute('data-shell-panel-fold')).toBe(true);
+    expect(pipelines.revealButton.hasAttribute('data-shell-panel-reveal')).toBe(true);
+    expect(clips.id).toBe('clips');
+    expect(clips.fallbackContent).toBeUndefined();
+  });
+
+  it('reports a marked side panel that is missing a required part', () => {
+    document.body.innerHTML = '<aside data-shell-panel="clips"><div data-shell-panel-content></div></aside>';
+
+    expect(() => ApplicationShellController.sidePanelsIn(document)).toThrow('Side panel "clips" has no [data-shell-panel-contributions].');
+  });
+
+  it('finds no side panels where none are marked', () => {
+    expect(ApplicationShellController.sidePanelsIn(document)).toEqual([]);
+  });
+});
+
 describe('application shell screen ownership', () => {
   it('keeps the current workspace selected when a leave guard rejects navigation', () => {
     const f = fixture();

@@ -94,24 +94,6 @@ class AppControllerSupport {
     if (!frameReview || !thumbnails || !extractionService || !captureStore) return null;
     return { frameReview, thumbnails, extractionService, captureStore };
   }
-
-  static shellPanels() {
-    return ['pipelines', 'clips'].flatMap(name => {
-      const root = AppControllerSupport.optionalElement(`${name}Panel`);
-      const contributionHost = AppControllerSupport.optionalElement(name === 'pipelines' ? 'pipelinesPanelMount' : `${name}PanelHost`);
-      if (!root || !contributionHost) return [];
-      const label = name[0].toUpperCase() + name.slice(1);
-      return [{
-        id: name,
-        root,
-        content: AppControllerSupport.requiredElement(`${name}PanelContent`),
-        contributionHost,
-        fallbackContent: AppControllerSupport.optionalElement(name === 'pipelines' ? 'pipelinesPanelHost' : `${name}PanelFallback`) ?? undefined,
-        foldButton: AppControllerSupport.requiredElement<HTMLButtonElement>(`fold${label}`),
-        revealButton: AppControllerSupport.requiredElement<HTMLButtonElement>(`reveal${label}`),
-      }];
-    });
-  }
 }
 
 // The composition root: builds services, controls and workflows in dependency order, then starts the app.
@@ -380,7 +362,7 @@ export class AppController {
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
     const gifRangesPanel = AppControllerSupport.optionalElement('gifRangesPanel');
-    const shellPanels = AppControllerSupport.shellPanels();
+    const shellPanels = ApplicationShellController.sidePanelsIn(document);
     const sessionReporting = {
       onProgress: activityReporter.progress,
       onSuccess: activityReporter.success,

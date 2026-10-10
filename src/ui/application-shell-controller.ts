@@ -46,6 +46,26 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
   private applyingPanelState = false;
   private readonly onSelectionChange = (): void => { this.activate(this.elements.selector.value); };
 
+  static sidePanelsIn(root: ParentNode): ShellPanel[] {
+    return [...root.querySelectorAll<HTMLElement>('[data-shell-panel]')].map(panelRoot => {
+      const id = panelRoot.dataset.shellPanel ?? '';
+      const part = <T extends HTMLElement>(attribute: string): T => {
+        const element = panelRoot.querySelector<T>(`[${attribute}]`);
+        if (!element) throw new Error(`Side panel "${id}" has no [${attribute}].`);
+        return element;
+      };
+      return {
+        id,
+        root: panelRoot,
+        content: part('data-shell-panel-content'),
+        contributionHost: part('data-shell-panel-contributions'),
+        fallbackContent: panelRoot.querySelector<HTMLElement>('[data-shell-panel-fallback]') ?? undefined,
+        foldButton: part<HTMLButtonElement>('data-shell-panel-fold'),
+        revealButton: part<HTMLButtonElement>('data-shell-panel-reveal'),
+      };
+    });
+  }
+
   constructor(private readonly elements: ShellElements) {
     if (elements.panels?.length && (!elements.workspace || !elements.center)) throw new Error('Panels require workspace and center hosts.');
     const panelIds = new Set<string>();

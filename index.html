@@ -653,12 +653,12 @@
     <span class="utility-separator caption-separator" aria-hidden="true"></span>
   </header>
   <div id="workspaceRow">
-    <aside id="pipelinesPanel" class="side-panel" aria-label="Pipelines">
-      <div id="pipelinesPanelContent" class="panel-content">
-        <header class="panel-heading"><h2>Pipelines</h2><button id="foldPipelines" type="button" aria-label="Fold Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button></header>
-        <div id="pipelinesPanelMount"><div id="pipelinesPanelHost"><p id="pipelinesPanelFallback" class="panel-empty">Pipeline browsing will appear here. Use Browse Folder to open a pipeline.</p></div></div>
+    <aside id="pipelinesPanel" class="side-panel" aria-label="Pipelines" data-shell-panel="pipelines">
+      <div id="pipelinesPanelContent" class="panel-content" data-shell-panel-content>
+        <header class="panel-heading"><h2>Pipelines</h2><button id="foldPipelines" data-shell-panel-fold type="button" aria-label="Fold Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button></header>
+        <div id="pipelinesPanelMount" data-shell-panel-contributions><div id="pipelinesPanelHost" data-shell-panel-fallback><p id="pipelinesPanelFallback" class="panel-empty">Pipeline browsing will appear here. Use Browse Folder to open a pipeline.</p></div></div>
       </div>
-      <button id="revealPipelines" class="panel-reveal" type="button" aria-label="Show Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5h7l2 3h9v12H3V7Z"/></svg><span class="rail-label">Pipelines</span><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button>
+      <button id="revealPipelines" class="panel-reveal" data-shell-panel-reveal type="button" aria-label="Show Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5h7l2 3h9v12H3V7Z"/></svg><span class="rail-label">Pipelines</span><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button>
     </aside>
     <div id="centralWorkspace">
     <div id="screenCommandHost">
@@ -765,15 +765,15 @@
     </section>
     </main>
     </div>
-    <aside id="clipsPanel" class="side-panel" aria-label="Clips">
-      <div id="clipsPanelContent" class="panel-content">
-        <header class="panel-heading"><h2>Clips</h2><button id="foldClips" type="button" aria-label="Fold Clips" aria-controls="clipsPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button></header>
-        <div id="clipsPanelHost">
-          <p id="clipsPanelFallback" class="panel-empty">No Clips tools for this screen.</p>
+    <aside id="clipsPanel" class="side-panel" aria-label="Clips" data-shell-panel="clips">
+      <div id="clipsPanelContent" class="panel-content" data-shell-panel-content>
+        <header class="panel-heading"><h2>Clips</h2><button id="foldClips" data-shell-panel-fold type="button" aria-label="Fold Clips" aria-controls="clipsPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button></header>
+        <div id="clipsPanelHost" data-shell-panel-contributions>
+          <p id="clipsPanelFallback" class="panel-empty" data-shell-panel-fallback>No Clips tools for this screen.</p>
           <section id="gifRangesPanel" aria-label="Captured ranges"><p class="gif-ranges-empty">No captured ranges yet. Open a movie and lock a range to add it here.</p></section>
         </div>
       </div>
-      <button id="revealClips" class="panel-reveal" type="button" aria-label="Show Clips" aria-controls="clipsPanelContent" aria-expanded="true" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M16 3v18M4 8h4m-4 8h4M16 8h4m-4 8h4M8 12h8"/></svg><span class="rail-label">Clips</span><span id="lockedClipCount" hidden></span><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button>
+      <button id="revealClips" class="panel-reveal" data-shell-panel-reveal type="button" aria-label="Show Clips" aria-controls="clipsPanelContent" aria-expanded="true" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M16 3v18M4 8h4m-4 8h4M16 8h4m-4 8h4M8 12h8"/></svg><span class="rail-label">Clips</span><span id="lockedClipCount" hidden></span><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button>
     </aside>
   </div>
   </div>
