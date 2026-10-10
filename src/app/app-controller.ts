@@ -183,23 +183,27 @@ export class AppController {
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
     const hasClipsPanel = ApplicationShellControl.sidePanelsIn(document).some(panel => panel.id === 'clips');
+    // Saving refreshes the open folder through folder selection, which itself saves first; the callback below closes that loop.
+    const openFolderRefreshSession = new OpenFolderRefreshSession({
+      folders: fileSystem,
+      openFolder: state,
+      pipelineSession,
+      refreshActiveFolder: (): Promise<void> => folderSelection.refreshActiveFolder(),
+      reporter: activityReporter,
+      diagnostics,
+    });
     const sessionReporting = {
-      onProgress: activityReporter.progress,
-      onSuccess: activityReporter.success,
-      onActivity: (entry: Parameters<ActivityLogger['log']>[0]) => { activityLogger.log(entry); },
-      onWarning: (message: string) => activityReporter.success(message, 5000),
-      onError: (message: string, error?: unknown) => {
-        activityReporter.failure(message);
-        if (error !== undefined) void diagnostics.logRuntimeError(message, error);
-      },
-      onPublished: (publication: { folderPath: string }) => openFolderRefreshSession.onFolderContentsPublished(publication.folderPath),
+      reporter: activityReporter,
+      activityLog: activityLogger,
+      diagnostics,
+      publications: openFolderRefreshSession,
     };
     const gifExtractionSession = gifServices
       ? new GifExtractionSession(gifServices.frameReview, gifServices.thumbnails, {
         ...sessionReporting,
         extractionService: gifServices.extractionService,
         captureStore: gifServices.captureStore,
-        onRestoredCaptures: (review, endpoint) => frameReviewPlayer.showFrameAfterCapture(review, endpoint),
+        capturePositioning: frameReviewPlayer,
       })
       : null;
     const collectionRefinementSession = collectionRefinementGifServices
@@ -276,15 +280,6 @@ export class AppController {
       },
       reporter: activityReporter,
       appText,
-    });
-    // Saving refreshes the open folder through folder selection, which itself saves first; the callback below closes that loop.
-    const openFolderRefreshSession = new OpenFolderRefreshSession({
-      folders: fileSystem,
-      openFolder: state,
-      pipelineSession,
-      refreshActiveFolder: (): Promise<void> => folderSelection.refreshActiveFolder(),
-      reporter: activityReporter,
-      diagnostics,
     });
     const collectionSave = new CollectionSaveWorkflow({
       pipelineSession,

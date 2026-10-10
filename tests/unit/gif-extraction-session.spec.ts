@@ -70,7 +70,7 @@ function thumbnailService(): IThumbnailCacheService {
 describe('GifExtractionSession', () => {
   it('positions an explicitly opened movie after its last saved capture', async () => {
     const review = reviewSession();
-    const onRestoredCaptures = vi.fn(async () => undefined);
+    const capturePositioning = { showFrameAfterCapture: vi.fn(async () => undefined) };
     const captureStore: IClipCapturesStoreService = {
       attach: vi.fn(async () => ({ kind: 'attached' as const, movieRef: 'capture_12345678',
         fingerprint: {
@@ -90,11 +90,11 @@ describe('GifExtractionSession', () => {
       chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(async () => review),
     };
-    const session = new GifExtractionSession(service, thumbnailService(), { captureStore, onRestoredCaptures });
+    const session = new GifExtractionSession(service, thumbnailService(), { captureStore, capturePositioning });
 
     expect(await session.openMovie()).toBe('opened');
-    await vi.waitFor(() => expect(onRestoredCaptures).toHaveBeenCalledOnce());
-    expect(onRestoredCaptures).toHaveBeenCalledWith(review, expect.objectContaining({ kind: 'saved-exact-frame', frameIndex: 12 }));
+    await vi.waitFor(() => expect(capturePositioning.showFrameAfterCapture).toHaveBeenCalledOnce());
+    expect(capturePositioning.showFrameAfterCapture).toHaveBeenCalledWith(review, expect.objectContaining({ kind: 'saved-exact-frame', frameIndex: 12 }));
   });
 
   it('keeps capture loading visible until the selected movie queue attaches', async () => {
@@ -161,12 +161,12 @@ describe('GifExtractionSession', () => {
       chooseSource: vi.fn(async () => ({ name: 'Sample Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(async () => reviewSession()),
     };
-    const onSuccess = vi.fn();
-    const session = new GifExtractionSession(service, thumbnailService(), { onSuccess });
+    const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
+    const session = new GifExtractionSession(service, thumbnailService(), { reporter });
 
     await session.openMovie();
 
-    expect(onSuccess.mock.calls).toContainEqual(['Reused the prepared review cache for Sample Movie.mkv.']);
+    expect(reporter.success.mock.calls).toContainEqual(['Reused the prepared review cache for Sample Movie.mkv.']);
   });
 
   it('reports exact-review preparation phases and distinguishes a prepared cache reuse', async () => {
@@ -184,12 +184,11 @@ describe('GifExtractionSession', () => {
       chooseSource: vi.fn(async () => ({ name: 'Sample Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(async () => review),
     };
-    const onProgress = vi.fn();
-    const onSuccess = vi.fn();
-    const session = new GifExtractionSession(service, thumbnailService(), { onProgress, onSuccess });
+    const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
+    const session = new GifExtractionSession(service, thumbnailService(), { reporter });
     await session.openMovie();
-    onProgress.mockClear();
-    onSuccess.mockClear();
+    reporter.progress.mockClear();
+    reporter.success.mockClear();
 
     listener?.({
       type: 'state',
@@ -210,11 +209,27 @@ describe('GifExtractionSession', () => {
       }),
     });
 
-    expect(onProgress.mock.calls).toEqual([
+    expect(reporter.progress.mock.calls).toEqual([
       ['Checking the prepared review cache for Sample Movie.mkv (32%).'],
       ['Creating the exact-review proxy for Sample Movie.mkv (68%).'],
     ]);
-    expect(onSuccess).toHaveBeenCalledWith('Reused the prepared review cache for Sample Movie.mkv.');
+    expect(reporter.success).toHaveBeenCalledWith('Reused the prepared review cache for Sample Movie.mkv.');
+  });
+
+  it('reports a movie that cannot be opened in Activity and logs the underlying error', async () => {
+    const error = new Error('codec unavailable');
+    const service: IFrameReviewService = {
+      chooseSource: vi.fn(async () => ({ name: 'Sample Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
+      open: vi.fn(async () => { throw error; }),
+    };
+    const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
+    const diagnostics = { logRuntimeError: vi.fn(async () => undefined) };
+    const session = new GifExtractionSession(service, thumbnailService(), { reporter, diagnostics });
+
+    await session.openMovie();
+
+    expect(reporter.failure).toHaveBeenCalledWith('The movie could not be opened.');
+    expect(diagnostics.logRuntimeError).toHaveBeenCalledWith('The movie could not be opened.', error);
   });
 
   it('opens a selected movie, captures mixed endpoints, locks, and retains its start thumbnail', async () => {
@@ -265,6 +280,38 @@ describe('GifExtractionSession', () => {
       expect.objectContaining({ collectionName: 'Heat.1995' }), expect.any(Function));
     expect(extractionService.saveCollection).toHaveBeenCalledWith(
       'destination_12345678', 'Heat.1995.txt', 'Heat.1995-001.mp4\n');
+  });
+
+  it('records the extraction in Activity and tells the publication listener which folder changed', async () => {
+    const service: IFrameReviewService = {
+      chooseSource: vi.fn(async () => ({ name: 'Heat.1995.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
+      open: vi.fn(async () => reviewSession()),
+    };
+    const extractionService: IClipExtractionService = {
+      openExtractionDestination: vi.fn(async () => ({
+        destinationHandle: 'destination_12345678', folderPath: 'C:\\extraction-tmp', entries: [],
+      })),
+      extract: vi.fn(async () => ({ kind: 'created-media' as const, mediaHandle: 'media_12345678', filename: 'Heat.1995-001.mp4' })),
+      saveCollection: vi.fn(async () => undefined),
+    };
+    const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
+    const activityLog = { log: vi.fn() };
+    const publications = { onFolderContentsPublished: vi.fn(async () => undefined) };
+    const session = new GifExtractionSession(service, thumbnailService(), { extractionService, reporter, activityLog, publications });
+    await session.openMovie();
+    session.markStart(displayedCapture('exact'));
+    session.markEnd(displayedCapture('exact'));
+    const locked = session.lockRange();
+    if (locked.kind !== 'locked') throw new Error('Range did not lock.');
+
+    await session.extractRange(locked.range.id);
+
+    expect(activityLog.log).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'information', message: expect.stringContaining('Extracted Heat.1995-001.mp4'),
+    }));
+    expect(publications.onFolderContentsPublished).toHaveBeenCalledWith('C:\\extraction-tmp');
+    expect(reporter.success).toHaveBeenCalledWith(expect.stringContaining('Exact clips were added to'));
+    expect(reporter.failure).not.toHaveBeenCalled();
   });
 
   it('switches movies with locked captures because they belong to the original movie', async () => {

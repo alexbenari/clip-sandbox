@@ -25,6 +25,8 @@ import {
 } from './refine-gif-session.js';
 import { ClipExtractionWorkflow, type ClipExtractionEntryState, type IExtractionBatchProgress } from './clip-extraction-workflow.js';
 import type { ActivityInput } from './activity-logger.js';
+import type { ActivityReporter } from './activity-reporter.js';
+import type { AppDiagnostics } from './app-diagnostics.js';
 import { ExtractionDestinationSession, type IExtractionDestination, type IExtractionDestinationPublication } from './extraction-destination-session.js';
 import { GifCaptureThumbnailSession, type GifThumbnailState } from './gif-capture-thumbnail-session.js';
 import type { IClipCapturesStoreService } from './clip-captures-store-service.js';
@@ -73,17 +75,25 @@ export type BeginRefinementResult =
   | Readonly<{ kind: 'started'; session: RefineGifSession }>
   | Readonly<{ kind: 'rejected'; message: string }>;
 
+// Awaited: extraction continues only after the open folder has reacted to the new clip.
+export interface IExtractionPublicationListener {
+  onFolderContentsPublished(folderPath: string): Promise<void> | void;
+}
+
+// Awaited: a failure to position the player is reported by the session.
+export interface ICapturePositioning {
+  showFrameAfterCapture(review: IFrameReviewSession, endpoint: CaptureEndpoint): Promise<void>;
+}
+
 type GifExtractionSessionOptions = {
   readonly previewBounds?: Readonly<{ maxWidth: number; maxHeight: number }>;
-  readonly onProgress?: (message: string) => void;
-  readonly onSuccess?: (message: string) => void;
-  readonly onActivity?: (entry: ActivityInput) => void;
-  readonly onWarning?: (message: string) => void;
-  readonly onError?: (message: string, error?: unknown) => void;
-  readonly onRestoredCaptures?: (review: IFrameReviewSession, endpoint: CaptureEndpoint) => Promise<void>;
+  readonly reporter?: Pick<ActivityReporter, 'progress' | 'success' | 'failure'>;
+  readonly activityLog?: { log(entry: ActivityInput): unknown };
+  readonly diagnostics?: Pick<AppDiagnostics, 'logRuntimeError'>;
+  readonly capturePositioning?: ICapturePositioning;
   readonly extractionService?: IClipExtractionService;
   readonly captureStore?: IClipCapturesStoreService;
-  readonly onPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
+  readonly publications?: IExtractionPublicationListener;
   readonly destination?: IExtractionDestination;
 };
 
@@ -122,9 +132,22 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     this.destination = options.destination;
     this.captureThumbnails = new GifCaptureThumbnailSession(thumbnails, {
       onChanged: () => this.publish(),
-      onError: (message, error) => this.options.onError?.(message, error),
+      onError: (message, error) => this.reportError(message, error),
     });
   }
+
+  private reportProgress(message: string): void { this.options.reporter?.progress(message); }
+
+  private reportSuccess(message: string): void { this.options.reporter?.success(message); }
+
+  private reportWarning(message: string): void { this.options.reporter?.success(message, 5000); }
+
+  private reportError(message: string, error?: unknown): void {
+    this.options.reporter?.failure(message);
+    if (error !== undefined) void this.options.diagnostics?.logRuntimeError(message, error);
+  }
+
+  private recordActivity(entry: ActivityInput): void { this.options.activityLog?.log(entry); }
 
   get reviewSession(): IFrameReviewSession | null { return this.review; }
   get refinementSession(): RefineGifSession | null { return this.activeRefinement; }
@@ -183,17 +206,17 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       }
       this.lifecycle = 'opening';
       this.message = `Opening ${selected.name}`;
-      this.options.onProgress?.(this.message);
+      this.reportProgress(this.message);
       this.publish();
       const candidate = await this.frameReview.open({ sourceHandle: selected.sourceHandle, previewBounds: this.previewBounds });
       await this.replaceSource(selected, candidate);
-      this.options.onSuccess?.(`Opened ${selected.name}.`);
+      this.reportSuccess(`Opened ${selected.name}.`);
       return 'opened';
     } catch (error) {
       this.capturesLoading = false;
       this.lifecycle = this.source ? 'open' : 'failed';
       this.message = error instanceof Error ? error.message : 'The movie could not be opened.';
-      this.options.onError?.('The movie could not be opened.', error);
+      this.reportError('The movie could not be opened.', error);
       this.publish();
       return 'failed';
     } finally {
@@ -325,7 +348,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       return true;
     } catch (error) {
       this.message = error instanceof Error ? error.message : 'Saved draft frames could not be checked.';
-      this.options.onError?.(this.message, error);
+      this.reportError(this.message, error);
       this.publish();
       return false;
     }
@@ -457,7 +480,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       return true;
     } catch (error) {
       this.message = error instanceof Error ? error.message : 'Saved frames could not be checked.';
-      this.options.onError?.(this.message, error);
+      this.reportError(this.message, error);
       this.publish();
       return false;
     }
@@ -634,8 +657,8 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         new ClipExtractor(this.options.extractionService),
         new ExtractionDestinationSession(this.options.extractionService, {
           destination: this.destination,
-          onPublished: publication => this.options.onPublished?.(publication),
-          onPublishError: error => this.options.onError?.(
+          onPublished: publication => this.options.publications?.onFolderContentsPublished(publication.folderPath),
+          onPublishError: error => this.reportError(
             'The clip was saved, but the Collection view could not refresh.',
             error,
           ),
@@ -644,17 +667,17 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         event => {
           const sourceField = { label: 'Source movie', value: selected.name };
           if (event.kind === 'batch-started') {
-            this.options.onActivity?.({ kind: 'information',
+            this.recordActivity({ kind: 'information',
               message: `Extraction started for ${event.total} clip${event.total === 1 ? '' : 's'}.`,
               fields: [sourceField] });
           } else if (event.kind === 'clip-extracted') {
-            this.options.onActivity?.({ kind: 'information',
+            this.recordActivity({ kind: 'information',
               message: `Extracted ${event.filename} in ${event.durationMs} ms.`,
               fields: [{ label: 'Clip', value: event.filename },
                 { label: 'Destination folder', value: event.folderPath }, sourceField] });
           } else {
             const outcome = event.cancelled ? 'cancelled' : 'finished';
-            this.options.onActivity?.({ kind: 'information',
+            this.recordActivity({ kind: 'information',
               message: `Extraction ${outcome}: ${event.extracted} of ${event.total} clip${event.total === 1 ? '' : 's'} extracted.`,
               fields: [sourceField] });
           }
@@ -681,7 +704,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         }
         this.message = event.state.captureEnabled ? 'Exact capture ready' : event.state.message;
         const preparationMessage = this.preparationProgressMessage(event.state);
-        if (preparationMessage) this.options.onProgress?.(preparationMessage);
+        if (preparationMessage) this.reportProgress(preparationMessage);
         if (becameReady && !exactReadinessAnnounced) {
           exactReadinessAnnounced = true;
           this.announceExactReadiness(event.state);
@@ -689,7 +712,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         if (becameReady) void this.restoreCaptures(candidate, expectedFingerprint);
         this.publish();
       } else if (event.type === 'error') {
-        this.options.onError?.(event.message);
+        this.reportError(event.message);
       }
     });
     const currentState = this.reviewState;
@@ -740,14 +763,14 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
 
   private announceExactReadiness(state: IFrameReviewState): void {
     if (!this.source) return;
-    this.options.onSuccess?.(state.preparedReview?.cacheHit
+    this.reportSuccess(state.preparedReview?.cacheHit
       ? `Reused the prepared review cache for ${this.source.name}.`
       : `Exact capture is ready for ${this.source.name}.`);
   }
 
   private async runExtraction(operation: () => Promise<void>): Promise<void> {
     this.message = 'Extracting exact range';
-    this.options.onProgress?.(this.message);
+    this.reportProgress(this.message);
     this.publish();
     try {
       await operation();
@@ -757,9 +780,9 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       });
       const cancelled = this.extractionWorkflow?.wasCancelled === true;
       this.message = failed ? 'Some clips need attention' : cancelled ? 'Extraction cancelled' : 'Extraction complete';
-      if (failed) this.options.onError?.('Some clips could not be completed. Retry them from Clips.');
-      else if (cancelled) this.options.onProgress?.('Extraction stopped. Completed clips were saved.');
-      else this.options.onSuccess?.(`Exact clips were added to ${this.destination?.kind === 'collection'
+      if (failed) this.reportError('Some clips could not be completed. Retry them from Clips.');
+      else if (cancelled) this.reportProgress('Extraction stopped. Completed clips were saved.');
+      else this.reportSuccess(`Exact clips were added to ${this.destination?.kind === 'collection'
         ? this.destination.collectionFilename : this.destination?.folderPath ?? 'extraction-tmp'}.`);
       for (const range of this.rangeModel?.snapshot.ranges ?? []) {
         const state = this.extractionWorkflow?.state(range.id);
@@ -767,12 +790,12 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         const warningId = `${range.id}\n${state.media.filename}`;
         if (this.notifiedProvenanceWarnings.has(warningId)) continue;
         this.notifiedProvenanceWarnings.add(warningId);
-        this.options.onWarning?.(state.media.warning);
+        this.reportWarning(state.media.warning);
       }
       this.persistQueue();
     } catch (error) {
       this.message = error instanceof Error ? error.message : 'Extraction could not start.';
-      this.options.onError?.(this.message, error);
+      this.reportError(this.message, error);
     }
     this.publish();
   }
@@ -797,7 +820,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         this.message = 'The saved movie changed. Use Open movie to locate the original captures.';
         this.restoringCaptures = true;
         this.capturesLoading = false;
-        this.options.onError?.(this.message);
+        this.reportError(this.message);
         this.publish();
         return;
       }
@@ -807,9 +830,9 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       const continuation = this.rangeModel.continuationEndpoint();
       if (continuation) {
         try {
-          await this.options.onRestoredCaptures?.(review, continuation);
+          await this.options.capturePositioning?.showFrameAfterCapture(review, continuation);
         } catch (error) {
-          this.options.onError?.('Saved captures loaded, but the movie could not be positioned after them.', error);
+          this.reportError('Saved captures loaded, but the movie could not be positioned after them.', error);
         }
       }
       if (this.disposed || this.review !== review || this.sourceGeneration !== generation) return;
@@ -826,7 +849,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       this.message = 'Saved captures could not be loaded. The stored file was kept for recovery.';
       this.restoringCaptures = false;
       this.capturesLoading = false;
-      this.options.onError?.(this.message, error);
+      this.reportError(this.message, error);
       this.publish();
     }
   }
@@ -859,7 +882,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       }
     }
     if (failures > 0 && this.review === review && this.sourceGeneration === generation) {
-      this.options.onError?.(`${failures} saved start thumbnails could not be recreated. Retry them from Clips.`);
+      this.reportError(`${failures} saved start thumbnails could not be recreated. Retry them from Clips.`);
     }
   }
 
@@ -895,7 +918,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
 
   private createSavedCaptureQueue(store: IClipCapturesStoreService): SavedCaptureQueuePersistence {
     return new SavedCaptureQueuePersistence(store, this.sourceGeneration, error => {
-      this.options.onError?.('Captures could not be saved. Current work remains available until the app closes.', error);
+      this.reportError('Captures could not be saved. Current work remains available until the app closes.', error);
     });
   }
 

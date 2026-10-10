@@ -242,9 +242,7 @@ describe('AppController characterization', () => {
     function publishMovie003(session) {
       folder.write('Movie-003.mp4');
       folder.write('Movie.txt', 'Movie-001.mp4\nMovie-002.mp4\nMovie-003.mp4\n');
-      return session.options.onPublished({
-        folderPath: 'C:/clips', collectionFilename: 'Movie.txt', media: { filename: 'Movie-003.mp4' },
-      });
+      return session.options.publications.onFolderContentsPublished('C:/clips');
     }
 
     test('refreshes a clean view and keeps the selected collection', async () => {
