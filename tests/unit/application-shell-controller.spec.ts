@@ -147,6 +147,26 @@ describe('application shell screen ownership', () => {
     expect(shell.workspaceMoving).toBe(false);
     shell.destroy();
   });
+  it('gives keys to the active screen only, and none after it is destroyed', () => {
+    const f = fixture();
+    const collection = { ...f.collection, onKeyDown: vi.fn() } satisfies IAppScreen;
+    const settings = { ...f.settings, onKeyDown: vi.fn() } satisfies IAppScreen;
+    const shell = new ApplicationShellController({ ...f, screens: [collection, settings] });
+    const key = new KeyboardEvent('keydown', { key: 'z' });
+
+    shell.handleKeyDown(key);
+    expect(collection.onKeyDown).not.toHaveBeenCalled();
+    shell.start();
+    shell.handleKeyDown(key);
+    shell.activate(settings.id);
+    shell.handleKeyDown(key);
+    shell.destroy();
+    shell.handleKeyDown(key);
+
+    expect(collection.onKeyDown).toHaveBeenCalledOnce();
+    expect(settings.onKeyDown).toHaveBeenCalledOnce();
+  });
+
   it('mounts one screen and hides a redundant selector', () => {
     const f = fixture();
     const shell = new ApplicationShellController({ ...f, screens: [f.collection] });

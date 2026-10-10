@@ -21,15 +21,15 @@ describe('load status control', () => {
     expect(control.selectionLoadText({ isPipelineMode: false, clipCount: 2 })).toContain('2');
   });
 
-  test('delegates semantic status calls to the generic status bar control', () => {
-    const statusBarControl = { show: vi.fn() };
-    const control = new LoadStatusControl({ appText, statusBarControl });
+  test('reports load status as success messages', () => {
+    const reporter = { success: vi.fn() };
+    const control = new LoadStatusControl({ appText, reporter });
     const pipeline = { videoNames: () => ['a.mp4'] };
 
     control.showInitialLoadStatus({ pipeline, clipCount: 1, timeout: 123 });
     control.showSelectionLoadStatus({ isPipelineMode: false, clipCount: 2, timeout: 456 });
 
-    expect(statusBarControl.show).toHaveBeenNthCalledWith(1, 'Loaded pipeline with 1 clip.', 123);
-    expect(statusBarControl.show).toHaveBeenNthCalledWith(2, 'Loaded collection with 2 clips.', 456);
+    expect(reporter.success).toHaveBeenNthCalledWith(1, 'Loaded pipeline with 1 clip.', 123);
+    expect(reporter.success).toHaveBeenNthCalledWith(2, 'Loaded collection with 2 clips.', 456);
   });
 });

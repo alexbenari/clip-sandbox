@@ -7,6 +7,7 @@ import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
+import type { IScreenNavigation } from './collection-refinement-workflow.js';
 import type { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
@@ -59,7 +60,8 @@ type FolderSelectionDependencies = Readonly<{
   unsavedChangesPrompt: IUnsavedChangesPrompt;
   loadStatus: ILoadStatusView;
   collectionSave: Pick<CollectionSaveWorkflow, 'saveActive'>;
-  screens: { showCollectionScreen(): void };
+  navigation: Pick<IScreenNavigation, 'activate'>;
+  collectionScreenId: string;
   settingsLoaded: () => Promise<unknown>;
   toolbar: IEventSource<{ browseRequested: void }>;
   selector: IEventSource<{ selectionRequested: string | null }>;
@@ -255,7 +257,7 @@ export class FolderSelectionWorkflow {
   private async loadCatalogPipeline(entry: IPipelineCatalogEntry): Promise<void> {
     try {
       const selection = await this.folder.folders.openPipelineCatalogEntry(entry);
-      if (await this.loadPipeline(selection)) this.folder.screens.showCollectionScreen();
+      if (await this.loadPipeline(selection)) this.folder.navigation.activate(this.folder.collectionScreenId);
     } catch (err) {
       await this.folder.diagnostics.logRuntimeError(`Failed to open pipeline ${entry.name}.`, err, this.folder.openFolder.currentFolderSession);
       this.folder.reporter.failure(`Could not open ${entry.name}.`, {

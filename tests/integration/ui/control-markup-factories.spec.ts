@@ -6,6 +6,11 @@ import { ActivityLogger } from '../../../src/app/activity-logger.js';
 import { AppText } from '../../../src/app/app-text.js';
 import { ClipCollectionGridController } from '../../../src/ui/clip-collection-grid-controller.js';
 import { CollectionScreen } from '../../../src/ui/collection-screen.js';
+import { CollectionSelectorControl } from '../../../src/ui/collection-selector-control.js';
+import { GifRangesPanelControl } from '../../../src/ui/gif-ranges-panel-control.js';
+import { GlobalUtilityCoordinator } from '../../../src/ui/global-utility-coordinator.js';
+import { PipelineCatalogControl } from '../../../src/ui/pipeline-catalog-control.js';
+import { ZoomOverlayController } from '../../../src/ui/zoom-overlay-controller.js';
 import { ActivityIndicatorControl } from '../../../src/ui/activity-indicator-control.js';
 import type { IAppScreen } from '../../../src/ui/app-screen.js';
 import { ApplicationShellController } from '../../../src/ui/application-shell-controller.js';
@@ -191,6 +196,67 @@ describe('controls built from the page markup', () => {
     expect(conflict.isVisible()).toBe(false);
     expect(saveAsNew.isOpen()).toBe(false);
     expect(unsavedChanges.isOpen()).toBe(false);
+  });
+
+  it('the collection selector reports a choice made in the page selector', () => {
+    const selector = CollectionSelectorControl.fromDocument(document, { appText: new AppText() });
+    const selectionRequested = vi.fn();
+    selector.on('selectionRequested', selectionRequested);
+    const select = document.getElementById('activeCollectionName') as HTMLSelectElement;
+    select.disabled = false;
+    select.append(new Option('picks', 'picks.txt'));
+
+    select.value = 'picks.txt';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(selectionRequested).toHaveBeenCalledWith('picks.txt');
+    selector.destroy();
+  });
+
+  it('Zoom opens its overlay in the page Zoom layer', () => {
+    const media = [
+      vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined),
+      vi.spyOn(HTMLMediaElement.prototype, 'pause').mockReturnValue(undefined),
+      vi.spyOn(HTMLMediaElement.prototype, 'load').mockReturnValue(undefined),
+    ];
+    const zoom = ZoomOverlayController.fromDocument(document, { audioDefault: () => false });
+
+    zoom.open({ clipId: 'clip_1', src: 'file:///C:/clips/alpha.mp4', name: 'alpha.mp4' });
+
+    expect(document.getElementById('zoomLayerRoot')!.querySelector('#zoomOverlay')).not.toBeNull();
+    zoom.close();
+    for (const spy of media) spy.mockRestore();
+  });
+
+  it('the Pipelines catalog and the captured ranges panel use the page hosts, and are absent without them', () => {
+    const session = { subscribe: vi.fn(() => vi.fn()) };
+    const catalog = PipelineCatalogControl.fromDocument(document, { catalog: { listPipelineCatalog: vi.fn(), pipelineCatalogDetails: vi.fn() } as never });
+    const ranges = GifRangesPanelControl.fromDocument(document, session as never);
+    const host = document.createElement('div');
+    ranges!.mount(host);
+
+    expect(catalog).not.toBeNull();
+    expect(host.firstElementChild?.id).toBe('gifRangesPanel');
+    catalog!.destroy();
+    ranges!.destroy();
+
+    document.body.innerHTML = '';
+    expect(PipelineCatalogControl.fromDocument(document, { catalog: {} as never })).toBeNull();
+    expect(GifRangesPanelControl.fromDocument(document, session as never)).toBeNull();
+  });
+
+  it('the utility coordinator uses the page utility host', () => {
+    const keyboardMap = KeyboardMapControl.fromDocument(document, { globalShortcuts: [] });
+    keyboardMap.render({ label: 'Collection', shortcuts: [] });
+
+    expect(GlobalUtilityCoordinator.isAvailableIn(document)).toBe(true);
+    const utilities = GlobalUtilityCoordinator.fromDocument(document, [{ id: 'keyboard', ...keyboardMap.utilitySurface()! }]);
+    utilities!.open('keyboard');
+
+    expect(document.getElementById('keyboardMapPanel')!.hidden).toBe(false);
+    utilities!.destroy();
+    document.body.innerHTML = '';
+    expect(GlobalUtilityCoordinator.isAvailableIn(document)).toBe(false);
   });
 
   it('reports a required part that is missing from the page', () => {

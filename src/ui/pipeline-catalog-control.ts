@@ -5,6 +5,7 @@ import type {
   PipelineCatalogResult,
 } from '../app/pipeline-catalog.js';
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { DocumentElements } from './document-elements.js';
 
 export interface IPipelineCatalogEvents {
   loadRequested: IPipelineCatalogEntry;
@@ -30,6 +31,11 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
   private readonly detailsByPipelineId = new Map<string, IPipelineCatalogDetails>();
   private requestGeneration = 0;
   private destroyed = false;
+
+  static fromDocument(doc: Document, { catalog }: { catalog: PipelineCatalogPort }): PipelineCatalogControl | null {
+    const host = new DocumentElements(doc).optional('pipelinesPanelHost');
+    return host ? new PipelineCatalogControl({ host, catalog, document: doc }) : null;
+  }
 
   constructor(options: PipelineCatalogControlOptions) {
     this.host = options.host;

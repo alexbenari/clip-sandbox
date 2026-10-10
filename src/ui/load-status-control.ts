@@ -1,25 +1,20 @@
 import type { AppText } from '../app/app-text.js';
 import type { Pipeline } from '../domain/pipeline.js';
 
-type StatusControl = {
-  show(message: string, timeout?: number): void;
+type SuccessReporter = {
+  success(message: string, timeoutMs?: number): void;
 };
 
 export class LoadStatusControl {
   private readonly appText: Pick<AppText, 'collectionLoadedText' | 'loadedVideosText'>;
-  statusBarControl?: StatusControl | null;
+  private readonly reporter: SuccessReporter | null;
 
-  constructor({
-    appText,
-    statusControl,
-    statusBarControl = statusControl,
-  }: {
+  constructor({ appText, reporter = null }: {
     appText: Pick<AppText, 'collectionLoadedText' | 'loadedVideosText'>;
-    statusControl?: StatusControl | null;
-    statusBarControl?: StatusControl | null;
+    reporter?: SuccessReporter | null;
   }) {
     this.appText = appText;
-    this.statusBarControl = statusBarControl;
+    this.reporter = reporter;
   }
 
   initialLoadText({ pipeline = null, clipCount = 0 }: { pipeline?: Pipeline | null; clipCount?: number } = {}): string {
@@ -36,10 +31,10 @@ export class LoadStatusControl {
   }
 
   showInitialLoadStatus({ pipeline = null, clipCount = 0, timeout = 2500 }: { pipeline?: Pipeline | null; clipCount?: number; timeout?: number } = {}): void {
-    this.statusBarControl?.show(this.initialLoadText({ pipeline, clipCount }), timeout);
+    this.reporter?.success(this.initialLoadText({ pipeline, clipCount }), timeout);
   }
 
   showSelectionLoadStatus({ isPipelineMode = true, clipCount = 0, timeout = 2500 }: { isPipelineMode?: boolean; clipCount?: number; timeout?: number } = {}): void {
-    this.statusBarControl?.show(this.selectionLoadText({ isPipelineMode, clipCount }), timeout);
+    this.reporter?.success(this.selectionLoadText({ isPipelineMode, clipCount }), timeout);
   }
 }

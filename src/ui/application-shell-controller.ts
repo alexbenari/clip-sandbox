@@ -130,6 +130,11 @@ export class ApplicationShellController implements IEventSource<IApplicationShel
     this.activate(this.current.id);
   }
 
+  handleKeyDown(event: KeyboardEvent): void {
+    if (this.destroyed || !this.activated) return;
+    this.current.onKeyDown?.(event);
+  }
+
   on<TName extends keyof IApplicationShellEvents>(name: TName, handler: EventHandler<IApplicationShellEvents[TName]>): () => void {
     return this.events.on(name, handler);
   }

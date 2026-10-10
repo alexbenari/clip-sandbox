@@ -228,6 +228,10 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     this.options.session?.abandonRefinement();
   }
 
+  onKeyDown(event: KeyboardEvent): void {
+    if (!event.defaultPrevented) this.options.keyboard.handleKeyDown(event);
+  }
+
   focusInitial(): void {
     if (!this.options.player.focusInitial()) this.back.focus();
   }

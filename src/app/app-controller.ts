@@ -64,14 +64,12 @@ import { DeleteFromDiskDialogController } from '../ui/delete-from-disk-dialog-co
 import { SaveAsNewDialogController } from '../ui/save-as-new-dialog-controller.js';
 import { UnsavedChangesDialogController } from '../ui/unsaved-changes-dialog-controller.js';
 import { LoadStatusControl } from '../ui/load-status-control.js';
-import { DocumentElements } from '../ui/document-elements.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
 import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
 
 const ERROR_LOG_FILENAME = 'err.log';
 const NEW_COLLECTION_CHOICE_VALUE = '__new_collection__';
-const PIPELINE_SELECTION_VALUE = '__pipeline__';
 
 class AppControllerSupport {
   static gifSessionServices(win: Window) {
@@ -92,10 +90,6 @@ export class AppController {
     if (this.initialized) return;
     this.initialized = true;
 
-    // Page elements.
-    const elements = new DocumentElements(document);
-    const activeCollectionNameEl = elements.required<HTMLSelectElement>('activeCollectionName');
-    const zoomLayerRoot = elements.required('zoomLayerRoot');
     const body = document.body;
 
     // Application services and adapters.
@@ -132,22 +126,14 @@ export class AppController {
       : null;
 
     // Controls.
-    const zoomOverlay = new ZoomOverlayController({
-      mountEl: zoomLayerRoot,
+    const zoomOverlay = ZoomOverlayController.fromDocument(document, {
       audioDefault: () => settingsService.current.singleClipAudioDefault,
-      document,
     });
     eventWiring.require('zoomOverlay', zoomOverlay, ['playbackFailed', 'contextMenuRequested']);
     const clipContextMenuController = ContextMenuController.forClipMenu(document);
     const gridContextMenuControl = new GridContextMenuControl({ contextMenuController: clipContextMenuController });
     const zoomEditMenuControl = new ZoomEditMenuControl({ contextMenuController: clipContextMenuController, videoEditCatalog });
-    const collectionSelectorControl = new CollectionSelectorControl({
-      appText,
-      selectEl: activeCollectionNameEl,
-      doc: document,
-      pipelineSelectionValue: PIPELINE_SELECTION_VALUE,
-      defaultTitle: appText.defaultAppTitle,
-    });
+    const collectionSelectorControl = CollectionSelectorControl.fromDocument(document, { appText, defaultTitle: appText.defaultAppTitle });
     eventWiring.require('collectionSelector', collectionSelectorControl, ['selectionRequested']);
     const mainToolbarControl = MainToolbarControl.fromDocument(document, { appText });
     eventWiring.require('mainToolbar', mainToolbarControl, [
@@ -174,19 +160,17 @@ export class AppController {
       document,
     });
     // The Activity control and the utility coordinator each refer to the other, so these callbacks resolve `utilities` when called.
-    const utilityHost = elements.optional('globalUtilityHost');
+    const utilitiesAvailable = GlobalUtilityCoordinator.isAvailableIn(document);
     const activityIndicatorControl = ActivityIndicatorControl.fromDocument(document, {
       logger: activityLogger,
       requestPanelClose: () => utilities?.close(),
       writeClipboard: text => navigator.clipboard.writeText(text),
       win: window,
-      requestPanelOpen: utilityHost ? () => {
+      requestPanelOpen: utilitiesAvailable ? () => {
         if (activityPanelAutoOpenPolicy.mayOpenAutomatically()) utilities?.open('activity');
       } : undefined,
     });
-    const loadStatusControl = new LoadStatusControl({ appText, statusControl: {
-      show: (message, timeout) => activityLogger.log({ kind: 'success', message, timeoutMs: timeout }),
-    } });
+    const loadStatusControl = new LoadStatusControl({ appText, reporter: activityReporter });
     const gridController = ClipCollectionGridController.fromDocument(document, { fullScreen: fullscreenAdapter });
     gridController.on('metadataFailed', ({ clip, error }) => {
       void diagnostics.logVideoMetadataFailure({ filename: clip?.name || '', error });
@@ -195,10 +179,7 @@ export class AppController {
       'cardCountChanged', 'selectionChanged', 'orderChanged', 'openClipRequested',
       'removeSelectedRequested', 'contextMenuRequested', 'metadataFailed',
     ]);
-    const pipelinesPanelHost = elements.optional('pipelinesPanelHost');
-    const pipelineCatalogControl = pipelinesPanelHost
-      ? new PipelineCatalogControl({ host: pipelinesPanelHost, catalog: fileSystem, document })
-      : null;
+    const pipelineCatalogControl = PipelineCatalogControl.fromDocument(document, { catalog: fileSystem });
     if (pipelineCatalogControl) {
       pipelineCatalogControl.on('failed', ({ message, error }) => {
         activityReporter.failure(message, {
@@ -216,13 +197,12 @@ export class AppController {
       error: activityReporter.failure,
       pipelinesRootChanged: () => { void pipelineCatalogControl?.load(); },
     });
-    const keyboardMap = utilityHost
+    const keyboardMap = utilitiesAvailable
       ? KeyboardMapControl.fromDocument(document, { globalShortcuts: GLOBAL_UTILITY_SHORTCUTS, requestClose: () => utilities?.close() })
       : null;
     const collectionScreen = CollectionScreen.fromDocument(document, { grid: gridController, toolbar: mainToolbarControl });
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
-    const gifRangesPanel = elements.optional('gifRangesPanel');
     const hasClipsPanel = ApplicationShellController.sidePanelsIn(document).some(panel => panel.id === 'clips');
     const sessionReporting = {
       onProgress: activityReporter.progress,
@@ -249,8 +229,8 @@ export class AppController {
         extractionService: collectionRefinementGifServices.extractionService,
       })
       : null;
-    const gifRangesPanelControl = gifExtractionSession && gifRangesPanel
-      ? new GifRangesPanelControl(gifRangesPanel, gifExtractionSession, { document, player: frameReviewPlayer })
+    const gifRangesPanelControl = gifExtractionSession
+      ? GifRangesPanelControl.fromDocument(document, gifExtractionSession, { player: frameReviewPlayer })
       : null;
     // The refined-clip panel mounts into the shell's Clips panel, so it exists only where that panel does.
     const collectionRangesPanelControl = collectionRefinementSession && hasClipsPanel
@@ -300,8 +280,8 @@ export class AppController {
     eventWiring.require('applicationShell', shell, ['screenChanged', 'settingsRequested']);
     const keyboardUtility = keyboardMap?.utilitySurface();
     const activityUtility = activityIndicatorControl.utilitySurface();
-    const utilities = utilityHost && keyboardUtility && activityUtility
-      ? new GlobalUtilityCoordinator(utilityHost, [
+    const utilities = keyboardUtility && activityUtility
+      ? GlobalUtilityCoordinator.fromDocument(document, [
         { id: 'keyboard', ...keyboardUtility },
         { id: 'activity', ...activityUtility },
       ])
@@ -325,18 +305,12 @@ export class AppController {
     });
     // Saving refreshes the open folder through folder selection, which itself saves first; the callback below closes that loop.
     const openFolderRefreshSession = new OpenFolderRefreshSession({
-      isActiveFolder: folderPath => fileSystem.isActiveFolder(state.currentFolderSession, folderPath),
-      hasUnsavedActiveSequenceChanges: () => pipelineSession.hasDirtyClipSequenceChanges,
+      folders: fileSystem,
+      openFolder: state,
+      pipelineSession,
       refreshActiveFolder: (): Promise<void> => folderSelection.refreshActiveFolder(),
-      onRefreshError: error => {
-        const message = 'The clip was saved, but the Collection view could not refresh.';
-        activityReporter.failure(message, {
-          affected: 'Collection refresh',
-          recovery: 'Open the folder again to refresh its clips.',
-          technicalDetails: activityReporter.technicalDetailsOf(error),
-        });
-        void diagnostics.logRuntimeError(message, error, state.currentFolderSession);
-      },
+      reporter: activityReporter,
+      diagnostics,
     });
     const collectionSave = new CollectionSaveWorkflow({
       pipelineSession,
@@ -375,7 +349,8 @@ export class AppController {
       unsavedChangesPrompt: unsavedChangesDialogController,
       loadStatus: loadStatusControl,
       collectionSave,
-      screens: { showCollectionScreen: () => shell.activate(collectionScreen.id) },
+      navigation: shell,
+      collectionScreenId: collectionScreen.id,
       settingsLoaded: () => settingsReady,
       toolbar: mainToolbarControl,
       selector: collectionSelectorControl,
@@ -463,10 +438,6 @@ export class AppController {
       reporter: activityReporter,
       appText,
     });
-    mainToolbarControl.on('toggleFullscreenRequested', () => {
-      if (zoom.isOpen()) zoom.close();
-      fullscreenSession.onFsToggle();
-    });
     const fullScreenChange = new FullScreenChangeWorkflow({
       utilities,
       moviePlayer: frameReviewPlayer,
@@ -485,7 +456,11 @@ export class AppController {
       zoom,
       gridController,
       fullScreen: fullscreenAdapter,
+      keys: collectionScreen,
+      utilities,
+      fullScreenKeys: fullscreenSession,
     });
+    eventWiring.require('collectionScreen', collectionScreen, ['keyPressed']);
     eventWiring.assertComplete();
 
     // Startup: show an empty Collection view, activate the first screen, then load settings.
@@ -503,6 +478,7 @@ export class AppController {
     });
     const shutdown = new ApplicationShutdownCoordinator({
       stopActions: () => {
+        appKeyDownHandler.dispose();
         fullscreenSession.destroy();
         shell.destroy();
       },
@@ -512,7 +488,7 @@ export class AppController {
         await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
       },
       destroyControls: () => {
-        gridController.destroy();
+        gridController.dispose();
         gifExtractionScreen.destroy();
         refineGifScreen.destroy();
         collectionRefineScreen.destroy();
@@ -534,15 +510,7 @@ export class AppController {
       document,
       window,
       onFullscreenChange: () => fullScreenChange.handleFullScreenChange(),
-      onResize: () => gridController.recomputeLayout(),
-      onKeyDown: event => {
-        if (!utilities?.isOpen && !event.defaultPrevented && shell.activeScreen === collectionScreen) appKeyDownHandler.handle(event);
-        if (!event.defaultPrevented && shell.activeScreen !== collectionScreen) gifWorkflowKeyboard.handleKeyDown(event);
-      },
-      onGlobalKeyDown: event => {
-        if (utilities?.isOpen || event.defaultPrevented) return;
-        if (shell.activeScreen === collectionScreen) fullscreenSession.onGlobalKeyDown(event);
-      },
+      onKeyDown: event => shell.handleKeyDown(event),
       onKeyUp: event => gifWorkflowKeyboard.handleKeyUp(event),
       onWindowBlur: () => gifWorkflowKeyboard.releaseHeldSteps(),
       onPageHide: () => { void shutdown.begin(); },

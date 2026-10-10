@@ -3,6 +3,7 @@ import type { ClipSequence } from '../domain/clip-sequence.js';
 import type { Collection } from '../domain/collection.js';
 import type { Pipeline } from '../domain/pipeline.js';
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { DocumentElements } from './document-elements.js';
 
 export interface ICollectionSelectorEvents {
   selectionRequested: string | null;
@@ -22,6 +23,18 @@ export class CollectionSelectorControl implements IEventSource<ICollectionSelect
   pipelineSelectionValue: string;
   defaultTitle: string;
   onChange: (event: Event) => void;
+
+  static fromDocument(doc: Document, { appText, defaultTitle }: {
+    appText: Pick<AppText, 'activeCollectionText' | 'activeCollectionTabText'>;
+    defaultTitle?: string;
+  }): CollectionSelectorControl {
+    return new CollectionSelectorControl({
+      appText,
+      selectEl: new DocumentElements(doc).required<HTMLSelectElement>('activeCollectionName'),
+      doc,
+      defaultTitle,
+    });
+  }
 
   constructor({
     appText,

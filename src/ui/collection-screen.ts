@@ -2,6 +2,11 @@ import type { IAppScreen, IAppScreenPanelContribution, IShortcutDescriptor } fro
 import { COLLECTION_SHORTCUTS } from '../app/app-keydown-handler.js';
 import { FULLSCREEN_SHORTCUTS } from '../app/fullscreen-session.js';
 import { DocumentElements } from './document-elements.js';
+import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+
+export interface ICollectionScreenEvents {
+  keyPressed: KeyboardEvent;
+}
 
 type CollectionGrid = {
   focusSelectedClip(): boolean;
@@ -11,7 +16,8 @@ type CollectionGrid = {
 
 type CollectionToolbar = { focusBrowse(): void };
 
-export class CollectionScreen implements IAppScreen {
+export class CollectionScreen implements IAppScreen, IEventSource<ICollectionScreenEvents>, IEventSubscriberCount<ICollectionScreenEvents> {
+  private readonly events = new EventSource<ICollectionScreenEvents>();
   readonly id = 'collection';
   readonly label = 'Collection';
   readonly selectorStatus = 'fixed' as const;
@@ -44,5 +50,17 @@ export class CollectionScreen implements IAppScreen {
 
   onBoundsSettled(): void {
     this.grid.endWorkspaceResize();
+  }
+
+  onKeyDown(event: KeyboardEvent): void {
+    this.events.emit('keyPressed', event);
+  }
+
+  on<TName extends keyof ICollectionScreenEvents>(name: TName, handler: EventHandler<ICollectionScreenEvents[TName]>): () => void {
+    return this.events.on(name, handler);
+  }
+
+  subscriberCount(name: keyof ICollectionScreenEvents): number {
+    return this.events.subscriberCount(name);
   }
 }

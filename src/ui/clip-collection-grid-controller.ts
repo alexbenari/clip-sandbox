@@ -1016,9 +1016,14 @@ export class ClipCollectionGridController implements IEventSource<IClipGridEvent
     return this.getCardByClipId(clipId)?.dataset.objectUrl || '';
   }
 
-  destroy(): void {
+  // destroy() only clears the loaded view and is also used for that while the app runs; dispose() ends the grid.
+  dispose(): void {
     this.rootResizeObserver?.disconnect();
     this.rootResizeObserver = null;
+    this.destroy();
+  }
+
+  destroy(): void {
     this.fsRestore();
     this.previewPlayback.cancel(this.grid);
     this.clearGridCards(this.grid);

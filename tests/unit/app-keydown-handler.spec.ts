@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { describe, expect, test, vi } from 'vitest';
 import { AppKeyDownHandler } from '../../src/app/app-keydown-handler.js';
+import { EventSource } from '../../src/app/event-source.js';
 
 function createContext(overrides = {}) {
   return {
@@ -32,11 +33,37 @@ function createContext(overrides = {}) {
       getSelectedClipId: vi.fn(() => null),
     },
     fullScreen: { isDocumentFullScreen: vi.fn(() => false) },
+    keys: new EventSource(),
+    utilities: { isOpen: false },
+    fullScreenKeys: { onGlobalKeyDown: vi.fn() },
     ...overrides,
   };
 }
 
 describe('app keydown handler', () => {
+  test('handles Collection keys before full-screen keys, and none while a utility is open', () => {
+    const context = createContext({
+      gridController: { handleKeyDown: vi.fn(() => false), getSelectedClipId: vi.fn(() => 'clip_7') },
+    });
+    const handler = new AppKeyDownHandler(context);
+
+    const zoomKey = new KeyboardEvent('keydown', { key: 'z', cancelable: true });
+    context.keys.emit('keyPressed', zoomKey);
+    expect(context.zoom.openClipById).toHaveBeenCalledWith('clip_7');
+    expect(context.fullScreenKeys.onGlobalKeyDown).not.toHaveBeenCalled();
+
+    const digit = new KeyboardEvent('keydown', { key: '3', cancelable: true });
+    context.keys.emit('keyPressed', digit);
+    expect(context.fullScreenKeys.onGlobalKeyDown).toHaveBeenCalledWith(digit);
+
+    context.utilities.isOpen = true;
+    context.keys.emit('keyPressed', new KeyboardEvent('keydown', { key: 'z', cancelable: true }));
+    expect(context.zoom.openClipById).toHaveBeenCalledOnce();
+
+    handler.dispose();
+    expect(context.keys.subscriberCount('keyPressed')).toBe(0);
+  });
+
   test('honors handler precedence for dialog controllers before other shortcuts', () => {
     const context = createContext({
       saveAsNewDialogController: {

@@ -1,4 +1,7 @@
 import type { IShortcutDescriptor } from './app-screen.js';
+import { DocumentElements } from './document-elements.js';
+
+const GLOBAL_UTILITY_HOST_ID = 'globalUtilityHost';
 
 export const GLOBAL_UTILITY_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Close the open app-bar utility', sequences: [['Escape']] },
@@ -32,6 +35,15 @@ export class GlobalUtilityCoordinator {
       event.stopImmediatePropagation();
     }
   };
+
+  static isAvailableIn(doc: Document): boolean {
+    return new DocumentElements(doc).optional(GLOBAL_UTILITY_HOST_ID) !== null;
+  }
+
+  static fromDocument(doc: Document, utilities: readonly GlobalUtility[]): GlobalUtilityCoordinator | null {
+    const host = new DocumentElements(doc).optional(GLOBAL_UTILITY_HOST_ID);
+    return host ? new GlobalUtilityCoordinator(host, utilities) : null;
+  }
 
   constructor(private readonly host: HTMLElement, utilities: readonly GlobalUtility[]) {
     this.doc = host.ownerDocument;

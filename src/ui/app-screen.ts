@@ -29,5 +29,6 @@ export interface IAppScreen {
   onDeactivate?(): void;
   onBoundsChanging?(width: number, durationMs: number): void;
   onBoundsSettled?(): void;
+  onKeyDown?(event: KeyboardEvent): void;
   focusInitial(): void;
 }

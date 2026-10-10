@@ -442,7 +442,15 @@ describe('clip collection grid controller', () => {
       observer.callback();
       expect(computeBestGrid).not.toHaveBeenCalled();
 
+      controller.endWorkspaceResize();
       controller.destroy();
+      controller.renderCollection(makeCollection());
+      computeBestGrid.mockClear();
+      observer.callback();
+      expect(observer.disconnected).toBeUndefined();
+      expect(computeBestGrid).toHaveBeenCalled();
+
+      controller.dispose();
       expect(observer.disconnected).toBe(true);
     } finally {
       window.ResizeObserver = originalResizeObserver;

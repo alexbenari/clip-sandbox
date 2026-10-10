@@ -8,6 +8,7 @@ const DEFAULT_ZOOM_OVERLAY_CSS = `
 `;
 
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { DocumentElements } from './document-elements.js';
 
 type ZoomContextMenuEvent = {
   clipId: string | null;
@@ -44,6 +45,10 @@ export class ZoomOverlayController implements IEventSource<IZoomOverlayEvents>, 
   private readonly audioDefault: () => boolean;
   private playbackAttempt = 0;
   private playbackFailureReported = false;
+
+  static fromDocument(doc: Document, { audioDefault }: { audioDefault: () => boolean }): ZoomOverlayController {
+    return new ZoomOverlayController({ mountEl: new DocumentElements(doc).required('zoomLayerRoot'), document: doc, audioDefault });
+  }
 
   constructor({ mountEl, document: doc = document, audioDefault = () => false }: {
     mountEl?: HTMLElement | null;

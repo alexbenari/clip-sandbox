@@ -1,6 +1,7 @@
 import type { IShortcutDescriptor } from '../ui/app-screen.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppText } from './app-text.js';
+import type { IEventSource } from './event-source.js';
 
 export const FULLSCREEN_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Toggle fullscreen review', group: 'Fullscreen', sequences: [['F']] },
@@ -25,7 +26,7 @@ export interface IFullscreenGrid {
   computeGrid(): void;
 }
 
-export interface IFullscreenButton {
+export interface IFullscreenButton extends IEventSource<{ toggleFullscreenRequested: void }> {
   setFullscreenButtonState(active: boolean): void;
 }
 
@@ -58,7 +59,12 @@ type FullscreenSessionOptions = {
 export class FullscreenSession {
   private readonly fullscreenState: FullscreenState = { savedTitlesHidden: null, digitBuffer: '', digitTimer: null, slots: 12, randInterval: null };
 
-  constructor(private readonly session: FullscreenSessionOptions) {}
+  private readonly unsubscribeToolbar: () => void;
+
+  // Entering Collection full screen closes Zoom through the full-screen change, before the grid changes.
+  constructor(private readonly session: FullscreenSessionOptions) {
+    this.unsubscribeToolbar = session.toolbar.on('toggleFullscreenRequested', () => this.onFsToggle());
+  }
 
   async enterFullScreen(): Promise<void> {
     const { grid, titles, fullScreen, toolbar } = this.session;
@@ -129,6 +135,7 @@ export class FullscreenSession {
   }
 
   destroy(): void {
+    this.unsubscribeToolbar();
     this.stopFsRandomizer();
     if (this.fullscreenState.digitTimer) clearTimeout(this.fullscreenState.digitTimer);
     this.fullscreenState.digitTimer = null;

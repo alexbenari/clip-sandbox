@@ -1,4 +1,5 @@
 import type { IShortcutDescriptor } from '../ui/app-screen.js';
+import type { IEventSource } from './event-source.js';
 
 export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Open selected clip in Zoom', group: 'Grid', sequences: [['Z']] },
@@ -32,10 +33,28 @@ export type AppKeyDownContext = {
     getSelectedClipId(): string | null;
   };
   fullScreen: { isDocumentFullScreen(): boolean };
+  keys: IEventSource<{ keyPressed: KeyboardEvent }>;
+  utilities: { readonly isOpen: boolean } | null;
+  fullScreenKeys: { onGlobalKeyDown(event: KeyboardEvent): void };
 };
 
 export class AppKeyDownHandler {
-  constructor(private readonly context: AppKeyDownContext) {}
+  private readonly unsubscribeKeys: () => void;
+
+  constructor(private readonly context: AppKeyDownContext) {
+    this.unsubscribeKeys = context.keys.on('keyPressed', event => this.onCollectionKey(event));
+  }
+
+  dispose(): void {
+    this.unsubscribeKeys();
+  }
+
+  // Collection shortcuts come first; full-screen keys only see keys those left unhandled.
+  private onCollectionKey(event: KeyboardEvent): void {
+    if (this.context.utilities?.isOpen || event.defaultPrevented) return;
+    this.handle(event);
+    if (!event.defaultPrevented) this.context.fullScreenKeys.onGlobalKeyDown(event);
+  }
 
   handle(event: KeyboardEvent): boolean {
     const context = this.context;

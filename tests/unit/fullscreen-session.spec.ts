@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
+import { EventSource } from '../../src/app/event-source.js';
 import { FullscreenSession } from '../../src/app/fullscreen-session.js';
 
 afterEach(() => { vi.useRealTimers(); });
@@ -15,10 +16,11 @@ function fullscreenSession() {
     computeGrid: vi.fn(),
   };
   const reporter = { success: vi.fn() };
+  const toolbar = Object.assign(new EventSource<{ toggleFullscreenRequested: void }>(), { setFullscreenButtonState: vi.fn() });
   const session = new FullscreenSession({
     body: document.body,
     grid,
-    toolbar: { setFullscreenButtonState: vi.fn() },
+    toolbar,
     titles: { setTitlesHidden: vi.fn() },
     fullScreen: {
       enterFullScreen: () => { active = true; },
@@ -29,8 +31,22 @@ function fullscreenSession() {
     reporter,
     appText: { fullscreenSlotsText: String },
   });
-  return { session, grid, reporter };
+  return { session, grid, reporter, toolbar, isActive: () => active };
 }
+
+test('the toolbar full-screen request enters and leaves full screen', async () => {
+  const { session, toolbar, isActive } = fullscreenSession();
+
+  toolbar.emit('toggleFullscreenRequested');
+  await Promise.resolve();
+  expect(isActive()).toBe(true);
+  toolbar.emit('toggleFullscreenRequested');
+  await Promise.resolve();
+  expect(isActive()).toBe(false);
+
+  session.destroy();
+  expect(toolbar.subscriberCount('toggleFullscreenRequested')).toBe(0);
+});
 
 test('fullscreen exit and disposal cancel rotation and delayed slot input', async () => {
   vi.useFakeTimers();

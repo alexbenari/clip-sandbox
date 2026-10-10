@@ -16,6 +16,17 @@ it('passes workspace resizes to its grid', () => {
   expect(grid.endWorkspaceResize).toHaveBeenCalledOnce();
 });
 
+it('reports keys pressed while it is active', () => {
+  const screen = new CollectionScreen(document.createElement('section'), document.createElement('nav'), collectionGrid(), { focusBrowse: vi.fn() });
+  const keyPressed = vi.fn();
+  screen.on('keyPressed', keyPressed);
+  const key = new KeyboardEvent('keydown', { key: 'z' });
+
+  screen.onKeyDown(key);
+
+  expect(keyPressed).toHaveBeenCalledWith(key);
+});
+
 it('asks the grid to focus its selection and uses Browse only when there is none', () => {
   const grid = collectionGrid();
   const toolbar = { focusBrowse: vi.fn() };

@@ -46,7 +46,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   const toolbar = new EventSource<{ browseRequested: void }>();
   const selector = new EventSource<{ selectionRequested: string | null }>();
   const catalog = new EventSource<{ loadRequested: IPipelineCatalogEntry }>();
-  const screens = { showCollectionScreen: vi.fn() };
+  const navigation = { activate: vi.fn() };
   const workflow = new FolderSelectionWorkflow({
     pipelineSession,
     openFolder,
@@ -60,7 +60,8 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     unsavedChangesPrompt,
     loadStatus: { showInitialLoadStatus: vi.fn(), showSelectionLoadStatus: vi.fn() },
     collectionSave,
-    screens,
+    navigation,
+    collectionScreenId: 'collection',
     settingsLoaded: async () => undefined,
     toolbar,
     selector,
@@ -72,7 +73,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     const ids = pipelineSession.currentClipSequence!.orderedClips().map(clip => clip.id);
     pipelineSession.replaceCurrentOrder([...ids].reverse());
   };
-  return { workflow, folders, pipelineSession, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, screens, makeViewDirty };
+  return { workflow, folders, pipelineSession, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, makeViewDirty };
 }
 
 async function openFolder(context: ReturnType<typeof folderWorkflow>) {
@@ -114,7 +115,7 @@ describe('FolderSelectionWorkflow', () => {
 
     await vi.waitFor(() => expect(context.pipelineSession.pipeline?.folderName).toBe('archive'));
     expect(context.collectionSave.saveActive).toHaveBeenCalledOnce();
-    expect(context.screens.showCollectionScreen).toHaveBeenCalled();
+    expect(context.navigation.activate).toHaveBeenCalledWith('collection');
     expect(context.workflow.pendingSelectionAction).toBeNull();
   });
 

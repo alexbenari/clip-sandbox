@@ -9,6 +9,7 @@ import type {
 import type { IAppPanelContent } from './app-screen.js';
 import type { FrameReviewPlayerControl } from './frame-review-player-control.js';
 import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { DocumentElements } from './document-elements.js';
 
 type GifRangesPanelControlOptions = {
   readonly document?: Document;
@@ -27,6 +28,11 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
   private readonly clickListener = (event: Event): void => this.onClick(event);
   private readonly keydownListener = (event: KeyboardEvent): void => this.onKeyDown(event);
   private latestSnapshot: IGifExtractionSessionSnapshot | null = null;
+
+  static fromDocument(doc: Document, session: GifExtractionSession, options: Omit<GifRangesPanelControlOptions, 'document'> = {}): GifRangesPanelControl | null {
+    const root = new DocumentElements(doc).optional('gifRangesPanel');
+    return root ? new GifRangesPanelControl(root, session, { ...options, document: doc }) : null;
+  }
 
   static forCollectionRefinement(session: GifExtractionSession, options: GifRangesPanelControlOptions = {}): GifRangesPanelControl {
     const root = (options.document ?? document).createElement('section');

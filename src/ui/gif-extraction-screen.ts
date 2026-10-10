@@ -148,6 +148,10 @@ export class GifExtractionScreen implements IAppScreen {
     if (!this.options.player.focusInitial()) this.openMovie.focus();
   }
 
+  onKeyDown(event: KeyboardEvent): void {
+    if (!event.defaultPrevented) this.options.keyboard.handleKeyDown(event);
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
