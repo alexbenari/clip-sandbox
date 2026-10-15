@@ -1,5 +1,6 @@
 import type { GifExtractionSession, IGifExtractionSessionSnapshot } from '../app/gif-extraction-session.js';
-import type { IAppPanelContent, IAppScreen, IAppScreenPanelContribution, IShortcutDescriptor } from './app-screen.js';
+import type { IAppPanelContent, IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
+import type { IShortcutDescriptor } from '../app/shortcut-descriptor.js';
 import { FrameReviewPlayerControl } from './frame-review-player-control.js';
 import { GifWorkflowKeyboard } from './gif-workflow-keyboard.js';
 

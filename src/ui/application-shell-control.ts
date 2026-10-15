@@ -227,6 +227,11 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     } else incoming.onBoundsSettled?.();
   }
 
+  // Collection full screen hides the window's shared parts (app bar, side panels, utilities) through one page class.
+  setFullScreenLayout(active: boolean): void {
+    this.elements.screenHost.ownerDocument.body.classList.toggle('fs-active', active);
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;

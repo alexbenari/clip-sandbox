@@ -1,4 +1,5 @@
-import type { IAppScreen, IShortcutDescriptor } from './app-screen.js';
+import type { IAppScreen } from './app-screen.js';
+import type { IShortcutDescriptor } from '../app/shortcut-descriptor.js';
 import { DocumentElements } from './document-elements.js';
 import type { GlobalUtility } from './global-utility-coordinator.js';
 

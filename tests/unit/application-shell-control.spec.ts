@@ -101,6 +101,16 @@ describe('application shell side panel markup', () => {
 });
 
 describe('application shell screen ownership', () => {
+  it('hides the window chrome for Collection full screen and restores it', () => {
+    const f = fixture();
+    const shell = new ApplicationShellControl({ ...f, screens: [f.collection, f.settings] });
+
+    shell.setFullScreenLayout(true);
+    expect(document.body.classList.contains('fs-active')).toBe(true);
+    shell.setFullScreenLayout(false);
+    expect(document.body.classList.contains('fs-active')).toBe(false);
+    shell.destroy();
+  });
   it('keeps the current workspace selected when a leave guard rejects navigation', () => {
     const f = fixture();
     const leavePolicy = { canLeave: vi.fn(() => false) };

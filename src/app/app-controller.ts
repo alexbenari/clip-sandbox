@@ -76,8 +76,6 @@ export class AppController {
     if (this.initialized) return;
     this.initialized = true;
 
-    const body = document.body;
-
     // Application services and adapters.
     const state = new AppSessionState();
     const pipelineSession = new PipelineSession();
@@ -373,7 +371,7 @@ export class AppController {
       reporter: activityReporter,
     });
     const fullscreenSession = new FullscreenSession({
-      body,
+      layout: shell,
       grid,
       toolbar: mainToolbarControl,
       titles: collectionView,

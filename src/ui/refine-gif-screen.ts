@@ -1,7 +1,8 @@
 import type { GifExtractionSession, IGifExtractionSessionSnapshot } from '../app/gif-extraction-session.js';
 import type { IRefineGifSessionSnapshot, RefineGifEndpoint } from '../app/refine-gif-session.js';
 import type { CapturedRangeId } from '../domain/captured-range.js';
-import type { IAppScreen, IAppScreenPanelContribution, IShortcutDescriptor } from './app-screen.js';
+import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
+import type { IShortcutDescriptor } from '../app/shortcut-descriptor.js';
 import { FrameReviewPlayerControl } from './frame-review-player-control.js';
 import type { GifRangesPanelControl } from './gif-ranges-panel-control.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';

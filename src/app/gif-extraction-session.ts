@@ -14,7 +14,7 @@ import {
   type IRangeCaptureSnapshot,
   type RangeCaptureTransition,
 } from '../domain/range-capture-model.js';
-import type { IFrameReviewDisplayedCapture } from '../ui/frame-review-player-control.js';
+import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capture.js';
 import type { IThumbnailCacheService } from './thumbnail-cache-service.js';
 import {
   RefineGifSession,

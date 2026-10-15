@@ -1,4 +1,4 @@
-import type { IShortcutDescriptor } from '../ui/app-screen.js';
+import type { IShortcutDescriptor } from './shortcut-descriptor.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppText } from './app-text.js';
 import type { IEventSource } from './event-source.js';
@@ -40,13 +40,17 @@ export interface IDocumentFullScreen {
   isDocumentFullScreen(): boolean;
 }
 
+export interface IFullScreenLayout {
+  setFullScreenLayout(active: boolean): void;
+}
+
 export interface IRepeatingClock {
   every(ms: number, fn: () => void): ReturnType<typeof setInterval>;
   clear(id: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout>): void;
 }
 
 type FullscreenSessionOptions = {
-  body: HTMLElement;
+  layout: IFullScreenLayout;
   grid: IFullscreenGrid;
   toolbar: IFullscreenButton;
   titles: ITitlesVisibility;
@@ -143,9 +147,9 @@ export class FullscreenSession {
   }
 
   onFsChange(): void {
-    const { body, fullScreen, grid, titles, toolbar } = this.session;
+    const { layout, fullScreen, grid, titles, toolbar } = this.session;
     const active = fullScreen.isDocumentFullScreen();
-    body.classList.toggle('fs-active', active);
+    layout.setFullScreenLayout(active);
     if (!active) {
       if (this.fullscreenState.digitTimer) clearTimeout(this.fullscreenState.digitTimer);
       this.fullscreenState.digitTimer = null;

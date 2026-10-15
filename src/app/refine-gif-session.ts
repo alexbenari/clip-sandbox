@@ -6,7 +6,7 @@ import type {
   IReadyToExtractRange,
 } from '../domain/captured-range.js';
 import type { FrameReviewDisplayFrame } from '../frame-review/frame-review-api.js';
-import type { IFrameReviewDisplayedCapture } from '../ui/frame-review-player-control.js';
+import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capture.js';
 
 export type RefineGifEndpoint = 'start' | 'end';
 

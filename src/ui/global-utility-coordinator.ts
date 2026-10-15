@@ -1,4 +1,4 @@
-import type { IShortcutDescriptor } from './app-screen.js';
+import type { IShortcutDescriptor } from '../app/shortcut-descriptor.js';
 import { DocumentElements } from './document-elements.js';
 
 const GLOBAL_UTILITY_HOST_ID = 'globalUtilityHost';

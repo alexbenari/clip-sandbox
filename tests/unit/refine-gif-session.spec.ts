@@ -10,7 +10,7 @@ import type {
 } from '../../src/frame-review/frame-review-api.js';
 import { FrameReviewOpaqueId } from '../../src/frame-review/frame-review-api.js';
 import { FrameReviewState } from '../../src/frame-review/model/frame-review-state.js';
-import type { IFrameReviewDisplayedCapture } from '../../src/ui/frame-review-player-control.js';
+import type { IFrameReviewDisplayedCapture } from '../../src/app/frame-review-displayed-capture.js';
 
 const identity = (frameIndex: number) => Object.freeze({
   frameIndex,

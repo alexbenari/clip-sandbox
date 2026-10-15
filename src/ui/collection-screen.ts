@@ -1,4 +1,5 @@
-import type { IAppScreen, IAppScreenPanelContribution, IShortcutDescriptor } from './app-screen.js';
+import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
+import type { IShortcutDescriptor } from '../app/shortcut-descriptor.js';
 import { COLLECTION_SHORTCUTS } from '../app/app-keydown-handler.js';
 import { FULLSCREEN_SHORTCUTS } from '../app/fullscreen-session.js';
 import { DocumentElements } from './document-elements.js';

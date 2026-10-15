@@ -8,17 +8,11 @@ import type {
 } from '../frame-review/frame-review-api.js';
 import type { IFrameReviewState } from '../frame-review/model/frame-review-state.js';
 import type { CaptureEndpoint } from '../domain/capture-endpoint.js';
+import type { IFrameReviewDisplayedCapture } from '../app/frame-review-displayed-capture.js';
 
 export interface IFrameReviewFrameRenderer {
   render(canvas: HTMLCanvasElement, frame: FrameReviewDisplayFrame, stillCurrent?: () => boolean): Promise<void>;
   clear(canvas: HTMLCanvasElement): void;
-}
-
-export interface IFrameReviewDisplayedCapture {
-  readonly point: FrameReviewCapturePoint;
-  readonly positionUs: bigint;
-  readonly sourceGeneration: number;
-  readonly thumbnail: FrameReviewDisplayFrame;
 }
 
 export interface IPlayerFullScreen {

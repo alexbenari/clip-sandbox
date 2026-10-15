@@ -1,4 +1,4 @@
-import type { IShortcutDescriptor } from '../ui/app-screen.js';
+import type { IShortcutDescriptor } from './shortcut-descriptor.js';
 import type { IEventSource } from './event-source.js';
 
 export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [

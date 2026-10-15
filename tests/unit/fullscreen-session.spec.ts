@@ -16,9 +16,10 @@ function fullscreenSession() {
     computeGrid: vi.fn(),
   };
   const reporter = { success: vi.fn() };
+  const layout = { setFullScreenLayout: vi.fn() };
   const toolbar = Object.assign(new EventSource<{ toggleFullscreenRequested: void }>(), { setFullscreenButtonState: vi.fn() });
   const session = new FullscreenSession({
-    body: document.body,
+    layout,
     grid,
     toolbar,
     titles: { setTitlesHidden: vi.fn() },
@@ -31,7 +32,7 @@ function fullscreenSession() {
     reporter,
     appText: { fullscreenSlotsText: String },
   });
-  return { session, grid, reporter, toolbar, isActive: () => active };
+  return { session, grid, reporter, toolbar, layout, isActive: () => active };
 }
 
 test('the toolbar full-screen request enters and leaves full screen', async () => {
@@ -72,6 +73,17 @@ test('fullscreen exit and disposal cancel rotation and delayed slot input', asyn
   session.destroy();
   vi.advanceTimersByTime(4000);
   expect(grid.rotateVisibleClip).toHaveBeenCalledTimes(2);
+});
+
+test('the window layout follows full screen in both directions', async () => {
+  const { session, layout } = fullscreenSession();
+  await session.enterFullScreen();
+  session.onFsChange();
+  await session.exitFullScreen();
+  session.onFsChange();
+
+  expect(layout.setFullScreenLayout.mock.calls).toEqual([[true], [false]]);
+  session.destroy();
 });
 
 test('a typed clip count is normalized by the grid, applied and reported', async () => {

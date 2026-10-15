@@ -9,7 +9,7 @@ import type {
 import { FrameReviewOpaqueId } from '../../src/frame-review/frame-review-api.js';
 import { FrameReviewState } from '../../src/frame-review/model/frame-review-state.js';
 import { GifExtractionSession, type IThumbnailCacheService } from '../../src/app/gif-extraction-session.js';
-import type { IFrameReviewDisplayedCapture } from '../../src/ui/frame-review-player-control.js';
+import type { IFrameReviewDisplayedCapture } from '../../src/app/frame-review-displayed-capture.js';
 import { ThumbnailOpaqueId } from '../../src/app/thumbnail-cache-service.js';
 import type { IClipCapturesStoreService } from '../../src/app/clip-captures-store-service.js';
 import type { IClipExtractionService } from '../../src/frame-review/clip-extraction-api.js';
