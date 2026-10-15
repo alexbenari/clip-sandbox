@@ -28,8 +28,8 @@ The roles below cover the classes found in an application's UI and the layers ju
 | Stateless class | A calculation or text selection with no state, such as layout rules or label formatting, used by controls or workflows. | Holds state or touches page elements. |
 | Domain model | Business rules and state, as described in `coding-quality.md`. | Knows about the UI or about storage formats. |
 | Adapter | Access to the platform: desktop APIs, file system, clock, full screen. | Contains business rules. |
-| Application event component | Listening to window and document events (key presses, full-screen changes, page hide) and passing each to the one component that handles it. | Decides what an event means for a screen. |
-| Composition root | Building all of the above, connecting them, and starting the application. | Anything else. |
+| Application event component (named `…Controller`; see Naming) | Listening to application-wide window and document events (key presses, full-screen changes, page hide) and passing each to the one component that handles it. | Decides what an event means for a screen. |
+| Composition root (named `…Controller`; see Naming) | Building all of the above, connecting them, and starting the application. | Anything else. |
 
 ## Composition root
 
@@ -49,7 +49,8 @@ The roles below cover the classes found in an application's UI and the layers ju
 - The factory decides which parts are required. A missing required part fails at once with a message that names it; a missing optional part disables only what depends on it.
 - A control decides which text it shows and where, including accessible labels. Wording used only by that control lives in the control. Wording shared across the application (counts, product terms, messages several parts use) comes from a text service injected into the control. The composition root passes the text service, never the text itself.
 - When another component needs to describe the control (for example a menu or utility registry that needs its label and trigger), the control provides that description.
-- A control binds and unbinds the listeners on its own elements. Window and document events (key presses, full-screen changes, page hide) belong to the application event component, not to individual controls. A control that must react to its own size observes its own element rather than the window.
+- A control binds and unbinds the listeners on its own elements. Window and document events that concern the whole application (key presses, full-screen changes, page hide) belong to the application event component, not to individual controls. A control that must react to its own size observes its own element rather than the window.
+- A control that must react to interaction outside itself while open (closing on an outside click, on focus leaving it or on Escape, or repositioning when the window is resized) may listen on its own element's document and window. It removes those listeners in `dispose()`. Application shortcuts still arrive through the application event component.
 - A control puts itself into a consistent initial state when it is built: a dialog starts closed, a list starts empty. Nothing else resets it at startup.
 - A control reports what the user did as typed events, named after the user's intent: `browseRequested`, `selectionRequested(filename)`, `orderChanged(ids)`. An event says what happened, not what should happen next.
 - Workflows tell a control what to show through methods such as `render(state)`, `open()` or `close()`. A control never decides application flow.
@@ -116,7 +117,7 @@ The general rules in `coding-quality.md` ("Test reliability") apply. In addition
 - Application service: a name for what it holds or does. Give each suffix one meaning across the application; do not use the same suffix (for example `…Session`) for a working copy, a coordinator and a draft.
 - Stateless class: a name for what it computes (`DisplayLayoutRules`, `ClipLabelFormatter`).
 - Adapter: `…Adapter` for a class that wraps a platform API (`FullscreenAdapter`). A platform-backed implementation of a service interface is named after the platform and the service (`ElectronFileSystemService`).
-- Application event component and composition root: `…Controller` is kept for these two application-level coordinators (`ApplicationEventController`, `AppController`). Do not use it for UI parts, where it would suggest coordination a control never does.
+- Application event component and composition root: `…Controller` is kept for these two application-level coordinators (`ApplicationEventController`, `AppController`). Do not use it for UI parts, where it would suggest coordination a control never does, or for a helper that a control or screen uses (a keyboard handler, a playback scheduler); name such a helper for what it does.
 - Name events after what happened: `…Requested` for the user's intent (`browseRequested`), `…Changed` for a change of state (`selectionChanged`), `confirmed` and `cancelled` for a dialog's answer, `…Pressed` for raw input a screen passes on (`keyPressed`), and `failed` or `…Failed` for a failure (`playbackFailed`).
 
 ## Rejected alternatives
