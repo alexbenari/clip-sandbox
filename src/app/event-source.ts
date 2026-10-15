@@ -6,11 +6,7 @@ export interface IEventSource<TEvents> {
   on<TName extends keyof TEvents>(name: TName, handler: EventHandler<TEvents[TName]>): () => void;
 }
 
-export interface IEventSubscriberCount<TEvents> {
-  subscriberCount(name: keyof TEvents): number;
-}
-
-export class EventSource<TEvents> implements IEventSource<TEvents>, IEventSubscriberCount<TEvents> {
+export class EventSource<TEvents> implements IEventSource<TEvents> {
   readonly #handlers = new Map<keyof TEvents, Set<EventHandler<never>>>();
 
   on<TName extends keyof TEvents>(name: TName, handler: EventHandler<TEvents[TName]>): () => void {
@@ -41,7 +37,8 @@ export class EventSource<TEvents> implements IEventSource<TEvents>, IEventSubscr
     if (errors.length > 1) throw new AggregateError(errors, `${errors.length} handlers of "${String(name)}" failed.`);
   }
 
-  subscriberCount(name: keyof TEvents): number {
-    return this.#handlers.get(name)?.size ?? 0;
+  // Lets a control keep the browser's default behavior when nothing handles one of its events.
+  hasSubscribers(name: keyof TEvents): boolean {
+    return (this.#handlers.get(name)?.size ?? 0) > 0;
   }
 }

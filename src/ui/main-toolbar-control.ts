@@ -1,5 +1,5 @@
 import type { AppText } from '../app/app-text.js';
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
 import { OrderMenuControl } from './order-menu-control.js';
 
@@ -13,7 +13,7 @@ export interface IMainToolbarEvents {
   toggleFullscreenRequested: void;
 }
 
-export class MainToolbarControl implements IEventSource<IMainToolbarEvents>, IEventSubscriberCount<IMainToolbarEvents> {
+export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
   private readonly appText: Pick<AppText, 'countText'>;
   private readonly browseButton?: HTMLButtonElement;
   private readonly fullscreenButton?: HTMLButtonElement;
@@ -87,10 +87,6 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents>, IEv
 
   on<TName extends keyof IMainToolbarEvents>(name: TName, handler: EventHandler<IMainToolbarEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof IMainToolbarEvents): number {
-    return this.events.subscriberCount(name);
   }
   setFullscreenButtonState(active: boolean): void {
     if (!this.fullscreenButton) return;

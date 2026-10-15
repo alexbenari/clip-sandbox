@@ -2,7 +2,7 @@ import type { IAppScreen, IAppScreenPanelContribution, IShortcutDescriptor } fro
 import { COLLECTION_SHORTCUTS } from '../app/app-keydown-handler.js';
 import { FULLSCREEN_SHORTCUTS } from '../app/fullscreen-session.js';
 import { DocumentElements } from './document-elements.js';
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 
 export interface ICollectionScreenEvents {
   keyPressed: KeyboardEvent;
@@ -16,7 +16,7 @@ type CollectionGrid = {
 
 type CollectionToolbar = { focusBrowse(): void };
 
-export class CollectionScreen implements IAppScreen, IEventSource<ICollectionScreenEvents>, IEventSubscriberCount<ICollectionScreenEvents> {
+export class CollectionScreen implements IAppScreen, IEventSource<ICollectionScreenEvents> {
   private readonly events = new EventSource<ICollectionScreenEvents>();
   readonly id = 'collection';
   readonly label = 'Collection';
@@ -58,9 +58,5 @@ export class CollectionScreen implements IAppScreen, IEventSource<ICollectionScr
 
   on<TName extends keyof ICollectionScreenEvents>(name: TName, handler: EventHandler<ICollectionScreenEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof ICollectionScreenEvents): number {
-    return this.events.subscriberCount(name);
   }
 }

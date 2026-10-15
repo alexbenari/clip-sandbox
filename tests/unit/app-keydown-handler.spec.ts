@@ -60,8 +60,10 @@ describe('app keydown handler', () => {
     context.keys.emit('keyPressed', new KeyboardEvent('keydown', { key: 'z', cancelable: true }));
     expect(context.zoom.openClipById).toHaveBeenCalledOnce();
 
+    context.utilities.isOpen = false;
     handler.dispose();
-    expect(context.keys.subscriberCount('keyPressed')).toBe(0);
+    context.keys.emit('keyPressed', new KeyboardEvent('keydown', { key: 'z', cancelable: true }));
+    expect(context.zoom.openClipById).toHaveBeenCalledOnce();
   });
 
   test('honors handler precedence for dialog controllers before other shortcuts', () => {

@@ -5,7 +5,7 @@ import { DisplayLayoutRules } from './display-layout-rules.js';
 import { ClipLabelFormatter } from './clip-label-formatter.js';
 import { DocumentElements } from './document-elements.js';
 import { GridPreviewPlaybackController } from './grid-preview-playback-controller.js';
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 
 export interface IClipGridEvents {
   cardCountChanged: void;
@@ -99,7 +99,7 @@ type ClipCollectionGridControlOptions = {
   metadataRelayoutDebounceMs?: number;
 };
 
-export class ClipCollectionGridControl implements IEventSource<IClipGridEvents>, IEventSubscriberCount<IClipGridEvents> {
+export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> {
   private asClipCard(element: Element | null | undefined): ClipCard | null {
   return element instanceof HTMLElement ? element as ClipCard : null;
 }
@@ -849,7 +849,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents>,
   }
 
   private onGridContextMenu(event: MouseEvent): void {
-    if (this.events.subscriberCount('contextMenuRequested') === 0) return;
+    if (!this.events.hasSubscribers('contextMenuRequested')) return;
     event.preventDefault();
     const card = event.target instanceof Element ? this.asClipCard(event.target.closest('.thumb')) : null;
     this.events.emit('contextMenuRequested', {
@@ -864,12 +864,8 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents>,
     return this.events.on(name, handler);
   }
 
-  subscriberCount(name: keyof IClipGridEvents): number {
-    return this.events.subscriberCount(name);
-  }
-
   handleKeyDown(event: KeyboardEvent): boolean {
-    if (this.events.subscriberCount('removeSelectedRequested') === 0) return false;
+    if (!this.events.hasSubscribers('removeSelectedRequested')) return false;
     if (!(event?.key === 'Delete' || event?.key === 'Backspace')) return false;
     if (this.isEditableTarget(event.target)) return false;
     const orderedSelectedClipIds = this.getSelectedClipIds();

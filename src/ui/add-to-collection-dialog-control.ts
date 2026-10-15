@@ -1,5 +1,5 @@
 import type { Pipeline } from '../domain/pipeline.js';
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
 
 export type AddToCollectionChoice = {
@@ -17,7 +17,7 @@ export interface IAddToCollectionDialogEvents {
   cancelled: void;
 }
 
-export class AddToCollectionDialogControl implements IEventSource<IAddToCollectionDialogEvents>, IEventSubscriberCount<IAddToCollectionDialogEvents> {
+export class AddToCollectionDialogControl implements IEventSource<IAddToCollectionDialogEvents> {
   private readonly dialog: HTMLDialogElement | null;
   private readonly destinationSelect: HTMLSelectElement | null;
   private readonly newCollectionNameLabel: HTMLElement | null;
@@ -127,10 +127,6 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
 
   on<TName extends keyof IAddToCollectionDialogEvents>(name: TName, handler: EventHandler<IAddToCollectionDialogEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof IAddToCollectionDialogEvents): number {
-    return this.events.subscriberCount(name);
   }
 
   isOpen(): boolean {

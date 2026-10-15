@@ -2,7 +2,7 @@ import type { AppText } from '../app/app-text.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
 import type { Collection } from '../domain/collection.js';
 import type { Pipeline } from '../domain/pipeline.js';
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
 
 export interface ICollectionSelectorEvents {
@@ -15,7 +15,7 @@ type SelectorChoice = {
   collectionFilename?: string | null;
 };
 
-export class CollectionSelectorControl implements IEventSource<ICollectionSelectorEvents>, IEventSubscriberCount<ICollectionSelectorEvents> {
+export class CollectionSelectorControl implements IEventSource<ICollectionSelectorEvents> {
   private readonly appText: Pick<AppText, 'activeCollectionText' | 'activeCollectionTabText'>;
   private readonly events = new EventSource<ICollectionSelectorEvents>();
   selectEl: HTMLSelectElement | null;
@@ -67,10 +67,6 @@ export class CollectionSelectorControl implements IEventSource<ICollectionSelect
 
   on<TName extends keyof ICollectionSelectorEvents>(name: TName, handler: EventHandler<ICollectionSelectorEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof ICollectionSelectorEvents): number {
-    return this.events.subscriberCount(name);
   }
 
   render({

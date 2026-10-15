@@ -4,7 +4,7 @@ import type { CapturedRangeId } from '../domain/captured-range.js';
 import type { IAppScreen, IAppScreenPanelContribution, IShortcutDescriptor } from './app-screen.js';
 import { FrameReviewPlayerControl } from './frame-review-player-control.js';
 import type { GifRangesPanelControl } from './gif-ranges-panel-control.js';
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import {
   GifWorkflowKeyboardController,
   type IGifWorkflowKeyboardTarget,
@@ -47,7 +47,7 @@ export interface IRefineGifScreenEvents {
   backRequested: CapturedRangeId | null;
 }
 
-export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScreenEvents>, IEventSubscriberCount<IRefineGifScreenEvents> {
+export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScreenEvents> {
   private readonly events = new EventSource<IRefineGifScreenEvents>();
   readonly id: string;
   readonly label: string;
@@ -360,10 +360,6 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
 
   on<TName extends keyof IRefineGifScreenEvents>(name: TName, handler: EventHandler<IRefineGifScreenEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof IRefineGifScreenEvents): number {
-    return this.events.subscriberCount(name);
   }
 
   private render(snapshot: IGifExtractionSessionSnapshot): void {

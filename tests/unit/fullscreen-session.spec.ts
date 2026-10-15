@@ -45,7 +45,9 @@ test('the toolbar full-screen request enters and leaves full screen', async () =
   expect(isActive()).toBe(false);
 
   session.destroy();
-  expect(toolbar.subscriberCount('toggleFullscreenRequested')).toBe(0);
+  toolbar.emit('toggleFullscreenRequested');
+  await Promise.resolve();
+  expect(isActive()).toBe(false);
 });
 
 test('fullscreen exit and disposal cancel rotation and delayed slot input', async () => {

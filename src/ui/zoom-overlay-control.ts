@@ -7,7 +7,7 @@ const DEFAULT_ZOOM_OVERLAY_CSS = `
 .zoom-video{ width:100%; height:100%; object-fit:contain; display:block; background:#000; }
 `;
 
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
 
 type ZoomContextMenuEvent = {
@@ -33,7 +33,7 @@ type ZoomItem = {
   name: string;
 };
 
-export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents>, IEventSubscriberCount<IZoomOverlayEvents> {
+export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
   private readonly mountEl: HTMLElement | null;
   private readonly doc: Document;
   private readonly events = new EventSource<IZoomOverlayEvents>();
@@ -69,10 +69,6 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents>, IEv
 
   on<TName extends keyof IZoomOverlayEvents>(name: TName, handler: EventHandler<IZoomOverlayEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof IZoomOverlayEvents): number {
-    return this.events.subscriberCount(name);
   }
 
   private ensureMount(): HTMLElement {

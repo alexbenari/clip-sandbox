@@ -8,7 +8,7 @@ import type {
 } from '../app/gif-extraction-session.js';
 import type { IAppPanelContent } from './app-screen.js';
 import type { FrameReviewPlayerControl } from './frame-review-player-control.js';
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
 
 type GifRangesPanelControlOptions = {
@@ -20,7 +20,7 @@ export interface IGifRangesPanelEvents {
   refineRequested: CapturedRangeId;
 }
 
-export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGifRangesPanelEvents>, IEventSubscriberCount<IGifRangesPanelEvents> {
+export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGifRangesPanelEvents> {
   private readonly document: Document;
   private readonly events = new EventSource<IGifRangesPanelEvents>();
   private readonly unsubscribe: () => void;
@@ -55,10 +55,6 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
 
   on<TName extends keyof IGifRangesPanelEvents>(name: TName, handler: EventHandler<IGifRangesPanelEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof IGifRangesPanelEvents): number {
-    return this.events.subscriberCount(name);
   }
 
   mount(host: HTMLElement): void {

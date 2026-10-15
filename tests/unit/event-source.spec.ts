@@ -42,16 +42,18 @@ describe('EventSource', () => {
     events.emit('saveRequested');
 
     expect(saves).toBe(0);
-    expect(events.subscriberCount('saveRequested')).toBe(0);
+    expect(events.hasSubscribers('saveRequested')).toBe(false);
   });
 
-  it('counts subscriptions per event name', () => {
+  it('tells whether an event has subscribers, per event name', () => {
     const events = new EventSource<ToolbarEvents>();
-    events.on('saveRequested', () => undefined);
+    const first = events.on('saveRequested', () => undefined);
     events.on('saveRequested', () => undefined);
 
-    expect(events.subscriberCount('saveRequested')).toBe(2);
-    expect(events.subscriberCount('orderChanged')).toBe(0);
+    first();
+
+    expect(events.hasSubscribers('saveRequested')).toBe(true);
+    expect(events.hasSubscribers('orderChanged')).toBe(false);
   });
 
   it('runs later subscribers after one throws, then rethrows that error', () => {

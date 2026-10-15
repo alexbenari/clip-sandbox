@@ -38,10 +38,11 @@ describe('ControlFailureReporting', () => {
   });
 
   it('works without a Pipelines catalog and stops listening when disposed', () => {
-    const { reporting, grid } = failureReporting({ withCatalog: false });
+    const { reporting, grid, diagnostics } = failureReporting({ withCatalog: false });
 
     reporting.dispose();
+    grid.emit('metadataFailed', { clip: { name: 'alpha.mp4' }, error: new Error('decode') });
 
-    expect(grid.subscriberCount('metadataFailed')).toBe(0);
+    expect(diagnostics.logVideoMetadataFailure).not.toHaveBeenCalled();
   });
 });

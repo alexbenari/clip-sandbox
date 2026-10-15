@@ -1,7 +1,7 @@
 import type { IAppScreen } from './app-screen.js';
 import { DocumentElements } from './document-elements.js';
 import { FoldablePanelControl } from './foldable-panel-control.js';
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 
 export interface IApplicationShellEvents {
   screenChanged: IAppScreen;
@@ -32,7 +32,7 @@ type ShellElements = {
   canLeaveScreen?: (current: IAppScreen, incoming: IAppScreen) => boolean;
 };
 
-export class ApplicationShellControl implements IEventSource<IApplicationShellEvents>, IEventSubscriberCount<IApplicationShellEvents> {
+export class ApplicationShellControl implements IEventSource<IApplicationShellEvents> {
   private readonly screens = new Map<string, IAppScreen>();
   private readonly events = new EventSource<IApplicationShellEvents>();
   private current: IAppScreen;
@@ -137,10 +137,6 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
 
   on<TName extends keyof IApplicationShellEvents>(name: TName, handler: EventHandler<IApplicationShellEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof IApplicationShellEvents): number {
-    return this.events.subscriberCount(name);
   }
 
   get activeScreen(): IAppScreen { return this.current; }

@@ -163,11 +163,14 @@ describe('CollectionViewWorkflow', () => {
   });
 
   it('stops reacting to the grid and toolbar once disposed', () => {
-    const { workflow, grid, toolbar } = collectionView();
+    const { workflow, grid, toolbar, pipelineSession } = collectionView();
+    const ids = pipelineSession.currentClipSequence!.orderedClips().map(clip => clip.id);
 
     workflow.dispose();
+    grid.emit('orderChanged', [...ids].reverse());
+    toolbar.emit('toggleTitlesRequested');
 
-    expect(grid.subscriberCount('orderChanged')).toBe(0);
-    expect(toolbar.subscriberCount('toggleTitlesRequested')).toBe(0);
+    expect(pipelineSession.hasDirtyClipSequenceChanges).toBe(false);
+    expect(grid.titlesHidden).toBe(false);
   });
 });

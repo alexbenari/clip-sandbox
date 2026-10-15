@@ -4,7 +4,7 @@ import type {
   IPipelineCatalogEntry,
   PipelineCatalogResult,
 } from '../app/pipeline-catalog.js';
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
 
 export interface IPipelineCatalogEvents {
@@ -23,7 +23,7 @@ type PipelineCatalogControlOptions = {
   document?: Document;
 };
 
-export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEvents>, IEventSubscriberCount<IPipelineCatalogEvents> {
+export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEvents> {
   private readonly host: HTMLElement;
   private readonly catalog: PipelineCatalogPort;
   private readonly events = new EventSource<IPipelineCatalogEvents>();
@@ -45,10 +45,6 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
 
   on<TName extends keyof IPipelineCatalogEvents>(name: TName, handler: EventHandler<IPipelineCatalogEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof IPipelineCatalogEvents): number {
-    return this.events.subscriberCount(name);
   }
 
   async load(): Promise<void> {

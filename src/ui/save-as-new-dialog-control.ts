@@ -1,4 +1,4 @@
-import { EventSource, type EventHandler, type IEventSource, type IEventSubscriberCount } from '../app/event-source.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
 
 export interface ISaveAsNewDialogEvents {
@@ -6,7 +6,7 @@ export interface ISaveAsNewDialogEvents {
   cancelled: void;
 }
 
-export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEvents>, IEventSubscriberCount<ISaveAsNewDialogEvents> {
+export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEvents> {
   private readonly dialog: HTMLElement | null;
   private readonly titleEl: HTMLElement | null;
   private readonly textEl: HTMLElement | null;
@@ -86,10 +86,6 @@ export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEven
 
   on<TName extends keyof ISaveAsNewDialogEvents>(name: TName, handler: EventHandler<ISaveAsNewDialogEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  subscriberCount(name: keyof ISaveAsNewDialogEvents): number {
-    return this.events.subscriberCount(name);
   }
 
   isOpen(): boolean {
