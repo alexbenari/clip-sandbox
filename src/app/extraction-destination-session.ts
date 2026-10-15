@@ -1,12 +1,10 @@
 import { Collection } from '../domain/collection.js';
-import { Pipeline } from '../domain/pipeline.js';
-import type { ClipFile } from '../domain/clip.js';
+import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import type {
   IClipExtractionService,
   ICreatedExtractionMedia,
   IExtractionDestinationSnapshot,
 } from '../frame-review/clip-extraction-api.js';
-import { PipelineSession } from './pipeline-session.js';
 
 export interface IExtractionDestinationPublication {
   readonly folderPath: string;
@@ -29,10 +27,11 @@ type ExtractionDestinationSessionOptions = {
   readonly onPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
   readonly onPublishError?: (error: unknown) => void;
   readonly destination?: IExtractionDestination;
+  readonly collectionParser?: Pick<CollectionDescriptionValidator, 'parseText'>;
 };
 
 export class ExtractionDestinationSession {
-  private readonly pipelineSession = new PipelineSession();
+  private readonly collectionParser: Pick<CollectionDescriptionValidator, 'parseText'>;
   private destinationHandle = '';
   private folderPath = '';
   private collectionFilename = '';
@@ -43,7 +42,9 @@ export class ExtractionDestinationSession {
   constructor(
     private readonly service: Pick<IClipExtractionService, 'openExtractionDestination' | 'saveCollection'>,
     private readonly options: ExtractionDestinationSessionOptions = {},
-  ) {}
+  ) {
+    this.collectionParser = options.collectionParser ?? new CollectionDescriptionValidator();
+  }
 
   async open({ movieName }: { movieName: string }): Promise<IExtractionDestinationSessionSnapshot> {
     const collectionFilename = (this.options.destination?.kind === 'collection'
@@ -51,12 +52,12 @@ export class ExtractionDestinationSession {
       ?? Collection.filenameFromCollectionName(this.movieStem(movieName));
     const destination = await this.service.openExtractionDestination(
       this.options.destination ? { folderPath: this.options.destination.folderPath } : undefined);
-    this.loadPipeline(destination);
+    const collection = this.existingCollection(destination, collectionFilename)
+      ?? Collection.fromFilename({ filename: collectionFilename, orderedClipNames: [] });
     this.destinationHandle = destination.destinationHandle;
     this.folderPath = destination.folderPath;
     this.collectionFilename = collectionFilename;
-    this.collection = this.pipelineSession.pipeline?.getCollectionByFilename(collectionFilename)
-      ?? Collection.fromFilename({ filename: collectionFilename, orderedClipNames: [] });
+    this.collection = collection;
     return this.snapshot();
   }
 
@@ -82,21 +83,21 @@ export class ExtractionDestinationSession {
     const media = this.pendingPublications.get(mediaHandle);
     if (!media) throw new Error('There is no collection publication to persist.');
     if (this.options.destination?.kind === 'folder') {
-      this.pendingPublications.delete(mediaHandle);
-      if (this.latestPendingMediaHandle === mediaHandle) this.latestPendingMediaHandle = null;
+      this.forgetPending(mediaHandle);
       await this.publishCommitted(media, null);
       return;
     }
-    const collection = this.collectionWith(media.filename);
+    // The collection changes only after its file is saved, so a failed save can be retried as is.
+    const collection = this.collection!.withExtractionOutput(media.filename);
     await this.service.saveCollection(this.destinationHandle, this.collectionFilename, collection.toText());
-    const publication = this.pipelineSession.publishCreatedClipToCollection(
-      this.collectionFilename, this.clipFile(media));
-    if (!publication.ok) throw new Error('The extracted clip could not be added to its collection.');
-    this.pipelineSession.pipeline?.upsertCollection(collection);
     this.collection = collection;
+    this.forgetPending(mediaHandle);
+    await this.publishCommitted(media, this.collectionFilename);
+  }
+
+  private forgetPending(mediaHandle: string): void {
     this.pendingPublications.delete(mediaHandle);
     if (this.latestPendingMediaHandle === mediaHandle) this.latestPendingMediaHandle = null;
-    await this.publishCommitted(media, this.collectionFilename);
   }
 
   private async publishCommitted(media: ICreatedExtractionMedia, collectionFilename: string | null): Promise<void> {
@@ -111,54 +112,17 @@ export class ExtractionDestinationSession {
     }
   }
 
-  private collectionWith(filename: string): Collection {
-    const collection = this.collection!;
-    const names = collection.orderedClipNames;
-    if (names.includes(filename)) return collection;
-    // Existing entries keep their saved order; only a retried earlier output moves ahead of later outputs.
-    const prefix = `${collection.collectionName}-`;
-    const sequence = this.outputSequence(filename, prefix);
-    const laterOutputIndex = sequence === null ? -1 : names.findIndex(name => {
-      const existingSequence = this.outputSequence(name, prefix);
-      return existingSequence !== null && existingSequence > sequence;
-    });
-    if (laterOutputIndex < 0) names.push(filename);
-    else names.splice(laterOutputIndex, 0, filename);
-    return collection.withOrderedClipNames(names);
-  }
-
-  private outputSequence(filename: string, prefix: string): number | null {
-    if (!filename.toLowerCase().startsWith(prefix.toLowerCase()) || !/\.mp4$/i.test(filename)) return null;
-    const sequenceText = filename.slice(prefix.length, -4);
-    return /^\d+$/.test(sequenceText) ? Number(sequenceText) : null;
-  }
-
-  private loadPipeline(destination: IExtractionDestinationSnapshot): void {
-    const collections = destination.entries.flatMap(entry => {
-      if (entry.kind !== 'collection' || typeof entry.content !== 'string') return [];
-      return [Collection.fromFilename({
-        filename: entry.filename,
-        orderedClipNames: entry.content.split(/\r?\n/).map(name => name.trim()).filter(Boolean),
-      })];
-    });
-    const videoFiles = destination.entries.flatMap(entry => entry.kind === 'video'
-      ? [this.clipFile({ filename: entry.filename, type: entry.type, size: entry.size, lastModifiedMs: entry.lastModifiedMs })]
-      : []);
-    this.pipelineSession.loadPipeline(new Pipeline({
-      folderName: 'extraction-tmp',
-      videoFiles,
-      collections,
-    }));
-  }
-
-  private clipFile(media: Pick<ICreatedExtractionMedia, 'filename' | 'type' | 'size' | 'lastModifiedMs'>): ClipFile {
-    const file = new File(
-      media.size && media.size > 0 ? [new Uint8Array(Math.min(media.size, 1))] : [],
-      media.filename,
-      { type: media.type ?? 'video/mp4', lastModified: media.lastModifiedMs ?? Date.now() },
-    ) as ClipFile;
-    Object.defineProperty(file, 'mediaSource', { value: '', enumerable: true });
-    return file;
+  // Reads the target collection with the same rules as opening a folder. An empty file is an empty
+  // collection; a file with duplicate entries is refused rather than rewritten.
+  private existingCollection(destination: IExtractionDestinationSnapshot, collectionFilename: string): Collection | null {
+    const identityKey = Collection.identityKeyFromFilename(collectionFilename);
+    const entry = destination.entries.find(candidate => candidate.kind === 'collection'
+      && Collection.identityKeyFromFilename(candidate.filename) === identityKey);
+    if (!entry || typeof entry.content !== 'string') return null;
+    const parsed = this.collectionParser.parseText({ text: entry.content, filename: entry.filename });
+    if (!('code' in parsed)) return parsed.content;
+    if (parsed.code === 'invalid-empty') return Collection.fromFilename({ filename: entry.filename, orderedClipNames: [] });
+    throw new Error(`${entry.filename} cannot receive new clips. ${parsed.message} Remove the duplicate lines, then extract again.`);
   }
 
   private movieStem(movieName: string): string {

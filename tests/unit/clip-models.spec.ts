@@ -109,6 +109,19 @@ describe('clip and sequence models', () => {
     expect(collection.toText()).toBe('alpha.mp4\nbravo.webm\n');
   });
 
+  test('adds an extraction output in sequence without reordering existing entries', () => {
+    const movie = Collection.fromFilename({ filename: 'Movie.txt', orderedClipNames: ['intro.mp4', 'Movie-001.mp4', 'Movie-003.mp4'] });
+
+    expect(movie.withExtractionOutput('Movie-004.mp4').orderedClipNames)
+      .toEqual(['intro.mp4', 'Movie-001.mp4', 'Movie-003.mp4', 'Movie-004.mp4']);
+    expect(movie.withExtractionOutput('Movie-002.mp4').orderedClipNames)
+      .toEqual(['intro.mp4', 'Movie-001.mp4', 'Movie-002.mp4', 'Movie-003.mp4']);
+    expect(movie.withExtractionOutput('other.mp4').orderedClipNames)
+      .toEqual(['intro.mp4', 'Movie-001.mp4', 'Movie-003.mp4', 'other.mp4']);
+    expect(movie.withExtractionOutput('Movie-003.mp4')).toBe(movie);
+    expect(movie.orderedClipNames).toEqual(['intro.mp4', 'Movie-001.mp4', 'Movie-003.mp4']);
+  });
+
   test('validates collection names and preserves append/remove semantics', () => {
     expect(Collection.validateCollectionName(' highlights ')).toEqual({
       ok: true,

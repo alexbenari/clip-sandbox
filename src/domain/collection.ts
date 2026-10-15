@@ -151,6 +151,28 @@ export class Collection {
     });
   }
 
+  // Extraction outputs are named <collection>-NNN.mp4. Existing entries keep their saved order;
+  // only an earlier output published again after a retry moves ahead of later outputs.
+  withExtractionOutput(filename: string): Collection {
+    const names = this.orderedClipNames;
+    if (names.includes(filename)) return this;
+    const prefix = `${this.#collectionName}-`;
+    const sequence = Collection.#outputSequence(filename, prefix);
+    const laterOutputIndex = sequence === null ? -1 : names.findIndex(name => {
+      const existingSequence = Collection.#outputSequence(name, prefix);
+      return existingSequence !== null && existingSequence > sequence;
+    });
+    if (laterOutputIndex < 0) names.push(filename);
+    else names.splice(laterOutputIndex, 0, filename);
+    return this.withOrderedClipNames(names);
+  }
+
+  static #outputSequence(filename: string, prefix: string): number | null {
+    if (!filename.toLowerCase().startsWith(prefix.toLowerCase()) || !/\.mp4$/i.test(filename)) return null;
+    const sequenceText = filename.slice(prefix.length, -4);
+    return /^\d+$/.test(sequenceText) ? Number(sequenceText) : null;
+  }
+
   appendMissingClipNames(orderedClipNames: Iterable<string>): CollectionMutationResult {
     const existingNames = this.orderedClipNames;
     const seenNames = new Set(existingNames);
