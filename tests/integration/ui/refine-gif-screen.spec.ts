@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { IGifExtractionSessionSnapshot } from '../../../src/app/gif-extraction-session.js';
 import type { IRefineGifSessionSnapshot } from '../../../src/app/refine-gif-session.js';
 import { FrameReviewPlayerControl } from '../../../src/ui/frame-review-player-control.js';
-import { GifWorkflowKeyboardController } from '../../../src/ui/gif-workflow-keyboard-controller.js';
+import { GifWorkflowKeyboard } from '../../../src/ui/gif-workflow-keyboard.js';
 import { RefineGifScreen } from '../../../src/ui/refine-gif-screen.js';
 
 const identity = (frameIndex: number) => Object.freeze({
@@ -68,7 +68,7 @@ describe('RefineGifScreen', () => {
   it('shows its own wording for each use', () => {
     const player = new FrameReviewPlayerControl({ document,
       frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
-    const keyboard = new GifWorkflowKeyboardController();
+    const keyboard = new GifWorkflowKeyboard();
     const fromExtraction = RefineGifScreen.forGifExtraction({ player, keyboard, document });
     const fromCollection = RefineGifScreen.forCollectionRefinement({ player, keyboard, document });
 
@@ -94,7 +94,7 @@ describe('RefineGifScreen', () => {
       frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
     const attach = vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
     const screen = RefineGifScreen.forCollectionRefinement({
-      player, keyboard: new GifWorkflowKeyboardController(), session: session as never, document });
+      player, keyboard: new GifWorkflowKeyboard(), session: session as never, document });
     document.body.append(screen.commands, screen.root);
     screen.showPreparation('Finding the original movie…');
     screen.onActivate();
@@ -144,7 +144,7 @@ describe('RefineGifScreen', () => {
     vi.spyOn(player, 'enterExactScrubAtFrame').mockResolvedValue(null);
     const displayed = { point: { kind: 'exact-frame', identity: identity(10) } } as never;
     vi.spyOn(player, 'displayedCapture').mockReturnValue(displayed);
-    const keyboard = new GifWorkflowKeyboardController();
+    const keyboard = new GifWorkflowKeyboard();
     const onBack = vi.fn();
     const onExtractCurrent = vi.fn();
     const screen = RefineGifScreen.forGifExtraction({

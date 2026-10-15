@@ -1,7 +1,7 @@
 import type { GifExtractionSession, IGifExtractionSessionSnapshot } from '../app/gif-extraction-session.js';
 import type { IAppPanelContent, IAppScreen, IAppScreenPanelContribution, IShortcutDescriptor } from './app-screen.js';
 import { FrameReviewPlayerControl } from './frame-review-player-control.js';
-import { GifWorkflowKeyboardController } from './gif-workflow-keyboard-controller.js';
+import { GifWorkflowKeyboard } from './gif-workflow-keyboard.js';
 
 export const GIF_EXTRACTION_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
   { description: 'Enter or exit movie full screen', sequences: [['F']] },
@@ -25,7 +25,7 @@ export const GIF_EXTRACTION_SHORTCUTS: readonly IShortcutDescriptor[] = Object.f
 
 type GifExtractionScreenOptions = {
   readonly player: FrameReviewPlayerControl;
-  readonly keyboard: GifWorkflowKeyboardController;
+  readonly keyboard: GifWorkflowKeyboard;
   readonly session?: GifExtractionSession;
   readonly rangesPanel?: IAppPanelContent;
   readonly document?: Document;

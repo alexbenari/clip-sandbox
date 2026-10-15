@@ -1,4 +1,4 @@
-export class GridPreviewPlaybackController {
+export class GridPreviewPlaybackScheduler {
   private readonly playbackTokens = new WeakMap<HTMLElement, number>();
 
   cancel(grid: HTMLElement | null | undefined): void {

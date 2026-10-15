@@ -30,7 +30,7 @@ export interface IGifWorkflowKeyboardTarget {
   readonly capture?: IGifWorkflowCaptureCommands;
 }
 
-export class GifWorkflowKeyboardController {
+export class GifWorkflowKeyboard {
   private target: IGifWorkflowKeyboardTarget | null = null;
   private readonly heldDirections = new Set<AdjacentDirection>();
 

@@ -40,7 +40,7 @@ import { SettingsScreen } from '../ui/settings-screen.js';
 import { GifExtractionScreen } from '../ui/gif-extraction-screen.js';
 import { RefineGifScreen } from '../ui/refine-gif-screen.js';
 import { FrameReviewPlayerControl } from '../ui/frame-review-player-control.js';
-import { GifWorkflowKeyboardController } from '../ui/gif-workflow-keyboard-controller.js';
+import { GifWorkflowKeyboard } from '../ui/gif-workflow-keyboard.js';
 import { GifRangesPanelControl } from '../ui/gif-ranges-panel-control.js';
 import { ElectronGifSessionServices } from '../adapters/electron/electron-gif-session-services.js';
 import { ElectronCollectionClipRefinementService } from '../adapters/electron/electron-collection-clip-refinement-service.js';
@@ -161,7 +161,7 @@ export class AppController {
       : null;
     const collectionScreen = CollectionScreen.fromDocument(document, { grid, toolbar: mainToolbarControl });
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
-    const gifWorkflowKeyboard = new GifWorkflowKeyboardController();
+    const gifWorkflowKeyboard = new GifWorkflowKeyboard();
     const hasClipsPanel = ApplicationShellControl.sidePanelsIn(document).some(panel => panel.id === 'clips');
     // Saving refreshes the open folder through folder selection, which itself saves first; the callback below closes that loop.
     const openFolderRefreshSession = new OpenFolderRefreshSession({

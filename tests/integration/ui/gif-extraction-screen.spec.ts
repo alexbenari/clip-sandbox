@@ -4,7 +4,7 @@ import type { IGifExtractionSessionSnapshot } from '../../../src/app/gif-extract
 import type { IRangeCaptureSnapshot } from '../../../src/domain/range-capture-model.js';
 import { GifExtractionScreen } from '../../../src/ui/gif-extraction-screen.js';
 import { FrameReviewPlayerControl } from '../../../src/ui/frame-review-player-control.js';
-import { GifWorkflowKeyboardController } from '../../../src/ui/gif-workflow-keyboard-controller.js';
+import { GifWorkflowKeyboard } from '../../../src/ui/gif-workflow-keyboard.js';
 
 function snapshot(ready: boolean): IGifExtractionSessionSnapshot {
   const capture: IRangeCaptureSnapshot = Object.freeze({
@@ -48,7 +48,7 @@ describe('GifExtractionScreen', () => {
     };
     const player = new FrameReviewPlayerControl({ document,
       frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
-    const screen = new GifExtractionScreen({ player, keyboard: new GifWorkflowKeyboardController(),
+    const screen = new GifExtractionScreen({ player, keyboard: new GifWorkflowKeyboard(),
       session: session as never, document });
 
     expect(screen.root.querySelector('.gif-workflow-empty-copy')?.textContent)
@@ -77,7 +77,7 @@ describe('GifExtractionScreen', () => {
     const capture = { point: { kind: 'playback-timestamp', timestampUs: 1n }, positionUs: 1n, sourceGeneration: 1, thumbnail: {} };
     vi.spyOn(player, 'displayedCapture').mockReturnValue(capture as never);
     const interrupt = vi.spyOn(player, 'interruptJumps');
-    const keyboard = new GifWorkflowKeyboardController();
+    const keyboard = new GifWorkflowKeyboard();
     const rangesPanel = { mount: vi.fn() };
     const screen = new GifExtractionScreen({ player, keyboard, session: session as never, rangesPanel, document });
     document.body.append(screen.commands, screen.root);

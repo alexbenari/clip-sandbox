@@ -4,7 +4,7 @@ import { GridVideoMetadataTracker } from './grid-video-metadata-tracker.js';
 import { DisplayLayoutRules } from './display-layout-rules.js';
 import { ClipLabelFormatter } from './clip-label-formatter.js';
 import { DocumentElements } from './document-elements.js';
-import { GridPreviewPlaybackController } from './grid-preview-playback-controller.js';
+import { GridPreviewPlaybackScheduler } from './grid-preview-playback-scheduler.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 
 export interface IClipGridEvents {
@@ -289,7 +289,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private gridViewCache: Map<string, GridViewCacheEntry>;
   private metadataTracker: GridVideoMetadataTracker;
   private readonly coordinateWorkspaceLayout: boolean;
-  private readonly previewPlayback = new GridPreviewPlaybackController();
+  private readonly previewPlayback = new GridPreviewPlaybackScheduler();
   private workspaceBounds: { width: number; height: number } | null = null;
 
   constructor(options: ClipCollectionGridControlOptions = {}) {

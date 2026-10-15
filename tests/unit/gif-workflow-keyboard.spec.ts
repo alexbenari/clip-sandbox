@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { GifWorkflowKeyboardController } from '../../src/ui/gif-workflow-keyboard-controller.js';
+import { GifWorkflowKeyboard } from '../../src/ui/gif-workflow-keyboard.js';
 
 function player() {
   return {
@@ -25,11 +25,11 @@ function event(key: string, target: EventTarget = document.body, options: Partia
   return keyboardEvent;
 }
 
-describe('GifWorkflowKeyboardController', () => {
+describe('GifWorkflowKeyboard', () => {
   it('routes F from buttons and the Jump-by select, keeps text editing, and blocks E only in movie full screen', () => {
     const transport = player();
     const commands = capture(true);
-    const controller = new GifWorkflowKeyboardController();
+    const controller = new GifWorkflowKeyboard();
     controller.activate({ player: transport, capture: commands });
     const button = document.createElement('button');
     const select = document.createElement('select');
@@ -56,7 +56,7 @@ describe('GifWorkflowKeyboardController', () => {
   it('routes transport and capture commands only while an active target is installed', () => {
     const transport = player();
     const commands = capture(true);
-    const controller = new GifWorkflowKeyboardController();
+    const controller = new GifWorkflowKeyboard();
 
     controller.activate({ player: transport, capture: commands });
     controller.handleKeyDown(event(' '));
@@ -83,7 +83,7 @@ describe('GifWorkflowKeyboardController', () => {
 
   it('ignores E when the active capture target cannot extract the current range', () => {
     const commands = capture(false);
-    const controller = new GifWorkflowKeyboardController();
+    const controller = new GifWorkflowKeyboard();
     controller.activate({ player: player(), capture: commands });
 
     controller.handleKeyDown(event('e'));
@@ -92,7 +92,7 @@ describe('GifWorkflowKeyboardController', () => {
 
   it('starts each held arrow once, ignores browser repeat, and releases each direction independently', () => {
     const transport = player();
-    const controller = new GifWorkflowKeyboardController();
+    const controller = new GifWorkflowKeyboard();
     controller.activate({ player: transport });
 
     controller.handleKeyDown(event('ArrowLeft'));
@@ -111,7 +111,7 @@ describe('GifWorkflowKeyboardController', () => {
   it('ignores modified shortcuts and editable controls, while keeping Space and arrows on a range input', () => {
     const transport = player();
     const commands = capture();
-    const controller = new GifWorkflowKeyboardController();
+    const controller = new GifWorkflowKeyboard();
     controller.activate({ player: transport, capture: commands });
     const text = document.createElement('input');
     const range = document.createElement('input'); range.type = 'range';
@@ -128,7 +128,7 @@ describe('GifWorkflowKeyboardController', () => {
 
   it('removes the active target and releases held directions when deactivated', () => {
     const transport = player();
-    const controller = new GifWorkflowKeyboardController();
+    const controller = new GifWorkflowKeyboard();
     controller.activate({ player: transport });
     controller.handleKeyDown(event('ArrowRight'));
     controller.deactivate();
@@ -141,7 +141,7 @@ describe('GifWorkflowKeyboardController', () => {
 
   it('releases held stepping on focus loss without deactivating the screen', () => {
     const transport = player();
-    const controller = new GifWorkflowKeyboardController();
+    const controller = new GifWorkflowKeyboard();
     controller.activate({ player: transport });
     controller.handleKeyDown(event('ArrowRight'));
 
@@ -154,7 +154,7 @@ describe('GifWorkflowKeyboardController', () => {
 
   it('maps only plain physical top-row digits to jump durations', () => {
     const transport = player();
-    const controller = new GifWorkflowKeyboardController();
+    const controller = new GifWorkflowKeyboard();
     controller.activate({ player: transport });
     for (let digit = 1; digit <= 5; digit += 1) {
       controller.handleKeyDown(event(String(digit), document.body, { code: `Digit${digit}` }));

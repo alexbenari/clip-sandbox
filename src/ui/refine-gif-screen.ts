@@ -6,9 +6,9 @@ import { FrameReviewPlayerControl } from './frame-review-player-control.js';
 import type { GifRangesPanelControl } from './gif-ranges-panel-control.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import {
-  GifWorkflowKeyboardController,
+  GifWorkflowKeyboard,
   type IGifWorkflowKeyboardTarget,
-} from './gif-workflow-keyboard-controller.js';
+} from './gif-workflow-keyboard.js';
 
 const REFINE_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
   { description: 'Enter or exit movie full screen', sequences: [['F']] },
@@ -71,7 +71,7 @@ const COLLECTION_REFINEMENT: RefineScreenVariant = Object.freeze({
 
 type RefineGifScreenOptions = {
   readonly player: FrameReviewPlayerControl;
-  readonly keyboard: GifWorkflowKeyboardController;
+  readonly keyboard: GifWorkflowKeyboard;
   readonly session?: GifExtractionSession;
   readonly rangesPanel?: GifRangesPanelControl;
   readonly onExtractCurrent?: (rangeId: CapturedRangeId) => void;
