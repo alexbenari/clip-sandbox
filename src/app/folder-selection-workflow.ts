@@ -11,6 +11,7 @@ import type { IScreenNavigation } from './collection-refinement-workflow.js';
 import type { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
+import { LoadStatusText } from './load-status-text.js';
 import type { IPipelineCatalogEntry } from './pipeline-catalog.js';
 import type { PipelineSession } from './pipeline-session.js';
 
@@ -41,11 +42,6 @@ export interface IUnsavedChangesPrompt {
   close(): void;
 }
 
-export interface ILoadStatusView {
-  showInitialLoadStatus(status: { pipeline: Pipeline; clipCount: number }): void;
-  showSelectionLoadStatus(status: { isPipelineMode: boolean; clipCount: number }): void;
-}
-
 type FolderSelectionDependencies = Readonly<{
   pipelineSession: Pick<PipelineSession, 'pipeline' | 'activeCollection' | 'activeCollectionFilename'
     | 'hasDirtyClipSequenceChanges' | 'materializeSelection' | 'loadPipeline'>;
@@ -58,7 +54,6 @@ type FolderSelectionDependencies = Readonly<{
   collectionView: Pick<CollectionViewWorkflow, 'applySelection' | 'refreshSelector' | 'cacheKeyFor' | 'activeCacheKey'>;
   missingClipsPrompt: IMissingClipsPrompt;
   unsavedChangesPrompt: IUnsavedChangesPrompt;
-  loadStatus: ILoadStatusView;
   collectionSave: Pick<CollectionSaveWorkflow, 'saveActive'>;
   navigation: Pick<IScreenNavigation, 'activate'>;
   collectionScreenId: string;
@@ -67,15 +62,18 @@ type FolderSelectionDependencies = Readonly<{
   selector: IEventSource<{ selectionRequested: string | null }>;
   catalog: IEventSource<{ loadRequested: IPipelineCatalogEntry }> | null;
   reporter: Pick<ActivityReporter, 'success' | 'failure' | 'technicalDetailsOf'>;
-  appText: Pick<AppText, 'collectionReadErrorText' | 'noCollectionMatchesText' | 'collectionPartiallyLoadedText'>;
+  appText: Pick<AppText, 'collectionReadErrorText' | 'noCollectionMatchesText' | 'collectionPartiallyLoadedText'
+    | 'collectionLoadedText' | 'loadedVideosText'>;
 }>;
 
 export class FolderSelectionWorkflow {
   private pendingAction: PendingSelectionAction | null = null;
   private selectionRevision = 0;
   private readonly unsubscribes: (() => void)[];
+  private readonly loadStatusText: LoadStatusText;
 
   constructor(private readonly folder: FolderSelectionDependencies) {
+    this.loadStatusText = new LoadStatusText(folder.appText);
     this.unsubscribes = [
       folder.toolbar.on('browseRequested', () => { void this.browseForFolder(); }),
       folder.selector.on('selectionRequested', collectionFilename => this.requestSelection(collectionFilename)),
@@ -166,10 +164,7 @@ export class FolderSelectionWorkflow {
       collection: selection instanceof Collection ? selection : null,
       folderSession,
     });
-    this.folder.loadStatus.showSelectionLoadStatus({
-      isPipelineMode: selection === pipeline,
-      clipCount: result.sequence.orderedClips().length,
-    });
+    this.folder.reporter.success(this.loadStatusText.selectionLoaded(selection === pipeline, result.sequence.orderedClips().length));
   }
 
   dispose(): void {
@@ -295,7 +290,7 @@ export class FolderSelectionWorkflow {
       }
       collectionView.applySelection(result.sequence, { collection: null, folderSession });
       if (reportInitialLoad) {
-        this.folder.loadStatus.showInitialLoadStatus({ pipeline, clipCount: result.sequence.orderedClips().length });
+        this.folder.reporter.success(this.loadStatusText.folderLoaded(pipeline, result.sequence.orderedClips().length));
       }
       return true;
     } catch (err) {

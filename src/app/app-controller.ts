@@ -60,7 +60,6 @@ import { CollectionConflictControl } from '../ui/collection-conflict-control.js'
 import { DeleteFromDiskDialogControl } from '../ui/delete-from-disk-dialog-control.js';
 import { SaveAsNewDialogControl } from '../ui/save-as-new-dialog-control.js';
 import { UnsavedChangesDialogControl } from '../ui/unsaved-changes-dialog-control.js';
-import { LoadStatusControl } from '../ui/load-status-control.js';
 import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
 import { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
 import { ControlFailureReporting } from './control-failure-reporting.js';
@@ -148,7 +147,6 @@ export class AppController {
         if (activityPanelAutoOpenPolicy.mayOpenAutomatically()) utilities?.open('activity');
       } : undefined,
     });
-    const loadStatusControl = new LoadStatusControl({ appText, reporter: activityReporter });
     const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: fullscreenAdapter });
     const pipelineCatalogControl = PipelineCatalogControl.fromDocument(document, { catalog: fileSystem });
     const controlFailureReporting = new ControlFailureReporting({
@@ -294,7 +292,6 @@ export class AppController {
       collectionView,
       missingClipsPrompt: collectionConflict,
       unsavedChangesPrompt: unsavedChangesDialog,
-      loadStatus: loadStatusControl,
       collectionSave,
       navigation: shell,
       collectionScreenId: collectionScreen.id,

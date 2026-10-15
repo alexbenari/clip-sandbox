@@ -47,6 +47,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   const selector = new EventSource<{ selectionRequested: string | null }>();
   const catalog = new EventSource<{ loadRequested: IPipelineCatalogEntry }>();
   const navigation = { activate: vi.fn() };
+  const activityLog = { log: vi.fn() };
   const workflow = new FolderSelectionWorkflow({
     pipelineSession,
     openFolder,
@@ -58,7 +59,6 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     collectionView,
     missingClipsPrompt: { showConflict: vi.fn(), hide: vi.fn() },
     unsavedChangesPrompt,
-    loadStatus: { showInitialLoadStatus: vi.fn(), showSelectionLoadStatus: vi.fn() },
     collectionSave,
     navigation,
     collectionScreenId: 'collection',
@@ -66,14 +66,14 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     toolbar,
     selector,
     catalog,
-    reporter: new ActivityReporter({ log: vi.fn() }),
+    reporter: new ActivityReporter(activityLog),
     appText: new AppText(),
   });
   const makeViewDirty = () => {
     const ids = pipelineSession.currentClipSequence!.orderedClips().map(clip => clip.id);
     pipelineSession.replaceCurrentOrder([...ids].reverse());
   };
-  return { workflow, folders, pipelineSession, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, makeViewDirty };
+  return { workflow, folders, pipelineSession, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, activityLog, makeViewDirty };
 }
 
 async function openFolder(context: ReturnType<typeof folderWorkflow>) {
@@ -89,6 +89,18 @@ describe('FolderSelectionWorkflow', () => {
 
     expect(context.pipelineSession.currentClipSequence?.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.mp4']);
     expect(context.unsavedChangesPrompt.open).not.toHaveBeenCalled();
+    expect(context.activityLog.log).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'success', message: 'Loaded pipeline with 2 clips.' }));
+  });
+
+  it('reports how many clips a chosen collection loaded', async () => {
+    const context = folderWorkflow();
+    await openFolder(context);
+
+    context.selector.emit('selectionRequested', 'subset.txt');
+
+    await vi.waitFor(() => expect(context.activityLog.log).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'success', message: 'Loaded collection with 1 clip.' })));
   });
 
   it('asks before leaving unsaved changes, and forgets the request when the prompt is cancelled', async () => {
