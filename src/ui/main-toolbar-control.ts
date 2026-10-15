@@ -18,6 +18,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
   private readonly browseButton?: HTMLButtonElement;
   private readonly fullscreenButton?: HTMLButtonElement;
   private readonly events = new EventSource<IMainToolbarEvents>();
+  private readonly orderMenu: OrderMenuControl | null;
   private readonly buttonRequests: ReadonlyArray<readonly [HTMLButtonElement | null | undefined, EventListener]>;
   countEl: HTMLElement | null;
   saveBtn: HTMLButtonElement | null;
@@ -29,9 +30,9 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
   // The Save, Save as, Add and Delete commands are items of the toolbar's Actions menu.
   static fromDocument(doc: Document, { appText }: { appText: Pick<AppText, 'countText'> }): MainToolbarControl {
     const elements = new DocumentElements(doc);
-    OrderMenuControl.fromDocument(doc);
     return new MainToolbarControl({
       appText,
+      orderMenu: OrderMenuControl.fromDocument(doc),
       browseButton: elements.required<HTMLButtonElement>('pickBtn'),
       fullscreenButton: elements.required<HTMLButtonElement>('fsBtn'),
       countEl: elements.required('count'),
@@ -53,8 +54,10 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
     addToCollectionBtn,
     deleteFromDiskBtn,
     toggleTitlesBtn,
+    orderMenu,
   }: {
     appText: Pick<AppText, 'countText'>;
+    orderMenu?: OrderMenuControl;
     browseButton?: HTMLButtonElement;
     fullscreenButton?: HTMLButtonElement;
     countEl?: HTMLElement | null;
@@ -73,6 +76,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
     this.addToCollectionBtn = addToCollectionBtn || null;
     this.deleteFromDiskBtn = deleteFromDiskBtn || null;
     this.toggleTitlesBtn = toggleTitlesBtn || null;
+    this.orderMenu = orderMenu ?? null;
     this.buttonRequests = [
       [this.browseButton, () => this.events.emit('browseRequested')],
       [this.saveBtn, () => this.events.emit('saveRequested')],
@@ -149,5 +153,6 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
 
   destroy(): void {
     for (const [button, request] of this.buttonRequests) button?.removeEventListener('click', request);
+    this.orderMenu?.destroy();
   }
 }

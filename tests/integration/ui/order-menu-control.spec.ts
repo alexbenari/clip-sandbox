@@ -23,11 +23,31 @@ function setupDom() {
   const saveAsNewBtn = document.getElementById('saveAsNewBtn');
   const addToCollectionBtn = document.getElementById('addToCollectionBtn');
   const deleteFromDiskBtn = document.getElementById('deleteFromDiskBtn');
-  new OrderMenuControl({ orderMenu, orderMenuBtn, orderMenuPanel });
-  return { orderMenu, orderMenuBtn, loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn };
+  const control = new OrderMenuControl({ orderMenu, orderMenuBtn, orderMenuPanel });
+  return { control, orderMenu, orderMenuBtn, loadOrderBtn, saveBtn, saveAsNewBtn, addToCollectionBtn, deleteFromDiskBtn };
 }
 
-describe('order menu controller', () => {
+describe('order menu control', () => {
+  test('a click outside the menu closes it', () => {
+    const { orderMenu, orderMenuBtn } = setupDom();
+    orderMenuBtn.click();
+
+    document.body.click();
+
+    expect(orderMenu.dataset.open).toBe('false');
+  });
+
+  test('stops reacting to clicks once destroyed', () => {
+    const { control, orderMenu, orderMenuBtn } = setupDom();
+    orderMenuBtn.click();
+    control.destroy();
+
+    document.body.click();
+    orderMenuBtn.click();
+
+    expect(orderMenu.dataset.open).toBe('true');
+  });
+
   test('choosing an item closes the menu', () => {
     const { orderMenu, orderMenuBtn, saveAsNewBtn } = setupDom();
     orderMenuBtn.click();

@@ -10,6 +10,8 @@ export class OrderMenuControl {
   private readonly orderMenu: HTMLElement | null;
   private readonly orderMenuBtn: HTMLButtonElement | null;
   private readonly orderMenuPanel: HTMLElement | null;
+  private readonly doc: Document;
+  private readonly listeners = new AbortController();
 
   static fromDocument(doc: Document): OrderMenuControl {
     const elements = new DocumentElements(doc);
@@ -24,29 +26,32 @@ export class OrderMenuControl {
     this.orderMenu = orderMenu || null;
     this.orderMenuBtn = orderMenuBtn || null;
     this.orderMenuPanel = orderMenuPanel || null;
+    this.doc = orderMenu?.ownerDocument ?? document;
+    const { signal } = this.listeners;
 
     if (!orderMenu || !orderMenuBtn || !orderMenuPanel) return;
 
     orderMenuBtn.addEventListener('click', (e) => {
       e.preventDefault();
       this.toggle();
-    });
-    orderMenuBtn.addEventListener('keydown', (e) => this.handleButtonKeyDown(e));
-    orderMenuPanel.addEventListener('keydown', (e) => this.handlePanelKeyDown(e));
+    }, { signal });
+    orderMenuBtn.addEventListener('keydown', (e) => this.handleButtonKeyDown(e), { signal });
+    orderMenuPanel.addEventListener('keydown', (e) => this.handlePanelKeyDown(e), { signal });
     orderMenuPanel.addEventListener('click', (e) => {
       if (e.target instanceof Element && e.target.closest('[role="menuitem"]')) this.close();
-    });
+    }, { signal });
 
     orderMenu.addEventListener('focusout', () => {
       setTimeout(() => {
-        if (!orderMenu.contains(document.activeElement)) this.close();
+        if (!orderMenu.contains(this.doc.activeElement)) this.close();
       }, 0);
-    });
+    }, { signal });
 
-    document.addEventListener('click', (e) => {
+    // Closing on a click outside the menu needs the whole document.
+    this.doc.addEventListener('click', (e) => {
       if (!(e.target instanceof Node)) return;
       if (!orderMenu.contains(e.target)) this.close();
-    });
+    }, { signal });
 
     this.close();
   }
@@ -80,7 +85,7 @@ export class OrderMenuControl {
   moveItemFocus(step: number): void {
     const items = this.focusableItems();
     if (items.length === 0) return;
-    const currentIndex = items.findIndex((el) => el === document.activeElement);
+    const currentIndex = items.findIndex((el) => el === this.doc.activeElement);
     const nextIndex = currentIndex < 0 ? 0 : (currentIndex + step + items.length) % items.length;
     items[nextIndex].focus();
   }
@@ -134,6 +139,10 @@ export class OrderMenuControl {
       e.preventDefault();
       this.focusableItems().at(-1)?.focus();
     }
+  }
+
+  destroy(): void {
+    this.listeners.abort();
   }
 
   private focusableItems(): HTMLButtonElement[] {
