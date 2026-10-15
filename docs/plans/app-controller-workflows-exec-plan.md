@@ -151,6 +151,8 @@ Final pass against `coding-quality.md`:
 
 Skills that governed Milestone 8: doc-update (G10), goal-based verification (G9 compared against `master` rather than asserted on the branch alone), and this final `coding-quality.md` pass. No work was delegated to subagents in any milestone, so no delegation ledger exists.
 
+Later change (2026-10-15, during code review): at the user's request the event wiring check (D6, spec D5, gate G7) was removed. It depended on every new event being added to a list in `AppController`, so it could not catch the case it was meant for. A missing subscription now shows up as a control that does nothing, which app-level and end-to-end tests are expected to catch.
+
 ## Context and orientation
 
 The renderer is framework-free TypeScript under `src/`, emitted to `build/src/` and loaded by `index.html`. The layers are `src/domain/` (models such as `Pipeline` and `Collection`), `src/business-logic/`, `src/app/` (application objects), `src/ui/` (controls that own DOM) and `src/adapters/` (Electron and browser services).

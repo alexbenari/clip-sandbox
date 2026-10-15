@@ -17,7 +17,6 @@ import { ApplicationShutdownCoordinator } from './application-shutdown-coordinat
 import { AppText } from './app-text.js';
 import { CollectionNameValidator } from './collection-name-validator.js';
 import { NewCollectionNameCheck } from './new-collection-name-check.js';
-import { EventWiringCheck } from './event-wiring-check.js';
 import { CollectionFileWriter } from './collection-file-writer.js';
 import { CollectionViewWorkflow } from './collection-view-workflow.js';
 import { CollectionSaveWorkflow } from './collection-save-workflow.js';
@@ -95,7 +94,6 @@ export class AppController {
 
     // Application services and adapters.
     const state = new AppSessionState();
-    const eventWiring = new EventWiringCheck();
     const pipelineSession = new PipelineSession();
     const appText = new AppText();
     const collectionNameValidator = new CollectionNameValidator(appText);
@@ -130,27 +128,19 @@ export class AppController {
     const zoomOverlay = ZoomOverlayControl.fromDocument(document, {
       audioDefault: () => settingsService.current.singleClipAudioDefault,
     });
-    eventWiring.require('zoomOverlay', zoomOverlay, ['playbackFailed', 'contextMenuRequested']);
     const clipContextMenu = ContextMenuControl.forClipMenu(document);
     const gridContextMenuControl = new GridContextMenuControl({ contextMenu: clipContextMenu });
     const zoomEditMenuControl = new ZoomEditMenuControl({ contextMenu: clipContextMenu, videoEditCatalog });
     const collectionSelectorControl = CollectionSelectorControl.fromDocument(document, { appText, defaultTitle: appText.defaultAppTitle });
-    eventWiring.require('collectionSelector', collectionSelectorControl, ['selectionRequested']);
     const mainToolbarControl = MainToolbarControl.fromDocument(document, { appText });
-    eventWiring.require('mainToolbar', mainToolbarControl, [
-      'browseRequested', 'saveRequested', 'saveAsNewRequested', 'addToCollectionRequested',
-      'deleteFromDiskRequested', 'toggleTitlesRequested', 'toggleFullscreenRequested',
-    ]);
     const addToCollectionDialog = AddToCollectionDialogControl.fromDocument(document, {
       newChoiceValue: NEW_COLLECTION_CHOICE_VALUE,
       validateNewName: name => newCollectionNameCheck.problemText(name),
     });
-    eventWiring.require('addToCollectionDialog', addToCollectionDialog, ['confirmed']);
     const collectionConflict = CollectionConflictControl.fromDocument(document, { appText });
     const saveAsNewDialog = SaveAsNewDialogControl.fromDocument(document, {
       validateName: name => newCollectionNameCheck.problemText(name),
     });
-    eventWiring.require('saveAsNewDialog', saveAsNewDialog, ['confirmed', 'cancelled']);
     const unsavedChangesDialog = UnsavedChangesDialogControl.fromDocument(document);
     const deleteFromDiskDialog = DeleteFromDiskDialogControl.fromDocument(document, { appText });
     const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
@@ -173,12 +163,7 @@ export class AppController {
     });
     const loadStatusControl = new LoadStatusControl({ appText, reporter: activityReporter });
     const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: fullscreenAdapter });
-    eventWiring.require('clipGrid', grid, [
-      'cardCountChanged', 'selectionChanged', 'orderChanged', 'openClipRequested',
-      'removeSelectedRequested', 'contextMenuRequested', 'metadataFailed',
-    ]);
     const pipelineCatalogControl = PipelineCatalogControl.fromDocument(document, { catalog: fileSystem });
-    if (pipelineCatalogControl) eventWiring.require('pipelineCatalog', pipelineCatalogControl, ['loadRequested', 'failed']);
     const controlFailureReporting = new ControlFailureReporting({
       grid,
       pipelineCatalog: pipelineCatalogControl,
@@ -230,8 +215,6 @@ export class AppController {
     const collectionRangesPanelControl = collectionRefinementSession && hasClipsPanel
       ? GifRangesPanelControl.forCollectionRefinement(collectionRefinementSession, { document, player: frameReviewPlayer })
       : null;
-    if (gifRangesPanelControl) eventWiring.require('gifRangesPanel', gifRangesPanelControl, ['refineRequested']);
-    if (collectionRangesPanelControl) eventWiring.require('collectionRangesPanel', collectionRangesPanelControl, ['refineRequested']);
     const gifExtractionScreen = new GifExtractionScreen({
       player: frameReviewPlayer,
       keyboard: gifWorkflowKeyboard,
@@ -246,7 +229,6 @@ export class AppController {
       rangesPanel: gifRangesPanelControl ?? undefined,
       document,
     });
-    eventWiring.require('refineGifScreen', refineGifScreen, ['backRequested']);
     const collectionRefineScreen = new RefineGifScreen({
       id: 'collection-refine',
       label: 'Refine Clip',
@@ -258,7 +240,6 @@ export class AppController {
       rangesPanel: collectionRangesPanelControl ?? undefined,
       document,
     });
-    eventWiring.require('collectionRefineScreen', collectionRefineScreen, ['backRequested']);
     const refineScreenLeavePolicy = new RefineScreenLeavePolicy(
       collectionRefineScreen.id, collectionRefinementSession, activityReporter.progress);
     const shell = ApplicationShellControl.fromDocument(document, {
@@ -271,7 +252,6 @@ export class AppController {
       utilities?.close(false);
       shell.activate(settingsScreen.id);
     });
-    eventWiring.require('applicationShell', shell, ['screenChanged', 'settingsRequested']);
     const keyboardUtility = keyboardMap?.utilitySurface();
     const activityUtility = activityIndicatorControl.utilitySurface();
     const utilities = keyboardUtility && activityUtility
@@ -454,8 +434,6 @@ export class AppController {
       utilities,
       fullScreenKeys: fullscreenSession,
     });
-    eventWiring.require('collectionScreen', collectionScreen, ['keyPressed']);
-    eventWiring.assertComplete();
 
     // Startup: show an empty Collection view, activate the first screen, then load settings.
     collectionView.clearLoadedView();

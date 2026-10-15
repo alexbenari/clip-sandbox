@@ -1,6 +1,6 @@
 # Agent Architecture Map
 
-Last verified: 2026-10-10 (AppController as composition root only, Collection-screen workflow classes, typed control events and the event wiring check); explicit movie opening, saved-capture continuation, activity ownership, and separate GIF movie full screen verified 2026-10-09; other sections retain their dated verification below.
+Last verified: 2026-10-15 (AppController as composition root only, Collection-screen workflow classes, typed control events without a startup wiring check, controls that find their own parts, and failure reporting by layer); explicit movie opening, saved-capture continuation, activity ownership, and separate GIF movie full screen verified 2026-10-09; other sections retain their dated verification below.
 
 GIF capture, refinement, original-source extraction, extraction-publication refresh, and coordinated shutdown ownership updated: 2026-09-21. Reusable frame-review player and generic fixed/contextual screen integration updated: 2026-09-20. Prepared-review host, persistent cache reuse, renderer-safe service, and native frame-review build ownership updated: 2026-09-14. Shell panel state ownership updated: 2026-09-27. Utilities, grid layout, durable settings, startup workspace selection, production TypeScript object ownership, and interface naming updated: 2026-09-21. Pipeline catalog folder grant boundary and clean-run native Ninja acquisition verified: 2026-09-26.
 
@@ -92,7 +92,7 @@ These are normative defaults for future work. Do not violate them without a conc
 
 1. Keep the renderer framework-free unless a larger architecture decision is approved.
 2. Keep [`AppController`](../../src/app/app-controller.ts) as the composition root only: it constructs services, controls, screens and workflow classes, connects them, and starts the application. User flows live in workflow classes under [`src/app/`](../../src/app/) (`*-workflow.ts`); do not put flow logic, domain rules or reusable UI internals in `AppController`.
-3. Controls report user intent as typed events (`EventSource` in [`src/app/event-source.ts`](../../src/app/event-source.ts)) that workflows subscribe to; workflows depend on narrow consumer-declared `I…` interfaces and never import from `src/ui/`. A reply to a single request, such as a dialog's submit result or a menu item callback, stays a call argument. Questions other parts ask ("may this screen be left?", "is this name new?") are answered by standalone query components, not workflows. `AppController.init()` ends with `EventWiringCheck.assertComplete()`, so a control event without a subscriber fails startup and the app-controller tests.
+3. Controls report user intent as typed events (`EventSource` in [`src/app/event-source.ts`](../../src/app/event-source.ts)) that workflows subscribe to; workflows depend on narrow consumer-declared `I…` interfaces and never import from `src/ui/`. A reply to a single request, such as a dialog's submit result or a menu item callback, stays a call argument. Questions other parts ask ("may this screen be left?", "is this name new?") are answered by standalone query components, not workflows. There is no startup check that every event has a subscriber; an unhandled event shows up as a control that does nothing, which the app-level and end-to-end tests are expected to catch.
 4. Keep durable pipeline and collection state in domain models plus explicit active-collection selection state, not in DOM order or DOM-selected state.
 5. Prefer explicit pipeline-vs-collection flows when their semantics differ materially. Do not introduce shared protocol layers or generic source ids unless they are buying real simplification.
 6. Keep Electron main/preload and local filesystem behavior behind adapters or services. Do not leak raw Electron or Node APIs broadly into renderer code.
@@ -288,7 +288,7 @@ Flow:
 10. Change full screen behavior:
    For Collection review, start with [`src/app/fullscreen-session.ts`](../../src/app/fullscreen-session.ts) and [`src/ui/display-layout-rules.ts`](../../src/ui/display-layout-rules.ts). For GIF movie review, start with [`src/ui/frame-review-player-control.ts`](../../src/ui/frame-review-player-control.ts) and [`src/ui/gif-workflow-keyboard-controller.ts`](../../src/ui/gif-workflow-keyboard-controller.ts). Check element identity and shared app-wide handling in [`src/app/full-screen-change-workflow.ts`](../../src/app/full-screen-change-workflow.ts) and [`src/adapters/browser/fullscreen-adapter.ts`](../../src/adapters/browser/fullscreen-adapter.ts).
 11. Change orchestration across multiple subsystems:
-    Start with [`src/app/app-controller.ts`](../../src/app/app-controller.ts) for how the parts are connected, then the workflow that owns the flow. A new control event needs a workflow subscriber and an `eventWiring.require(...)` entry, or startup fails.
+    Start with [`src/app/app-controller.ts`](../../src/app/app-controller.ts) for how the parts are connected, then the workflow that owns the flow. A new control event needs a workflow that subscribes to it, and a test that exercises it.
 12. Review why a module is still non-OO:
     Start with [`docs/documentation/object-oriented-exception-register.md`](../../docs/documentation/object-oriented-exception-register.md).
 13. Change Electron e2e coverage:
@@ -298,7 +298,7 @@ Flow:
 
 ## Risky Seams
 
-1. [`src/app/app-controller.ts`](../../src/app/app-controller.ts) is the single place that knows both controls and workflows. Construction order matters: workflows must subscribe before `EventWiringCheck.assertComplete()` and before `ApplicationShellControl.start()` emits the first `screenChanged`. Workflows that call each other (for example the folder reload used by refresh) are connected here, and keeping that set small keeps the flows independently testable.
+1. [`src/app/app-controller.ts`](../../src/app/app-controller.ts) is the single place that knows both controls and workflows. Construction order matters: workflows must subscribe before `ApplicationShellControl.start()` emits the first `screenChanged`. Workflows that call each other (for example the folder reload used by refresh) are connected here, and keeping that set small keeps the flows independently testable.
 2. [`src/ui/clip-collection-grid-control.ts`](../../src/ui/clip-collection-grid-control.ts) owns DOM rendering, selection, drag/drop, and media-element sources. Changes can affect both UI behavior and lifecycle cleanup.
 3. [`electron/preload.cjs`](../../electron/preload.cjs) and [`electron/main.cjs`](../../electron/main.cjs) define the desktop trust boundary. Over-broad IPC or preload exposure is the main architecture risk in this runtime.
 4. [`src/app/fullscreen-session.ts`](../../src/app/fullscreen-session.ts) owns fullscreen timers and input while the grid owns cancelable media rotation. Exit, view replacement and disposal must cancel pending ended listeners.
