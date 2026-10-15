@@ -90,7 +90,7 @@ async function openSession(thumbnails = thumbnailService(), extractionService?: 
     })),
     open: vi.fn(async () => reviewSession()),
   };
-  const session = new GifExtractionSession(service, thumbnails, { extractionService });
+  const session = GifExtractionSession.forMovieCapture(service, thumbnails, { extractionService });
   expect(await session.openMovie()).toBe('opened');
   return { session, service, thumbnails };
 }

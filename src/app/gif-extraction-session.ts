@@ -27,7 +27,7 @@ import { ClipExtractionWorkflow, type ClipExtractionEntryState, type IExtraction
 import type { ActivityInput } from './activity-logger.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
-import { ExtractionDestinationSession, type IExtractionDestination, type IExtractionDestinationPublication } from './extraction-destination-session.js';
+import { ExtractionDestinationSession, type ExtractionDestination, type IExtractionDestinationPublication } from './extraction-destination-session.js';
 import { GifCaptureThumbnailSession, type GifThumbnailState } from './gif-capture-thumbnail-session.js';
 import type { IClipCapturesStoreService } from './clip-captures-store-service.js';
 import type { ISourceFingerprint } from '../frame-review/model/source-fingerprint.js';
@@ -94,8 +94,12 @@ type GifExtractionSessionOptions = {
   readonly extractionService?: IClipExtractionService;
   readonly captureStore?: IClipCapturesStoreService;
   readonly publications?: IExtractionPublicationListener;
-  readonly destination?: IExtractionDestination;
+  readonly destination?: ExtractionDestination;
 };
+
+type CollectionRefinementOptions = Omit<GifExtractionSessionOptions, 'captureStore'>;
+
+type GifExtractionSessionMode = 'movie-capture' | 'collection-refinement';
 
 export class GifExtractionSession implements IRefineGifSessionOwner {
   private readonly listeners = new Set<(snapshot: IGifExtractionSessionSnapshot) => void>();
@@ -123,10 +127,23 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   private previewRevision = 0;
   private lastRefinementRevision: number | null = null;
 
-  constructor(
+  // GIF Extraction: the user captures ranges from a movie they open; captures are saved when a store is given.
+  static forMovieCapture(frameReview: IFrameReviewService, thumbnails: IThumbnailCacheService,
+    options: GifExtractionSessionOptions = {}): GifExtractionSession {
+    return new GifExtractionSession('movie-capture', frameReview, thumbnails, options);
+  }
+
+  // Collection Refine: one range imported from a collection clip, never saved as a capture.
+  static forCollectionRefinement(frameReview: IFrameReviewService, thumbnails: IThumbnailCacheService,
+    options: CollectionRefinementOptions = {}): GifExtractionSession {
+    return new GifExtractionSession('collection-refinement', frameReview, thumbnails, options);
+  }
+
+  private constructor(
+    private readonly mode: GifExtractionSessionMode,
     private readonly frameReview: IFrameReviewService,
     thumbnails: IThumbnailCacheService,
-    private readonly options: GifExtractionSessionOptions = {},
+    private readonly options: GifExtractionSessionOptions,
   ) {
     this.previewBounds = options.previewBounds ?? Object.freeze({ maxWidth: 1280, maxHeight: 720 });
     this.destination = options.destination;
@@ -152,7 +169,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   get reviewSession(): IFrameReviewSession | null { return this.review; }
   get refinementSession(): RefineGifSession | null { return this.activeRefinement; }
 
-  setExtractionDestination(destination: IExtractionDestination): void {
+  setExtractionDestination(destination: ExtractionDestination): void {
     if (this.extractionWorkflow?.batchProgress) throw new Error('Wait for the current extraction to finish.');
     this.destination = destination;
   }
@@ -247,7 +264,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   }>): Promise<BeginRefinementResult> {
     const review = this.review;
     const generation = this.sourceGeneration;
-    if (!review || this.options.captureStore) return this.rejectRefinement('Collection refinement is unavailable.');
+    if (!review || this.mode !== 'collection-refinement') return this.rejectRefinement('Collection refinement is unavailable.');
     await new Promise<void>((resolve, reject) => {
       const current = review.state();
       if (current.captureEnabled) { resolve(); return; }
@@ -514,7 +531,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   }
 
   canRemoveRange(rangeId: CapturedRangeId): boolean {
-    return (this.savedCaptureQueue?.hasMovieReference === true || (!this.options.captureStore && this.lifecycle === 'open'))
+    return this.capturesRemovable()
       && !this.opening && !this.capturesLoading
       && this.rangeModel?.snapshot.ranges.some(range => range.id === rangeId) === true
       && !this.extractionWorkflow?.revisionBlock(rangeId);
@@ -531,9 +548,16 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
 
   canRemoveDraft(): boolean {
     const capture = this.rangeModel?.snapshot.capture;
-    return (this.savedCaptureQueue?.hasMovieReference === true || (!this.options.captureStore && this.lifecycle === 'open'))
+    return this.capturesRemovable()
       && !this.opening && !this.capturesLoading
       && capture?.kind === 'draft' && (capture.start !== null || capture.end !== null);
+  }
+
+  // Saved captures stay removable while their movie is unavailable; unsaved ones only while the movie is open.
+  private capturesRemovable(): boolean {
+    return this.options.captureStore
+      ? this.savedCaptureQueue?.hasMovieReference === true
+      : this.lifecycle === 'open';
   }
 
   currentSourceGeneration(): number | null {

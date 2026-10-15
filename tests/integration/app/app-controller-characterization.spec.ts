@@ -14,7 +14,10 @@ vi.mock('../../../src/app/gif-extraction-session.js', () => {
   });
   class GifExtractionSession {
     static instances = [];
-    constructor(frameReview, thumbnails, options = {}) {
+    static forMovieCapture(frameReview, thumbnails, options) { return new GifExtractionSession('movie-capture', options); }
+    static forCollectionRefinement(frameReview, thumbnails, options) { return new GifExtractionSession('collection-refinement', options); }
+    constructor(mode, options = {}) {
+      this.mode = mode;
       this.options = options;
       this.destinations = [];
       this.openCollectionSource = vi.fn(async () => undefined);
@@ -143,8 +146,8 @@ describe('AppController characterization', () => {
   async function gifSessions() {
     const { GifExtractionSession } = await import('../../../src/app/gif-extraction-session.js');
     return {
-      extraction: GifExtractionSession.instances.findLast(session => session.options.captureStore),
-      collectionRefinement: GifExtractionSession.instances.findLast(session => !session.options.captureStore),
+      extraction: GifExtractionSession.instances.findLast(session => session.mode === 'movie-capture'),
+      collectionRefinement: GifExtractionSession.instances.findLast(session => session.mode === 'collection-refinement'),
     };
   }
 

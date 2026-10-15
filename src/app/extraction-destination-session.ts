@@ -12,7 +12,7 @@ export interface IExtractionDestinationPublication {
   readonly media: ICreatedExtractionMedia;
 }
 
-export type IExtractionDestination =
+export type ExtractionDestination =
   | Readonly<{ kind: 'collection'; folderPath: string; collectionFilename: string }>
   | Readonly<{ kind: 'folder'; folderPath: string }>;
 
@@ -26,7 +26,7 @@ export interface IExtractionDestinationSessionSnapshot {
 type ExtractionDestinationSessionOptions = {
   readonly onPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
   readonly onPublishError?: (error: unknown) => void;
-  readonly destination?: IExtractionDestination;
+  readonly destination?: ExtractionDestination;
   readonly collectionParser?: Pick<CollectionDescriptionValidator, 'parseText'>;
 };
 

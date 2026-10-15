@@ -90,7 +90,7 @@ describe('GifExtractionSession', () => {
       chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(async () => review),
     };
-    const session = new GifExtractionSession(service, thumbnailService(), { captureStore, capturePositioning });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStore, capturePositioning });
 
     expect(await session.openMovie()).toBe('opened');
     await vi.waitFor(() => expect(capturePositioning.showFrameAfterCapture).toHaveBeenCalledOnce());
@@ -113,7 +113,7 @@ describe('GifExtractionSession', () => {
       chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(async () => reviewSession()),
     };
-    const session = new GifExtractionSession(service, thumbnailService(), { captureStore });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStore });
 
     expect(await session.openMovie()).toBe('opened');
     expect(session.snapshot.capturesLoading).toBe(true);
@@ -148,7 +148,7 @@ describe('GifExtractionSession', () => {
       chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(async () => review),
     };
-    const session = new GifExtractionSession(service, thumbnailService(), { captureStore });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStore });
 
     await session.openMovie();
     expect(session.snapshot.capturesLoading).toBe(true);
@@ -162,7 +162,7 @@ describe('GifExtractionSession', () => {
       open: vi.fn(async () => reviewSession()),
     };
     const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
-    const session = new GifExtractionSession(service, thumbnailService(), { reporter });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { reporter });
 
     await session.openMovie();
 
@@ -185,7 +185,7 @@ describe('GifExtractionSession', () => {
       open: vi.fn(async () => review),
     };
     const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
-    const session = new GifExtractionSession(service, thumbnailService(), { reporter });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { reporter });
     await session.openMovie();
     reporter.progress.mockClear();
     reporter.success.mockClear();
@@ -224,7 +224,7 @@ describe('GifExtractionSession', () => {
     };
     const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
     const diagnostics = { logRuntimeError: vi.fn(async () => undefined) };
-    const session = new GifExtractionSession(service, thumbnailService(), { reporter, diagnostics });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { reporter, diagnostics });
 
     await session.openMovie();
 
@@ -239,7 +239,7 @@ describe('GifExtractionSession', () => {
       open: vi.fn(async () => review),
     };
     const thumbnails = thumbnailService();
-    const session = new GifExtractionSession(service, thumbnails);
+    const session = GifExtractionSession.forMovieCapture(service, thumbnails);
 
     expect(await session.openMovie()).toBe('opened');
     session.markStart(displayedCapture('timestamp', 400_000n));
@@ -267,7 +267,7 @@ describe('GifExtractionSession', () => {
       extract: vi.fn(async () => ({ kind: 'created-media' as const, mediaHandle: 'media_12345678', filename: 'Heat.1995-001.mp4' })),
       saveCollection: vi.fn(async () => undefined),
     };
-    const session = new GifExtractionSession(service, thumbnailService(), { extractionService });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { extractionService });
     await session.openMovie();
     session.markStart(displayedCapture('exact'));
     session.markEnd(displayedCapture('exact'));
@@ -297,7 +297,7 @@ describe('GifExtractionSession', () => {
     const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
     const activityLog = { log: vi.fn() };
     const publications = { onFolderContentsPublished: vi.fn(async () => undefined) };
-    const session = new GifExtractionSession(service, thumbnailService(), { extractionService, reporter, activityLog, publications });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { extractionService, reporter, activityLog, publications });
     await session.openMovie();
     session.markStart(displayedCapture('exact'));
     session.markEnd(displayedCapture('exact'));
@@ -323,7 +323,7 @@ describe('GifExtractionSession', () => {
       .mockResolvedValueOnce({ name: 'First.mp4', sourceHandle: 'source_12345678' })
       .mockResolvedValueOnce({ name: 'Second.mp4', sourceHandle: 'source_87654321' });
     const service: IFrameReviewService = { chooseSource, open: vi.fn().mockResolvedValueOnce(first).mockReturnValueOnce(candidate) };
-    const session = new GifExtractionSession(service, thumbnailService());
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService());
     await session.openMovie();
     session.markStart(displayedCapture('timestamp', 10n));
     session.markEnd(displayedCapture('timestamp', 20n));
@@ -354,7 +354,7 @@ describe('GifExtractionSession', () => {
       open: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second),
     };
     const thumbnails = thumbnailService();
-    const session = new GifExtractionSession(service, thumbnails);
+    const session = GifExtractionSession.forMovieCapture(service, thumbnails);
     await session.openMovie();
     session.markStart(displayedCapture('timestamp', 10n));
     session.markEnd(displayedCapture('timestamp', 20n));
@@ -367,5 +367,39 @@ describe('GifExtractionSession', () => {
     expect(thumbnails.delete).toHaveBeenCalledWith('thumbnail_00000001');
     expect(session.snapshot.source?.name).toBe('Second.mp4');
     expect(session.snapshot.ranges).toHaveLength(0);
+  });
+});
+
+describe('GifExtractionSession modes', () => {
+  const range = Object.freeze({
+    start: Object.freeze({ frameIndex: 2, frameInfoHash: '0000000000000002' }),
+    end: Object.freeze({ frameIndex: 4, frameInfoHash: '0000000000000004' }),
+  });
+  const source = Object.freeze({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') });
+
+  function serviceWithFrames(): IFrameReviewService {
+    const review = Object.assign(reviewSession(), {
+      frameIdentity: vi.fn(async (frameIndex: number) => Object.freeze({
+        ...identity, frameIndex, originalFrameIndex: frameIndex,
+        pts: BigInt(frameIndex * 1_000), frameInfoPts: BigInt(frameIndex * 1_000), frameInfoHash: frameIndex.toString(16).padStart(16, '0'),
+      })),
+    });
+    return { chooseSource: vi.fn(), open: vi.fn(async () => review) };
+  }
+
+  it('starts refining an imported collection clip range in collection refinement mode', async () => {
+    const session = GifExtractionSession.forCollectionRefinement(serviceWithFrames(), thumbnailService());
+    await session.openCollectionSource(source);
+
+    expect(await session.importCollectionRange(range)).toEqual(expect.objectContaining({ kind: 'started' }));
+    expect(session.snapshot.ranges).toHaveLength(1);
+  });
+
+  it('refuses to import a collection clip range while capturing from a movie', async () => {
+    const session = GifExtractionSession.forMovieCapture(serviceWithFrames(), thumbnailService());
+    await session.openCollectionSource(source);
+
+    expect(await session.importCollectionRange(range))
+      .toEqual({ kind: 'rejected', message: 'Collection refinement is unavailable.' });
   });
 });

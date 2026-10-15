@@ -177,7 +177,7 @@ export class AppController {
       publications: openFolderRefreshSession,
     };
     const gifExtractionSession = gifServices
-      ? new GifExtractionSession(gifServices.frameReview, gifServices.thumbnails, {
+      ? GifExtractionSession.forMovieCapture(gifServices.frameReview, gifServices.thumbnails, {
         ...sessionReporting,
         extractionService: gifServices.extractionService,
         captureStore: gifServices.captureStore,
@@ -185,7 +185,7 @@ export class AppController {
       })
       : null;
     const collectionRefinementSession = collectionRefinementGifServices
-      ? new GifExtractionSession(collectionRefinementGifServices.frameReview, collectionRefinementGifServices.thumbnails, {
+      ? GifExtractionSession.forCollectionRefinement(collectionRefinementGifServices.frameReview, collectionRefinementGifServices.thumbnails, {
         ...sessionReporting,
         extractionService: collectionRefinementGifServices.extractionService,
       })
