@@ -65,6 +65,22 @@ function extractionSnapshot(refinement: IRefineGifSessionSnapshot): IGifExtracti
 }
 
 describe('RefineGifScreen', () => {
+  it('shows its own wording for each use', () => {
+    const player = new FrameReviewPlayerControl({ document,
+      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const keyboard = new GifWorkflowKeyboardController();
+    const fromExtraction = RefineGifScreen.forGifExtraction({ player, keyboard, document });
+    const fromCollection = RefineGifScreen.forCollectionRefinement({ player, keyboard, document });
+
+    expect([fromExtraction.id, fromExtraction.label]).toEqual(['refine-gif', 'Refine Gif']);
+    expect(fromExtraction.commands.querySelector('[data-command="back"]')?.textContent).toBe('Back to GIF Extraction');
+    expect(fromExtraction.root.querySelector<HTMLButtonElement>('[data-command="next-inexact"]')?.hidden).toBe(false);
+    expect([fromCollection.id, fromCollection.label]).toEqual(['collection-refine', 'Refine Clip']);
+    expect(fromCollection.commands.querySelector('[data-command="back"]')?.textContent).toBe('Back to Collection');
+    expect(fromCollection.root.querySelector('.gif-workflow-empty-copy h1')?.textContent).toBe('Preparing source movie');
+    expect(fromCollection.root.querySelector<HTMLButtonElement>('[data-command="next-inexact"]')?.hidden).toBe(true);
+  });
+
   it('shows source lookup on the Refine screen before the review session opens', () => {
     const session = {
       reviewSession: {} as never,
@@ -77,7 +93,7 @@ describe('RefineGifScreen', () => {
     const player = new FrameReviewPlayerControl({ document,
       frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
     const attach = vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
-    const screen = new RefineGifScreen({ id: 'collection-refine', singleRange: true,
+    const screen = RefineGifScreen.forCollectionRefinement({
       player, keyboard: new GifWorkflowKeyboardController(), session: session as never, document });
     document.body.append(screen.commands, screen.root);
     screen.showPreparation('Finding the original movie…');
@@ -131,7 +147,7 @@ describe('RefineGifScreen', () => {
     const keyboard = new GifWorkflowKeyboardController();
     const onBack = vi.fn();
     const onExtractCurrent = vi.fn();
-    const screen = new RefineGifScreen({
+    const screen = RefineGifScreen.forGifExtraction({
       player,
       keyboard,
       session: session as never,

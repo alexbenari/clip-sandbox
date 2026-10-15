@@ -41,10 +41,7 @@ import { RefineGifScreen } from '../ui/refine-gif-screen.js';
 import { FrameReviewPlayerControl } from '../ui/frame-review-player-control.js';
 import { GifWorkflowKeyboardController } from '../ui/gif-workflow-keyboard-controller.js';
 import { GifRangesPanelControl } from '../ui/gif-ranges-panel-control.js';
-import { ElectronFrameReviewService } from '../adapters/electron/electron-frame-review-service.js';
-import { ElectronThumbnailCacheService } from '../adapters/electron/electron-thumbnail-cache-service.js';
-import { ElectronClipExtractionService } from '../adapters/electron/electron-clip-extraction-service.js';
-import { ElectronClipCapturesStoreService } from '../adapters/electron/electron-clip-captures-store-service.js';
+import { ElectronGifSessionServices } from '../adapters/electron/electron-gif-session-services.js';
 import { ElectronCollectionClipRefinementService } from '../adapters/electron/electron-collection-clip-refinement-service.js';
 import { GifExtractionSession } from './gif-extraction-session.js';
 import { AppSettingsService } from './app-settings-service.js';
@@ -70,17 +67,6 @@ import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
 
 const ERROR_LOG_FILENAME = 'err.log';
 const NEW_COLLECTION_CHOICE_VALUE = '__new_collection__';
-
-class AppControllerSupport {
-  static gifSessionServices(win: Window) {
-    const frameReview = ElectronFrameReviewService.tryCreate(win);
-    const thumbnails = ElectronThumbnailCacheService.tryCreate(win);
-    const extractionService = ElectronClipExtractionService.tryCreate(win);
-    const captureStore = ElectronClipCapturesStoreService.tryCreate(win);
-    if (!frameReview || !thumbnails || !extractionService || !captureStore) return null;
-    return { frameReview, thumbnails, extractionService, captureStore };
-  }
-}
 
 // The composition root: builds services, controls and workflows in dependency order, then starts the app.
 export class AppController {
@@ -119,9 +105,9 @@ export class AppController {
       getCurrentFolderSession: () => state.currentFolderSession,
     });
     // Non-Electron DOM tests and unsupported hosts keep the shell available without native movie opening.
-    const gifServices = AppControllerSupport.gifSessionServices(window);
+    const gifServices = ElectronGifSessionServices.tryCreate(window);
     const collectionRefinementGifServices = gifServices && collectionRefinementService
-      ? AppControllerSupport.gifSessionServices(window)
+      ? ElectronGifSessionServices.tryCreate(window)
       : null;
 
     // Controls.
@@ -226,18 +212,14 @@ export class AppController {
       rangesPanel: gifRangesPanelControl ?? undefined,
       document,
     });
-    const refineGifScreen = new RefineGifScreen({
+    const refineGifScreen = RefineGifScreen.forGifExtraction({
       player: frameReviewPlayer,
       keyboard: gifWorkflowKeyboard,
       session: gifExtractionSession ?? undefined,
       rangesPanel: gifRangesPanelControl ?? undefined,
       document,
     });
-    const collectionRefineScreen = new RefineGifScreen({
-      id: 'collection-refine',
-      label: 'Refine Clip',
-      returnLabel: 'Back to Collection',
-      singleRange: true,
+    const collectionRefineScreen = RefineGifScreen.forCollectionRefinement({
       player: frameReviewPlayer,
       keyboard: gifWorkflowKeyboard,
       session: collectionRefinementSession ?? undefined,
@@ -245,7 +227,7 @@ export class AppController {
       document,
     });
     const refineScreenLeavePolicy = new RefineScreenLeavePolicy(
-      collectionRefineScreen.id, collectionRefinementSession, activityReporter.progress);
+      collectionRefineScreen.id, collectionRefinementSession, activityReporter);
     const shell = ApplicationShellControl.fromDocument(document, {
       initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
       screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
