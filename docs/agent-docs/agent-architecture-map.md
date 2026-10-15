@@ -88,7 +88,7 @@ The important split remains durable selection state vs runtime working copy:
 
 ## Architecture Axioms
 
-These are normative defaults for future work. Do not violate them without a concrete reason and user approval.
+These are normative defaults for future work. Do not violate them without a concrete reason and user approval. UI design follows [`ui-coding-quality.md`](../../ui-coding-quality.md); axioms 2, 3, 7 and 11 record how this repository applies it. Known gap: `gif-extraction-session.ts`, `refine-gif-session.ts`, `fullscreen-session.ts` and `app-keydown-handler.ts` in `src/app/` still import types from `src/ui/`, which the guideline forbids; do not copy that pattern.
 
 1. Keep the renderer framework-free unless a larger architecture decision is approved.
 2. Keep [`AppController`](../../src/app/app-controller.ts) as the composition root only: it constructs services, controls, screens and workflow classes, connects them, and starts the application. User flows live in workflow classes under [`src/app/`](../../src/app/) (`*-workflow.ts`); do not put flow logic, domain rules or reusable UI internals in `AppController`.
@@ -96,7 +96,7 @@ These are normative defaults for future work. Do not violate them without a conc
 4. Keep durable pipeline and collection state in domain models plus explicit active-collection selection state, not in DOM order or DOM-selected state.
 5. Prefer explicit pipeline-vs-collection flows when their semantics differ materially. Do not introduce shared protocol layers or generic source ids unless they are buying real simplification.
 6. Keep Electron main/preload and local filesystem behavior behind adapters or services. Do not leak raw Electron or Node APIs broadly into renderer code.
-7. Keep reusable UI behavior in focused controllers under [`src/ui/`](../../src/ui/), even when the app controller wires them together.
+7. Keep reusable UI behavior in focused controls (`…Control`) and screens under [`src/ui/`](../../src/ui/); `AppController` only builds and connects them.
 8. Default production TypeScript behavior to explicit class ownership, including deterministic calculations and text formatting. Treat every module-level function as a design smell that requires an ownership decision; document any intentional exception.
 9. Treat [`docs/documentation/object-oriented-exception-register.md`](../../docs/documentation/object-oriented-exception-register.md) as the reviewable record of intentionally non-OO holdouts.
 10. Treat `docs/agent-docs/` as the canonical agent-facing architecture knowledge base. Historical specs and plans are not canonical onboarding material.

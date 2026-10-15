@@ -51,18 +51,7 @@
 - A docstring the runtime reads is behavior, not documentation, and stays — CLI help text (Typer, Click, argparse), MCP tool descriptions, and anything else surfaced to a user or a model at run time. If a consumer requires generated API reference documentation, raise it as a deviation rather than assuming the exception.
 
 ## Layer guidance
-### Presentation layer
-- Keep pure rendering and local interaction behavior in the UI layer.
-- UI components should own interaction surfaces and presentation state, not application workflow decisions.
-- Stateless UI modules are appropriate for pure layout rules, pure copy selection, pure view-model composition, or rendering helpers that do not own control behavior.
-- If the codebase uses class-backed controls, keep those classes focused on a concrete UI control and its local behavior. Do not treat that pattern as mandatory across every UI surface.
-
-### Application controller layer
-- The application controller layer should orchestrate application workflows.
-- It may read domain state in order to drive workflow, but reading domain state alone does not make code orchestration.
-- Do not place UI rendering concerns or reusable presentation logic in the application controller layer.
-- Do not move domain rules into the controller layer just because the controller is already coordinating a flow.
-- When a workflow needs the outcome of a user interaction to continue, the interaction returns that outcome to its caller, for example as a promise or a result callback. Do not record the caller's intent in shared state for the completing component to inspect; a callee must not know which caller's workflow it resumes. Every exit path, including cancel, Escape, and closing by other means, must settle the result.
+- UI code follows [`ui-coding-quality.md`](ui-coding-quality.md). It defines the presentation roles (controls, screens, the shell), the workflows that run user flows, the composition root, and how they communicate. It takes precedence over this document where the two differ on UI matters.
 
 ## Tradeoffs and exceptions
 - Keep a free function only at a pragmatic language, framework, bootstrap, generated-code, or tooling boundary where a class would make ownership less clear. Record production exceptions in `docs/documentation/object-oriented-exception-register.md`.
@@ -91,6 +80,7 @@
 - Check whether dependencies point in the right direction and whether layers are being bypassed.
 - Check whether errors are handled explicitly, whether failure modes are clear, and whether APIs make misuse difficult.
 - Check whether tests still make sense and whether unit, integration, and end-to-end coverage match the risk of the code.
+- For UI code, also review against `ui-coding-quality.md`.
 - Check for obvious performance or memory inefficiencies, but do not trade away clarity for speculative micro-optimizations.
 
 ## Review questions
