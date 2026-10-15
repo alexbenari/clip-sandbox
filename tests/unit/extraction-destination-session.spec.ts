@@ -108,12 +108,11 @@ describe('ExtractionDestinationSession', () => {
     expect(snapshot.collection.orderedClipNames).toEqual(['old-001.mp4']);
   });
 
-  it('does not save a collection when opening or locking the destination', async () => {
+  it('does not save a collection when opening the destination', async () => {
     const service = destinationService();
     const session = new ExtractionDestinationSession(service);
 
     await session.open({ movieName: 'Sample Movie.mp4' });
-    await session.lock();
 
     expect(service.saveCollection).not.toHaveBeenCalled();
   });

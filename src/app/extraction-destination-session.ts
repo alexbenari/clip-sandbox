@@ -61,10 +61,6 @@ export class ExtractionDestinationSession {
     return this.snapshot();
   }
 
-  async lock(): Promise<IExtractionDestinationSessionSnapshot> {
-    return this.snapshot();
-  }
-
   async publishCreatedMedia(media: ICreatedExtractionMedia): Promise<void> {
     this.assertOpen();
     this.pendingPublications.set(media.mediaHandle, media);
