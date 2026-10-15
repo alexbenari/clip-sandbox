@@ -14,12 +14,20 @@ export interface IAppSettingsPersistence {
 
 export class AppSettingsService {
   private value = DEFAULT_APP_SETTINGS;
+  private markLoaded: () => void = () => undefined;
+  private readonly firstLoad = new Promise<void>(resolve => { this.markLoaded = resolve; });
   constructor(private readonly persistence: IAppSettingsPersistence) {}
   get current(): IAppSettings { return this.value; }
+  // Settles after the first load attempt, successful or not, so callers never wait forever.
+  whenLoaded(): Promise<void> { return this.firstLoad; }
   async load(): Promise<SettingsResult> {
-    const result = await this.persistence.load();
-    if (result.ok) this.value = result.settings;
-    return result;
+    try {
+      const result = await this.persistence.load();
+      if (result.ok) this.value = result.settings;
+      return result;
+    } finally {
+      this.markLoaded();
+    }
   }
   async save(settings: IAppSettings): Promise<SettingsResult> {
     const result = await this.persistence.save(settings);

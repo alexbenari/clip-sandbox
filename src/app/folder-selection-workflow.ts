@@ -62,7 +62,7 @@ type FolderSelectionDependencies = Readonly<{
   collectionSave: Pick<CollectionSaveWorkflow, 'saveActive'>;
   navigation: Pick<IScreenNavigation, 'activate'>;
   collectionScreenId: string;
-  settingsLoaded: () => Promise<unknown>;
+  settings: Readonly<{ whenLoaded(): Promise<void> }>;
   toolbar: IEventSource<{ browseRequested: void }>;
   selector: IEventSource<{ selectionRequested: string | null }>;
   catalog: IEventSource<{ loadRequested: IPipelineCatalogEntry }> | null;
@@ -276,7 +276,7 @@ export class FolderSelectionWorkflow {
     reportInitialLoad = true,
   }: Partial<FolderContents> & { preserveCollectionFilename?: string; reportInitialLoad?: boolean }): Promise<boolean> {
     const { pipelineSession, grid, collectionView, diagnostics } = this.folder;
-    await this.folder.settingsLoaded();
+    await this.folder.settings.whenLoaded();
     try {
       const { pipeline } = await this.folder.pipelineFactory.buildPipeline({
         folderName,

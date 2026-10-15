@@ -28,6 +28,7 @@ import { CollectionRefinementWorkflow } from './collection-refinement-workflow.j
 import { GridContextMenuWorkflow } from './grid-context-menu-workflow.js';
 import { GifRangeRefinementWorkflow } from './gif-range-refinement-workflow.js';
 import { FullScreenChangeWorkflow } from './full-screen-change-workflow.js';
+import { SettingsWorkflow } from './settings-workflow.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
 import { AddToCollectionDialogControl } from '../ui/add-to-collection-dialog-control.js';
@@ -156,12 +157,7 @@ export class AppController {
       reporter: activityReporter,
       diagnostics,
     });
-    const settingsScreen = new SettingsScreen(settingsService, {
-      progress: activityReporter.progress,
-      success: activityReporter.success,
-      error: activityReporter.failure,
-      pipelinesRootChanged: () => { void pipelineCatalogControl?.load(); },
-    });
+    const settingsScreen = new SettingsScreen(document);
     const keyboardMap = utilitiesAvailable
       ? KeyboardMapControl.fromDocument(document, { globalShortcuts: GLOBAL_UTILITY_SHORTCUTS, requestClose: () => utilities?.close() })
       : null;
@@ -302,7 +298,7 @@ export class AppController {
       collectionSave,
       navigation: shell,
       collectionScreenId: collectionScreen.id,
-      settingsLoaded: () => settingsReady,
+      settings: settingsService,
       toolbar: mainToolbarControl,
       selector: collectionSelectorControl,
       catalog: pipelineCatalogControl,
@@ -399,6 +395,13 @@ export class AppController {
       pipelineSession,
       collectionView,
     });
+    const settingsWorkflow = new SettingsWorkflow({
+      settings: settingsService,
+      view: settingsScreen,
+      catalog: pipelineCatalogControl,
+      navigation: shell,
+      reporter: activityReporter,
+    });
     const appKeyDownHandler = new AppKeyDownHandler({
       saveAsNewDialog,
       addToCollectionDialog,
@@ -417,14 +420,7 @@ export class AppController {
     grid.recomputeLayout();
     collectionView.setTitlesHidden(false);
     shell.start();
-    const settingsReady = settingsScreen.load();
-    const initialScreenId = shell.activeScreen.id;
-    void settingsReady.then(() => {
-      void pipelineCatalogControl?.load();
-      if (shell.activeScreen.id === initialScreenId && shell.activeScreen.id !== settingsService.current.startupScreenId) {
-        shell.activate(settingsService.current.startupScreenId);
-      }
-    });
+    void settingsWorkflow.loadAtStartup();
     const shutdown = new ApplicationShutdownCoordinator({
       stopActions: () => {
         appKeyDownHandler.dispose();
@@ -433,7 +429,7 @@ export class AppController {
       },
       disposeWorkflow: async () => {
         for (const workflow of [collectionView, collectionSave, addToCollection, folderSelection, deleteFromDisk,
-          zoom, collectionRefinement, gridContextMenu, gifRangeRefinement, controlFailureReporting]) workflow.dispose();
+          zoom, collectionRefinement, gridContextMenu, gifRangeRefinement, settingsWorkflow, controlFailureReporting]) workflow.dispose();
         await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
       },
       destroyControls: () => {

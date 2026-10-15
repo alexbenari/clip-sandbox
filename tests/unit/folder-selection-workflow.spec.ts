@@ -62,7 +62,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     collectionSave,
     navigation,
     collectionScreenId: 'collection',
-    settingsLoaded: async () => undefined,
+    settings: { whenLoaded: async () => undefined },
     toolbar,
     selector,
     catalog,

@@ -1,16 +1,13 @@
 import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
-import { AppSettingsService, type SettingsResult } from '../app/app-settings-service.js';
-import type { ActivityErrorOptions } from '../app/activity-logger.js';
+import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { isStartupScreenId, type IAppSettings } from '../app/app-settings.js';
 
-type SettingsFeedback = {
-  progress(message: string): void;
-  success(message: string): void;
-  error(message: string, options?: ActivityErrorOptions): void;
-  pipelinesRootChanged?(): void;
-};
+export interface ISettingsScreenEvents {
+  folderChooseRequested: void;
+  preferenceChangeRequested: Partial<IAppSettings>;
+}
 
-export class SettingsScreen implements IAppScreen {
+export class SettingsScreen implements IAppScreen, IEventSource<ISettingsScreenEvents> {
   readonly id = 'settings';
   readonly label = 'Settings';
   readonly selectorStatus = 'fixed' as const;
@@ -19,17 +16,19 @@ export class SettingsScreen implements IAppScreen {
   readonly commands = null;
   readonly shortcuts = [];
   readonly root: HTMLElement;
+  private readonly events = new EventSource<ISettingsScreenEvents>();
   private readonly folder: HTMLInputElement;
   private readonly choose: HTMLButtonElement;
   private readonly audio: HTMLInputElement;
   private readonly startupScreen: HTMLSelectElement;
   private readonly status: HTMLElement;
-  private busy = true;
 
-  constructor(private readonly service: AppSettingsService, private readonly feedback: SettingsFeedback, doc: Document = document) {
+  constructor(doc: Document = document) {
     this.root = doc.createElement('section');
     this.root.id = 'settingsScreen';
     this.root.setAttribute('aria-label', 'Settings');
+    // Starts busy: nothing can change until the saved settings have been read.
+    this.root.setAttribute('aria-busy', 'true');
     this.root.innerHTML = `
       <div class="settings-surface"><h1>Settings</h1>
       <p>Preferences for your workspace and clip playback.</p>
@@ -37,19 +36,19 @@ export class SettingsScreen implements IAppScreen {
         <label for="pipelinesRootPath">Pipelines top folder</label>
         <div class="settings-folder">
           <input id="pipelinesRootPath" readonly dir="ltr" placeholder="Not configured">
-          <button id="choosePipelinesRoot" type="button">Choose folder…</button>
+          <button id="choosePipelinesRoot" type="button" disabled>Choose folder…</button>
         </div>
         <p>This preference does not change the currently loaded folder.</p>
       </div>
       <div class="settings-field">
         <label class="settings-switch">
-          <input id="singleClipAudioDefault" type="checkbox" role="switch"> Clip audio by default
+          <input id="singleClipAudioDefault" type="checkbox" role="switch" disabled> Clip audio by default
         </label>
         <p>Start newly opened single-clip playback with audio. Grid previews stay muted.</p>
       </div>
       <div class="settings-field">
         <label for="startupScreenId">Startup workspace</label>
-        <select id="startupScreenId">
+        <select id="startupScreenId" disabled>
           <option value="gif-extraction">GIF Extraction</option>
           <option value="collection">Collection</option>
         </select>
@@ -62,80 +61,37 @@ export class SettingsScreen implements IAppScreen {
     const status = this.root.querySelector('#settingsStatus');
     if (!(folder instanceof HTMLInputElement) || !(choose instanceof HTMLButtonElement) || !(audio instanceof HTMLInputElement) || !(startupScreen instanceof HTMLSelectElement) || !(status instanceof HTMLElement)) throw new Error('Settings template is incomplete.');
     this.folder = folder; this.choose = choose; this.audio = audio; this.startupScreen = startupScreen; this.status = status;
-    choose.addEventListener('click', () => { void this.chooseFolder(); });
-    audio.addEventListener('change', () => { void this.save({ singleClipAudioDefault: audio.checked }); });
+    choose.addEventListener('click', () => this.events.emit('folderChooseRequested'));
+    audio.addEventListener('change', () => {
+      this.events.emit('preferenceChangeRequested', { singleClipAudioDefault: audio.checked });
+    });
     startupScreen.addEventListener('change', () => {
-      if (isStartupScreenId(startupScreen.value)) void this.save({ startupScreenId: startupScreen.value });
+      if (isStartupScreenId(startupScreen.value)) {
+        this.events.emit('preferenceChangeRequested', { startupScreenId: startupScreen.value });
+      }
     });
-    this.render();
   }
-  async load(): Promise<void> {
-    const result = await this.service.load();
-    this.busy = false;
-    this.render();
-    if (result.ok === false) this.reportError('Could not read settings. Defaults are in use.', {
-      affected: 'Load settings', recovery: 'Check access to your settings folder. You can still choose and save preferences.', technicalDetails: result.error,
-    });
-    else if ('warning' in result) {
-      const ignoredFields = result.warningKind === 'ignored-fields';
-      this.reportError(ignoredFields ? 'Some saved settings were ignored.' : 'Could not read settings. Defaults are in use.', {
-        affected: 'Load settings',
-        recovery: ignoredFields ? 'Review your preferences and save them again.' : 'Check access to your settings folder. You can still choose and save preferences.',
-        technicalDetails: result.warning,
-      });
-    }
+
+  on<TName extends keyof ISettingsScreenEvents>(name: TName, handler: EventHandler<ISettingsScreenEvents[TName]>): () => void {
+    return this.events.on(name, handler);
   }
+
   focusInitial(): void { this.folder.focus(); }
-  private render(settings: IAppSettings = this.service.current): void {
+
+  // Changes are disabled while settings load or save, so two writes never overlap.
+  render(settings: IAppSettings, busy: boolean): void {
     this.folder.value = settings.pipelinesRootPath ?? '';
     this.audio.checked = settings.singleClipAudioDefault;
     this.startupScreen.value = settings.startupScreenId;
-    this.choose.disabled = this.busy;
-    this.audio.disabled = this.busy;
-    this.startupScreen.disabled = this.busy;
-    this.root.setAttribute('aria-busy', String(this.busy));
+    this.choose.disabled = busy;
+    this.audio.disabled = busy;
+    this.startupScreen.disabled = busy;
+    this.root.setAttribute('aria-busy', String(busy));
   }
-  private reportError(message: string, options: ActivityErrorOptions): void {
-    this.status.textContent = message;
-    this.feedback.error(message, options);
-  }
-  private async chooseFolder(): Promise<void> {
-    if (this.busy) return;
-    this.busy = true; this.render();
-    const choice = await this.service.chooseRoot();
-    this.busy = false;
-    if (choice.kind === 'chosen') await this.save({ pipelinesRootPath: choice.path });
-    else {
-      this.render();
-      if (choice.kind === 'error') this.reportError('Could not choose a folder.', {
-        affected: 'Choose Pipelines top folder', recovery: 'Choose an accessible folder and try again.', technicalDetails: choice.error,
-      });
-    }
-  }
-  private async save(change: Partial<IAppSettings>, retrying = false): Promise<SettingsResult | void> {
-    if (this.busy) {
-      if (retrying) return { ok: false, error: 'Wait for the current settings change to finish, then retry.' };
-      return;
-    }
-    // A retry reapplies only the failed preference, preserving later changes to other settings.
-    const settings = { ...this.service.current, ...change };
-    this.busy = true; this.render(settings);
-    this.status.textContent = 'Saving…'; this.feedback.progress('Saving settings…');
-    const result = await this.service.save(settings);
-    this.busy = false; this.render();
-    if (result.ok === false) {
-      const message = 'Settings were not saved.';
-      if (retrying) { this.status.textContent = message; return result; }
-      this.reportError(message, {
-        affected: 'Save settings', recovery: 'Check available disk space and folder access, then retry.',
-        technicalDetails: result.error, retry: () => this.save(change, true),
-      });
-    }
-    else {
-      this.status.textContent = 'Saved';
-      this.feedback.success('Settings saved');
-      if ('pipelinesRootPath' in change) this.feedback.pipelinesRootChanged?.();
-    }
-    return result;
-  }
+
+  showSaving(): void { this.status.textContent = 'Saving…'; }
+
+  showSaved(): void { this.status.textContent = 'Saved'; }
+
+  showProblem(message: string): void { this.status.textContent = message; }
 }

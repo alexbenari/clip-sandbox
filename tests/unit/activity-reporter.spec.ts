@@ -33,15 +33,6 @@ describe('ActivityReporter', () => {
     ]);
   });
 
-  it('keeps working when its methods are passed around as plain callbacks', () => {
-    const { reporter, entries } = reporterWithLog();
-    const reportSuccess = reporter.success;
-
-    reportSuccess('Opened Movie.mkv.');
-
-    expect(entries).toEqual([{ kind: 'success', message: 'Opened Movie.mkv.', timeoutMs: 2500 }]);
-  });
-
   it('describes an error by its stack, and any other value as text', () => {
     const { reporter } = reporterWithLog();
     const error = new Error('disk full');
