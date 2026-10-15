@@ -10,6 +10,12 @@ const DEFAULT_ZOOM_OVERLAY_CSS = `
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
 
+export interface IClipAudioPreference {
+  readonly current: Readonly<{ singleClipAudioDefault: boolean }>;
+}
+
+const SILENT_BY_DEFAULT: IClipAudioPreference = Object.freeze({ current: Object.freeze({ singleClipAudioDefault: false }) });
+
 type ZoomContextMenuEvent = {
   clipId: string | null;
   name: string;
@@ -42,22 +48,22 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
   private videoEl: HTMLVideoElement | null;
   private currentItem: ZoomItem | null;
   private readonly handleOverlayClick: (event: MouseEvent) => void;
-  private readonly audioDefault: () => boolean;
+  private readonly audioPreference: IClipAudioPreference;
   private playbackAttempt = 0;
   private playbackFailureReported = false;
 
-  static fromDocument(doc: Document, { audioDefault }: { audioDefault: () => boolean }): ZoomOverlayControl {
-    return new ZoomOverlayControl({ mountEl: new DocumentElements(doc).required('zoomLayerRoot'), document: doc, audioDefault });
+  static fromDocument(doc: Document, { audioPreference }: { audioPreference: IClipAudioPreference }): ZoomOverlayControl {
+    return new ZoomOverlayControl({ mountEl: new DocumentElements(doc).required('zoomLayerRoot'), document: doc, audioPreference });
   }
 
-  constructor({ mountEl, document: doc = document, audioDefault = () => false }: {
+  constructor({ mountEl, document: doc = document, audioPreference = SILENT_BY_DEFAULT }: {
     mountEl?: HTMLElement | null;
     document?: Document;
-    audioDefault?: () => boolean;
+    audioPreference?: IClipAudioPreference;
   } = {}) {
     this.mountEl = mountEl || null;
     this.doc = doc;
-    this.audioDefault = audioDefault;
+    this.audioPreference = audioPreference;
     this.overlayEl = null;
     this.frameEl = null;
     this.videoEl = null;
@@ -110,7 +116,7 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     nextVideo.autoplay = true;
     nextVideo.controls = false;
     nextVideo.loop = true;
-    nextVideo.muted = !this.audioDefault();
+    nextVideo.muted = !this.audioPreference.current.singleClipAudioDefault;
     nextVideo.playsInline = true;
     nextVideo.preload = 'auto';
     nextVideo.addEventListener(

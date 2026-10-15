@@ -112,7 +112,7 @@ export class AppController {
 
     // Controls.
     const zoomOverlay = ZoomOverlayControl.fromDocument(document, {
-      audioDefault: () => settingsService.current.singleClipAudioDefault,
+      audioPreference: settingsService,
     });
     const clipContextMenu = ContextMenuControl.forClipMenu(document);
     const gridContextMenuControl = new GridContextMenuControl({ contextMenu: clipContextMenu });
@@ -225,7 +225,7 @@ export class AppController {
     const shell = ApplicationShellControl.fromDocument(document, {
       initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
       screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
-      canLeaveScreen: current => refineScreenLeavePolicy.canLeave(current),
+      leavePolicy: refineScreenLeavePolicy,
     });
     shell.on('screenChanged', screen => keyboardMap?.render(screen));
     shell.on('settingsRequested', () => {

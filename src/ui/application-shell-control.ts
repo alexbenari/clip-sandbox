@@ -18,6 +18,10 @@ type ShellPanel = {
   revealButton: HTMLButtonElement;
 };
 
+export interface IScreenLeavePolicy {
+  canLeave(current: IAppScreen, incoming: IAppScreen): boolean;
+}
+
 type ShellElements = {
   screenHost: HTMLElement;
   commandHost: HTMLElement;
@@ -29,7 +33,7 @@ type ShellElements = {
   workspace?: HTMLElement;
   center?: HTMLElement;
   panels?: readonly ShellPanel[];
-  canLeaveScreen?: (current: IAppScreen, incoming: IAppScreen) => boolean;
+  leavePolicy?: IScreenLeavePolicy;
 };
 
 export class ApplicationShellControl implements IEventSource<IApplicationShellEvents> {
@@ -48,7 +52,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
   private readonly onSelectionChange = (): void => { this.activate(this.elements.selector.value); };
   private readonly onSettingsClick = (): void => { this.events.emit('settingsRequested'); };
 
-  static fromDocument(doc: Document, options: Pick<ShellElements, 'screens' | 'initialScreenId' | 'canLeaveScreen'>): ApplicationShellControl {
+  static fromDocument(doc: Document, options: Pick<ShellElements, 'screens' | 'initialScreenId' | 'leavePolicy'>): ApplicationShellControl {
     const elements = new DocumentElements(doc);
     return new ApplicationShellControl({
       ...options,
@@ -182,7 +186,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
       incoming.focusInitial();
       return;
     }
-    if (this.activated && this.elements.canLeaveScreen?.(this.current, incoming) === false) {
+    if (this.activated && this.elements.leavePolicy?.canLeave(this.current, incoming) === false) {
       this.elements.selector.value = this.current.id;
       return;
     }

@@ -219,7 +219,7 @@ describe('controls built from the page markup', () => {
       vi.spyOn(HTMLMediaElement.prototype, 'pause').mockReturnValue(undefined),
       vi.spyOn(HTMLMediaElement.prototype, 'load').mockReturnValue(undefined),
     ];
-    const zoom = ZoomOverlayControl.fromDocument(document, { audioDefault: () => false });
+    const zoom = ZoomOverlayControl.fromDocument(document, { audioPreference: { current: { singleClipAudioDefault: false } } });
 
     zoom.open({ clipId: 'clip_1', src: 'file:///C:/clips/alpha.mp4', name: 'alpha.mp4' });
 

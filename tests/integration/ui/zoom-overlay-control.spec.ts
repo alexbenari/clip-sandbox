@@ -159,7 +159,8 @@ describe('zoom overlay controller', () => {
 
   test('uses the current preference only when opening a new video', () => {
     let audioDefault = true;
-    const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot'), document, audioDefault: () => audioDefault });
+    const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot'), document,
+      audioPreference: { get current() { return { singleClipAudioDefault: audioDefault }; } } });
     controller.open({ src: 'blob:first', name: 'first.mp4' });
     const first = document.getElementById('zoomVideo');
     expect(first.muted).toBe(false);

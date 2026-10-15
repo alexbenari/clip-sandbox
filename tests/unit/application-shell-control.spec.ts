@@ -103,9 +103,9 @@ describe('application shell side panel markup', () => {
 describe('application shell screen ownership', () => {
   it('keeps the current workspace selected when a leave guard rejects navigation', () => {
     const f = fixture();
-    const canLeaveScreen = vi.fn(() => false);
+    const leavePolicy = { canLeave: vi.fn(() => false) };
     const shell = new ApplicationShellControl({ ...f,
-      screens: [f.collection, f.settings], canLeaveScreen,
+      screens: [f.collection, f.settings], leavePolicy,
     });
     shell.start();
     f.selector.value = f.settings.id;
@@ -113,7 +113,7 @@ describe('application shell screen ownership', () => {
     expect(shell.activeScreen).toBe(f.collection);
     expect(f.selector.value).toBe(f.collection.id);
     expect(f.collection.onDeactivate).not.toHaveBeenCalled();
-    expect(canLeaveScreen).toHaveBeenCalledWith(f.collection, f.settings);
+    expect(leavePolicy.canLeave).toHaveBeenCalledWith(f.collection, f.settings);
     shell.destroy();
   });
   it('reclaims each panel width and notifies the active screen once after both settle', async () => {
