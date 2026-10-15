@@ -41,7 +41,7 @@ function setup() {
     confirmBtn,
     cancelBtn,
     newChoiceValue: '__new_collection__',
-    validateNewName: (name) => (!name.trim() ? 'Enter a collection name.' : ''),
+    nameCheck: { problemText: (name) => (!name.trim() ? 'Enter a collection name.' : '') },
   });
   controller.on('confirmed', onConfirm);
   controller.on('cancelled', onCancel);

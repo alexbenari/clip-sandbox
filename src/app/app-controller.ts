@@ -121,11 +121,11 @@ export class AppController {
     const mainToolbarControl = MainToolbarControl.fromDocument(document, { appText });
     const addToCollectionDialog = AddToCollectionDialogControl.fromDocument(document, {
       newChoiceValue: NEW_COLLECTION_CHOICE_VALUE,
-      validateNewName: name => newCollectionNameCheck.problemText(name),
+      nameCheck: newCollectionNameCheck,
     });
     const collectionConflict = CollectionConflictControl.fromDocument(document, { appText });
     const saveAsNewDialog = SaveAsNewDialogControl.fromDocument(document, {
-      validateName: name => newCollectionNameCheck.problemText(name),
+      nameCheck: newCollectionNameCheck,
     });
     const unsavedChangesDialog = UnsavedChangesDialogControl.fromDocument(document);
     const deleteFromDiskDialog = DeleteFromDiskDialogControl.fromDocument(document, { appText });

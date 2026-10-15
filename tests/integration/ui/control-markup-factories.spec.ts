@@ -33,7 +33,7 @@ describe('controls built from the page markup', () => {
   beforeEach(() => { document.body.innerHTML = pageBody; });
 
   it('Save as Collection reports the entered name', () => {
-    const dialog = SaveAsNewDialogControl.fromDocument(document, { validateName: () => '' });
+    const dialog = SaveAsNewDialogControl.fromDocument(document, { nameCheck: { problemText: () => '' } });
     const confirmed = vi.fn();
     dialog.on('confirmed', confirmed);
 

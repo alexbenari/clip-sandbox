@@ -6,6 +6,10 @@ export interface ISaveAsNewDialogEvents {
   cancelled: void;
 }
 
+export interface ICollectionNameCheck {
+  problemText(name: string): string;
+}
+
 export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEvents> {
   private readonly dialog: HTMLElement | null;
   private readonly titleEl: HTMLElement | null;
@@ -14,11 +18,11 @@ export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEven
   private readonly errorMessageEl: HTMLElement | null;
   private readonly confirmBtn: HTMLButtonElement | null;
   private readonly cancelBtn: HTMLElement | null;
-  private readonly validateName: (name: string) => string;
+  private readonly nameCheck: ICollectionNameCheck;
   private readonly events = new EventSource<ISaveAsNewDialogEvents>();
   private externalError: string;
 
-  static fromDocument(doc: Document, { validateName }: { validateName?: (name: string) => string } = {}): SaveAsNewDialogControl {
+  static fromDocument(doc: Document, { nameCheck }: { nameCheck?: ICollectionNameCheck } = {}): SaveAsNewDialogControl {
     const elements = new DocumentElements(doc);
     const dialog = elements.required('saveAsNewDialog');
     return new SaveAsNewDialogControl({
@@ -29,7 +33,7 @@ export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEven
       errorMessageEl: elements.required('saveAsNewError'),
       confirmBtn: elements.required<HTMLButtonElement>('confirmSaveAsNewBtn'),
       cancelBtn: elements.required<HTMLButtonElement>('cancelSaveAsNewBtn'),
-      validateName,
+      nameCheck,
     });
   }
 
@@ -41,7 +45,7 @@ export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEven
     errorMessageEl,
     confirmBtn,
     cancelBtn,
-    validateName = () => '',
+    nameCheck = { problemText: () => '' },
   }: {
     dialog?: HTMLElement | null;
     titleEl?: HTMLElement | null;
@@ -50,7 +54,7 @@ export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEven
     errorMessageEl?: HTMLElement | null;
     confirmBtn?: HTMLButtonElement | null;
     cancelBtn?: HTMLElement | null;
-    validateName?: (name: string) => string;
+    nameCheck?: ICollectionNameCheck;
   } = {}) {
     this.dialog = dialog || null;
     this.titleEl = titleEl || null;
@@ -59,7 +63,7 @@ export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEven
     this.errorMessageEl = errorMessageEl || null;
     this.confirmBtn = confirmBtn || null;
     this.cancelBtn = cancelBtn || null;
-    this.validateName = validateName;
+    this.nameCheck = nameCheck;
     this.externalError = '';
 
     if (!dialog || !nameInput || !confirmBtn) return;
@@ -97,7 +101,7 @@ export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEven
   }
 
   currentValidationError(): string {
-    return this.externalError || this.validateName(this.nameInput?.value || '');
+    return this.externalError || this.nameCheck.problemText(this.nameInput?.value || '');
   }
 
   hasNameInput(): boolean {

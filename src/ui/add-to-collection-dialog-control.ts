@@ -17,6 +17,10 @@ export interface IAddToCollectionDialogEvents {
   cancelled: void;
 }
 
+export interface INewCollectionNameCheck {
+  problemText(name: string): string;
+}
+
 export class AddToCollectionDialogControl implements IEventSource<IAddToCollectionDialogEvents> {
   private readonly dialog: HTMLDialogElement | null;
   private readonly destinationSelect: HTMLSelectElement | null;
@@ -26,7 +30,7 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
   private readonly confirmBtn: HTMLButtonElement | null;
   private readonly cancelBtn: HTMLButtonElement | null;
   private readonly newChoiceValue: string;
-  private readonly validateNewName: (name: string) => string;
+  private readonly nameCheck: INewCollectionNameCheck;
   private readonly events = new EventSource<IAddToCollectionDialogEvents>();
   private readonly doc: Document;
   private hasSelection: boolean;
@@ -43,9 +47,9 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
       }));
   }
 
-  static fromDocument(doc: Document, { newChoiceValue, validateNewName }: {
+  static fromDocument(doc: Document, { newChoiceValue, nameCheck }: {
     newChoiceValue: string;
-    validateNewName?: (name: string) => string;
+    nameCheck?: INewCollectionNameCheck;
   }): AddToCollectionDialogControl {
     const elements = new DocumentElements(doc);
     return new AddToCollectionDialogControl({
@@ -57,7 +61,7 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
       confirmBtn: elements.optional<HTMLButtonElement>('confirmAddToCollectionBtn'),
       cancelBtn: elements.optional<HTMLButtonElement>('cancelAddToCollectionBtn'),
       newChoiceValue,
-      validateNewName,
+      nameCheck,
     });
   }
 
@@ -70,7 +74,7 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
     confirmBtn,
     cancelBtn,
     newChoiceValue,
-    validateNewName = () => '',
+    nameCheck = { problemText: () => '' },
   }: {
     dialog?: HTMLDialogElement | null;
     destinationSelect?: HTMLSelectElement | null;
@@ -80,7 +84,7 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
     confirmBtn?: HTMLButtonElement | null;
     cancelBtn?: HTMLButtonElement | null;
     newChoiceValue: string;
-    validateNewName?: (name: string) => string;
+    nameCheck?: INewCollectionNameCheck;
   }) {
     this.dialog = dialog || null;
     this.destinationSelect = destinationSelect || null;
@@ -90,7 +94,7 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
     this.confirmBtn = confirmBtn || null;
     this.cancelBtn = cancelBtn || null;
     this.newChoiceValue = newChoiceValue;
-    this.validateNewName = validateNewName;
+    this.nameCheck = nameCheck;
     this.doc = dialog?.ownerDocument || document;
     this.hasSelection = false;
     this.externalError = '';
@@ -152,7 +156,7 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
   currentValidationError(): string {
     if (this.externalError) return this.externalError;
     if (!this.isNewDestinationSelected()) return '';
-    return this.validateNewName(this.newCollectionNameInput?.value || '');
+    return this.nameCheck.problemText(this.newCollectionNameInput?.value || '');
   }
 
   focusActiveField(): void {

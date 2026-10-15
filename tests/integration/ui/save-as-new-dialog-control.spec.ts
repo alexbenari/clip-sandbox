@@ -29,10 +29,12 @@ describe('save-as-new dialog controller', () => {
       errorMessageEl: document.getElementById('error'),
       confirmBtn: document.getElementById('confirmBtn'),
       cancelBtn: document.getElementById('cancelBtn'),
-      validateName: (name) => {
-        if (!name.trim()) return 'Name is required.';
-        if (name.includes(':')) return 'Collection names cannot contain: < > : " / \\ | ? *';
-        return '';
+      nameCheck: {
+        problemText: (name) => {
+          if (!name.trim()) return 'Name is required.';
+          if (name.includes(':')) return 'Collection names cannot contain: < > : " / \\ | ? *';
+          return '';
+        },
       },
     });
     controller.on('confirmed', onConfirm);
