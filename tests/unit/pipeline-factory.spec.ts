@@ -1,16 +1,15 @@
+// @vitest-environment node
 // @ts-nocheck
 import { describe, expect, test, vi } from 'vitest';
 import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
 import { CollectionTextFormat } from '../../src/business-logic/collection-text-format.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
+import { folderEntry } from '../support/clip-source-fixtures.js';
 
 describe('pipeline factory', () => {
   function createFile(content, name, type) {
-    const file = new File([content], name, { type });
-    file.text = () => Promise.resolve(String(content));
-    file.mediaSource = `file:///clips/${name}`;
-    return file;
+    return folderEntry(name, { type, text: content });
   }
 
   test('buildPipeline builds a pipeline from top-level videos and collections', async () => {
@@ -37,10 +36,7 @@ describe('pipeline factory', () => {
 
 describe('pipeline selection loading', () => {
   function createFile(content, name, type) {
-    const file = new File([content], name, { type });
-    file.text = () => Promise.resolve(String(content));
-    file.mediaSource = `file:///clips/${name}`;
-    return file;
+    return folderEntry(name, { type, text: content });
   }
 
   test('materializePipeline loads the full folder view first', async () => {

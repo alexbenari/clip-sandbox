@@ -99,7 +99,7 @@ test.each(['onStarted', 'onCreated', 'onFailed', 'onFinished'])('cleans up and p
   const fault = new Error(`${callback} failed`);
   const callbackFn = vi.fn().mockImplementationOnce(() => { throw fault; });
   const result = callback === 'onFailed' ? { ok: false, code: 'edit-failed' }
-    : { ok: true, createdFile: new File(['output'], 'alpha-looped.mp4') };
+    : { ok: true, createdFile: { name: 'alpha-looped.mp4', mediaSource: 'file:///clips/alpha-looped.mp4' } };
   const finished = callback === 'onFinished' ? callbackFn : vi.fn();
   const editor = { createVideoEdit: vi.fn(async () => result) };
   const workflow = new ZoomVideoEditWorkflow({ clipEditor: editor, [callback]: callbackFn, onFinished: finished });
@@ -111,7 +111,7 @@ test.each(['onStarted', 'onCreated', 'onFailed', 'onFinished'])('cleans up and p
 });
 
 test('preserves successful output and both callback failures when finishing also throws', async () => {
-  const output = { ok: true, createdFile: new File(['output'], 'alpha-looped.mp4') };
+  const output = { ok: true, createdFile: { name: 'alpha-looped.mp4', mediaSource: 'file:///clips/alpha-looped.mp4' } };
   const createdFailure = new Error('Refresh failed');
   const finishFailure = new Error('Toolbar failed');
   const workflow = new ZoomVideoEditWorkflow({

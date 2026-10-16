@@ -4,6 +4,7 @@ import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
 import { AppText } from '../../src/app/app-text.js';
 import { ClipLabelFormatter } from '../../src/ui/clip-label-formatter.js';
 import { DisplayLayoutRules } from '../../src/ui/display-layout-rules.js';
+import { folderEntry } from '../support/clip-source-fixtures.js';
 
 const appText = new AppText();
 const displayLayoutRules = new DisplayLayoutRules();
@@ -15,35 +16,21 @@ describe('video helpers', () => {
   const pipelineFactory = new PipelineFactory();
 
   it('detects video by MIME and extension', () => {
-    expect(pipelineFactory.isVideoFile({ type: 'video/mp4', name: 'a.mp4' })).toBe(true);
-    expect(pipelineFactory.isVideoFile({ type: '', name: 'clip.WEBM' })).toBe(true);
-    expect(pipelineFactory.isVideoFile({ name: 'doc.txt' })).toBe(false);
+    expect(pipelineFactory.isVideoEntry(folderEntry('a.mp4', { type: 'video/mp4' }))).toBe(true);
+    expect(pipelineFactory.isVideoEntry(folderEntry('clip.WEBM', { type: '' }))).toBe(true);
+    expect(pipelineFactory.isVideoEntry(folderEntry('doc.txt'))).toBe(false);
   });
 
-  it('filters and sorts files', () => {
-    const files = [
-      { name: 'clip10.mp4', type: 'video/mp4' },
-      { name: 'clip2.mp4', type: 'video/mp4' },
-      { name: 'note.txt', type: 'text/plain' },
-    ];
-    const sorted = pipelineFactory.filterAndSortFiles(files);
-    expect(sorted.map((f) => f.name)).toEqual(['clip2.mp4', 'clip10.mp4']);
+  it('detects collection text files', () => {
+    expect(pipelineFactory.isCollectionEntry(folderEntry('set-a.txt'))).toBe(true);
+    expect(pipelineFactory.isCollectionEntry(folderEntry('set-a.md', { type: '' }))).toBe(false);
   });
 
-  it('detects collection text files and top-level folder entries', () => {
-    expect(pipelineFactory.isCollectionFile({ name: 'set-a.txt' })).toBe(true);
-    expect(pipelineFactory.isCollectionFile({ name: 'set-a.md' })).toBe(false);
-    expect(pipelineFactory.isTopLevelFolderEntry({ webkitRelativePath: 'clips/one.mp4' })).toBe(true);
-    expect(pipelineFactory.isTopLevelFolderEntry({ webkitRelativePath: 'clips/sub/one.mp4' })).toBe(false);
-  });
-
-  it('splits top-level videos and collection files while ignoring nested entries', () => {
+  it('splits videos and collection files, each sorted by natural name order', () => {
     const { videos, collectionFiles } = pipelineFactory.getVideosAndCollectionFiles([
-      { name: 'clip10.mp4', type: 'video/mp4', webkitRelativePath: 'clips/clip10.mp4' },
-      { name: 'clip2.mp4', type: 'video/mp4', webkitRelativePath: 'clips/clip2.mp4' },
-      { name: 'subset.txt', type: 'text/plain', webkitRelativePath: 'clips/subset.txt' },
-      { name: 'deep.mp4', type: 'video/mp4', webkitRelativePath: 'clips/nested/deep.mp4' },
-      { name: 'deep.txt', type: 'text/plain', webkitRelativePath: 'clips/nested/deep.txt' },
+      folderEntry('clip10.mp4'),
+      folderEntry('clip2.mp4'),
+      folderEntry('subset.txt', { text: '' }),
     ]);
     expect(videos.map((file) => file.name)).toEqual(['clip2.mp4', 'clip10.mp4']);
     expect(collectionFiles.map((file) => file.name)).toEqual(['subset.txt']);

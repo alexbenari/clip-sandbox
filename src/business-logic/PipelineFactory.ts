@@ -1,68 +1,37 @@
 import { ClipSource } from '../domain/clip-source.js';
 import { Pipeline } from '../domain/pipeline.js';
 import type { Collection } from '../domain/collection.js';
-import type { CollectionDescriptionResult, InvalidCollectionDescription } from '../domain/collection-description-validator.js';
+import type { InvalidCollectionDescription } from '../domain/collection-description-validator.js';
 import type { CollectionTextFormat } from './collection-text-format.js';
+import type { FolderEntry } from './folder-entry.js';
 
 const VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'mkv', 'mpg', 'mpeg']);
 const COLLECTION_FILE_EXT = '.txt';
 
-export type ClipFile = File & {
-  mediaSource?: string;
-  path?: string;
-};
-
-type FolderEntryFile = ClipFile & {
-  relativePath?: string;
-  webkitRelativePath?: string;
-};
-
 export type PipelineBuildResult = {
   pipeline: Pipeline;
-  videos: FolderEntryFile[];
-  collectionFiles: FolderEntryFile[];
+  videos: FolderEntry[];
+  collectionFiles: FolderEntry[];
   validCollections: Collection[];
   invalidDescriptions: InvalidCollectionDescription[];
 };
 
 export class PipelineFactory {
-  isTopLevelFolderEntry(file: FolderEntryFile): boolean {
-    const relPath = String(file?.webkitRelativePath || file?.relativePath || '').trim();
-    if (!relPath) return true;
-    const parts = relPath.split(/[\\/]/).filter(Boolean);
-    return parts.length <= 2;
-  }
-
-  topLevelFiles(files: Iterable<FolderEntryFile>): FolderEntryFile[] {
-    return Array.from(files || []).filter((file) => this.isTopLevelFolderEntry(file));
-  }
-
-  isVideoFile(file: FolderEntryFile): boolean {
-    if (file?.type && file.type.startsWith('video/')) return true;
-    const name = file?.name || '';
-    const ext = name.split('.').pop()?.toLowerCase() || '';
+  isVideoEntry(entry: FolderEntry): boolean {
+    if (entry.type.startsWith('video/')) return true;
+    const ext = entry.name.split('.').pop()?.toLowerCase() || '';
     return VIDEO_EXTS.has(ext);
   }
 
-  isCollectionFile(file: FolderEntryFile): boolean {
-    return (file?.name || '').toLowerCase().endsWith(COLLECTION_FILE_EXT);
+  isCollectionEntry(entry: FolderEntry): boolean {
+    return entry.name.toLowerCase().endsWith(COLLECTION_FILE_EXT);
   }
 
-  filterAndSortFiles(files: Iterable<FolderEntryFile>): FolderEntryFile[] {
-    return this.topLevelFiles(files)
-      .filter((file) => this.isVideoFile(file))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-  }
-
-  getVideosAndCollectionFiles(files: Iterable<FolderEntryFile>): { videos: FolderEntryFile[]; collectionFiles: FolderEntryFile[] } {
-    const entries = this.topLevelFiles(files);
+  getVideosAndCollectionFiles(entries: Iterable<FolderEntry>): { videos: FolderEntry[]; collectionFiles: FolderEntry[] } {
+    const all = Array.from(entries || []);
     return {
-      videos: entries
-        .filter((file) => this.isVideoFile(file))
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })),
-      collectionFiles: entries
-        .filter((file) => this.isCollectionFile(file))
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })),
+      videos: PipelineFactory.sortedByName(all.filter((entry) => this.isVideoEntry(entry))),
+      collectionFiles: PipelineFactory.sortedByName(all.filter((entry) => this.isCollectionEntry(entry))),
     };
   }
 
@@ -73,16 +42,16 @@ export class PipelineFactory {
     logInvalidDescription,
   }: {
     folderName?: string;
-    files?: Iterable<FolderEntryFile>;
-    collectionFormat: Pick<CollectionTextFormat, 'readFile'>;
+    files?: Iterable<FolderEntry>;
+    collectionFormat: Pick<CollectionTextFormat, 'read'>;
     logInvalidDescription?: (result: InvalidCollectionDescription) => void | Promise<void>;
   }): Promise<PipelineBuildResult> {
     const { videos, collectionFiles } = this.getVideosAndCollectionFiles(files);
     const validCollections: Collection[] = [];
     const invalidDescriptions: InvalidCollectionDescription[] = [];
 
-    for (const file of collectionFiles) {
-      const result: CollectionDescriptionResult = await collectionFormat.readFile(file);
+    for (const entry of collectionFiles) {
+      const result = collectionFormat.read({ text: entry.text ?? '', filename: entry.name });
       if (result.ok === true) {
         validCollections.push(result.content);
         continue;
@@ -93,7 +62,11 @@ export class PipelineFactory {
 
     const pipeline = new Pipeline({
       folderName,
-      videoSources: videos.map((file) => ClipSource.create({ name: file.name, mediaSource: file.mediaSource ?? '', desktopPath: file.path })),
+      videoSources: videos.map((entry) => ClipSource.create({
+        name: entry.name,
+        mediaSource: entry.mediaSource,
+        desktopPath: entry.desktopPath,
+      })),
       collections: validCollections,
     });
 
@@ -104,5 +77,9 @@ export class PipelineFactory {
       validCollections,
       invalidDescriptions,
     };
+  }
+
+  private static sortedByName(entries: FolderEntry[]): FolderEntry[] {
+    return entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
   }
 }

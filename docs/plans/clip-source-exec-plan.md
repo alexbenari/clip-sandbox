@@ -11,7 +11,7 @@ Users see no change: opening folders, collections, the grid, Zoom and video edit
 ## Progress
 
 - [x] (2026-10-16) M1: delete the unused browser folder adapters. Commit `6f29120`. G1: both type checks clean; the search finds only an archived test-run listing under `sandbox/component-library-evaluation/artifacts/`, left as history. G2: 116 files, 677 tests pass (693 before, minus the 16 tests in the two deleted files); `m1-commit-hook.log`.
-- [ ] M2: `ClipSource` in the domain; `Clip`, `Pipeline`, the working copy, Zoom, `ClipEditor` and the grid use it.
+- [x] (2026-10-16) M2: `ClipSource` in the domain; `Clip`, `Pipeline`, the working copy, Zoom, `ClipEditor` and the grid use it. Commit `5810454`. G3: the three domain spec files (27 tests) pass in Node. G4: four `ClipSource` cases pass. G5: no match in `src/domain`. G6: both type checks clean; 117 files, 681 tests pass (`m2-commit-hook.log`). A counted script converted 130 test sites; the rest were edited by hand.
 - [ ] M3: folder listings arrive as `FolderEntry` values; the last `File`-based types are removed.
 - [ ] M4: full end-to-end run, architecture map, acceptance check.
 
@@ -40,6 +40,11 @@ Unavailable skills or fallbacks:
 
 - Discovery: one end-to-end check is intermittent. "F and Escape review the same movie at display size and restore the workspace" (`tests/e2e/gif-movie-fullscreen.spec.ts`) sometimes sees the full-screen controls still visible 5 seconds after a mouse move.
   Evidence: on 2026-10-16 it failed 2 of 9 runs at commit `f5bd13a` and passed 5 of 5 at `76f22a0`; logs in `test-evidence/remaining-review-findings/e2e-after-15*.log`. That code is not touched by this plan; G9 says how to treat a failure there.
+
+- Discovery: no test existed only for the grid's `blob:` fallback. Two assertions checked it: one expected a `blob:` media address, and one expected `URL.revokeObjectURL` on rerender.
+  Evidence: `tests/integration/ui/clip-collection-grid-control.spec.ts`. The first now expects the clip's `file://` address; the second is removed, and its test is renamed to what it still checks (drag-over state is cleared).
+- Discovery: `Clip` and `Pipeline` also reject non-`ClipSource` values at run time, not only through types, because many tests skip type checking (`@ts-nocheck`).
+  Evidence: `Clip.#requiredSource` and `Pipeline.#requiredSource`; the case in `tests/unit/clip-models.spec.ts`.
 
 ## Decision Log
 

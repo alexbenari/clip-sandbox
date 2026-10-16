@@ -49,7 +49,7 @@ type FolderSelectionDependencies = Readonly<{
   folders: IFolderSource;
   pipelineCatalog: IPipelineCatalogOpener;
   pipelineFactory: Pick<PipelineFactory, 'buildPipeline'>;
-  collectionFormat: Pick<CollectionTextFormat, 'readFile'>;
+  collectionFormat: Pick<CollectionTextFormat, 'read'>;
   diagnostics: Pick<AppDiagnostics, 'logInvalidDescription' | 'logRuntimeError'>;
   grid: { invalidateView(cacheKey: string): void; invalidateAllViews(): void; retagActiveView(cacheKey: string | null): void };
   collectionView: Pick<CollectionViewWorkflow, 'applySelection' | 'refreshSelector' | 'cacheKeyFor' | 'activeCacheKey'>;

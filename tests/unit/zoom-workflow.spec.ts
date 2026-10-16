@@ -111,7 +111,7 @@ describe('ZoomWorkflow', () => {
   });
 
   it('inserts a created clip into the pipeline view and zooms into it', async () => {
-    const created = new File(['looped'], 'alpha-looped.mp4');
+    const created = { name: 'alpha-looped.mp4', mediaSource: 'file:///clips/alpha-looped.mp4' };
     const { workflow, zoomView, editMenu, entries, alpha, collectionView, pipelineWorkingCopy } = zoomWorkflow({
       editResult: { ok: true, code: 'created', edit: loopify, request: {} as never, createdFile: created },
     });

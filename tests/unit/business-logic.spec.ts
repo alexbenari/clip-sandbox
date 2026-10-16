@@ -3,22 +3,17 @@ import { describe, expect, test, vi } from 'vitest';
 import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
-import { clipSource } from '../support/clip-source-fixtures.js';
+import { clipSource, folderEntry } from '../support/clip-source-fixtures.js';
 
 describe('business logic modules', () => {
   const pipelineFactory = new PipelineFactory();
 
-  test('getVideosAndCollectionFiles classifies and sorts top-level folder entries', () => {
-    const topVideoB = new File(['b'], 'b.mp4', { type: 'video/mp4' });
-    Object.defineProperty(topVideoB, 'webkitRelativePath', { value: 'clips/b.mp4' });
-    const topVideoA = new File(['a'], 'a.mp4', { type: 'video/mp4' });
-    Object.defineProperty(topVideoA, 'webkitRelativePath', { value: 'clips/a.mp4' });
-    const collection = new File(['a.mp4\n'], 'subset.txt', { type: 'text/plain' });
-    Object.defineProperty(collection, 'webkitRelativePath', { value: 'clips/subset.txt' });
-    const nested = new File(['n'], 'nested.mp4', { type: 'video/mp4' });
-    Object.defineProperty(nested, 'webkitRelativePath', { value: 'clips/nested/nested.mp4' });
-
-    const result = pipelineFactory.getVideosAndCollectionFiles([topVideoB, collection, topVideoA, nested]);
+  test('getVideosAndCollectionFiles classifies and sorts folder entries', () => {
+    const result = pipelineFactory.getVideosAndCollectionFiles([
+      folderEntry('b.mp4'),
+      folderEntry('subset.txt', { text: 'a.mp4\n' }),
+      folderEntry('a.mp4'),
+    ]);
 
     expect(result.videos.map((file) => file.name)).toEqual(['a.mp4', 'b.mp4']);
     expect(result.collectionFiles.map((file) => file.name)).toEqual(['subset.txt']);

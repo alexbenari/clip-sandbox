@@ -1,16 +1,14 @@
 import type { CreatedVideoFile } from '../../business-logic/clip-editor.js';
-import type { ClipFile } from '../../business-logic/PipelineFactory.js';
+import type { FolderEntry } from '../../business-logic/folder-entry.js';
 import { ClipSource } from '../../domain/clip-source.js';
 import type { FolderAccess, FolderContents } from '../../app/folder-access.js';
 
 type ElectronFolderEntry = {
   name?: string;
-  relativePath?: string;
   path?: string;
   text?: string;
   type?: string;
   mediaSource?: string;
-  lastModifiedMs?: number;
 };
 
 export type DesktopFolderResult = {
@@ -64,7 +62,7 @@ export class ElectronFolderService {
     }
     return {
       folderAccess: Object.freeze({ folderPath: result.folderPath }),
-      files: Array.from(result.files || []).map((entry) => this.toRendererFile(entry)),
+      files: Array.from(result.files || []).map((entry) => this.folderEntryOf(entry)),
       folderName: result.folderName || '',
     };
   }
@@ -73,37 +71,14 @@ export class ElectronFolderService {
     return ClipSource.create({ name: created.name, mediaSource: created.mediaSource ?? '', desktopPath: created.path });
   }
 
-  toRendererFile(entry: ElectronFolderEntry): ClipFile {
-    const lastModifiedMs = 'lastModifiedMs' in entry ? entry.lastModifiedMs : undefined;
-    const file = new File(
-      [typeof entry?.text === 'string' ? entry.text : ''],
-      entry?.name || '',
-      {
-        type: entry?.type || '',
-        lastModified: Number.isFinite(lastModifiedMs) ? lastModifiedMs : Date.now(),
-      }
-    );
-
-    if ('relativePath' in entry && entry.relativePath) {
-      Object.defineProperty(file, 'webkitRelativePath', {
-        configurable: true,
-        value: entry.relativePath,
-      });
-    }
-    if (entry?.path) {
-      Object.defineProperty(file, 'path', {
-        configurable: true,
-        value: entry.path,
-      });
-    }
-    if (entry?.mediaSource) {
-      Object.defineProperty(file, 'mediaSource', {
-        configurable: true,
-        value: entry.mediaSource,
-      });
-    }
-
-    return file as ClipFile;
+  private folderEntryOf(entry: ElectronFolderEntry): FolderEntry {
+    return Object.freeze({
+      name: entry.name || '',
+      type: entry.type || '',
+      mediaSource: entry.mediaSource || '',
+      desktopPath: entry.path || null,
+      ...(typeof entry.text === 'string' ? { text: entry.text } : {}),
+    });
   }
 
   private requireApi(): Required<ElectronFolderApi> {

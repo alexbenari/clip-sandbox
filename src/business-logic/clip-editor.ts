@@ -9,10 +9,11 @@ export type VideoEditRequest = {
   sourcePath: string;
 };
 
-export type CreatedVideoFile = File & {
-  mediaSource?: string;
+export type CreatedVideoFile = Readonly<{
+  name: string;
   path?: string;
-};
+  mediaSource?: string;
+}>;
 
 export type RuntimeVideoEditResult =
   | { ok: true; createdFile: CreatedVideoFile }

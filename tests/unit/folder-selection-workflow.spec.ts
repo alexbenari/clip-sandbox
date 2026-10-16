@@ -10,15 +10,12 @@ import type { IPipelineCatalogEntry } from '../../src/app/pipeline-catalog.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
 import { CollectionTextFormat } from '../../src/business-logic/collection-text-format.js';
+import { folderEntry } from '../support/clip-source-fixtures.js';
 
 type UnsavedPromptRequest = { message: string; onSave: () => void; onDiscard: () => void; onCancel: () => void };
 
-function folderFile(name: string, text = ''): File {
-  const file = new File([text], name, { type: name.endsWith('.txt') ? 'text/plain' : 'video/mp4' });
-  // jsdom's File has no text(); collection files are read through it.
-  Object.defineProperty(file, 'text', { value: async () => text });
-  Object.defineProperty(file, 'mediaSource', { value: `file:///clips/${name}` });
-  return file;
+function folderFile(name: string, text?: string) {
+  return folderEntry(name, { text });
 }
 
 function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {

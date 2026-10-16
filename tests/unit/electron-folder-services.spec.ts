@@ -33,10 +33,32 @@ describe('electron folder services', () => {
     expect(result.folderAccess).toEqual({ folderPath: 'C:/clips' });
     expect(result.folderName).toBe('clips');
     expect(result.files).toHaveLength(1);
-    expect(result.files[0].name).toBe('alpha.txt');
-    expect(result.files[0].webkitRelativePath).toBe('alpha.txt');
-    expect(result.files[0].path).toBe('C:/clips/alpha.txt');
+    expect(result.files[0]).toEqual({
+      name: 'alpha.txt',
+      type: 'text/plain',
+      mediaSource: 'file:///C:/clips/alpha.txt',
+      desktopPath: 'C:/clips/alpha.txt',
+      text: 'hello',
+    });
     expect(Object.hasOwn(result.files[0], 'frameReviewSourceHandle')).toBe(false);
+  });
+
+  it('lists a video without text and turns a created edit output into a clip source', async () => {
+    const api = {
+      pickFolder: vi.fn(async () => ({
+        folderPath: 'C:/clips',
+        files: [{ name: 'alpha.mp4', path: 'C:/clips/alpha.mp4', mediaSource: 'file:///C:/clips/alpha.mp4', type: 'video/mp4' }],
+      })),
+    };
+    const service = new ElectronFolderService(api);
+
+    const { files } = await service.pickFolder();
+    const created = service.clipSourceOf({ name: 'alpha-looped.mp4', path: 'C:/clips/alpha-looped.mp4', mediaSource: 'file:///C:/clips/alpha-looped.mp4' });
+
+    expect(files[0]).toEqual({ name: 'alpha.mp4', type: 'video/mp4', mediaSource: 'file:///C:/clips/alpha.mp4', desktopPath: 'C:/clips/alpha.mp4' });
+    expect(Object.hasOwn(files[0], 'text')).toBe(false);
+    expect(created).toMatchObject({ name: 'alpha-looped.mp4', mediaSource: 'file:///C:/clips/alpha-looped.mp4', desktopPath: 'C:/clips/alpha-looped.mp4' });
+    expect(() => service.clipSourceOf({ name: 'broken.mp4' })).toThrow('Clip source media address is required.');
   });
 
   it('refuses a picked folder that has no path, so no folder access exists without one', async () => {

@@ -15,7 +15,4 @@ export class CollectionTextFormat {
     return this.validator.parseLines({ lines: String(text || '').replace(/\r/g, '').split('\n'), filename });
   }
 
-  async readFile(file: File): Promise<CollectionDescriptionResult> {
-    return this.read({ text: await file.text(), filename: file?.name || '' });
-  }
 }
