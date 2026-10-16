@@ -93,30 +93,29 @@ $fixtureRoot = Join-Path $tools.RepoRoot 'tests\fixtures\gif-extraction'
 $generatedRoot = Assert-GifExtractionPathInside -Path (Join-Path $fixtureRoot 'generated') -Root $fixtureRoot
 [void](New-Item -ItemType Directory -Force -Path $generatedRoot)
 
+# Sources are filtergraph source filters rather than '-f lavfi' inputs: the
+# pinned FFmpeg is built without libavdevice, which provides the lavfi device.
 $cfrSource = Join-Path $generatedRoot 'cfr-audio.mkv'
 Invoke-FixtureEncode -Tools $tools -OutputPath $cfrSource -Arguments @(
-    '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=24:duration=3',
-    '-f', 'lavfi', '-i', 'sine=frequency=997:sample_rate=48000:duration=3',
-    '-map', '0:v:0', '-map', '1:a:0',
+    '-filter_complex', 'testsrc=size=320x180:rate=24:duration=3[v];sine=frequency=997:sample_rate=48000:duration=3[a]',
+    '-map', '[v]', '-map', '[a]',
     '-frames:v', '72', '-c:v', 'ffv1', '-level', '3', '-pix_fmt', 'yuv444p',
     '-c:a', 'pcm_s16le', '-shortest'
 )
 
 $vfrSource = Join-Path $generatedRoot 'vfr-audio.mkv'
 Invoke-FixtureEncode -Tools $tools -OutputPath $vfrSource -Arguments @(
-    '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=24:duration=3',
-    '-f', 'lavfi', '-i', 'sine=frequency=733:sample_rate=48000:duration=5',
-    '-map', '0:v:0', '-map', '1:a:0',
-    '-frames:v', '72', '-vf', 'setpts=(N+floor(N/3))/(24*TB)',
-    '-vsync', 'vfr', '-c:v', 'ffv1', '-level', '3', '-pix_fmt', 'yuv444p',
+    '-filter_complex', 'testsrc=size=320x180:rate=24:duration=3,setpts=(N+floor(N/3))/(24*TB)[v];sine=frequency=733:sample_rate=48000:duration=5[a]',
+    '-map', '[v]', '-map', '[a]',
+    '-frames:v', '72',
+    '-fps_mode', 'vfr','-c:v', 'ffv1', '-level', '3', '-pix_fmt', 'yuv444p',
     '-c:a', 'pcm_s16le', '-shortest'
 )
 
 $timestampSource = Join-Path $generatedRoot 'timestamp-repair-source.mkv'
 Invoke-FixtureEncode -Tools $tools -OutputPath $timestampSource -Arguments @(
-    '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=24:duration=3',
-    '-f', 'lavfi', '-i', 'sine=frequency=587:sample_rate=48000:duration=3',
-    '-map', '0:v:0', '-map', '1:a:0',
+    '-filter_complex', 'testsrc=size=320x180:rate=24:duration=3[v];sine=frequency=587:sample_rate=48000:duration=3[a]',
+    '-map', '[v]', '-map', '[a]',
     '-frames:v', '72', '-output_ts_offset', '5',
     '-c:v', 'ffv1', '-level', '3', '-pix_fmt', 'yuv444p',
     '-c:a', 'pcm_s16le', '-shortest'
@@ -133,16 +132,16 @@ Invoke-FixtureEncode -Tools $tools -OutputPath $timestampReview -Arguments @(
 
 $oddSource = Join-Path $generatedRoot 'odd-dimensions-audio.mkv'
 Invoke-FixtureEncode -Tools $tools -OutputPath $oddSource -Arguments @(
-    '-f', 'lavfi', '-i', 'testsrc=size=321x181:rate=24:duration=3',
-    '-f', 'lavfi', '-i', 'sine=frequency=439:sample_rate=48000:duration=3',
-    '-map', '0:v:0', '-map', '1:a:0',
+    '-filter_complex', 'testsrc=size=321x181:rate=24:duration=3[v];sine=frequency=439:sample_rate=48000:duration=3[a]',
+    '-map', '[v]', '-map', '[a]',
     '-frames:v', '72', '-c:v', 'ffv1', '-level', '3', '-pix_fmt', 'yuv444p',
     '-c:a', 'pcm_s16le', '-shortest'
 )
 
 $noAudioSource = Join-Path $generatedRoot 'no-audio.mkv'
 Invoke-FixtureEncode -Tools $tools -OutputPath $noAudioSource -Arguments @(
-    '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=24:duration=2',
+    '-filter_complex', 'testsrc=size=320x180:rate=24:duration=2[v]',
+    '-map', '[v]',
     '-frames:v', '48', '-c:v', 'ffv1', '-level', '3', '-pix_fmt', 'yuv444p'
 )
 
