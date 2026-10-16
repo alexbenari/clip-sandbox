@@ -19,7 +19,7 @@ After this work, each job has its own small class, Collection Refine has its own
   - [x] (2026-10-16) Cases 2-13 added to `tests/unit/gif-extraction-session.spec.ts` ("GifExtractionSession behavior before the split"); all 14 pass on the unchanged code (G1). Case 4's opening half is also covered by the existing test "switches movies with locked captures".
   - [x] (2026-10-16) Cause of the removal test failure found (G2); see `Surprises & Discoveries`.
   - [x] (2026-10-16) The user chose to remove the unreachable stale-movie path (spec D19). It is removed in the desktop layer and the renderer, along with the obsolete end-to-end test. Case 1 is dropped because it described that path.
-- [ ] M2 `GifSessionStatus` and `CurrentMovie`
+- [x] M2 `GifSessionStatus` and `CurrentMovie` (2026-10-16). The session drives a change of movie through `beginChange`, `chooseSource`, `openCandidate`, `stopFollowingReview`, `switchTo` and `followReview` (D16). `openMovie` now reports "Opening ..." to Activity just after publishing the opening snapshot rather than just before; the order is not visible to users. G3: `test-evidence/gif-extraction-session-split/G3-commit-hook.log`.
 - [ ] M3 `RangeExtraction`
 - [ ] M4 `CaptureQueue` and capture storage
 - [ ] M5 `RangeRefinement`, with locking and refinement checking saved frames themselves

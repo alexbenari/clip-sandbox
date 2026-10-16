@@ -32,6 +32,8 @@ import { GifCaptureThumbnailSession, type GifThumbnailState } from './gif-captur
 import type { IClipCapturesStoreService } from './clip-captures-store-service.js';
 import { SourceFrameIdentity } from '../frame-review/model/source-frame-identity.js';
 import { SavedCaptureQueuePersistence } from './saved-capture-queue-persistence.js';
+import { CurrentMovie } from './current-movie.js';
+import { GifSessionStatus } from './gif-session-status.js';
 
 export type { IThumbnailCacheService } from './thumbnail-cache-service.js';
 export type { GifThumbnailState } from './gif-capture-thumbnail-session.js';
@@ -102,28 +104,20 @@ type GifExtractionSessionMode = 'movie-capture' | 'collection-refinement';
 
 export class GifExtractionSession implements IRefineGifSessionOwner {
   private readonly listeners = new Set<(snapshot: IGifExtractionSessionSnapshot) => void>();
-  private readonly previewBounds: Readonly<{ maxWidth: number; maxHeight: number }>;
+  private readonly status = new GifSessionStatus();
+  private readonly movie: CurrentMovie;
   private destination: GifExtractionSessionOptions['destination'];
   private readonly captureThumbnails: GifCaptureThumbnailSession;
-  private lifecycle: IGifExtractionSessionSnapshot['lifecycle'] = 'empty';
-  private source: IFrameReviewSourceSelection | null = null;
-  private review: IFrameReviewSession | null = null;
-  private unsubscribeReview: (() => void) | null = null;
-  private reviewState: IFrameReviewState | null = null;
   private rangeModel: RangeCaptureModel | null = null;
-  private sourceGeneration = 0;
-  private message: string | null = null;
   private selectedRangeId: CapturedRangeId | null = null;
   private activeRefinement: RefineGifSession | null = null;
   private extractionWorkflow: ClipExtractionWorkflow | null = null;
   private disposed = false;
-  private opening = false;
   private savedCaptureQueue: SavedCaptureQueuePersistence | null = null;
   private restoringCaptures = false;
   private capturesLoading = false;
   private restoreStarted = false;
   private readonly notifiedProvenanceWarnings = new Set<string>();
-  private previewRevision = 0;
   private lastRefinementRevision: number | null = null;
 
   // GIF Extraction: the user captures ranges from a movie they open; captures are saved when a store is given.
@@ -140,15 +134,30 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
 
   private constructor(
     private readonly mode: GifExtractionSessionMode,
-    private readonly frameReview: IFrameReviewService,
+    frameReview: IFrameReviewService,
     thumbnails: IThumbnailCacheService,
     private readonly options: GifExtractionSessionOptions,
   ) {
-    this.previewBounds = options.previewBounds ?? Object.freeze({ maxWidth: 1280, maxHeight: 720 });
+    this.movie = new CurrentMovie({
+      frameReview,
+      previewBounds: options.previewBounds ?? Object.freeze({ maxWidth: 1280, maxHeight: 720 }),
+      status: this.status,
+      reporter: options.reporter,
+      diagnostics: options.diagnostics,
+    });
     this.destination = options.destination;
     this.captureThumbnails = new GifCaptureThumbnailSession(thumbnails, {
-      onChanged: () => this.publish(),
+      onChanged: () => this.status.changed(),
       onError: (message, error) => this.reportError(message, error),
+    });
+    this.status.on('changed', () => this.publish());
+    this.movie.on('reviewEnded', () => {
+      this.restoringCaptures = false;
+      this.capturesLoading = false;
+    });
+    this.movie.on('exactCaptureReady', () => {
+      const review = this.movie.review;
+      if (review) void this.restoreCaptures(review);
     });
   }
 
@@ -165,7 +174,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
 
   private recordActivity(entry: ActivityInput): void { this.options.activityLog?.log(entry); }
 
-  get reviewSession(): IFrameReviewSession | null { return this.review; }
+  get reviewSession(): IFrameReviewSession | null { return this.movie.review; }
   get refinementSession(): RefineGifSession | null { return this.activeRefinement; }
 
   setExtractionDestination(destination: ExtractionDestination): void {
@@ -182,9 +191,9 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       validation: this.savedCaptureQueue?.isStale(range.id) ? 'stale' as const : undefined,
     })) ?? [];
     return Object.freeze({
-      lifecycle: this.lifecycle,
-      source: this.source,
-      reviewState: this.reviewState,
+      lifecycle: this.movie.lifecycle,
+      source: this.movie.source,
+      reviewState: this.movie.reviewState,
       capture,
       draftThumbnail: this.captureThumbnails.draftState,
       ranges: Object.freeze(ranges),
@@ -192,12 +201,12 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       refinement: this.activeRefinement?.snapshot ?? null,
       extractionAvailable: this.extractionWorkflow !== null,
       extractionBatch: this.extractionWorkflow?.batchProgress ?? null,
-      captureAvailable: this.lifecycle === 'open' && this.reviewState?.captureEnabled === true
+      captureAvailable: this.movie.lifecycle === 'open' && this.movie.reviewState?.captureEnabled === true
         && !this.restoringCaptures && !this.capturesLoading,
       capturesLoading: this.capturesLoading,
-      message: this.message,
+      message: this.status.message,
       previewTarget: this.previewTarget(),
-      previewRevision: this.previewRevision,
+      previewRevision: this.status.previewRevision,
     });
   }
 
@@ -209,51 +218,34 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   }
 
   async openMovie(): Promise<OpenMovieResult> {
-    if (this.disposed || this.opening) return 'busy';
-    this.opening = true;
-    this.lifecycle = 'choosing';
-    this.message = 'Choose a movie';
-    this.publish();
+    if (this.disposed || !this.movie.beginChange()) return 'busy';
     try {
-      const selected = await this.frameReview.chooseSource();
-      if (!selected) {
-        this.restoreOpenLifecycle();
-        return 'cancelled';
-      }
-      this.lifecycle = 'opening';
-      this.message = `Opening ${selected.name}`;
-      this.reportProgress(this.message);
-      this.publish();
-      const candidate = await this.frameReview.open({ sourceHandle: selected.sourceHandle, previewBounds: this.previewBounds });
-      await this.replaceSource(selected, candidate);
-      this.reportSuccess(`Opened ${selected.name}.`);
+      const selected = await this.movie.chooseSource();
+      if (!selected) return 'cancelled';
+      const opening = this.movie.openCandidate(selected);
+      this.movie.reportOpening(selected);
+      await this.replaceSource(selected, await opening);
+      this.movie.reportOpened(selected);
       return 'opened';
     } catch (error) {
       this.capturesLoading = false;
-      this.lifecycle = this.source ? 'open' : 'failed';
-      this.message = error instanceof Error ? error.message : 'The movie could not be opened.';
-      this.reportError('The movie could not be opened.', error);
+      this.movie.failOpening(error);
       this.publish();
       return 'failed';
     } finally {
-      this.opening = false;
+      this.movie.endChange();
     }
   }
 
   async openCollectionSource(selected: IFrameReviewSourceSelection): Promise<void> {
-    if (this.disposed || this.opening || this.extractionWorkflow?.batchProgress) {
+    if (this.disposed || this.extractionWorkflow?.batchProgress || !this.movie.beginChange()) {
       throw new Error('Wait for the current movie or extraction to finish.');
     }
-    this.opening = true;
-    this.lifecycle = 'opening';
-    this.message = `Opening ${selected.name}`;
-    this.publish();
     try {
-      const candidate = await this.frameReview.open({ sourceHandle: selected.sourceHandle, previewBounds: this.previewBounds });
-      await this.replaceSource(selected, candidate);
+      await this.replaceSource(selected, await this.movie.openCandidate(selected));
     } finally {
-      this.opening = false;
-      if (this.lifecycle === 'opening') this.restoreOpenLifecycle();
+      this.movie.endChange();
+      if (this.movie.lifecycle === 'opening') this.movie.restoreLifecycle();
     }
   }
 
@@ -261,8 +253,8 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     start: Readonly<{ frameIndex: number; frameInfoHash: string }>;
     end: Readonly<{ frameIndex: number; frameInfoHash: string }>;
   }>): Promise<BeginRefinementResult> {
-    const review = this.review;
-    const generation = this.sourceGeneration;
+    const review = this.movie.review;
+    const generation = this.movie.sourceGeneration;
     if (!review || this.mode !== 'collection-refinement') return this.rejectRefinement('Collection refinement is unavailable.');
     await new Promise<void>((resolve, reject) => {
       const current = review.state();
@@ -280,7 +272,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         }
       });
     });
-    if (this.disposed || this.review !== review || this.sourceGeneration !== generation) {
+    if (this.disposed || this.movie.review !== review || this.movie.sourceGeneration !== generation) {
       return this.rejectRefinement('The source changed while opening the clip.');
     }
     const [start, end] = await Promise.all([
@@ -307,46 +299,46 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   }
 
   markStart(capture: IFrameReviewDisplayedCapture | null): RangeCaptureTransition {
-    if (this.restoringCaptures || this.lifecycle !== 'open') return this.captureUnavailable();
+    if (this.restoringCaptures || this.movie.lifecycle !== 'open') return this.captureUnavailable();
     const endpoint = this.endpointFromCapture(capture);
     if (!endpoint || !capture || !this.rangeModel) return this.captureUnavailable();
     const transition = this.rangeModel.markStart(endpoint);
-    if (transition.kind === 'marked-start') this.previewRevision += 1;
+    if (transition.kind === 'marked-start') this.status.advancePreview();
     if (transition.kind === 'marked-start') this.captureThumbnails.replaceDraft(capture.thumbnail);
     if (transition.kind === 'marked-start') this.persistQueue();
-    this.message = transition.kind === 'rejected' ? transition.message : 'Start marked';
+    this.status.show(transition.kind === 'rejected' ? transition.message : 'Start marked');
     this.publish();
     return transition;
   }
 
   markEnd(capture: IFrameReviewDisplayedCapture | null): RangeCaptureTransition {
-    if (this.restoringCaptures || this.lifecycle !== 'open') return this.captureUnavailable();
+    if (this.restoringCaptures || this.movie.lifecycle !== 'open') return this.captureUnavailable();
     const endpoint = this.endpointFromCapture(capture);
     if (!endpoint || !this.rangeModel) return this.captureUnavailable();
     const transition = this.rangeModel.markEnd(endpoint);
-    if (transition.kind === 'marked-end') this.previewRevision += 1;
+    if (transition.kind === 'marked-end') this.status.advancePreview();
     if (transition.kind === 'marked-end') this.persistQueue();
-    this.message = transition.kind === 'rejected' ? transition.message : 'End marked';
+    this.status.show(transition.kind === 'rejected' ? transition.message : 'End marked');
     this.publish();
     return transition;
   }
 
   lockRange(): RangeCaptureTransition {
-    if (!this.rangeModel || this.restoringCaptures || this.lifecycle !== 'open') return this.captureUnavailable();
+    if (!this.rangeModel || this.restoringCaptures || this.movie.lifecycle !== 'open') return this.captureUnavailable();
     const transition = this.rangeModel.lockRange();
-    if (transition.kind === 'locked') this.previewRevision += 1;
+    if (transition.kind === 'locked') this.status.advancePreview();
     if (transition.kind === 'locked') this.captureThumbnails.commitDraftToRange(transition.range.id);
     if (transition.kind === 'locked') this.selectedRangeId = transition.range.id;
     if (transition.kind === 'locked') this.persistQueue();
-    this.message = transition.kind === 'rejected' ? transition.message : 'Range locked';
+    this.status.show(transition.kind === 'rejected' ? transition.message : 'Range locked');
     this.publish();
     return transition;
   }
 
   async prepareSavedDraft(): Promise<boolean> {
     const draft = this.rangeModel?.snapshot.capture;
-    const review = this.review;
-    const generation = this.sourceGeneration;
+    const review = this.movie.review;
+    const generation = this.movie.sourceGeneration;
     if (!draft || draft.kind !== 'draft') return true;
     const savedStart = draft.start?.kind === 'saved-exact-frame' ? draft.start : null;
     const savedEnd = draft.end?.kind === 'saved-exact-frame' ? draft.end : null;
@@ -355,7 +347,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     try {
       const identities = await this.indexedIdentitiesForSavedEndpoints(review, savedStart, savedEnd);
       const current = this.rangeModel?.snapshot.capture;
-      if (this.review !== review || this.sourceGeneration !== generation || current?.kind !== 'draft'
+      if (this.movie.review !== review || this.movie.sourceGeneration !== generation || current?.kind !== 'draft'
         || current.start !== draft.start || current.end !== draft.end) return false;
       if (!this.rangeModel?.hydrateSavedDraft(identities)) {
         throw new Error('Saved draft frames no longer match this movie. Mark new endpoints before locking.');
@@ -363,8 +355,9 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       this.publish();
       return true;
     } catch (error) {
-      this.message = error instanceof Error ? error.message : 'Saved draft frames could not be checked.';
-      this.reportError(this.message, error);
+      const message = error instanceof Error ? error.message : 'Saved draft frames could not be checked.';
+      this.status.show(message);
+      this.reportError(message, error);
       this.publish();
       return false;
     }
@@ -373,13 +366,13 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   async retryThumbnail(rangeId: CapturedRangeId): Promise<void> {
     if (this.savedCaptureQueue?.isStale(rangeId)) return;
     const range = this.rangeModel?.snapshot.ranges.find(item => item.id === rangeId);
-    const review = this.review;
-    const generation = this.sourceGeneration;
+    const review = this.movie.review;
+    const generation = this.movie.sourceGeneration;
     if (range && range.start.kind !== 'playback-timestamp' && review?.state().captureEnabled
       && this.captureThumbnails.stateForRange(rangeId).kind === 'missing') {
       const frameIndex = range.start.kind === 'exact-frame' ? range.start.identity.frameIndex : range.start.frameIndex;
       const frame = await review.thumbnailFrame(frameIndex);
-      if (this.review !== review || this.sourceGeneration !== generation) return;
+      if (this.movie.review !== review || this.movie.sourceGeneration !== generation) return;
       const savedHash = range.start.kind === 'saved-exact-frame' ? range.start.frameInfoHash : range.start.identity.frameInfoHash;
       if (frame.identity.frameInfoHash !== savedHash) return;
       this.captureThumbnails.replaceRange(rangeId, frame);
@@ -392,7 +385,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     if (!this.rangeModel?.snapshot.ranges.some(range => range.id === rangeId)) return;
     if (this.selectedRangeId === rangeId) return;
     this.selectedRangeId = rangeId;
-    this.previewRevision += 1;
+    this.status.advancePreview();
     this.publish();
   }
 
@@ -400,7 +393,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     const range = this.rangeModel?.snapshot.ranges.find(candidate => candidate.id === rangeId);
     if (this.destination && this.activeRefinement?.snapshot.rangeId === rangeId
       && this.activeRefinement.snapshot.status !== 'committed') return false;
-    if (!range || this.lifecycle !== 'open' || this.savedCaptureQueue?.isStale(rangeId)
+    if (!range || this.movie.lifecycle !== 'open' || this.savedCaptureQueue?.isStale(rangeId)
       || (range.kind !== 'ready-to-extract' && range.kind !== 'saved-exact-range')
       || !this.extractionWorkflow || this.extractionWorkflow.batchProgress) return false;
     const state = this.extractionWorkflow.state(rangeId);
@@ -416,11 +409,11 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     }
     if (!range || range.kind !== 'ready-to-extract') return;
     await this.runExtraction(() => this.extractionWorkflow!.extractOne({
-      sourceHandle: this.source!.sourceHandle,
-      reviewSessionId: this.review?.id,
-      sourceGeneration: this.sourceGeneration,
+      sourceHandle: this.movie.source!.sourceHandle,
+      reviewSessionId: this.movie.review?.id,
+      sourceGeneration: this.movie.sourceGeneration,
       range,
-      movieName: this.source!.name,
+      movieName: this.movie.source!.name,
     }));
   }
 
@@ -430,13 +423,13 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     }
     const ranges = (this.rangeModel?.snapshot.ranges ?? []).filter(
       (range): range is IReadyToExtractRange => range.kind === 'ready-to-extract' && this.canExtractRange(range.id));
-    if (ranges.length === 0 || !this.extractionWorkflow || !this.source) return;
+    if (ranges.length === 0 || !this.extractionWorkflow || !this.movie.source) return;
     await this.runExtraction(() => this.extractionWorkflow!.extractAll({
-      sourceHandle: this.source!.sourceHandle,
-      reviewSessionId: this.review?.id,
-      sourceGeneration: this.sourceGeneration,
+      sourceHandle: this.movie.source!.sourceHandle,
+      reviewSessionId: this.movie.review?.id,
+      sourceGeneration: this.movie.sourceGeneration,
       ranges,
-      movieName: this.source!.name,
+      movieName: this.movie.source!.name,
     }));
   }
 
@@ -450,7 +443,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   }
 
   beginRefinement(rangeId: CapturedRangeId): BeginRefinementResult {
-    if (this.lifecycle !== 'open') return this.rejectRefinement('Wait for the movie to finish opening.');
+    if (this.movie.lifecycle !== 'open') return this.rejectRefinement('Wait for the movie to finish opening.');
     const range = this.rangeModel?.snapshot.ranges.find(candidate => candidate.id === rangeId);
     if (!range) {
       return this.rejectRefinement('Choose a captured range to refine.');
@@ -461,31 +454,31 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     if (range.kind === 'saved-exact-range') {
       return this.rejectRefinement('Check the saved range against the movie before refining it.');
     }
-    if (!this.reviewState?.captureEnabled || range.sourceGeneration !== this.sourceGeneration) {
+    if (!this.movie.reviewState?.captureEnabled || range.sourceGeneration !== this.movie.sourceGeneration) {
       return this.rejectRefinement('Exact frame review is not ready for this range.');
     }
     this.activeRefinement = new RefineGifSession(this, range);
     this.lastRefinementRevision = 0;
-    this.previewRevision += 1;
+    this.status.advancePreview();
     this.selectedRangeId = rangeId;
-    this.message = range.kind === 'needs-exact-frames'
+    this.status.show(range.kind === 'needs-exact-frames'
       ? 'Refine the approximate endpoint against exact frames.'
-      : 'Review and adjust exact frames, then lock the range.';
+      : 'Review and adjust exact frames, then lock the range.');
     this.publish();
     return Object.freeze({ kind: 'started', session: this.activeRefinement });
   }
 
   async prepareSavedRange(rangeId: CapturedRangeId): Promise<boolean> {
     const range = this.rangeModel?.snapshot.ranges.find(item => item.id === rangeId);
-    const review = this.review;
-    const generation = this.sourceGeneration;
+    const review = this.movie.review;
+    const generation = this.movie.sourceGeneration;
     if (!range || !review?.state().captureEnabled || this.savedCaptureQueue?.isStale(rangeId)) return false;
     const savedStart = range.start.kind === 'saved-exact-frame' ? range.start : null;
     const savedEnd = range.end.kind === 'saved-exact-frame' ? range.end : null;
     if (!savedStart && !savedEnd) return true;
     try {
       const identities = await this.indexedIdentitiesForSavedEndpoints(review, savedStart, savedEnd);
-      if (this.review !== review || this.sourceGeneration !== generation) return false;
+      if (this.movie.review !== review || this.movie.sourceGeneration !== generation) return false;
       const hydrated = this.rangeModel?.hydrateSavedRange(rangeId, identities);
       if (!hydrated) {
         this.savedCaptureQueue?.markStale(rangeId);
@@ -495,8 +488,9 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       this.publish();
       return true;
     } catch (error) {
-      this.message = error instanceof Error ? error.message : 'Saved frames could not be checked.';
-      this.reportError(this.message, error);
+      const message = error instanceof Error ? error.message : 'Saved frames could not be checked.';
+      this.status.show(message);
+      this.reportError(message, error);
       this.publish();
       return false;
     }
@@ -506,8 +500,8 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     const rangeId = this.activeRefinement?.snapshot.rangeId ?? null;
     this.activeRefinement = null;
     this.lastRefinementRevision = null;
-    this.previewRevision += 1;
-    this.message = null;
+    this.status.advancePreview();
+    this.status.show(null);
     this.publish();
     return rangeId;
   }
@@ -520,7 +514,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     this.persistQueue();
     this.captureThumbnails.removeRange(rangeId);
     if (this.selectedRangeId === rangeId) this.selectedRangeId = null;
-    this.previewRevision += 1;
+    this.status.advancePreview();
     if (this.activeRefinement?.snapshot.rangeId === rangeId) {
       this.activeRefinement.invalidate('The range was removed before this refinement was locked.');
       this.activeRefinement = null;
@@ -531,14 +525,14 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
 
   canRemoveRange(rangeId: CapturedRangeId): boolean {
     return this.capturesRemovable()
-      && !this.opening && !this.capturesLoading
+      && !this.movie.opening && !this.capturesLoading
       && this.rangeModel?.snapshot.ranges.some(range => range.id === rangeId) === true
       && !this.extractionWorkflow?.revisionBlock(rangeId);
   }
 
   removeDraft(): boolean {
     if (!this.canRemoveDraft() || !this.rangeModel?.discardDraft()) return false;
-    this.previewRevision += 1;
+    this.status.advancePreview();
     this.persistQueue();
     this.captureThumbnails.removeDraft();
     this.publish();
@@ -548,7 +542,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   canRemoveDraft(): boolean {
     const capture = this.rangeModel?.snapshot.capture;
     return this.capturesRemovable()
-      && !this.opening && !this.capturesLoading
+      && !this.movie.opening && !this.capturesLoading
       && capture?.kind === 'draft' && (capture.start !== null || capture.end !== null);
   }
 
@@ -556,24 +550,24 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   private capturesRemovable(): boolean {
     return this.options.captureStore
       ? this.savedCaptureQueue?.hasMovieReference === true
-      : this.lifecycle === 'open';
+      : this.movie.lifecycle === 'open';
   }
 
   currentSourceGeneration(): number | null {
-    return this.rangeModel ? this.sourceGeneration : null;
+    return this.rangeModel ? this.movie.sourceGeneration : null;
   }
 
   exactEndpointFromDisplayedCapture(capture: IFrameReviewDisplayedCapture | null) {
-    if (!capture || capture.point.kind !== 'exact-frame' || !this.reviewState?.captureEnabled
-      || capture.sourceGeneration !== this.reviewState.sourceGeneration || !this.rangeModel) return null;
-    return CaptureEndpointValue.exact(capture.point.identity, capture.positionUs, this.sourceGeneration);
+    if (!capture || capture.point.kind !== 'exact-frame' || !this.movie.reviewState?.captureEnabled
+      || capture.sourceGeneration !== this.movie.reviewState.sourceGeneration || !this.rangeModel) return null;
+    return CaptureEndpointValue.exact(capture.point.identity, capture.positionUs, this.movie.sourceGeneration);
   }
 
   commitRefinement(request: IRefineGifCommitRequest): RefineGifCommitResult {
     if (this.activeRefinement !== request.session) {
       return Object.freeze({ kind: 'rejected', message: 'This refinement is no longer active.' });
     }
-    if (request.sourceGeneration !== this.sourceGeneration) {
+    if (request.sourceGeneration !== this.movie.sourceGeneration) {
       return Object.freeze({ kind: 'rejected', message: 'The source changed before this refinement was locked.' });
     }
     const current = this.rangeModel?.snapshot.ranges.find(range => range.id === request.rangeId);
@@ -588,8 +582,9 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     if (block) return Object.freeze({ kind: 'rejected', message: block });
     if (!changed && current.kind === 'ready-to-extract') {
       this.selectedRangeId = request.rangeId;
-      this.message = 'Range unchanged; previous extraction status is preserved.';
-      return Object.freeze({ kind: 'committed', range: current, message: this.message });
+      const message = 'Range unchanged; previous extraction status is preserved.';
+      this.status.show(message);
+      return Object.freeze({ kind: 'committed', range: current, message });
     }
     const previousExtraction = this.extractionWorkflow?.state(request.rangeId);
     const replacement = this.rangeModel?.replaceRangeWithExactEndpoints(request.rangeId, request.start, request.end);
@@ -603,10 +598,11 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       this.captureThumbnails.replaceRange(request.rangeId, request.startThumbnail);
     }
     this.selectedRangeId = request.rangeId;
-    this.message = previousExtraction?.kind === 'completed'
+    const message = previousExtraction?.kind === 'completed'
       ? 'Revised range locked. The earlier clip remains saved; extract again to create a new clip.'
       : 'Exact range locked';
-    return Object.freeze({ kind: 'committed', range: replacement, message: this.message });
+    this.status.show(message);
+    return Object.freeze({ kind: 'committed', range: replacement, message });
   }
 
   nextInexactRangeId(afterRangeId: CapturedRangeId): CapturedRangeId | null {
@@ -621,7 +617,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     const current = session.snapshot.stagedRevision;
     if (current !== this.lastRefinementRevision || session.snapshot.status !== 'editing') {
       this.lastRefinementRevision = current;
-      this.previewRevision += 1;
+      this.status.advancePreview();
     }
     this.publish();
   }
@@ -631,42 +627,33 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     this.persistQueue();
     this.disposed = true;
     this.savedCaptureQueue?.invalidate();
-    this.lifecycle = 'disposed';
     this.listeners.clear();
-    this.unsubscribeReview?.();
-    this.unsubscribeReview = null;
+    const review = this.movie.close();
     this.activeRefinement = null;
     await this.extractionWorkflow?.cancel();
     this.extractionWorkflow = null;
-    const review = this.review;
-    this.review = null;
     await Promise.allSettled([review?.dispose(), this.captureThumbnails.dispose()]);
   }
-
   private async replaceSource(
     selected: IFrameReviewSourceSelection,
     candidate: IFrameReviewSession,
   ): Promise<void> {
     this.persistQueue();
-    const previous = this.review;
     await this.extractionWorkflow?.cancel();
-    this.unsubscribeReview?.();
-    this.unsubscribeReview = null;
+    this.movie.stopFollowingReview();
     this.activeRefinement?.invalidate('The source changed before this refinement was locked.');
     await this.captureThumbnails.clear();
     this.savedCaptureQueue?.invalidate();
-    this.sourceGeneration += 1;
-    this.previewRevision += 1;
-    this.source = selected;
-    this.review = candidate;
-    this.reviewState = candidate.state();
-    this.rangeModel = new RangeCaptureModel(this.sourceGeneration);
+    const previous = this.movie.switchTo(selected, candidate);
+    this.status.advancePreview();
+    this.rangeModel = new RangeCaptureModel(this.movie.sourceGeneration);
     this.savedCaptureQueue = this.options.captureStore
       ? this.createSavedCaptureQueue(this.options.captureStore) : null;
     this.notifiedProvenanceWarnings.clear();
     this.restoringCaptures = !!this.options.captureStore;
     this.capturesLoading = !!this.options.captureStore;
-    if (this.reviewState.phase === 'failed' || this.reviewState.phase === 'closed') {
+    const phase = this.movie.reviewState?.phase;
+    if (phase === 'failed' || phase === 'closed') {
       this.restoringCaptures = false;
       this.capturesLoading = false;
     }
@@ -706,45 +693,10 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         },
       )
       : null;
-    this.lifecycle = 'open';
-    this.message = this.reviewState.captureEnabled ? 'Exact capture ready' : 'Preparing exact frames';
-    this.subscribeToReview(candidate);
+    this.movie.followReview();
     this.publish();
     if (previous) await previous.dispose();
   }
-
-  private subscribeToReview(candidate: IFrameReviewSession): void {
-    let exactReadinessAnnounced = false;
-    this.unsubscribeReview = candidate.subscribe(event => {
-      if (this.disposed || this.review !== candidate) return;
-      if (event.type === 'state') {
-        const becameReady = !this.reviewState?.captureEnabled && event.state.captureEnabled;
-        this.reviewState = event.state;
-        if (event.state.phase === 'failed' || event.state.phase === 'closed') {
-          this.restoringCaptures = false;
-          this.capturesLoading = false;
-        }
-        this.message = event.state.captureEnabled ? 'Exact capture ready' : event.state.message;
-        const preparationMessage = this.preparationProgressMessage(event.state);
-        if (preparationMessage) this.reportProgress(preparationMessage);
-        if (becameReady && !exactReadinessAnnounced) {
-          exactReadinessAnnounced = true;
-          this.announceExactReadiness(event.state);
-        }
-        if (becameReady) void this.restoreCaptures(candidate);
-        this.publish();
-      } else if (event.type === 'error') {
-        this.reportError(event.message);
-      }
-    });
-    const currentState = this.reviewState;
-    if (currentState?.captureEnabled && !exactReadinessAnnounced) {
-      exactReadinessAnnounced = true;
-      this.announceExactReadiness(currentState);
-    }
-    if (currentState?.captureEnabled) void this.restoreCaptures(candidate);
-  }
-
   private async indexedIdentitiesForSavedEndpoints(
     review: IFrameReviewSession,
     savedStart: ISavedExactFrameEndpoint | null,
@@ -758,41 +710,16 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   }
 
   private endpointFromCapture(capture: IFrameReviewDisplayedCapture | null): CaptureEndpoint | null {
-    if (!capture || !this.rangeModel || !this.reviewState?.captureEnabled
-      || capture.sourceGeneration !== this.reviewState.sourceGeneration) return null;
+    if (!capture || !this.rangeModel || !this.movie.reviewState?.captureEnabled
+      || capture.sourceGeneration !== this.movie.reviewState.sourceGeneration) return null;
     return capture.point.kind === 'exact-frame'
-      ? CaptureEndpointValue.exact(capture.point.identity, capture.positionUs, this.sourceGeneration)
-      : CaptureEndpointValue.timestamp(capture.point.timestampUs, this.sourceGeneration);
-  }
-
-  private preparationProgressMessage(state: IFrameReviewState): string | null {
-    if (!this.source) return null;
-    let action: string;
-    switch (state.phase) {
-      case 'playback-ready': action = 'Playback is ready; preparing exact frames for'; break;
-      case 'inspecting': action = 'Inspecting source media for'; break;
-      case 'cache-validation': action = 'Checking the prepared review cache for'; break;
-      case 'normalizing': action = 'Repairing source timestamps for'; break;
-      case 'indexing': action = 'Indexing source frames for'; break;
-      case 'proxy-encoding': action = 'Creating the exact-review proxy for'; break;
-      case 'proxy-indexing': action = 'Indexing the exact-review proxy for'; break;
-      case 'validating': action = 'Validating the exact frame map for'; break;
-      default: return null;
-    }
-    const progress = state.progressPercent === null ? '' : ` (${Math.round(state.progressPercent)}%)`;
-    return `${action} ${this.source.name}${progress}.`;
-  }
-
-  private announceExactReadiness(state: IFrameReviewState): void {
-    if (!this.source) return;
-    this.reportSuccess(state.preparedReview?.cacheHit
-      ? `Reused the prepared review cache for ${this.source.name}.`
-      : `Exact capture is ready for ${this.source.name}.`);
+      ? CaptureEndpointValue.exact(capture.point.identity, capture.positionUs, this.movie.sourceGeneration)
+      : CaptureEndpointValue.timestamp(capture.point.timestampUs, this.movie.sourceGeneration);
   }
 
   private async runExtraction(operation: () => Promise<void>): Promise<void> {
-    this.message = 'Extracting exact range';
-    this.reportProgress(this.message);
+    this.status.show('Extracting exact range');
+    this.reportProgress('Extracting exact range');
     this.publish();
     try {
       await operation();
@@ -801,7 +728,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         return state?.kind === 'failed' || state?.kind === 'publication-failed';
       });
       const cancelled = this.extractionWorkflow?.wasCancelled === true;
-      this.message = failed ? 'Some clips need attention' : cancelled ? 'Extraction cancelled' : 'Extraction complete';
+      this.status.show(failed ? 'Some clips need attention' : cancelled ? 'Extraction cancelled' : 'Extraction complete');
       if (failed) this.reportError('Some clips could not be completed. Retry them from Clips.');
       else if (cancelled) this.reportProgress('Extraction stopped. Completed clips were saved.');
       else this.reportSuccess(`Exact clips were added to ${this.destination?.kind === 'collection'
@@ -816,20 +743,21 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       }
       this.persistQueue();
     } catch (error) {
-      this.message = error instanceof Error ? error.message : 'Extraction could not start.';
-      this.reportError(this.message, error);
+      const message = error instanceof Error ? error.message : 'Extraction could not start.';
+      this.status.show(message);
+      this.reportError(message, error);
     }
     this.publish();
   }
 
   private async restoreCaptures(review: IFrameReviewSession): Promise<void> {
     const savedCaptureQueue = this.savedCaptureQueue;
-    if (!savedCaptureQueue || this.review !== review || !this.restoringCaptures || this.restoreStarted) return;
-    const generation = this.sourceGeneration;
+    if (!savedCaptureQueue || this.movie.review !== review || !this.restoringCaptures || this.restoreStarted) return;
+    const generation = this.movie.sourceGeneration;
     this.restoreStarted = true;
     try {
       const restored = await savedCaptureQueue.attach(review.id);
-      if (!restored || this.disposed || this.review !== review || this.sourceGeneration !== generation
+      if (!restored || this.disposed || this.movie.review !== review || this.movie.sourceGeneration !== generation
         || this.savedCaptureQueue !== savedCaptureQueue) return;
       this.rangeModel = restored;
       for (const range of this.rangeModel.snapshot.ranges) this.captureThumbnails.markRestoredMissing(range.id);
@@ -842,21 +770,22 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
           this.reportError('Saved captures loaded, but the movie could not be positioned after them.', error);
         }
       }
-      if (this.disposed || this.review !== review || this.sourceGeneration !== generation) return;
+      if (this.disposed || this.movie.review !== review || this.movie.sourceGeneration !== generation) return;
       const savedDraft = this.rangeModel.snapshot.capture;
       const count = this.rangeModel.snapshot.ranges.length;
-      this.message = count > 0
+      this.status.show(count > 0
         ? `Restored ${count} saved ranges${savedDraft.kind === 'draft' && (savedDraft.start || savedDraft.end) ? ' and a draft' : ''}.`
-        : savedDraft.kind === 'draft' && (savedDraft.start || savedDraft.end) ? 'Restored saved range draft.' : 'Exact capture ready';
+        : savedDraft.kind === 'draft' && (savedDraft.start || savedDraft.end) ? 'Restored saved range draft.' : 'Exact capture ready');
       this.restoringCaptures = false;
       this.capturesLoading = false;
       this.publish();
     } catch (error) {
-      if (this.review !== review || this.sourceGeneration !== generation) return;
-      this.message = 'Saved captures could not be loaded. The stored file was kept for recovery.';
+      if (this.movie.review !== review || this.movie.sourceGeneration !== generation) return;
+      const message = 'Saved captures could not be loaded. The stored file was kept for recovery.';
+      this.status.show(message);
       this.restoringCaptures = false;
       this.capturesLoading = false;
-      this.reportError(this.message, error);
+      this.reportError(message, error);
       this.publish();
     }
   }
@@ -868,7 +797,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       try {
         const frame = await review.thumbnailFrame(draft.start.frameIndex);
         const current = this.rangeModel?.snapshot.capture;
-        if (this.disposed || this.review !== review || this.sourceGeneration !== generation) return;
+        if (this.disposed || this.movie.review !== review || this.movie.sourceGeneration !== generation) return;
         if (current?.kind === 'draft' && current.start === draft.start
           && frame.identity.frameInfoHash === draft.start.frameInfoHash) this.captureThumbnails.replaceDraft(frame);
       } catch {
@@ -876,11 +805,11 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       }
     }
     for (const range of this.rangeModel?.snapshot.ranges ?? []) {
-      if (this.disposed || this.review !== review || this.sourceGeneration !== generation) return;
+      if (this.disposed || this.movie.review !== review || this.movie.sourceGeneration !== generation) return;
       if (range.start.kind !== 'saved-exact-frame') continue;
       try {
         const frame = await review.thumbnailFrame(range.start.frameIndex);
-        if (this.disposed || this.review !== review || this.sourceGeneration !== generation) return;
+        if (this.disposed || this.movie.review !== review || this.movie.sourceGeneration !== generation) return;
         if (frame.identity.frameInfoHash === range.start.frameInfoHash) {
           this.captureThumbnails.replaceRange(range.id, frame);
         }
@@ -888,7 +817,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
         failures += 1;
       }
     }
-    if (failures > 0 && this.review === review && this.sourceGeneration === generation) {
+    if (failures > 0 && this.movie.review === review && this.movie.sourceGeneration === generation) {
       this.reportError(`${failures} saved start thumbnails could not be recreated. Retry them from Clips.`);
     }
   }
@@ -903,34 +832,28 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   private captureUnavailable(): RangeCaptureTransition {
     const message = this.savedCaptureQueue?.hasStaleRanges
       ? 'Open movie to find the original source before capturing.'
-      : this.lifecycle === 'opening' ? 'Wait for the movie to finish opening.'
+      : this.movie.lifecycle === 'opening' ? 'Wait for the movie to finish opening.'
         : this.restoringCaptures ? 'Saved captures are still loading.'
         : 'Capture becomes available after exact frame preparation.';
-    this.message = message;
+    this.status.show(message);
     this.publish();
     return Object.freeze({ kind: 'rejected', message });
   }
 
   private rejectRefinement(message: string): BeginRefinementResult {
-    this.message = message;
+    this.status.show(message);
     this.publish();
     return Object.freeze({ kind: 'rejected', message });
   }
 
-  private restoreOpenLifecycle(): void {
-    this.lifecycle = this.source ? 'open' : 'empty';
-    this.message = this.source ? (this.reviewState?.captureEnabled ? 'Exact capture ready' : 'Preparing exact frames') : null;
-    this.publish();
-  }
-
   private createSavedCaptureQueue(store: IClipCapturesStoreService): SavedCaptureQueuePersistence {
-    return new SavedCaptureQueuePersistence(store, this.sourceGeneration, error => {
+    return new SavedCaptureQueuePersistence(store, this.movie.sourceGeneration, error => {
       this.reportError('Captures could not be saved. Current work remains available until the app closes.', error);
     });
   }
 
   private previewTarget(): IGifPreviewTarget | null {
-    if (this.lifecycle !== 'open' || !this.reviewState?.captureEnabled || this.restoringCaptures) return null;
+    if (this.movie.lifecycle !== 'open' || !this.movie.reviewState?.captureEnabled || this.restoringCaptures) return null;
     const refinement = this.activeRefinement?.snapshot;
     if (refinement) {
       if (refinement.status === 'invalidated' || refinement.start.kind !== 'exact-frame'
@@ -938,7 +861,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       return Object.freeze({ kind: 'refinement', rangeId: refinement.rangeId,
         startFrameIndex: refinement.start.identity.frameIndex,
         endFrameIndex: refinement.end.identity.frameIndex,
-        sourceGeneration: this.sourceGeneration, revision: this.previewRevision });
+        sourceGeneration: this.movie.sourceGeneration, revision: this.status.previewRevision });
     }
     const capture = this.rangeModel?.snapshot.capture;
     if (capture?.kind === 'draft') {
@@ -949,7 +872,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       return Object.freeze({ kind: 'draft', rangeId: null,
         startFrameIndex: start.kind === 'exact-frame' ? start.identity.frameIndex : start.frameIndex,
         endFrameIndex: end.kind === 'exact-frame' ? end.identity.frameIndex : end.frameIndex,
-        sourceGeneration: this.sourceGeneration, revision: this.previewRevision });
+        sourceGeneration: this.movie.sourceGeneration, revision: this.status.previewRevision });
     }
     const range = this.rangeModel?.snapshot.ranges.find(item => item.id === this.selectedRangeId);
     if ((range?.kind !== 'ready-to-extract' && range?.kind !== 'saved-exact-range')
@@ -957,7 +880,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     return Object.freeze({ kind: 'locked', rangeId: range.id,
       startFrameIndex: range.start.kind === 'exact-frame' ? range.start.identity.frameIndex : range.start.frameIndex,
       endFrameIndex: range.end.kind === 'exact-frame' ? range.end.identity.frameIndex : range.end.frameIndex,
-      sourceGeneration: this.sourceGeneration, revision: this.previewRevision });
+      sourceGeneration: this.movie.sourceGeneration, revision: this.status.previewRevision });
   }
 
   private publish(): void {
