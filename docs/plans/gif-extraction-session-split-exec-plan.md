@@ -137,8 +137,8 @@ What changed besides the structure:
 Evidence: `test-evidence/gif-extraction-session-split/`. Each milestone's hook log shows the unit and integration tests passing, ending at 683 tests. G8 and the G9 probe logs and observations are there too.
 
 Deviations and open points:
-- `CaptureQueue` is 404 lines, against G10's "about 350". Restoring saved captures and recreating their thumbnails account for most of the excess. Every split tried would pass the queue's model back and forth through callbacks, so it stays whole until the user decides.
-- The shared base class `MovieRangeSession` (D20) is a design choice the plan did not foresee.
+- `CaptureQueue` is 404 lines, against G10's "about 350". Restoring saved captures and recreating their thumbnails account for most of the excess. Every split tried would pass the queue's model back and forth through callbacks, so it stays whole. The user accepted it at 404 lines on 2026-10-16.
+- The shared base class `MovieRangeSession` (D20) is a design choice the plan did not foresee. The user approved it on 2026-10-16.
 - `CurrentMovie` exposes the steps of a movie change separately (D16). Only the base class calls them, and in a fixed order.
 - Cancelling an extraction is checked by unit tests only. The fixture movie is too short to cancel reliably in the running app.
 
