@@ -84,7 +84,8 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   thumbnailFor(rangeId: CapturedRangeId): GifThumbnailState { return this.captureThumbnails.stateForRange(rangeId); }
   isStale(rangeId: CapturedRangeId): boolean { return this.deps.storage.isStale(rangeId); }
 
-  // Saves the queue and lets go of the current movie's thumbnails before another movie is switched in.
+  // Lets go of the current movie's thumbnails and stops saving its queue before another movie is switched in.
+  // It does not save: call save() first to keep the latest marks.
   async clearForReplacement(): Promise<void> {
     await this.captureThumbnails.clear();
     this.deps.storage.invalidate();
