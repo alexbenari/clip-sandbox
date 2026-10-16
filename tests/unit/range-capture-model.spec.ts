@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { CaptureEndpoints } from '../../src/domain/capture-endpoint.js';
 import { RangeCaptureModel } from '../../src/domain/range-capture-model.js';
+import { SavedCaptureCodec } from '../../src/app/saved-capture-codec.js';
+
+const codec = new SavedCaptureCodec();
 
 const identity = (frameIndex: number) => Object.freeze({
   frameIndex,
@@ -22,7 +25,7 @@ describe('RangeCaptureModel', () => {
 
     expect(model.snapshot.ranges).toEqual([expect.objectContaining({ id: 'range-1', kind: 'ready-to-extract' })]);
     expect(model.snapshot.capture).toMatchObject({ kind: 'draft', start: null, end: null });
-    expect(model.toSavedData().nextRangeSequence).toBe(2);
+    expect(codec.encode(model).nextRangeSequence).toBe(2);
     expect(() => RangeCaptureModel.withExactRange(exact(2), exact(4), 3)).toThrow('stale source generation');
   });
   it('replaces draft endpoints before A and locks an inclusive exact range', () => {
@@ -82,8 +85,8 @@ describe('RangeCaptureModel', () => {
 
     expect(model.snapshot.ranges).toHaveLength(0);
     expect(model.snapshot.capture).toMatchObject({ kind: 'draft', start: null, end: null });
-    expect(model.toSavedData()).toMatchObject({ ranges: [] });
-    expect(model.toSavedData()).not.toHaveProperty('draft');
+    expect(codec.encode(model)).toMatchObject({ ranges: [] });
+    expect(codec.encode(model)).not.toHaveProperty('draft');
   });
 
   it('discards an unfinished draft while retaining locked captures', () => {
@@ -97,7 +100,7 @@ describe('RangeCaptureModel', () => {
 
     expect(model.snapshot.ranges).toHaveLength(1);
     expect(model.snapshot.capture).toMatchObject({ kind: 'draft', start: null, end: null });
-    expect(model.toSavedData()).not.toHaveProperty('draft');
+    expect(codec.encode(model)).not.toHaveProperty('draft');
   });
 
   it('rejects missing, reversed, and stale-generation endpoints without creating a range', () => {
@@ -119,7 +122,7 @@ describe('RangeCaptureModel', () => {
     original.markEnd(CaptureEndpoints.timestamp(300_000n, 1));
     original.lockRange();
 
-    const saved = original.toSavedData();
+    const saved = codec.encode(original);
     expect(saved).toEqual({
       schemaVersion: 1,
       nextRangeSequence: 3,
@@ -136,7 +139,7 @@ describe('RangeCaptureModel', () => {
         },
       ],
     });
-    const restored = RangeCaptureModel.fromSavedData(saved, 2);
+    const restored = codec.decode(saved, 2);
     expect(restored.snapshot.ranges.map(range => range.kind)).toEqual(['saved-exact-range', 'needs-exact-frames']);
     expect(restored.hydrateSavedRange(restored.snapshot.ranges[0]!.id, {
       start: identity(10), end: { ...identity(12), frameInfoHash: 'ffffffffffffffff' },
@@ -146,7 +149,7 @@ describe('RangeCaptureModel', () => {
       .toBe('ready-to-extract');
     const mixed = restored.hydrateSavedRange(restored.snapshot.ranges[1]!.id, { start: identity(20) });
     expect(mixed).toMatchObject({ kind: 'needs-exact-frames', start: { kind: 'exact-frame' } });
-    expect(restored.toSavedData()).toEqual(saved);
+    expect(codec.encode(restored)).toEqual(saved);
   });
 
   it('restores an approximate draft without making it exact', () => {
@@ -154,12 +157,12 @@ describe('RangeCaptureModel', () => {
     original.markStart(CaptureEndpoints.timestamp(100_000n, 1));
     original.markEnd(CaptureEndpoints.timestamp(200_000n, 1));
 
-    const saved = original.toSavedData();
+    const saved = codec.encode(original);
     expect(saved.draft).toEqual({
       start: { kind: 'playback-timestamp', timestampUs: '100000' },
       end: { kind: 'playback-timestamp', timestampUs: '200000' },
     });
-    const restored = RangeCaptureModel.fromSavedData(saved, 2);
+    const restored = codec.decode(saved, 2);
     expect(restored.snapshot.capture).toMatchObject({
       kind: 'draft', start: { kind: 'playback-timestamp', timestampUs: 100_000n },
       end: { kind: 'playback-timestamp', timestampUs: 200_000n },
@@ -173,7 +176,7 @@ describe('RangeCaptureModel', () => {
     original.markEnd(CaptureEndpoints.exact(identity(12), 120_000n, 1));
     original.lockRange();
     original.markStart(CaptureEndpoints.exact(identity(20), 200_000n, 1));
-    const restored = RangeCaptureModel.fromSavedData(original.toSavedData(), 2);
+    const restored = codec.decode(codec.encode(original), 2);
 
     expect(restored.continuationEndpoint()).toMatchObject({ kind: 'saved-exact-frame', frameIndex: 20 });
     restored.markEnd(CaptureEndpoints.timestamp(230_000n, 2));
@@ -184,7 +187,7 @@ describe('RangeCaptureModel', () => {
     const original = new RangeCaptureModel(1);
     original.markStart(CaptureEndpoints.exact(identity(10), 100_000n, 1));
     original.markEnd(CaptureEndpoints.exact(identity(12), 120_000n, 1));
-    const restored = RangeCaptureModel.fromSavedData(original.toSavedData(), 2);
+    const restored = codec.decode(codec.encode(original), 2);
 
     expect(restored.lockRange().kind).toBe('rejected');
     expect(restored.hydrateSavedDraft({ start: identity(10), end: { ...identity(12), frameInfoHash: 'ffffffffffffffff' } })).toBe(false);
@@ -196,7 +199,7 @@ describe('RangeCaptureModel', () => {
     const original = new RangeCaptureModel(1);
     original.markStart(CaptureEndpoints.exact(identity(10), 100_000n, 1));
     original.markEnd(CaptureEndpoints.timestamp(200_000n, 1));
-    const restored = RangeCaptureModel.fromSavedData(original.toSavedData(), 2);
+    const restored = codec.decode(codec.encode(original), 2);
 
     expect(restored.lockRange().kind).toBe('rejected');
     expect(restored.hydrateSavedDraft({ start: identity(10) })).toBe(true);

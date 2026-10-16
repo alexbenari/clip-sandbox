@@ -4,7 +4,7 @@ import { Clip, ClipFileSnapshot } from '../../src/domain/clip.js';
 import { ClipSequence } from '../../src/domain/clip-sequence.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
-import { CollectionDescriptionValidator } from '../../src/domain/collection-description-validator.js';
+import { CollectionTextFormat } from '../../src/business-logic/collection-text-format.js';
 
 describe('clip and sequence models', () => {
   test('creates clips with stable identity and mutable metadata', () => {
@@ -106,7 +106,7 @@ describe('clip and sequence models', () => {
     expect(collection.collectionName).toBe('director-cut');
     expect(collection.filename).toBe('director-cut.txt');
     expect(collection.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm']);
-    expect(collection.toText()).toBe('alpha.mp4\nbravo.webm\n');
+    expect(new CollectionTextFormat().write(collection)).toBe('alpha.mp4\nbravo.webm\n');
   });
 
   test('adds an extraction output in sequence without reordering existing entries', () => {
@@ -383,15 +383,15 @@ describe('clip and sequence models', () => {
   });
 
   test('validates collection description text and reports human-readable diagnostics', () => {
-    const validator = new CollectionDescriptionValidator();
-    const valid = validator.parseText({
+    const format = new CollectionTextFormat();
+    const valid = format.read({
       text: 'alpha.mp4\nbravo.webm\n',
       filename: 'subset.txt',
     });
     expect(valid.ok).toBe(true);
     expect(valid.content.collectionName).toBe('subset');
 
-    const invalid = validator.parseText({
+    const invalid = format.read({
       text: 'alpha.mp4\nalpha.mp4\n',
       filename: 'subset.txt',
     });

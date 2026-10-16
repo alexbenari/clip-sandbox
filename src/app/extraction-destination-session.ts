@@ -1,5 +1,5 @@
 import { Collection } from '../domain/collection.js';
-import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
+import { CollectionTextFormat } from '../business-logic/collection-text-format.js';
 import type {
   IClipExtractionService,
   ICreatedExtractionMedia,
@@ -27,11 +27,11 @@ type ExtractionDestinationSessionOptions = {
   readonly onPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
   readonly onPublishError?: (error: unknown) => void;
   readonly destination?: ExtractionDestination;
-  readonly collectionParser?: Pick<CollectionDescriptionValidator, 'parseText'>;
+  readonly collectionFormat?: Pick<CollectionTextFormat, 'read' | 'write'>;
 };
 
 export class ExtractionDestinationSession {
-  private readonly collectionParser: Pick<CollectionDescriptionValidator, 'parseText'>;
+  private readonly collectionFormat: Pick<CollectionTextFormat, 'read' | 'write'>;
   private destinationHandle = '';
   private folderPath = '';
   private collectionFilename = '';
@@ -43,7 +43,7 @@ export class ExtractionDestinationSession {
     private readonly service: Pick<IClipExtractionService, 'openExtractionDestination' | 'saveCollection'>,
     private readonly options: ExtractionDestinationSessionOptions = {},
   ) {
-    this.collectionParser = options.collectionParser ?? new CollectionDescriptionValidator();
+    this.collectionFormat = options.collectionFormat ?? new CollectionTextFormat();
   }
 
   async open({ movieName }: { movieName: string }): Promise<IExtractionDestinationSessionSnapshot> {
@@ -85,7 +85,7 @@ export class ExtractionDestinationSession {
     }
     // The collection changes only after its file is saved, so a failed save can be retried as is.
     const collection = this.collection!.withExtractionOutput(media.filename);
-    await this.service.saveCollection(this.destinationHandle, this.collectionFilename, collection.toText());
+    await this.service.saveCollection(this.destinationHandle, this.collectionFilename, this.collectionFormat.write(collection));
     this.collection = collection;
     this.forgetPending(mediaHandle);
     await this.publishCommitted(media, this.collectionFilename);
@@ -115,7 +115,7 @@ export class ExtractionDestinationSession {
     const entry = destination.entries.find(candidate => candidate.kind === 'collection'
       && Collection.identityKeyFromFilename(candidate.filename) === identityKey);
     if (!entry || typeof entry.content !== 'string') return null;
-    const parsed = this.collectionParser.parseText({ text: entry.content, filename: entry.filename });
+    const parsed = this.collectionFormat.read({ text: entry.content, filename: entry.filename });
     if (!('code' in parsed)) return parsed.content;
     if (parsed.code === 'invalid-empty') return Collection.fromFilename({ filename: entry.filename, orderedClipNames: [] });
     throw new Error(`${entry.filename} cannot receive new clips. ${parsed.message} Remove the duplicate lines, then extract again.`);

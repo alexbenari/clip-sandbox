@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { describe, expect, test, vi } from 'vitest';
 import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
-import { CollectionDescriptionValidator } from '../../src/domain/collection-description-validator.js';
+import { CollectionTextFormat } from '../../src/business-logic/collection-text-format.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 
@@ -14,7 +14,7 @@ describe('pipeline factory', () => {
 
   test('buildPipeline builds a pipeline from top-level videos and collections', async () => {
     const pipelineFactory = new PipelineFactory();
-    const validator = new CollectionDescriptionValidator();
+    const collectionFormat = new CollectionTextFormat();
     const files = [
       createFile('a', 'alpha.mp4', 'video/mp4'),
       createFile('b', 'bravo.mp4', 'video/mp4'),
@@ -24,7 +24,7 @@ describe('pipeline factory', () => {
     const result = await pipelineFactory.buildPipeline({
       folderName: 'clips',
       files,
-      validator,
+      collectionFormat,
     });
 
     expect(result.pipeline.folderName).toBe('clips');
@@ -43,7 +43,7 @@ describe('pipeline selection loading', () => {
 
   test('materializePipeline loads the full folder view first', async () => {
     const pipelineFactory = new PipelineFactory();
-    const validator = new CollectionDescriptionValidator();
+    const collectionFormat = new CollectionTextFormat();
     const files = [
       createFile('a', 'alpha.mp4', 'video/mp4'),
       createFile('b', 'bravo.mp4', 'video/mp4'),
@@ -54,7 +54,7 @@ describe('pipeline selection loading', () => {
     const { pipeline } = await pipelineFactory.buildPipeline({
       folderName: 'clips',
       files,
-      validator,
+      collectionFormat,
     });
 
     const result = pipeline.materializePipeline({ nextClipId });
@@ -65,7 +65,7 @@ describe('pipeline selection loading', () => {
 
   test('materializeCollection loads saved collections and preserves missing-entry conflicts', async () => {
     const pipelineFactory = new PipelineFactory();
-    const validator = new CollectionDescriptionValidator();
+    const collectionFormat = new CollectionTextFormat();
     const files = [
       createFile('a', 'alpha.mp4', 'video/mp4'),
       createFile('b', 'bravo.mp4', 'video/mp4'),
@@ -75,7 +75,7 @@ describe('pipeline selection loading', () => {
     const { pipeline } = await pipelineFactory.buildPipeline({
       folderName: 'clips',
       files,
-      validator,
+      collectionFormat,
     });
 
     const result = pipeline.materializeCollection(

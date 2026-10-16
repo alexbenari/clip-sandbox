@@ -9,7 +9,7 @@ import { FolderSelectionWorkflow } from '../../src/app/folder-selection-workflow
 import type { IPipelineCatalogEntry } from '../../src/app/pipeline-catalog.js';
 import { PipelineSession } from '../../src/app/pipeline-session.js';
 import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
-import { CollectionDescriptionValidator } from '../../src/domain/collection-description-validator.js';
+import { CollectionTextFormat } from '../../src/business-logic/collection-text-format.js';
 
 type UnsavedPromptRequest = { message: string; onSave: () => void; onDiscard: () => void; onCancel: () => void };
 
@@ -53,7 +53,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     openFolder,
     folders,
     pipelineFactory: new PipelineFactory(),
-    collectionFileValidator: new CollectionDescriptionValidator(),
+    collectionFormat: new CollectionTextFormat(),
     diagnostics: { logInvalidDescription: vi.fn(), logRuntimeError: vi.fn(), logDirectoryReadError: vi.fn() },
     grid: { invalidateView: vi.fn(), invalidateAllViews: vi.fn(), retagActiveView: vi.fn() },
     collectionView,

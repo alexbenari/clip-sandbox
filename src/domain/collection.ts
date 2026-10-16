@@ -222,11 +222,6 @@ export class Collection {
       ? { kind: 'has-missing', ...analysis, partialSequence: sequence }
       : { kind: 'loaded', ...analysis, sequence };
   }
-  toText(): string {
-    if (this.#orderedClipNames.length === 0) return '';
-    return this.#orderedClipNames.join('\n') + '\n';
-  }
-
   static #normalizedText(value: unknown): string {
     return String(value || '').trim();
   }

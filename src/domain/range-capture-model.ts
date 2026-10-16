@@ -34,20 +34,8 @@ export interface IRangeCaptureSnapshot {
   readonly ranges: readonly CapturedRange[];
 }
 
-export interface ISavedRangeCaptureData {
-  readonly schemaVersion: 1;
-  readonly nextRangeSequence: number;
-  readonly draft?: Readonly<{
-    start: Readonly<Record<string, unknown>> | null;
-    end: Readonly<Record<string, unknown>> | null;
-  }>;
-  readonly ranges: readonly Readonly<{
-    id: string;
-    start: Readonly<Record<string, unknown>>;
-    end: Readonly<Record<string, unknown>>;
-  }>[];
-}
-
+// A range kept elsewhere and handed back for restoring: its sequence number and its endpoints.
+export type RestoredRange = Readonly<{ sequence: number; start: CaptureEndpoint; end: CaptureEndpoint }>;
 export class RangeCaptureModel {
   private start: CaptureEndpoint | null = null;
   private end: CaptureEndpoint | null = null;
@@ -70,57 +58,37 @@ export class RangeCaptureModel {
     return model;
   }
 
-  static fromSavedData(value: unknown, sourceGeneration: number): RangeCaptureModel {
-    const data = this.record(value, 'Saved capture data');
-    if (data.schemaVersion !== 1 || !Array.isArray(data.ranges) || data.ranges.length > 500
-      || !Number.isSafeInteger(data.nextRangeSequence) || (data.nextRangeSequence as number) < 1) {
-      throw new Error('Saved capture data is invalid or unsupported.');
-    }
+  // Rebuilds a queue from ranges and a draft kept between runs. Range numbers must be unique, and the
+  // next number must not reuse one of them.
+  static restore({ ranges, draft, nextRangeSequence }: Readonly<{
+    ranges: readonly RestoredRange[];
+    draft: Readonly<{ start: CaptureEndpoint | null; end: CaptureEndpoint | null }> | null;
+    nextRangeSequence: number;
+  }>, sourceGeneration: number): RangeCaptureModel {
     const model = new RangeCaptureModel(sourceGeneration);
-    const ids = new Set<string>();
-    let highestId = 0;
-    for (const item of data.ranges) {
-      const range = this.record(item, 'Saved range');
-      if (typeof range.id !== 'string' || !/^range-[1-9]\d*$/.test(range.id) || ids.has(range.id)) {
-        throw new Error('Saved range ID is invalid or duplicated.');
-      }
-      const sequence = Number(range.id.slice(6));
-      if (!Number.isSafeInteger(sequence)) throw new Error('Saved range ID exceeds the supported range.');
-      highestId = Math.max(highestId, sequence);
-      ids.add(range.id);
-      const start = this.savedEndpoint(range.start, sourceGeneration);
-      const end = this.savedEndpoint(range.end, sourceGeneration);
-      model.ranges.push(CapturedRanges.lock(CapturedRanges.id(sequence), start, end));
+    const sequences = new Set<number>();
+    for (const range of ranges) {
+      if (sequences.has(range.sequence)) throw new Error('Saved range ID is invalid or duplicated.');
+      sequences.add(range.sequence);
+      model.assertCurrentSource(range.start);
+      model.assertCurrentSource(range.end);
+      model.ranges.push(CapturedRanges.lock(CapturedRanges.id(range.sequence), range.start, range.end));
     }
-    if ((data.nextRangeSequence as number) <= highestId) throw new Error('Saved range sequence would reuse an ID.');
-    if (data.draft !== undefined && data.draft !== null) {
-      const draft = this.record(data.draft, 'Saved draft');
-      if (draft.start == null && draft.end == null) throw new Error('Saved draft has no endpoints.');
-      model.start = draft.start == null ? null : this.savedEndpoint(draft.start, sourceGeneration);
-      model.end = draft.end == null ? null : this.savedEndpoint(draft.end, sourceGeneration);
+    const highest = Math.max(0, ...sequences);
+    if (!Number.isSafeInteger(nextRangeSequence) || nextRangeSequence <= highest) {
+      throw new Error('Saved range sequence would reuse an ID.');
     }
-    model.sequence = (data.nextRangeSequence as number) - 1;
+    if (draft) {
+      if (draft.start) model.assertCurrentSource(draft.start);
+      if (draft.end) model.assertCurrentSource(draft.end);
+      model.start = draft.start;
+      model.end = draft.end;
+    }
+    model.sequence = nextRangeSequence - 1;
     return model;
   }
 
-  toSavedData(excludedIds: ReadonlySet<string> = new Set()): ISavedRangeCaptureData {
-    return Object.freeze({
-      schemaVersion: 1,
-      nextRangeSequence: this.sequence + 1,
-      ...(!this.latestLockedRangeId && (this.start || this.end) ? {
-        draft: Object.freeze({
-          start: this.start ? RangeCaptureModel.endpointData(this.start) : null,
-          end: this.end ? RangeCaptureModel.endpointData(this.end) : null,
-        }),
-      } : {}),
-      ranges: Object.freeze(this.ranges.filter(range => !excludedIds.has(range.id)).map(range => Object.freeze({
-        id: range.id,
-        start: RangeCaptureModel.endpointData(range.start),
-        end: RangeCaptureModel.endpointData(range.end),
-      }))),
-    });
-  }
-
+  get nextRangeSequence(): number { return this.sequence + 1; }
   hydrateSavedRange(
     rangeId: CapturedRangeId,
     identities: Readonly<{ start?: ISourceFrameIdentity; end?: ISourceFrameIdentity }>,
@@ -153,42 +121,6 @@ export class RangeCaptureModel {
     this.start = start;
     this.end = end;
     return true;
-  }
-
-  private static endpointData(endpoint: CaptureEndpoint): Readonly<Record<string, unknown>> {
-    if (endpoint.kind === 'playback-timestamp') {
-      return Object.freeze({ kind: endpoint.kind, timestampUs: endpoint.timestampUs.toString() });
-    }
-    return Object.freeze({
-      kind: 'exact-frame',
-      frameIndex: CaptureEndpoints.frameIndexOf(endpoint),
-      frameInfoHash: CaptureEndpoints.frameHashOf(endpoint),
-      reviewTimeUs: endpoint.reviewTimeUs.toString(),
-    });
-  }
-
-  private static savedEndpoint(value: unknown, sourceGeneration: number): CaptureEndpoint {
-    const record = this.record(value, 'Saved endpoint');
-    if (record.kind === 'playback-timestamp') {
-      return CaptureEndpoints.timestamp(this.decimal(record.timestampUs, 'timestampUs'), sourceGeneration);
-    }
-    if (record.kind === 'exact-frame') {
-      return CaptureEndpoints.savedExact(record.frameIndex as number, record.frameInfoHash as string,
-        this.decimal(record.reviewTimeUs, 'reviewTimeUs'), sourceGeneration);
-    }
-    throw new Error('Saved endpoint kind is unsupported.');
-  }
-
-  private static record(value: unknown, label: string): Record<string, unknown> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object.`);
-    return value as Record<string, unknown>;
-  }
-
-  private static decimal(value: unknown, label: string): bigint {
-    if (typeof value !== 'string' || !/^(0|[1-9]\d{0,19})$/.test(value)) {
-      throw new Error(`${label} must be a bounded nonnegative decimal string.`);
-    }
-    return BigInt(value);
   }
 
   markStart(endpoint: CaptureEndpoint): RangeCaptureTransition {

@@ -1,7 +1,8 @@
 import { Pipeline } from '../domain/pipeline.js';
 import type { ClipFile } from '../domain/clip.js';
 import type { Collection } from '../domain/collection.js';
-import type { CollectionDescriptionResult, CollectionDescriptionValidator, InvalidCollectionDescription } from '../domain/collection-description-validator.js';
+import type { CollectionDescriptionResult, InvalidCollectionDescription } from '../domain/collection-description-validator.js';
+import type { CollectionTextFormat } from './collection-text-format.js';
 
 const VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'mkv', 'mpg', 'mpeg']);
 const COLLECTION_FILE_EXT = '.txt';
@@ -63,12 +64,12 @@ export class PipelineFactory {
   async buildPipeline({
     folderName = '',
     files = [],
-    validator,
+    collectionFormat,
     logInvalidDescription,
   }: {
     folderName?: string;
     files?: Iterable<FolderEntryFile>;
-    validator: Pick<CollectionDescriptionValidator, 'parseFile'>;
+    collectionFormat: Pick<CollectionTextFormat, 'readFile'>;
     logInvalidDescription?: (result: InvalidCollectionDescription) => void | Promise<void>;
   }): Promise<PipelineBuildResult> {
     const { videos, collectionFiles } = this.getVideosAndCollectionFiles(files);
@@ -76,7 +77,7 @@ export class PipelineFactory {
     const invalidDescriptions: InvalidCollectionDescription[] = [];
 
     for (const file of collectionFiles) {
-      const result: CollectionDescriptionResult = await validator.parseFile(file);
+      const result: CollectionDescriptionResult = await collectionFormat.readFile(file);
       if (result.ok === true) {
         validCollections.push(result.content);
         continue;

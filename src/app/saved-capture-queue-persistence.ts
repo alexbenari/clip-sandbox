@@ -1,9 +1,11 @@
 import type { CapturedRangeId } from '../domain/captured-range.js';
-import { RangeCaptureModel, type ISavedRangeCaptureData } from '../domain/range-capture-model.js';
+import type { RangeCaptureModel } from '../domain/range-capture-model.js';
+import { SavedCaptureCodec, type ISavedRangeCaptureData } from './saved-capture-codec.js';
 import type { FrameReviewSessionId } from '../frame-review/frame-review-api.js';
 import type { IClipCapturesStoreService } from './clip-captures-store-service.js';
 
 export class SavedCaptureQueuePersistence {
+  private readonly codec = new SavedCaptureCodec();
   private movieRef: string | null = null;
   private lastSavedSnapshot: string | null = null;
   private readonly staleRangeIds = new Set<CapturedRangeId>();
@@ -31,7 +33,7 @@ export class SavedCaptureQueuePersistence {
 
   save(model: RangeCaptureModel | null, completedRangeIds: ReadonlySet<string>): void {
     if (!this.active || !this.movieRef || !model) return;
-    const data = model.toSavedData(completedRangeIds);
+    const data = this.codec.encode(model, completedRangeIds);
     const serialized = JSON.stringify(data);
     if (serialized === this.lastSavedSnapshot) return;
     this.lastSavedSnapshot = serialized;
@@ -44,7 +46,7 @@ export class SavedCaptureQueuePersistence {
   invalidate(): void { this.active = false; }
 
   private adopt(movieRef: string, data: ISavedRangeCaptureData): RangeCaptureModel {
-    const model = RangeCaptureModel.fromSavedData(data, this.sourceGeneration);
+    const model = this.codec.decode(data, this.sourceGeneration);
     this.movieRef = movieRef;
     this.lastSavedSnapshot = JSON.stringify(data);
     this.staleRangeIds.clear();

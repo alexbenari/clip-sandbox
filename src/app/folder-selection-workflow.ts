@@ -1,6 +1,6 @@
 import type { ClipFile } from '../domain/clip.js';
 import { Collection } from '../domain/collection.js';
-import type { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
+import type { CollectionTextFormat } from '../business-logic/collection-text-format.js';
 import type { Pipeline } from '../domain/pipeline.js';
 import type { PipelineFactory } from '../business-logic/PipelineFactory.js';
 import type { ActivityReporter } from './activity-reporter.js';
@@ -48,7 +48,7 @@ type FolderSelectionDependencies = Readonly<{
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   folders: IFolderSource;
   pipelineFactory: Pick<PipelineFactory, 'buildPipeline'>;
-  collectionFileValidator: Pick<CollectionDescriptionValidator, 'parseFile'>;
+  collectionFormat: Pick<CollectionTextFormat, 'readFile'>;
   diagnostics: Pick<AppDiagnostics, 'logInvalidDescription' | 'logRuntimeError' | 'logDirectoryReadError'>;
   grid: { invalidateView(cacheKey: string): void; invalidateAllViews(): void; retagActiveView(cacheKey: string | null): void };
   collectionView: Pick<CollectionViewWorkflow, 'applySelection' | 'refreshSelector' | 'cacheKeyFor' | 'activeCacheKey'>;
@@ -276,7 +276,7 @@ export class FolderSelectionWorkflow {
       const { pipeline } = await this.folder.pipelineFactory.buildPipeline({
         folderName,
         files,
-        validator: this.folder.collectionFileValidator,
+        collectionFormat: this.folder.collectionFormat,
         logInvalidDescription: result => diagnostics.logInvalidDescription(result, folderSession),
       });
       const result = pipelineSession.loadPipeline(pipeline);
@@ -321,7 +321,7 @@ export class FolderSelectionWorkflow {
       const refreshed = await this.folder.pipelineFactory.buildPipeline({
         folderName: selection.folderName,
         files: selection.files,
-        validator: this.folder.collectionFileValidator,
+        collectionFormat: this.folder.collectionFormat,
         logInvalidDescription: result => diagnostics.logInvalidDescription(result, selection.folderSession),
       });
       if (isStale()) return;

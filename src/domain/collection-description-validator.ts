@@ -17,11 +17,6 @@ export type InvalidCollectionDescription = {
 export type CollectionDescriptionResult = ValidCollectionDescription | InvalidCollectionDescription;
 
 export class CollectionDescriptionValidator {
-  parseText({ text = '', filename = '' }: { text?: string; filename?: string } = {}): CollectionDescriptionResult {
-    const lines = String(text || '').replace(/\r/g, '').split('\n');
-    return this.parseLines({ lines, filename });
-  }
-
   parseLines({ lines = [], filename = '' }: { lines?: Iterable<string>; filename?: string } = {}): CollectionDescriptionResult {
     const orderedClipNames = this.#normalizedLines(lines);
     if (orderedClipNames.length === 0) {
@@ -52,14 +47,6 @@ export class CollectionDescriptionValidator {
         orderedClipNames,
       }),
     };
-  }
-
-  async parseFile(file: File): Promise<CollectionDescriptionResult> {
-    const text = await file.text();
-    return this.parseText({
-      text,
-      filename: file?.name || '',
-    });
   }
 
   #normalizedLines(lines: Iterable<string>): string[] {

@@ -63,7 +63,7 @@ import { CollectionConflictControl } from '../ui/collection-conflict-control.js'
 import { DeleteFromDiskDialogControl } from '../ui/delete-from-disk-dialog-control.js';
 import { SaveAsNewDialogControl } from '../ui/save-as-new-dialog-control.js';
 import { UnsavedChangesDialogControl } from '../ui/unsaved-changes-dialog-control.js';
-import { CollectionDescriptionValidator } from '../domain/collection-description-validator.js';
+import { CollectionTextFormat } from '../business-logic/collection-text-format.js';
 import { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
 import { ControlFailureReporting } from './control-failure-reporting.js';
 import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
@@ -86,7 +86,7 @@ export class AppController {
     const collectionNameValidator = new CollectionNameValidator(appText);
     const newCollectionNameCheck = new NewCollectionNameCheck(pipelineSession, collectionNameValidator);
     const videoEditCatalog = new VideoEditCatalog();
-    const validator = new CollectionDescriptionValidator();
+    const collectionFormat = new CollectionTextFormat();
     const settingsParser = new AppSettingsParser();
     const settingsService = new AppSettingsService(ElectronAppSettingsService.fromWindow(window, settingsParser));
     const fileSystem = new ElectronFileSystemService({ win: window });
@@ -287,7 +287,7 @@ export class AppController {
       openFolder: state,
       folders: fileSystem,
       pipelineFactory,
-      collectionFileValidator: validator,
+      collectionFormat,
       diagnostics,
       grid,
       collectionView,

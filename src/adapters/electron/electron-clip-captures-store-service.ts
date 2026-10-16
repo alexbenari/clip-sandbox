@@ -1,6 +1,6 @@
 import type { FrameReviewSessionId } from '../../frame-review/frame-review-api.js';
 import { SourceFingerprint } from '../../frame-review/model/source-fingerprint.js';
-import type { ISavedRangeCaptureData } from '../../domain/range-capture-model.js';
+import type { ISavedRangeCaptureData } from '../../app/saved-capture-codec.js';
 import type { AttachedCaptures, IClipCapturesStoreService } from '../../app/clip-captures-store-service.js';
 
 interface IClipCapturesApi {
