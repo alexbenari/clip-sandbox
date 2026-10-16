@@ -202,6 +202,8 @@ export class FolderSelectionWorkflow {
     }
     if (saveFirst) {
       const outcome = await this.folder.collectionSave.saveActive();
+      // A newer request asked about the unsaved changes while this save ran; that request decides now.
+      if (this.pendingAction !== action) return;
       if (outcome === 'cancelled') {
         this.pendingAction = null;
         collectionView.refreshSelector();

@@ -76,6 +76,11 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   return { workflow, folders, pipelineWorkingCopy, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, activityLog, makeViewDirty };
 }
 
+// A dropped continuation leaves nothing to wait for, so the test lets every queued promise callback run first.
+function queuedContinuations(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 async function openFolder(context: ReturnType<typeof folderWorkflow>) {
   context.toolbar.emit('browseRequested');
   await vi.waitFor(() => expect(context.pipelineWorkingCopy.pipeline?.folderName).toBe('clips'));
@@ -155,6 +160,26 @@ describe('FolderSelectionWorkflow', () => {
     await vi.waitFor(() => expect(context.workflow.pendingSelectionAction).toBeNull());
     expect(context.folders.pickFolder).toHaveBeenCalledOnce();
     expect(context.unsavedPrompts).toHaveLength(1);
+  });
+
+  it('does not resume an earlier request once a newer one has been answered', async () => {
+    const context = folderWorkflow();
+    await openFolder(context);
+    context.makeViewDirty();
+    let finishSave: (outcome: SaveOutcome) => void = () => undefined;
+    const earlierSave = new Promise<SaveOutcome>(resolve => { finishSave = resolve; });
+    context.collectionSave.saveActive.mockImplementationOnce(() => earlierSave);
+    context.toolbar.emit('browseRequested');
+    context.unsavedPrompts[0].onSave();
+    context.selector.emit('selectionRequested', 'subset.txt');
+
+    context.unsavedPrompts[1].onDiscard();
+    await vi.waitFor(() => expect(context.pipelineWorkingCopy.activeCollection?.filename).toBe('subset.txt'));
+    const folderPicks = context.folders.pickFolder.mock.calls.length;
+    finishSave('saved');
+    await queuedContinuations();
+
+    expect(context.folders.pickFolder).toHaveBeenCalledTimes(folderPicks);
   });
 
   it('discards unsaved changes and switches to the requested collection', async () => {

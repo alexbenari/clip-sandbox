@@ -128,15 +128,17 @@ describe('CollectionSaveWorkflow', () => {
     await expect(disposedOutcome).resolves.toBe('cancelled');
   });
 
-  it('shares one wait between callers while the dialog is already open', async () => {
+  it('hands the open dialog to a newer request, so only the latest caller resumes after the save', async () => {
     const { workflow, dialog } = saveWorkflow();
 
     const first = workflow.saveAsNew();
     const second = workflow.saveActive();
+    expect(await settled(first)).toBe('cancelled');
     dialog.emit('confirmed', 'picks');
 
-    await expect(Promise.all([first, second])).resolves.toEqual(['saved', 'saved']);
+    await expect(second).resolves.toBe('saved');
     expect(dialog.open).toHaveBeenCalledOnce();
+    expect(dialog.isOpen).toBe(false);
   });
 
   it('starts saves from the toolbar', async () => {

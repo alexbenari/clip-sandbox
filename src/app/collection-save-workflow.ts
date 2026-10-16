@@ -62,11 +62,14 @@ export class CollectionSaveWorkflow {
 
   // Resolves when the user saves or cancels; a failed save keeps the dialog open and the wait pending.
   saveAsNew(): Promise<SaveAsNewOutcome> {
-    if (this.saveAsNewWait) return this.saveAsNewWait.outcome;
+    const dialogOpen = this.saveAsNewWait !== null;
+    // A request made while the dialog is open takes it over, so only the latest flow resumes after the save.
+    this.settleSaveAsNew('cancelled');
     let settle: (outcome: SaveAsNewOutcome) => void = () => undefined;
     const outcome = new Promise<SaveAsNewOutcome>(resolve => { settle = resolve; });
     this.saveAsNewWait = { outcome, settle };
-    this.save.saveAsNewDialog.open({ isPipelineMode: this.save.pipelineWorkingCopy.isPipelineMode() });
+    // Reopening would clear the name the user may already be typing.
+    if (!dialogOpen) this.save.saveAsNewDialog.open({ isPipelineMode: this.save.pipelineWorkingCopy.isPipelineMode() });
     return outcome;
   }
 
