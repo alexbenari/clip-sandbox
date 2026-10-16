@@ -22,6 +22,7 @@ import { GifSessionStatus } from './gif-session-status.js';
 import { RangeExtraction, type IExtractionMovie, type IExtractionPublicationListener } from './range-extraction.js';
 import { RangeRefinement, type BeginRefinementResult } from './range-refinement.js';
 import type { IRangeRefinementDraftSnapshot, RangeRefinementDraft } from './range-refinement-draft.js';
+import { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 import type { IThumbnailCacheService } from './thumbnail-cache-service.js';
 
 export type GifRangeView = CapturedRange & Readonly<{
@@ -88,20 +89,21 @@ export abstract class MovieRangeSession {
     options: MovieRangeSessionOptions,
   ) {
     const { reporter, diagnostics } = options;
+    const failures = new RuntimeFailureReporter(reporter, diagnostics);
     this.movie = new CurrentMovie({
       frameReview,
       previewBounds: options.previewBounds ?? Object.freeze({ maxWidth: 1280, maxHeight: 720 }),
-      status: this.status, reporter, diagnostics,
+      status: this.status, reporter, failures,
     });
     this.extraction = new RangeExtraction({
       extractionService: options.extractionService,
       destination: options.destination,
       publications: options.publications,
-      status: this.status, reporter, activityLog: options.activityLog, diagnostics,
+      status: this.status, reporter, activityLog: options.activityLog, failures,
     });
     this.queue = new CaptureQueue({
       movie: this.movie, status: this.status, thumbnails, storage, extraction: this.extraction,
-      capturePositioning: options.capturePositioning, rejectionText: options.rejectionText, reporter, diagnostics,
+      capturePositioning: options.capturePositioning, rejectionText: options.rejectionText, failures,
     });
     this.refinement = new RangeRefinement({ queue: this.queue, extraction: this.extraction, movie: this.movie, status: this.status });
     this.status.on('changed', () => this.publish());

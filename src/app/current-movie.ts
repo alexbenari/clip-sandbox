@@ -5,9 +5,9 @@ import type {
 } from '../frame-review/frame-review-api.js';
 import type { IFrameReviewState } from '../frame-review/model/frame-review-state.js';
 import type { ActivityReporter } from './activity-reporter.js';
-import type { AppDiagnostics } from './app-diagnostics.js';
 import { EventSource, type EventHandler, type IEventSource } from './event-source.js';
 import type { GifSessionStatus } from './gif-session-status.js';
+import type { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 
 export type CurrentMovieLifecycle = 'empty' | 'choosing' | 'opening' | 'open' | 'failed' | 'disposed';
 
@@ -20,8 +20,8 @@ type CurrentMovieDependencies = Readonly<{
   frameReview: IFrameReviewService;
   previewBounds: Readonly<{ maxWidth: number; maxHeight: number }>;
   status: Pick<GifSessionStatus, 'show' | 'changed'>;
-  reporter?: Pick<ActivityReporter, 'progress' | 'success' | 'failure'>;
-  diagnostics?: Pick<AppDiagnostics, 'logRuntimeError'>;
+  reporter?: Pick<ActivityReporter, 'progress' | 'success'>;
+  failures: Pick<RuntimeFailureReporter, 'report'>;
 }>;
 
 // The movie currently open for frame review, including the states before one is open. The owning
@@ -114,7 +114,7 @@ export class CurrentMovie implements IEventSource<ICurrentMovieEvents> {
         if (becameReady) this.events.emit('exactCaptureReady');
         this.deps.status.changed();
       } else if (event.type === 'error') {
-        this.reportError(event.message);
+        this.deps.failures.report(event.message);
       }
     });
     const currentState = this.latestReviewState;
@@ -136,7 +136,7 @@ export class CurrentMovie implements IEventSource<ICurrentMovieEvents> {
   failOpening(error: unknown): void {
     this.state = this.selected ? 'open' : 'failed';
     this.deps.status.show(error instanceof Error ? error.message : 'The movie could not be opened.');
-    this.reportError('The movie could not be opened.', error);
+    this.deps.failures.report('The movie could not be opened.', error);
   }
 
   restoreLifecycle(): void {
@@ -154,11 +154,6 @@ export class CurrentMovie implements IEventSource<ICurrentMovieEvents> {
     const review = this.activeReview;
     this.activeReview = null;
     return review;
-  }
-
-  private reportError(message: string, error?: unknown): void {
-    this.deps.reporter?.failure(message);
-    if (error !== undefined) void this.deps.diagnostics?.logRuntimeError(message, error);
   }
 
   private preparationProgressMessage(state: IFrameReviewState): string | null {

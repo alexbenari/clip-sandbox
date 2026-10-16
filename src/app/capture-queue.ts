@@ -3,8 +3,6 @@ import type { CapturedRange, CapturedRangeId } from '../domain/captured-range.js
 import { RangeCaptureModel, type IRangeCaptureSnapshot, type RangeCaptureTransition } from '../domain/range-capture-model.js';
 import { CaptureRejectionText } from './capture-rejection-text.js';
 import type { FrameReviewDisplayFrame, IFrameReviewSession } from '../frame-review/frame-review-api.js';
-import type { ActivityReporter } from './activity-reporter.js';
-import type { AppDiagnostics } from './app-diagnostics.js';
 import type { ICaptureStorage } from './capture-storage.js';
 import type { CurrentMovie } from './current-movie.js';
 import { EventSource, type EventHandler, type IEventSource } from './event-source.js';
@@ -12,6 +10,7 @@ import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capt
 import { CaptureThumbnails, type GifThumbnailState } from './capture-thumbnails.js';
 import type { GifSessionStatus } from './gif-session-status.js';
 import type { IExtractionProgressQuery } from './range-extraction.js';
+import type { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 import type { IThumbnailCacheService } from './thumbnail-cache-service.js';
 
 // Awaited: a failure to position the player is reported by the queue.
@@ -47,8 +46,7 @@ type CaptureQueueDependencies = Readonly<{
   extraction: IExtractionProgressQuery;
   capturePositioning?: ICapturePositioning;
   rejectionText?: Pick<CaptureRejectionText, 'textFor'>;
-  reporter?: Pick<ActivityReporter, 'failure'>;
-  diagnostics?: Pick<AppDiagnostics, 'logRuntimeError'>;
+  failures: Pick<RuntimeFailureReporter, 'report'>;
 }>;
 
 // The draft and locked ranges of the current movie, their start thumbnails, and their saved copy.
@@ -63,7 +61,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   constructor(private readonly deps: CaptureQueueDependencies) {
     this.captureThumbnails = new CaptureThumbnails(deps.thumbnails, {
       onChanged: () => deps.status.changed(),
-      onError: (message, error) => this.reportError(message, error),
+      onError: (message, error) => this.deps.failures.report(message, error),
     });
   }
 
@@ -182,7 +180,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     } catch (error) {
       if (movieReplaced()) return Object.freeze({ kind: 'movie-replaced' });
       const message = error instanceof Error ? error.message : 'Saved draft frames could not be checked.';
-      this.reportError(message, error);
+      this.deps.failures.report(message, error);
       return Object.freeze({ kind: 'refused', message });
     }
     if (movieReplaced()) return Object.freeze({ kind: 'movie-replaced' });
@@ -192,7 +190,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     }
     if (!this.model?.hydrateSavedDraft(identities)) {
       const message = 'Saved draft frames no longer match this movie. Mark new endpoints before locking.';
-      this.reportError(message);
+      this.deps.failures.report(message);
       return Object.freeze({ kind: 'refused', message });
     }
     return Object.freeze({ kind: 'exact' });
@@ -329,7 +327,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
         try {
           await this.deps.capturePositioning?.showFrameAfterCapture(review, continuation);
         } catch (error) {
-          this.reportError('Saved captures loaded, but the movie could not be positioned after them.', error);
+          this.deps.failures.report('Saved captures loaded, but the movie could not be positioned after them.', error);
         }
       }
       if (this.disposed || movie.review !== review || movie.sourceGeneration !== generation) return;
@@ -346,7 +344,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
       const message = 'Saved captures could not be loaded. The stored file was kept for recovery.';
       status.show(message);
       storage.endRestore();
-      this.reportError(message, error);
+      this.deps.failures.report(message, error);
       status.changed();
     }
   }
@@ -424,19 +422,14 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
       }
     }
     if (failures > 0 && movie.review === review && movie.sourceGeneration === generation) {
-      this.reportError(`${failures} saved start thumbnails could not be recreated. Retry them from Clips.`);
+      this.deps.failures.report(`${failures} saved start thumbnails could not be recreated. Retry them from Clips.`);
     }
   }
 
   private reportCheckFailure(error: unknown, fallback: string): void {
     const message = error instanceof Error ? error.message : fallback;
     this.deps.status.show(message);
-    this.reportError(message, error);
+    this.deps.failures.report(message, error);
     this.deps.status.changed();
-  }
-
-  private reportError(message: string, error?: unknown): void {
-    this.deps.reporter?.failure(message);
-    if (error !== undefined) void this.deps.diagnostics?.logRuntimeError(message, error);
   }
 }

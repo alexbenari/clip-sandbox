@@ -31,14 +31,15 @@ const media = (filename: string, warning?: string) => Object.freeze({
 
 function rangeExtraction(extract: IClipExtractionService['extract'], saveCollection: IClipExtractionService['saveCollection'] = vi.fn(async () => undefined)) {
   const status = new GifSessionStatus();
-  const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
+  const reporter = { progress: vi.fn(), success: vi.fn() };
+  const failures = { report: vi.fn() };
   const service: IClipExtractionService = {
     openExtractionDestination: vi.fn(async () => ({ destinationHandle: 'destination_12345678', folderPath: 'C:/extraction-tmp', entries: [] })),
     extract, saveCollection, cancelCurrent: vi.fn(async () => undefined),
   };
-  const extraction = new RangeExtraction({ extractionService: service, status, reporter });
+  const extraction = new RangeExtraction({ extractionService: service, status, reporter, failures });
   extraction.startForMovie(movie.movieName);
-  return { extraction, status, reporter };
+  return { extraction, status, reporter, failures };
 }
 
 describe('RangeExtraction', () => {
@@ -59,14 +60,14 @@ describe('RangeExtraction', () => {
     const extract = vi.fn()
       .mockRejectedValueOnce(new Error('Encoder stopped.'))
       .mockResolvedValueOnce(media('Sample Movie-002.mp4'));
-    const { extraction, status, reporter } = rangeExtraction(extract);
+    const { extraction, status, failures } = rangeExtraction(extract);
 
     await extraction.extractOne(movie, first, () => [first.id, second.id]);
-    reporter.failure.mockClear();
+    failures.report.mockClear();
     await extraction.extractOne(movie, second, () => [first.id, second.id]);
 
     expect(status.message).toBe('Some clips need attention');
-    expect(reporter.failure).toHaveBeenCalledWith('Some clips could not be completed. Retry them from Clips.');
+    expect(failures.report).toHaveBeenCalledWith('Some clips could not be completed. Retry them from Clips.');
   });
 
   it('reports a provenance warning once across runs', async () => {
@@ -121,7 +122,7 @@ describe('RangeExtraction', () => {
   });
 
   it('is unavailable without an extraction service', () => {
-    const extraction = new RangeExtraction({ status: new GifSessionStatus() });
+    const extraction = new RangeExtraction({ status: new GifSessionStatus(), failures: { report: vi.fn() } });
     extraction.startForMovie(movie.movieName);
 
     expect(extraction.available).toBe(false);

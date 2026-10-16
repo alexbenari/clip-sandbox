@@ -55,7 +55,7 @@ function captureQueue({ storage = new UnsavedCaptureStorage() as ICaptureStorage
     isCompleted: (rangeId: string) => completed.has(rangeId),
     revisionBlock: (rangeId: string) => held.has(rangeId) ? 'Wait for this extraction to finish.' : null,
   };
-  const queue = new CaptureQueue({ movie, status, thumbnails: thumbnails(), storage, extraction });
+  const queue = new CaptureQueue({ movie, status, thumbnails: thumbnails(), storage, extraction, failures: { report: vi.fn() } });
   queue.startForMovie();
   return { queue, status, movie };
 }
@@ -199,7 +199,7 @@ describe('CaptureQueue', () => {
     const { status, movie } = captureQueue();
     const queue = new CaptureQueue({
       movie, status, thumbnails: thumbnails(), storage: storage as unknown as ICaptureStorage,
-      extraction: { isCompleted: () => false, revisionBlock: () => null }, capturePositioning,
+      extraction: { isCompleted: () => false, revisionBlock: () => null }, capturePositioning, failures: { report: vi.fn() },
     });
 
     await queue.restore(movie.review);

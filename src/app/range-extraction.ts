@@ -3,7 +3,6 @@ import type { CapturedRangeId, IReadyToExtractRange } from '../domain/captured-r
 import type { IClipExtractionService } from '../business-logic/clip-extraction-service.js';
 import type { ActivityInput } from './activity-logger.js';
 import type { ActivityReporter } from './activity-reporter.js';
-import type { AppDiagnostics } from './app-diagnostics.js';
 import {
   ClipExtractionWorkflow,
   type ClipExtractionActivity,
@@ -13,6 +12,7 @@ import {
 import { EventSource, type EventHandler, type IEventSource } from './event-source.js';
 import { ExtractionPublisher, type ExtractionDestination } from './extraction-publisher.js';
 import type { GifSessionStatus } from './gif-session-status.js';
+import type { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 
 // Awaited: extraction continues only after the open folder has reacted to the new clip.
 export interface IExtractionPublicationListener {
@@ -42,9 +42,9 @@ type RangeExtractionDependencies = Readonly<{
   destination?: ExtractionDestination;
   publications?: IExtractionPublicationListener;
   status: Pick<GifSessionStatus, 'show' | 'changed'>;
-  reporter?: Pick<ActivityReporter, 'progress' | 'success' | 'failure'>;
+  reporter?: Pick<ActivityReporter, 'progress' | 'success'>;
   activityLog?: { log(entry: ActivityInput): unknown };
-  diagnostics?: Pick<AppDiagnostics, 'logRuntimeError'>;
+  failures: Pick<RuntimeFailureReporter, 'report'>;
 }>;
 
 const PENDING: ClipExtractionEntryState = Object.freeze({ kind: 'pending' });
@@ -83,7 +83,7 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
         new ExtractionPublisher(service, {
           destination: this.target,
           onPublished: publication => this.deps.publications?.onFolderContentsPublished(publication.folderPath),
-          onPublishError: error => this.reportError('The clip was saved, but the Collection view could not refresh.', error),
+          onPublishError: error => this.deps.failures.report('The clip was saved, but the Collection view could not refresh.', error),
         }),
         () => { this.events.emit('extractionStateChanged'); this.deps.status.changed(); },
         event => this.recordActivity(event, movieName),
@@ -156,7 +156,7 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
       });
       const cancelled = this.workflow?.wasCancelled === true;
       status.show(failed ? 'Some clips need attention' : cancelled ? 'Extraction cancelled' : 'Extraction complete');
-      if (failed) this.reportError('Some clips could not be completed. Retry them from Clips.');
+      if (failed) this.deps.failures.report('Some clips could not be completed. Retry them from Clips.');
       else if (cancelled) this.deps.reporter?.progress('Extraction stopped. Completed clips were saved.');
       else this.deps.reporter?.success(`Exact clips were added to ${this.target?.kind === 'collection'
         ? this.target.collectionFilename : this.target?.folderPath ?? 'extraction-tmp'}.`);
@@ -165,7 +165,7 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Extraction could not start.';
       status.show(message);
-      this.reportError(message, error);
+      this.deps.failures.report(message, error);
     }
     status.changed();
   }
@@ -197,10 +197,5 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
         message: `Extraction ${outcome}: ${event.extracted} of ${event.total} clip${event.total === 1 ? '' : 's'} extracted.`,
         fields: [sourceField] });
     }
-  }
-
-  private reportError(message: string, error?: unknown): void {
-    this.deps.reporter?.failure(message);
-    if (error !== undefined) void this.deps.diagnostics?.logRuntimeError(message, error);
   }
 }

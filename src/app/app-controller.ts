@@ -52,6 +52,7 @@ import { ElectronCollectionClipRefinementService } from '../adapters/electron/el
 import { GifExtractionSession } from './gif-extraction-session.js';
 import { CollectionClipRefinementSession } from './collection-clip-refinement-session.js';
 import { SavedCaptureStorage } from './capture-storage.js';
+import { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 import { AppSettingsService } from './app-settings-service.js';
 import { AppSettingsParser, DEFAULT_STARTUP_SCREEN_ID } from './app-settings.js';
 import { ElectronAppSettingsService } from '../adapters/electron/electron-app-settings-service.js';
@@ -189,7 +190,7 @@ export class AppController {
       ? new GifExtractionSession(gifExtractionServices.frameReview, gifExtractionServices.thumbnails, {
         ...sessionReporting,
         extractionService: gifExtractionServices.extractionService,
-        captureStorage: new SavedCaptureStorage(captureStore, { reporter: activityReporter, diagnostics }),
+        captureStorage: new SavedCaptureStorage(captureStore, new RuntimeFailureReporter(activityReporter, diagnostics)),
         rejectionText: new CaptureRejectionText(GIF_CAPTURE_KEYS.markStart),
         capturePositioning: frameReviewPlayer,
       })

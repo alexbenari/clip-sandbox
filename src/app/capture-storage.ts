@@ -1,9 +1,8 @@
 import type { CapturedRangeId } from '../domain/captured-range.js';
 import type { RangeCaptureModel } from '../domain/range-capture-model.js';
 import type { FrameReviewSessionId } from '../frame-review/frame-review-api.js';
-import type { ActivityReporter } from './activity-reporter.js';
-import type { AppDiagnostics } from './app-diagnostics.js';
 import type { IClipCapturesStoreService } from './clip-captures-store-service.js';
+import { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 import { SavedCaptureQueuePersistence } from './saved-capture-queue-persistence.js';
 
 // Where a movie's capture queue is kept between runs of the app.
@@ -32,10 +31,7 @@ export class SavedCaptureStorage implements ICaptureStorage {
 
   constructor(
     private readonly store: IClipCapturesStoreService,
-    private readonly reporting: Readonly<{
-      reporter?: Pick<ActivityReporter, 'failure'>;
-      diagnostics?: Pick<AppDiagnostics, 'logRuntimeError'>;
-    }> = {},
+    private readonly failures: Pick<RuntimeFailureReporter, 'report'> = new RuntimeFailureReporter(),
   ) {}
 
   get restoring(): boolean { return this.restoringQueue; }
@@ -44,9 +40,7 @@ export class SavedCaptureStorage implements ICaptureStorage {
 
   startForMovie(sourceGeneration: number): void {
     this.queue = new SavedCaptureQueuePersistence(this.store, sourceGeneration, error => {
-      const message = 'Captures could not be saved. Current work remains available until the app closes.';
-      this.reporting.reporter?.failure(message);
-      void this.reporting.diagnostics?.logRuntimeError(message, error);
+      this.failures.report('Captures could not be saved. Current work remains available until the app closes.', error);
     });
     this.restoringQueue = true;
     this.loadingQueue = true;

@@ -21,14 +21,14 @@ function review(phase: Parameters<typeof FrameReviewState.create>[0] = 'playback
 
 function currentMovie(frameReview: Partial<IFrameReviewService> = {}) {
   const status = new GifSessionStatus();
-  const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
-  const diagnostics = { logRuntimeError: vi.fn(async () => undefined) };
+  const reporter = { progress: vi.fn(), success: vi.fn() };
+  const failures = { report: vi.fn() };
   const movie = new CurrentMovie({
     frameReview: { chooseSource: vi.fn(async () => source), open: vi.fn(), ...frameReview } as IFrameReviewService,
     previewBounds: { maxWidth: 1280, maxHeight: 720 },
-    status, reporter, diagnostics,
+    status, reporter, failures,
   });
-  return { movie, status, reporter, diagnostics };
+  return { movie, status, reporter, failures };
 }
 
 describe('CurrentMovie', () => {
@@ -105,7 +105,7 @@ describe('CurrentMovie', () => {
   it('ignores the previous movie once another has been switched in, and hands the previous one back', () => {
     const first = review();
     const second = review();
-    const { movie, reporter } = currentMovie();
+    const { movie, failures } = currentMovie();
     movie.switchTo(source, first.session);
     movie.followReview();
 
@@ -113,11 +113,11 @@ describe('CurrentMovie', () => {
     first.emit({ type: 'error', message: 'Old movie failed.' } as FrameReviewEvent);
 
     expect(movie.sourceGeneration).toBe(2);
-    expect(reporter.failure).not.toHaveBeenCalled();
+    expect(failures.report).not.toHaveBeenCalled();
   });
 
   it('keeps an already open movie when opening another fails, and logs the cause', () => {
-    const { movie, status, reporter, diagnostics } = currentMovie();
+    const { movie, status, failures } = currentMovie();
     movie.switchTo(source, review().session);
     const error = new Error('codec unavailable');
 
@@ -125,8 +125,7 @@ describe('CurrentMovie', () => {
 
     expect(movie.lifecycle).toBe('open');
     expect(status.message).toBe('codec unavailable');
-    expect(reporter.failure).toHaveBeenCalledWith('The movie could not be opened.');
-    expect(diagnostics.logRuntimeError).toHaveBeenCalledWith('The movie could not be opened.', error);
+    expect(failures.report).toHaveBeenCalledWith('The movie could not be opened.', error);
   });
 
   it('hands its review back when closed and refuses further changes', () => {

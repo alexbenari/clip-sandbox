@@ -50,23 +50,21 @@ describe('SavedCaptureStorage', () => {
     expect(await attaching).toBeNull();
   });
 
-  it('reports a failed save once in Activity and in the diagnostics log', async () => {
+  it('reports a failed save once, with its error', async () => {
     const failing = store();
     const error = new Error('disk full');
     failing.save = vi.fn(async () => { throw error; });
-    const reporter = { failure: vi.fn() };
-    const diagnostics = { logRuntimeError: vi.fn(async () => undefined) };
-    const storage = new SavedCaptureStorage(failing, { reporter, diagnostics });
+    const failures = { report: vi.fn() };
+    const storage = new SavedCaptureStorage(failing, failures);
     storage.startForMovie(1);
     const model = await storage.attach(reviewId);
     model!.markStart({ kind: 'playback-timestamp', timestampUs: 1_000n, sourceGeneration: 1 } as never);
 
     storage.save(model!, new Set());
 
-    await vi.waitFor(() => expect(reporter.failure).toHaveBeenCalledWith(
-      'Captures could not be saved. Current work remains available until the app closes.'));
-    expect(diagnostics.logRuntimeError).toHaveBeenCalledWith(
-      'Captures could not be saved. Current work remains available until the app closes.', error);
+    await vi.waitFor(() => expect(failures.report).toHaveBeenCalledWith(
+      'Captures could not be saved. Current work remains available until the app closes.', error));
+    expect(failures.report).toHaveBeenCalledOnce();
   });
 });
 
