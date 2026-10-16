@@ -154,12 +154,12 @@ describe('clip and sequence models', () => {
       filename: 'subset.txt',
       orderedClipNames: ['alpha.mp4', 'bravo.webm'],
     });
-    const merged = collection.addClips(['bravo.webm', 'charlie.mp4', 'delta.mp4', 'charlie.mp4']);
+    const merged = collection.withClipsAdded(['bravo.webm', 'charlie.mp4', 'delta.mp4', 'charlie.mp4']);
     expect(merged.addedClipNames).toEqual(['charlie.mp4', 'delta.mp4']);
     expect(merged.skippedClipNames).toEqual(['bravo.webm', 'charlie.mp4']);
     expect(merged.collection.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm', 'charlie.mp4', 'delta.mp4']);
 
-    const pruned = merged.collection.removeVideos(['bravo.webm', 'missing.mp4', 'delta.mp4']);
+    const pruned = merged.collection.withoutClips(['bravo.webm', 'missing.mp4', 'delta.mp4']);
     expect(pruned.removedClipNames).toEqual(['bravo.webm', 'delta.mp4']);
     expect(pruned.collection.orderedClipNames).toEqual(['alpha.mp4', 'charlie.mp4']);
   });

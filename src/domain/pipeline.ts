@@ -168,7 +168,7 @@ export class Pipeline {
       filename: normalizedFilename,
       orderedClipNames: [],
     });
-    const merged = baseCollection.addClips(clipNames);
+    const merged = baseCollection.withClipsAdded(clipNames);
 
     if (merged.isNoOp && previousCollection) {
       return {
@@ -210,9 +210,7 @@ export class Pipeline {
     for (const file of this.videoFiles()) {
       this.#clipForFile(file, nextClipId);
     }
-    return collection.materializeClipSequence({
-      availableClips: this.#clipsByName,
-    });
+    return collection.materializeClipSequence(this.#clipsByName);
   }
 
   materializeSelection(collection: Collection | null | undefined, { nextClipId }: { nextClipId?: () => string } = {}): {
@@ -247,7 +245,7 @@ export class Pipeline {
 
     const changedCollections: RemovedCollectionChange[] = [];
     for (const collection of this.collections()) {
-      const pruned = collection.removeVideos(removedVideoNames);
+      const pruned = collection.withoutClips(removedVideoNames);
       if (pruned.isNoOp) continue;
 
       const nextCollection = pruned.collection.withFilename(collection.filename);

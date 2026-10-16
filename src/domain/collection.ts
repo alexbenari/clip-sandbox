@@ -1,6 +1,5 @@
 import { ClipSequence } from './clip-sequence.js';
-import { Clip } from './clip.js';
-import type { ClipFile } from './clip.js';
+import type { Clip } from './clip.js';
 
 export type CollectionNameValidationResult =
   | { ok: true; code: ''; name: string; filename: string }
@@ -24,26 +23,16 @@ export type CollectionRemovalResult = {
 
 type RequestedNameAnalysis = {
   collectionName: string;
-  requestedNames: string[];
   existingNamesInOrder: string[];
   missingNames: string[];
   missingCount: number;
-  matchKind: 'exact-match' | 'subset-match';
 };
 
+// 'loaded': every listed clip exists. 'has-missing': some listed clips are gone; partialSequence holds
+// the ones that remain, in the collection's order.
 export type CollectionMaterialization =
-  | (RequestedNameAnalysis & {
-    kind: 'loaded';
-    collection: ClipSequence;
-    sequence: ClipSequence;
-  })
-  | (RequestedNameAnalysis & {
-    kind: 'has-missing';
-    collection: Collection;
-    partialCollection: ClipSequence;
-    partialSequence: ClipSequence;
-  });
-
+  | (RequestedNameAnalysis & { kind: 'loaded'; sequence: ClipSequence })
+  | (RequestedNameAnalysis & { kind: 'has-missing'; partialSequence: ClipSequence });
 type CollectionParams = {
   collectionName?: string;
   filename?: string | null;
@@ -173,7 +162,8 @@ export class Collection {
     return /^\d+$/.test(sequenceText) ? Number(sequenceText) : null;
   }
 
-  appendMissingClipNames(orderedClipNames: Iterable<string>): CollectionMutationResult {
+  // Adds the clips this collection does not list yet, after its current clips.
+  withClipsAdded(orderedClipNames: Iterable<string>): CollectionMutationResult {
     const existingNames = this.orderedClipNames;
     const seenNames = new Set(existingNames);
     const addedClipNames: string[] = [];
@@ -199,11 +189,7 @@ export class Collection {
     };
   }
 
-  addClips(clipNames: Iterable<string>): CollectionMutationResult {
-    return this.appendMissingClipNames(clipNames);
-  }
-
-  withoutClipNames(clipNames: Iterable<string>): CollectionRemovalResult {
+  withoutClips(clipNames: Iterable<string>): CollectionRemovalResult {
     const namesToRemove = new Set(Collection.#normalizedOrderedClipNames(clipNames));
     const removedClipNames: string[] = [];
     const remainingClipNames: string[] = [];
@@ -224,56 +210,18 @@ export class Collection {
     };
   }
 
-  removeVideos(videoNames: Iterable<string>): CollectionRemovalResult {
-    return this.withoutClipNames(videoNames);
-  }
-
-  toCollection({ filename = this.#filename }: { filename?: string | null } = {}): Collection {
-    return this.withFilename(filename);
-  }
-
-  materializeClipSequence({
-    availableVideoFiles = [],
-    availableClips = null,
-    nextClipId,
-  }: {
-    availableVideoFiles?: ReadonlyArray<ClipFile> | Map<string, ClipFile>;
-    availableClips?: ReadonlyArray<Clip> | Map<string, Clip> | null;
-    nextClipId?: () => string;
-  } = {}): CollectionMaterialization {
-    if (!availableClips && typeof nextClipId !== 'function') {
-      throw new Error('A nextClipId function is required to materialize a collection sequence.');
-    }
-    const clipsByName = availableClips
-      ? Collection.#toClipMap(availableClips)
-      : new Map(Array.from(Collection.#toFileMap(availableVideoFiles).values()).map((file) => [
-        file.name,
-        new Clip({ id: nextClipId!(), file, mediaSource: file.mediaSource || '' }),
-      ]));
+  // Matches the listed clip names against the clips that exist, keeping the collection's order.
+  materializeClipSequence(availableClips: ReadonlyArray<Clip> | Map<string, Clip>): CollectionMaterialization {
+    const clipsByName = Collection.#toClipMap(availableClips);
     const analysis = this.#requestedNameAnalysis(clipsByName.keys());
-    const partialSequence = new ClipSequence({
+    const sequence = new ClipSequence({
       name: analysis.collectionName,
       clips: Collection.#materializedClips(analysis.existingNamesInOrder, clipsByName),
     });
-
-    if (analysis.missingNames.length > 0) {
-      return {
-        kind: 'has-missing',
-        ...analysis,
-        collection: this,
-        partialSequence,
-        partialCollection: partialSequence,
-      };
-    }
-
-    return {
-      kind: 'loaded',
-      ...analysis,
-      sequence: partialSequence,
-      collection: partialSequence,
-    };
+    return analysis.missingNames.length > 0
+      ? { kind: 'has-missing', ...analysis, partialSequence: sequence }
+      : { kind: 'loaded', ...analysis, sequence };
   }
-
   toText(): string {
     if (this.#orderedClipNames.length === 0) return '';
     return this.#orderedClipNames.join('\n') + '\n';
@@ -281,11 +229,6 @@ export class Collection {
 
   static #normalizedText(value: unknown): string {
     return String(value || '').trim();
-  }
-
-  static #toFileMap(availableVideoFiles: ReadonlyArray<ClipFile> | Map<string, ClipFile>): Map<string, ClipFile> {
-    if (availableVideoFiles instanceof Map) return new Map(availableVideoFiles);
-    return new Map(Array.from(availableVideoFiles || []).map(file => [file.name, file]));
   }
 
   static #toClipMap(availableClips: ReadonlyArray<Clip> | Map<string, Clip>): Map<string, Clip> {
@@ -302,24 +245,15 @@ export class Collection {
 
   #requestedNameAnalysis(availableNames: Iterable<string>): RequestedNameAnalysis {
     const requestedNames = this.orderedClipNames;
-    const normalizedAvailableNames = Array.from(availableNames || []);
-    const availableSet = new Set(normalizedAvailableNames);
-    const requestedSet = new Set(requestedNames);
+    const availableSet = new Set(availableNames);
     const missingNames = requestedNames.filter(name => !availableSet.has(name));
-    const existingNamesInOrder = requestedNames.filter(name => availableSet.has(name));
-    const isExactMatch = requestedSet.size === normalizedAvailableNames.length
-      && normalizedAvailableNames.every(name => requestedSet.has(name));
-
     return {
       collectionName: this.collectionName,
-      requestedNames,
-      existingNamesInOrder,
+      existingNamesInOrder: requestedNames.filter(name => availableSet.has(name)),
       missingNames,
       missingCount: missingNames.length,
-      matchKind: isExactMatch ? 'exact-match' : 'subset-match',
     };
   }
-
   static #normalizedFilename(filename: string | null | undefined): string | null {
     const trimmed = Collection.#normalizedText(filename);
     return trimmed ? Collection.filenameFromCollectionName(trimmed) : null;
