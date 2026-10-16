@@ -186,6 +186,11 @@ its additional cost. Review does not automatically require the strongest model;
 use the least expensive model capable of evaluating the particular risks. Keep
 architectural and other judgment-heavy review with the root.
 
+A fresh-context reviewer that a skill requires, such as the one
+`code-quality-review` starts, is outside this cost gate and needs no ledger
+entry. It exists for independence from the author's context, not for savings,
+and runs at the root's model and effort.
+
 ## Task-local diagnostics and closure
 
 For tasks with delegation, keep one compact root-owned ledger beside the execution
