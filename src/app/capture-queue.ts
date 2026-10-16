@@ -19,11 +19,20 @@ export interface ICapturePositioning {
   showFrameAfterCapture(review: IFrameReviewSession, endpoint: CaptureEndpoint): Promise<void>;
 }
 
-// A mark or lock as the screens see it: a refusal carries the text to show.
+// A mark or lock as the screens see it: a refusal carries the text to show. 'stopped' means nothing is
+// left to say, because the movie the lock was asked for was replaced while its saved frames were checked.
 export type CaptureTransition =
   | Readonly<{ kind: 'marked-start' | 'marked-end' }>
   | Readonly<{ kind: 'locked'; range: CapturedRange }>
-  | Readonly<{ kind: 'rejected'; message: string }>;
+  | Readonly<{ kind: 'rejected'; message: string }>
+  | Readonly<{ kind: 'stopped' }>;
+
+type DraftCapture = Extract<IRangeCaptureSnapshot['capture'], { kind: 'draft' }>;
+
+type SavedDraftCheck =
+  | Readonly<{ kind: 'exact' }>
+  | Readonly<{ kind: 'refused'; message: string }>
+  | Readonly<{ kind: 'movie-replaced' }>;
 
 export interface ICaptureQueueEvents {
   // Sent before the change is published, so a refinement of that range can be ended first.
@@ -131,11 +140,16 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   // A draft with saved endpoints is first checked against the movie, so no caller has to remember to do it.
   async lockRange(): Promise<CaptureTransition> {
     const draft = this.model?.snapshot.capture;
-    if (draft?.kind === 'draft' && (draft.start?.kind === 'saved-exact-frame' || draft.end?.kind === 'saved-exact-frame')
-      && !await this.prepareSavedDraft()) {
-      return Object.freeze({ kind: 'rejected', message: this.deps.status.message ?? 'Saved draft frames could not be checked.' });
+    if (draft?.kind !== 'draft' || (draft.start?.kind !== 'saved-exact-frame' && draft.end?.kind !== 'saved-exact-frame')) {
+      return this.lockDraft();
     }
-    return this.lockDraft();
+    const check = await this.makeSavedDraftExact(draft);
+    if (check.kind === 'exact') return this.lockDraft();
+    // A lock asked for one movie says nothing on the status line of the movie opened since.
+    if (check.kind === 'movie-replaced') return Object.freeze({ kind: 'stopped' });
+    this.deps.status.show(check.message);
+    this.deps.status.changed();
+    return Object.freeze({ kind: 'rejected', message: check.message });
   }
 
   private lockDraft(): CaptureTransition {
@@ -152,29 +166,36 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     return transition;
   }
 
-  async prepareSavedDraft(): Promise<boolean> {
-    const draft = this.model?.snapshot.capture;
-    const review = this.deps.movie.review;
-    const generation = this.deps.movie.sourceGeneration;
-    if (!draft || draft.kind !== 'draft') return true;
-    const savedStart = draft.start?.kind === 'saved-exact-frame' ? draft.start : null;
-    const savedEnd = draft.end?.kind === 'saved-exact-frame' ? draft.end : null;
-    if (!savedStart && !savedEnd) return true;
-    if (!review?.state().captureEnabled || this.deps.storage.restoring) return false;
-    try {
-      const identities = await this.indexedIdentities(review, savedStart, savedEnd);
-      const current = this.model?.snapshot.capture;
-      if (this.deps.movie.review !== review || this.deps.movie.sourceGeneration !== generation || current?.kind !== 'draft'
-        || current.start !== draft.start || current.end !== draft.end) return false;
-      if (!this.model?.hydrateSavedDraft(identities)) {
-        throw new Error('Saved draft frames no longer match this movie. Mark new endpoints before locking.');
-      }
-      this.deps.status.changed();
-      return true;
-    } catch (error) {
-      this.reportCheckFailure(error, 'Saved draft frames could not be checked.');
-      return false;
+  private async makeSavedDraftExact(draft: DraftCapture): Promise<SavedDraftCheck> {
+    const { movie, storage } = this.deps;
+    const review = movie.review;
+    const generation = movie.sourceGeneration;
+    if (!this.model || !review?.state().captureEnabled || storage.restoring || movie.lifecycle !== 'open') {
+      return Object.freeze({ kind: 'refused', message: this.captureUnavailableText() });
     }
+    const movieReplaced = () => movie.review !== review || movie.sourceGeneration !== generation;
+    let identities: Parameters<RangeCaptureModel['hydrateSavedDraft']>[0];
+    try {
+      identities = await this.indexedIdentities(review,
+        draft.start?.kind === 'saved-exact-frame' ? draft.start : null,
+        draft.end?.kind === 'saved-exact-frame' ? draft.end : null);
+    } catch (error) {
+      if (movieReplaced()) return Object.freeze({ kind: 'movie-replaced' });
+      const message = error instanceof Error ? error.message : 'Saved draft frames could not be checked.';
+      this.reportError(message, error);
+      return Object.freeze({ kind: 'refused', message });
+    }
+    if (movieReplaced()) return Object.freeze({ kind: 'movie-replaced' });
+    const current = this.model?.snapshot.capture;
+    if (current?.kind !== 'draft' || current.start !== draft.start || current.end !== draft.end) {
+      return Object.freeze({ kind: 'refused', message: 'The draft changed while its saved frames were being checked. Lock it again.' });
+    }
+    if (!this.model?.hydrateSavedDraft(identities)) {
+      const message = 'Saved draft frames no longer match this movie. Mark new endpoints before locking.';
+      this.reportError(message);
+      return Object.freeze({ kind: 'refused', message });
+    }
+    return Object.freeze({ kind: 'exact' });
   }
 
   async prepareSavedRange(rangeId: CapturedRangeId): Promise<boolean> {
@@ -278,14 +299,18 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   }
 
   captureUnavailable(): CaptureTransition {
-    const message = this.deps.storage.hasStaleRanges
+    const message = this.captureUnavailableText();
+    this.deps.status.show(message);
+    this.deps.status.changed();
+    return Object.freeze({ kind: 'rejected', message });
+  }
+
+  private captureUnavailableText(): string {
+    return this.deps.storage.hasStaleRanges
       ? 'Open movie to find the original source before capturing.'
       : this.deps.movie.lifecycle === 'opening' ? 'Wait for the movie to finish opening.'
         : this.deps.storage.restoring ? 'Saved captures are still loading.'
         : 'Capture becomes available after exact frame preparation.';
-    this.deps.status.show(message);
-    this.deps.status.changed();
-    return Object.freeze({ kind: 'rejected', message });
   }
 
   async restore(review: IFrameReviewSession): Promise<void> {

@@ -60,6 +60,11 @@ function captureQueue({ storage = new UnsavedCaptureStorage() as ICaptureStorage
   return { queue, status, movie };
 }
 
+function savedDraftModel(): RangeCaptureModel {
+  const saved = (frameIndex: number) => CaptureEndpoints.savedExact(frameIndex, frame(frameIndex).frameInfoHash, BigInt(frameIndex * 1_000), 1);
+  return RangeCaptureModel.restore({ ranges: [], draft: { start: saved(3), end: null }, nextRangeSequence: 1 }, 1);
+}
+
 async function lock(queue: CaptureQueue, start: number, end: number) {
   queue.markStart(exactCapture(start));
   queue.markEnd(exactCapture(end));
@@ -125,6 +130,59 @@ describe('CaptureQueue', () => {
     queue.save();
 
     expect(storage.save).toHaveBeenCalledWith(expect.anything(), new Set([first.id]));
+  });
+
+  it('says why a saved draft cannot be locked before exact frames are ready', async () => {
+    const { queue, status, movie } = captureQueue();
+    movie.reviewState = FrameReviewState.create('indexing', 1);
+    movie.review = { id: 'session_12345678', state: () => movie.reviewState } as unknown as IFrameReviewSession;
+    queue.useModel(savedDraftModel());
+
+    const result = await queue.lockRange();
+
+    expect(result).toEqual({ kind: 'rejected', message: 'Capture becomes available after exact frame preparation.' });
+    expect(status.message).toBe('Capture becomes available after exact frame preparation.');
+  });
+
+  it('says that a saved draft changed while its frames were being checked, instead of locking it', async () => {
+    const { queue, status, movie } = captureQueue();
+    let answer: (identity: ReturnType<typeof frame>) => void = () => undefined;
+    movie.review = {
+      id: 'session_12345678',
+      state: () => movie.reviewState,
+      frameIdentity: vi.fn(() => new Promise(resolve => { answer = resolve; })),
+    } as unknown as IFrameReviewSession;
+    queue.useModel(savedDraftModel());
+
+    const locking = queue.lockRange();
+    queue.markStart(exactCapture(4));
+    answer(frame(3));
+    const result = await locking;
+
+    expect(result).toEqual({ kind: 'rejected', message: 'The draft changed while its saved frames were being checked. Lock it again.' });
+    expect(status.message).toBe('The draft changed while its saved frames were being checked. Lock it again.');
+    expect(queue.ranges).toHaveLength(0);
+  });
+
+  it('stops without a word on the status line when the movie was replaced while the saved frames were checked', async () => {
+    const { queue, status, movie } = captureQueue();
+    let answer: (identity: ReturnType<typeof frame>) => void = () => undefined;
+    movie.review = {
+      id: 'session_12345678',
+      state: () => movie.reviewState,
+      frameIdentity: vi.fn(() => new Promise(resolve => { answer = resolve; })),
+    } as unknown as IFrameReviewSession;
+    queue.useModel(savedDraftModel());
+
+    const locking = queue.lockRange();
+    status.show('Opening Next.mkv');
+    movie.sourceGeneration = 2;
+    answer(frame(3));
+    const result = await locking;
+
+    expect(result).toEqual({ kind: 'stopped' });
+    expect(status.message).toBe('Opening Next.mkv');
+    expect(queue.capture?.capture).toMatchObject({ kind: 'draft', start: { kind: 'saved-exact-frame' } });
   });
 
   it('restores a saved queue, positions the movie after it, and says what came back', async () => {
