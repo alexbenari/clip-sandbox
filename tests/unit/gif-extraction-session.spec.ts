@@ -12,6 +12,7 @@ import { GifExtractionSession, type IThumbnailCacheService } from '../../src/app
 import type { IFrameReviewDisplayedCapture } from '../../src/app/frame-review-displayed-capture.js';
 import { ThumbnailOpaqueId } from '../../src/app/thumbnail-cache-service.js';
 import type { IClipCapturesStoreService } from '../../src/app/clip-captures-store-service.js';
+import { SavedCaptureStorage } from '../../src/app/capture-storage.js';
 import type { IClipExtractionService } from '../../src/frame-review/clip-extraction-api.js';
 
 const identity = Object.freeze({
@@ -90,7 +91,7 @@ describe('GifExtractionSession', () => {
       chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(async () => review),
     };
-    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStore, capturePositioning });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStorage: new SavedCaptureStorage(captureStore), capturePositioning });
 
     expect(await session.openMovie()).toBe('opened');
     await vi.waitFor(() => expect(capturePositioning.showFrameAfterCapture).toHaveBeenCalledOnce());
@@ -113,7 +114,7 @@ describe('GifExtractionSession', () => {
       chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(async () => reviewSession()),
     };
-    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStore });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStorage: new SavedCaptureStorage(captureStore) });
 
     expect(await session.openMovie()).toBe('opened');
     expect(session.snapshot.capturesLoading).toBe(true);
@@ -148,7 +149,7 @@ describe('GifExtractionSession', () => {
       chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(async () => review),
     };
-    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStore });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStorage: new SavedCaptureStorage(captureStore) });
 
     await session.openMovie();
     expect(session.snapshot.capturesLoading).toBe(true);
@@ -493,7 +494,7 @@ describe('GifExtractionSession behavior before the split', () => {
   function reporter() { return { progress: vi.fn(), success: vi.fn(), failure: vi.fn() }; }
 
   async function restoredSession(store: IClipCapturesStoreService, review = reviewWithFrames(), options = {}) {
-    const session = GifExtractionSession.forMovieCapture(movieService(review), thumbnailService(), { captureStore: store, ...options });
+    const session = GifExtractionSession.forMovieCapture(movieService(review), thumbnailService(), { captureStorage: new SavedCaptureStorage(store), ...options });
     await session.openMovie();
     await vi.waitFor(() => expect(session.snapshot.capturesLoading).toBe(false));
     return session;
@@ -672,7 +673,7 @@ describe('GifExtractionSession behavior before the split', () => {
       chooseSource: vi.fn(async () => ({ name: 'Sample Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
       open: vi.fn(() => new Promise<IFrameReviewSession>(resolve => { finishOpening = resolve; })),
     };
-    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStore: store });
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStorage: new SavedCaptureStorage(store) });
 
     const opening = session.openMovie();
     await vi.waitFor(() => expect(session.snapshot.lifecycle).toBe('opening'));
@@ -707,7 +708,7 @@ describe('GifExtractionSession behavior before the split', () => {
     const thumbnails = thumbnailService();
     const cancelCurrent = vi.fn(async () => undefined);
     const session = GifExtractionSession.forMovieCapture(movieService(review), thumbnails, {
-      captureStore: store, extractionService: { ...extractionService(vi.fn()), cancelCurrent },
+      captureStorage: new SavedCaptureStorage(store), extractionService: { ...extractionService(vi.fn()), cancelCurrent },
     });
     await session.openMovie();
     await vi.waitFor(() => expect(session.snapshot.capturesLoading).toBe(false));

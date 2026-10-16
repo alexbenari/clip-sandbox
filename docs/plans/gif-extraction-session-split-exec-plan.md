@@ -21,7 +21,11 @@ After this work, each job has its own small class, Collection Refine has its own
   - [x] (2026-10-16) The user chose to remove the unreachable stale-movie path (spec D19). It is removed in the desktop layer and the renderer, along with the obsolete end-to-end test. Case 1 is dropped because it described that path.
 - [x] M2 `GifSessionStatus` and `CurrentMovie` (2026-10-16). The session drives a change of movie through `beginChange`, `chooseSource`, `openCandidate`, `stopFollowingReview`, `switchTo` and `followReview` (D16). `openMovie` now reports "Opening ..." to Activity just after publishing the opening snapshot rather than just before; the order is not visible to users. G3: `test-evidence/gif-extraction-session-split/G3-commit-hook.log`.
 - [x] M3 `RangeExtraction` (2026-10-16). The outcome of a run is judged over every queued range, as before. The caller passes those range ids with each call, so extraction does not depend on the queue. `IExtractionPublicationListener` moved with it, and the session re-exports it. G4: `test-evidence/gif-extraction-session-split/G4-commit-hook.log`.
-- [ ] M4 `CaptureQueue` and capture storage
+- [x] M4 `CaptureQueue` and capture storage (2026-10-16). `AppController` passes `SavedCaptureStorage` (D18); the default is `UnsavedCaptureStorage`. Two departures from the plan text:
+  - The restore steps live in `CaptureQueue`, because they set the queue's model and thumbnails. The storage provides attach, save and the stale and loading state.
+  - A removed range is reported as a `rangeRemoved` event before the queue publishes, so the session ends a refinement of that range in the same order as before.
+  
+  G5: `test-evidence/gif-extraction-session-split/G5-commit-hook.log`; the search for `captureStore` in the session finds nothing.
 - [ ] M5 `RangeRefinement`, with locking and refinement checking saved frames themselves
 - [ ] M6 `CollectionClipRefinementSession`, the one-range domain factory, and narrow UI interfaces
 - [ ] M7 Documentation, end-to-end specs and checks in the running app
@@ -61,6 +65,9 @@ Unavailable skills or fallbacks:
   Evidence: `git show dabd91d -- electron/clip-captures-ipc.cjs src/app/saved-capture-queue-persistence.ts src/app/clip-captures-store-service.ts` removes the `last` channel, `LastSavedMovie` and `adoptUnavailable`.
 - Discovery: the "saved movie changed" (stale) restore path is now unreachable. A stale result needs an expected fingerprint, which only the removed startup restore supplied; no caller passes one now. So the saved-storage removal rule ("removable while the movie reference exists, even if the movie is unavailable") no longer applies in practice. Ranges still become stale when `prepareSavedRange` finds mismatched frames, and that path stays live.
   Evidence: `git grep -n expectedFingerprint -- src` shows only pass-through parameters and no caller with a value; `electron/clip-captures-ipc.cjs` returns `stale` only when `payload.expectedFingerprint` is set.
+
+- Discovery: after M4, `CaptureQueue` is 394 lines, above G10's limit of about 350. Restoring saved captures and recreating their thumbnails take about 85 of those lines. If it is still over at G10, the candidate split is a separate class for restoring saved captures.
+  Evidence: `(Get-Content src/app/capture-queue.ts).Count` = 394 at commit for M4.
 
 ## Decision Log
 
