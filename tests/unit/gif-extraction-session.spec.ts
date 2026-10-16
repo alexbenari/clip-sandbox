@@ -13,7 +13,7 @@ import type { IFrameReviewDisplayedCapture } from '../../src/app/frame-review-di
 import { ThumbnailOpaqueId } from '../../src/app/thumbnail-cache-service.js';
 import type { IClipCapturesStoreService } from '../../src/app/clip-captures-store-service.js';
 import { SavedCaptureStorage } from '../../src/app/capture-storage.js';
-import type { IClipExtractionService } from '../../src/frame-review/clip-extraction-api.js';
+import type { IClipExtractionService } from '../../src/business-logic/clip-extraction-service.js';
 
 const identity = Object.freeze({
   frameIndex: 5, originalFrameIndex: 5, pts: 5_000n, duration: 1_000n,

@@ -1,6 +1,6 @@
 import { ClipExtractor } from '../business-logic/clip-extractor.js';
 import type { CapturedRangeId, IReadyToExtractRange } from '../domain/captured-range.js';
-import type { IClipExtractionService } from '../frame-review/clip-extraction-api.js';
+import type { IClipExtractionService } from '../business-logic/clip-extraction-service.js';
 import type { ActivityInput } from './activity-logger.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';

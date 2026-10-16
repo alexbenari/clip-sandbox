@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { GifExtractionSession, type IThumbnailCacheService } from '../../src/app/gif-extraction-session.js';
 import { ThumbnailOpaqueId } from '../../src/app/thumbnail-cache-service.js';
-import type { IClipExtractionService } from '../../src/frame-review/clip-extraction-api.js';
+import type { IClipExtractionService } from '../../src/business-logic/clip-extraction-service.js';
 import type {
   FrameReviewDisplayFrame,
   IFrameReviewService,

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { CapturedRanges, type IReadyToExtractRange } from '../../src/domain/captured-range.js';
 import { CaptureEndpoints } from '../../src/domain/capture-endpoint.js';
-import type { IClipExtractionService } from '../../src/frame-review/clip-extraction-api.js';
+import type { IClipExtractionService } from '../../src/business-logic/clip-extraction-service.js';
 import { GifSessionStatus } from '../../src/app/gif-session-status.js';
 import { RangeExtraction } from '../../src/app/range-extraction.js';
 

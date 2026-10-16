@@ -7,7 +7,7 @@ import type { IFrameReviewState } from '../frame-review/model/frame-review-state
 import { CaptureEndpoints } from '../domain/capture-endpoint.js';
 import type { CapturedRange, CapturedRangeId, IReadyToExtractRange } from '../domain/captured-range.js';
 import type { IRangeCaptureSnapshot } from '../domain/range-capture-model.js';
-import type { IClipExtractionService } from '../frame-review/clip-extraction-api.js';
+import type { IClipExtractionService } from '../business-logic/clip-extraction-service.js';
 import type { ActivityInput } from './activity-logger.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';

@@ -73,6 +73,22 @@ describe('ClipExtractor', () => {
     expect(service.extract).not.toHaveBeenCalled();
   });
 
+  it('treats handles as opaque: any well-formed handle passes, whatever its prefix', async () => {
+    const service = extractionService();
+    const extractor = new ClipExtractor(service);
+
+    await extractor.extract({
+      range: exactRange(), sourceHandle: 'movieAbcdefghijklmnop', currentSourceGeneration: 4,
+      destinationHandle: 'folder_0123456789abcdef', collectionName: 'Sample Movie',
+    });
+    await expect(extractor.extract({
+      range: exactRange(), sourceHandle: 'short', currentSourceGeneration: 4,
+      destinationHandle: 'folder_0123456789abcdef', collectionName: 'Sample Movie',
+    })).rejects.toThrow('The source handle is invalid.');
+
+    expect(service.extract).toHaveBeenCalledOnce();
+  });
+
   it('rejects invalid collection names before service extraction', async () => {
     const service = extractionService();
     const extractor = new ClipExtractor(service);

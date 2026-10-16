@@ -1,3 +1,4 @@
+import { OpaqueHandle } from '../frame-review/opaque-handle.js';
 import { Collection } from '../domain/collection.js';
 import type { IReadyToExtractRange } from '../domain/captured-range.js';
 import type {
@@ -5,9 +6,9 @@ import type {
   ICreatedExtractionMedia,
   IExactClipExtractionRequest,
   IClipExtractionProgress,
-} from '../frame-review/clip-extraction-api.js';
+} from './clip-extraction-service.js';
 
-export type { IClipExtractionService } from '../frame-review/clip-extraction-api.js';
+export type { IClipExtractionService } from './clip-extraction-service.js';
 
 export interface IClipExtractorRequest {
   readonly range: IReadyToExtractRange;
@@ -42,12 +43,8 @@ export class ClipExtractor {
       || range.sourceGeneration !== request.currentSourceGeneration) {
       throw new Error('The captured range belongs to an earlier source.');
     }
-    if (!/^source_[a-zA-Z0-9_-]{8,120}$/.test(request.sourceHandle)) {
-      throw new Error('The source handle is invalid.');
-    }
-    if (!/^destination_[a-zA-Z0-9_-]{8,120}$/.test(request.destinationHandle)) {
-      throw new Error('The extraction destination handle is invalid.');
-    }
+    OpaqueHandle.parse(request.sourceHandle, 'source handle');
+    OpaqueHandle.parse(request.destinationHandle, 'extraction destination handle');
     const collection = Collection.validateCollectionName(request.collectionName);
     if (!collection.ok || collection.name !== request.collectionName) {
       throw new Error('The extraction collection name is invalid.');

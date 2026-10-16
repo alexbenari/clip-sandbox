@@ -4,7 +4,7 @@ import type {
   IClipExtractionService,
   ICreatedExtractionMedia,
   IExtractionDestinationSnapshot,
-} from '../frame-review/clip-extraction-api.js';
+} from '../business-logic/clip-extraction-service.js';
 
 export interface IExtractionDestinationPublication {
   readonly folderPath: string;

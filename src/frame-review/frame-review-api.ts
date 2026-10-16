@@ -1,3 +1,4 @@
+import { OpaqueHandle } from './opaque-handle.js';
 import type { AdjacentDirection } from './adjacent-step-scheduler.js';
 import type { IFrameReviewState } from './model/frame-review-state.js';
 import type { ISourceFrameIdentity } from './model/source-frame-identity.js';
@@ -96,9 +97,6 @@ export class FrameReviewOpaqueId {
   }
 
   private static parse(value: unknown, label: string): string {
-    if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(value)) {
-      throw new Error(`Frame-review ${label} is invalid.`);
-    }
-    return value;
+    return OpaqueHandle.parse(value, `frame-review ${label}`);
   }
 }

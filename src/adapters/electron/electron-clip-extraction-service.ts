@@ -5,7 +5,7 @@ import type {
   IClipExtractionProgress,
   IExtractionDestinationEntry,
   IExtractionDestinationSnapshot,
-} from '../../frame-review/clip-extraction-api.js';
+} from '../../business-logic/clip-extraction-service.js';
 
 interface IWireResponse {
   readonly ok?: boolean;
