@@ -53,20 +53,24 @@ export class CollectionRefinementWorkflow {
         reporter.failure('Save or discard the current changes before refining a clip.');
         return;
       }
-      session.setExtractionDestination(collectionFilename
-        ? { kind: 'collection', folderPath: request.folderPath, collectionFilename }
-        : { kind: 'folder', folderPath: request.folderPath });
       refineScreen.showPreparation(`Finding the original movie for ${request.filename}…`);
       navigation.activate(refineScreen.id);
       const resolved = await sourceLookup.resolve(request);
       if (this.isSuperseded(revision)) return;
       if (resolved.kind === 'cancelled') {
-        navigation.activate(this.refinement.collectionScreenId);
-        refineScreen.showPreparation(null);
+        this.returnToCollection();
         return;
       }
       if (request.folderPath !== this.openFolderPath()
-        || collectionFilename !== this.refinement.pipelineWorkingCopy.activeCollectionFilename()) return;
+        || collectionFilename !== this.refinement.pipelineWorkingCopy.activeCollectionFilename()) {
+        this.returnToCollection();
+        reporter.failure('The open folder or collection changed while the original movie was being found. Choose the clip again.');
+        return;
+      }
+      // Set only once the clip's view is confirmed, so an abandoned start leaves the open movie's destination alone.
+      session.setExtractionDestination(collectionFilename
+        ? { kind: 'collection', folderPath: request.folderPath, collectionFilename }
+        : { kind: 'folder', folderPath: request.folderPath });
       refineScreen.showPreparation('Opening the original movie…');
       await session.openCollectionSource(resolved.source);
       if (this.isSuperseded(revision)) return;
@@ -105,6 +109,11 @@ export class CollectionRefinementWorkflow {
   private async refineAgain(rangeId: CapturedRangeId): Promise<void> {
     const started = await this.refinement.refinementSession?.beginRefinement(rangeId);
     if (started?.kind === 'rejected') this.refinement.reporter.failure(started.message);
+  }
+
+  private returnToCollection(): void {
+    this.refinement.navigation.activate(this.refinement.collectionScreenId);
+    this.refinement.refineScreen.showPreparation(null);
   }
 
   private isSuperseded(revision: number): boolean {

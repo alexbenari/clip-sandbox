@@ -83,12 +83,16 @@ describe('CollectionRefinementWorkflow', () => {
     expect(session.openCollectionSource).not.toHaveBeenCalled();
   });
 
-  it('stops when the selected collection changed during the lookup', async () => {
-    const { workflow, session } = refinementWorkflow();
+  it('returns to Collection, leaving the destination alone, when the selected collection changed during the lookup', async () => {
+    const { workflow, session, navigation, refineScreen, reporter } = refinementWorkflow();
 
     await workflow.start(request, 'other.txt');
 
     expect(session.openCollectionSource).not.toHaveBeenCalled();
+    expect(session.setExtractionDestination).not.toHaveBeenCalled();
+    expect(navigation.activeScreen.id).toBe('collection');
+    expect(refineScreen.showPreparation).toHaveBeenLastCalledWith(null);
+    expect(reporter.failure).toHaveBeenCalledWith(expect.stringContaining('changed'));
   });
 
   it('ignores a lookup that finishes after the user went Back', async () => {

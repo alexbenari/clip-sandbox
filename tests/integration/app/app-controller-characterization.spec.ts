@@ -327,11 +327,11 @@ describe('AppController characterization', () => {
       resolveSource({ kind: 'cancelled' });
 
       await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection'));
-      expect(collectionRefinement.destinations).toEqual([{ kind: 'folder', folderPath: 'C:/clips' }]);
+      expect(collectionRefinement.destinations).toEqual([]);
       expect(collectionRefinement.openCollectionSource).not.toHaveBeenCalled();
     });
 
-    test('stops when the selected collection changes during the source lookup', async () => {
+    test('returns to Collection without opening the movie when the selected collection changes during the source lookup', async () => {
       folder.write('subset.txt', 'alpha.mp4\n');
       await startCollectionScreen();
       await openFolder(['alpha.mp4', 'bravo.mp4']);
@@ -349,8 +349,9 @@ describe('AppController characterization', () => {
         range: { start: { frameIndex: 1, frameInfoHash: '0000000000000001' }, end: { frameIndex: 2, frameInfoHash: '0000000000000002' }, endInclusive: true },
       });
 
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection'));
       expect(collectionRefinement.openCollectionSource).not.toHaveBeenCalled();
+      expect(collectionRefinement.destinations).toEqual([]);
     });
   });
 });
