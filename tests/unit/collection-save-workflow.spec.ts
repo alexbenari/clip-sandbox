@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AppText } from '../../src/app/app-text.js';
 import { CollectionSaveWorkflow } from '../../src/app/collection-save-workflow.js';
 import { EventSource } from '../../src/app/event-source.js';
-import { PipelineSession } from '../../src/app/pipeline-session.js';
+import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 
@@ -21,13 +21,13 @@ function saveWorkflow({ startInCollection = false, writeFails = false } = {}) {
     videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')],
     collections: [Collection.fromFilename({ filename: 'subset.txt', orderedClipNames: ['bravo.mp4'] })],
   });
-  const pipelineSession = new PipelineSession();
-  pipelineSession.loadPipeline(pipeline);
+  const pipelineWorkingCopy = new PipelineWorkingCopy();
+  pipelineWorkingCopy.loadPipeline(pipeline);
   if (startInCollection) {
     const subset = pipeline.getCollectionByFilename('subset.txt');
-    const loaded = pipelineSession.materializeSelection(subset);
+    const loaded = pipelineWorkingCopy.materializeSelection(subset);
     if (!loaded || loaded.materialization.kind !== 'loaded') throw new Error('subset did not load');
-    pipelineSession.activateSelection({ collection: subset, sequence: loaded.materialization.sequence });
+    pipelineWorkingCopy.activateSelection({ collection: subset, sequence: loaded.materialization.sequence });
   }
   const written: Collection[] = [];
   const fileWriter = {
@@ -41,7 +41,7 @@ function saveWorkflow({ startInCollection = false, writeFails = false } = {}) {
   const toolbar = new EventSource<{ saveRequested: void; saveAsNewRequested: void }>();
   const reporter = { success: vi.fn() };
   const workflow = new CollectionSaveWorkflow({
-    pipelineSession,
+    pipelineWorkingCopy,
     fileWriter,
     saveAsNewDialog: dialog,
     toolbar,
@@ -52,7 +52,7 @@ function saveWorkflow({ startInCollection = false, writeFails = false } = {}) {
     reporter,
     appText: new AppText(),
   });
-  return { workflow, pipelineSession, pipeline, written, dialog, toolbar, reporter, fileWriter };
+  return { workflow, pipelineWorkingCopy, pipeline, written, dialog, toolbar, reporter, fileWriter };
 }
 
 async function settled<T>(promise: Promise<T>): Promise<T | 'pending'> {
@@ -61,12 +61,12 @@ async function settled<T>(promise: Promise<T>): Promise<T | 'pending'> {
 
 describe('CollectionSaveWorkflow', () => {
   it('saves a collection view straight to its file', async () => {
-    const { workflow, written, pipelineSession, reporter, dialog } = saveWorkflow({ startInCollection: true });
+    const { workflow, written, pipelineWorkingCopy, reporter, dialog } = saveWorkflow({ startInCollection: true });
 
     await expect(workflow.saveActive()).resolves.toBe('saved');
 
     expect(written.map(collection => [collection.filename, collection.orderedClipNames])).toEqual([['subset.txt', ['bravo.mp4']]]);
-    expect(pipelineSession.hasDirtyClipSequenceChanges).toBe(false);
+    expect(pipelineWorkingCopy.hasDirtyClipSequenceChanges).toBe(false);
     expect(reporter.success).toHaveBeenCalledWith(new AppText().savedCollectionFileText('subset.txt'));
     expect(dialog.open).not.toHaveBeenCalled();
   });
@@ -79,7 +79,7 @@ describe('CollectionSaveWorkflow', () => {
   });
 
   it('asks for a collection name when the pipeline view is saved, and resolves once that save succeeds', async () => {
-    const { workflow, dialog, pipelineSession, written } = saveWorkflow();
+    const { workflow, dialog, pipelineWorkingCopy, written } = saveWorkflow();
 
     const outcome = workflow.saveActive();
     expect(dialog.open).toHaveBeenCalledWith({ isPipelineMode: true });
@@ -88,7 +88,7 @@ describe('CollectionSaveWorkflow', () => {
 
     await expect(outcome).resolves.toBe('saved');
     expect(written.map(collection => collection.filename)).toEqual(['picks.txt']);
-    expect(pipelineSession.activeCollection?.filename).toBe('picks.txt');
+    expect(pipelineWorkingCopy.activeCollection?.filename).toBe('picks.txt');
     expect(dialog.isOpen).toBe(false);
   });
 

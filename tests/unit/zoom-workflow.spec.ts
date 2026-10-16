@@ -4,7 +4,7 @@ import { ActivityReporter } from '../../src/app/activity-reporter.js';
 import { AppSessionState } from '../../src/app/app-session-state.js';
 import { AppText } from '../../src/app/app-text.js';
 import { EventSource } from '../../src/app/event-source.js';
-import { PipelineSession } from '../../src/app/pipeline-session.js';
+import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { ZoomWorkflow } from '../../src/app/zoom-workflow.js';
 import type { ClipEditorResult } from '../../src/business-logic/clip-editor.js';
 import type { VideoEdit } from '../../src/business-logic/video-edit-catalog.js';
@@ -23,16 +23,16 @@ class FakeZoomView extends EventSource<{ playbackFailed: { name: string; error: 
 
 function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
   const pipeline = new Pipeline({ folderName: 'clips', videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')] });
-  const pipelineSession = new PipelineSession();
-  pipelineSession.loadPipeline(pipeline);
-  const [alpha, bravo] = pipelineSession.currentClipSequence!.orderedClips();
+  const pipelineWorkingCopy = new PipelineWorkingCopy();
+  pipelineWorkingCopy.loadPipeline(pipeline);
+  const [alpha, bravo] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
   const openFolder = new AppSessionState();
   const folderSession = { folderPath: 'C:/clips' };
   openFolder.setCurrentFolderSession(folderSession);
   const zoomView = new FakeZoomView();
   const grid = Object.assign(new EventSource<{ openClipRequested: string }>(), {
     getClipMediaSource: (clipId: string) => `file:///C:/clips/${clipId}.mp4`,
-    getClipById: (clipId: string | null | undefined) => pipelineSession.resolveClip(clipId),
+    getClipById: (clipId: string | null | undefined) => pipelineWorkingCopy.resolveClip(clipId),
     getNextClip: (clipId: string | null) => (clipId === alpha.id ? bravo : null),
     getPrevClip: (clipId: string | null) => (clipId === bravo.id ? alpha : null),
     setSelectedClipId: vi.fn(),
@@ -45,7 +45,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
   const collectionView = { applySelection: vi.fn(), activeCacheKey: () => 'pipeline', refreshSelector: vi.fn(), refreshToolbar: vi.fn() };
   const screens = new EventSource<{ screenChanged: { id: string } }>();
   const workflow = new ZoomWorkflow({
-    pipelineSession,
+    pipelineWorkingCopy,
     openFolder,
     folderFiles: { toRendererFile: created => created as File },
     zoom: zoomView,
@@ -62,7 +62,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
     reporter: new ActivityReporter({ log: entry => { entries.push(entry); } }),
     appText: new AppText(),
   });
-  return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineSession };
+  return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineWorkingCopy };
 }
 
 describe('ZoomWorkflow', () => {
@@ -111,7 +111,7 @@ describe('ZoomWorkflow', () => {
 
   it('inserts a created clip into the pipeline view and zooms into it', async () => {
     const created = new File(['looped'], 'alpha-looped.mp4');
-    const { workflow, zoomView, editMenu, entries, alpha, collectionView, pipelineSession } = zoomWorkflow({
+    const { workflow, zoomView, editMenu, entries, alpha, collectionView, pipelineWorkingCopy } = zoomWorkflow({
       editResult: { ok: true, code: 'created', edit: loopify, request: {} as never, createdFile: created },
     });
     workflow.openClip(alpha);
@@ -120,7 +120,7 @@ describe('ZoomWorkflow', () => {
     editMenu.open.mock.calls[0][0].onSelectEdit(loopify);
 
     await vi.waitFor(() => expect(entries.at(-1)).toMatchObject({ kind: 'success' }));
-    expect(pipelineSession.pipeline?.videoNames()).toContain('alpha-looped.mp4');
+    expect(pipelineWorkingCopy.pipeline?.videoNames()).toContain('alpha-looped.mp4');
     expect(collectionView.applySelection).toHaveBeenCalled();
   });
 

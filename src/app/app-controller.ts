@@ -4,7 +4,7 @@ import { PipelineFactory } from '../business-logic/PipelineFactory.js';
 import { ClipEditor } from '../business-logic/clip-editor.js';
 import { VideoEditCatalog } from '../business-logic/video-edit-catalog.js';
 import { AppSessionState } from './app-session-state.js';
-import { PipelineSession } from './pipeline-session.js';
+import { PipelineWorkingCopy } from './pipeline-working-copy.js';
 import { FullscreenAdapter } from '../adapters/browser/fullscreen-adapter.js';
 import { ElectronFolderFileService } from '../adapters/electron/electron-folder-file-service.js';
 import { ElectronFolderService } from '../adapters/electron/electron-folder-service.js';
@@ -84,10 +84,10 @@ export class AppController {
 
     // Application services and adapters.
     const state = new AppSessionState();
-    const pipelineSession = new PipelineSession();
+    const pipelineWorkingCopy = new PipelineWorkingCopy();
     const appText = new AppText();
     const collectionNameValidator = new CollectionNameValidator(appText);
-    const newCollectionNameCheck = new NewCollectionNameCheck(pipelineSession, collectionNameValidator);
+    const newCollectionNameCheck = new NewCollectionNameCheck(pipelineWorkingCopy, collectionNameValidator);
     const videoEditCatalog = new VideoEditCatalog();
     const collectionFormat = new CollectionTextFormat();
     const settingsParser = new AppSettingsParser();
@@ -172,7 +172,7 @@ export class AppController {
     const openFolderRefreshSession = new OpenFolderRefreshSession({
       folders,
       openFolder: state,
-      pipelineSession,
+      pipelineWorkingCopy,
       refreshActiveFolder: (): Promise<void> => folderSelection.refreshActiveFolder(),
       reporter: activityReporter,
       diagnostics,
@@ -249,7 +249,7 @@ export class AppController {
 
     // Workflows.
     const collectionView = new CollectionViewWorkflow({
-      pipelineSession,
+      pipelineWorkingCopy,
       openFolder: state,
       grid,
       toolbar: mainToolbarControl,
@@ -264,7 +264,7 @@ export class AppController {
       appText,
     });
     const collectionSave = new CollectionSaveWorkflow({
-      pipelineSession,
+      pipelineWorkingCopy,
       fileWriter: collectionFileWriter,
       saveAsNewDialog,
       toolbar: mainToolbarControl,
@@ -276,7 +276,7 @@ export class AppController {
       appText,
     });
     const addToCollection = new AddToCollectionWorkflow({
-      pipelineSession,
+      pipelineWorkingCopy,
       grid,
       dialog: addToCollectionDialog,
       destinationChoices: AddToCollectionDialogControl,
@@ -288,7 +288,7 @@ export class AppController {
       appText,
     });
     const folderSelection = new FolderSelectionWorkflow({
-      pipelineSession,
+      pipelineWorkingCopy,
       openFolder: state,
       folders,
       pipelineCatalog,
@@ -310,7 +310,7 @@ export class AppController {
       appText,
     });
     const deleteFromDisk = new DeleteFromDiskWorkflow({
-      pipelineSession,
+      pipelineWorkingCopy,
       openFolder: state,
       files: folderFiles,
       fileWriter: collectionFileWriter,
@@ -326,7 +326,7 @@ export class AppController {
       appText,
     });
     const zoom = new ZoomWorkflow({
-      pipelineSession,
+      pipelineWorkingCopy,
       openFolder: state,
       folderFiles: folders,
       zoom: zoomOverlay,
@@ -350,13 +350,13 @@ export class AppController {
       refinedClipList: collectionRangesPanelControl,
       navigation: shell,
       collectionScreenId: collectionScreen.id,
-      pipelineSession,
+      pipelineWorkingCopy,
       openFolder: state,
       diagnostics,
       reporter: activityReporter,
     });
     const gridContextMenu = new GridContextMenuWorkflow({
-      pipelineSession,
+      pipelineWorkingCopy,
       openFolder: state,
       refinementAvailability: collectionRefinementService,
       grid,
@@ -394,7 +394,7 @@ export class AppController {
       fullScreen: fullscreenAdapter,
       zoom,
       collectionFullScreen: fullscreenSession,
-      pipelineSession,
+      pipelineWorkingCopy,
       collectionView,
     });
     const settingsWorkflow = new SettingsWorkflow({

@@ -5,7 +5,7 @@ import type { AppSessionState } from './app-session-state.js';
 import type { ICollectionClipRefinementRequest, ICollectionClipRefinementService } from './collection-clip-refinement.js';
 import type { IEventSource } from './event-source.js';
 import type { CollectionClipRefinementSession } from './collection-clip-refinement-session.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 export interface IScreenNavigation {
   activate(screenId: string): void;
@@ -25,7 +25,7 @@ type CollectionRefinementDependencies = Readonly<{
   refinedClipList: IEventSource<{ refineRequested: CapturedRangeId }> | null;
   navigation: IScreenNavigation;
   collectionScreenId: string;
-  pipelineSession: Pick<PipelineSession, 'hasDirtyClipSequenceChanges' | 'activeCollectionFilename'>;
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'hasDirtyClipSequenceChanges' | 'activeCollectionFilename'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   diagnostics: Pick<AppDiagnostics, 'logRuntimeError'>;
   reporter: Pick<ActivityReporter, 'failure'>;
@@ -49,7 +49,7 @@ export class CollectionRefinementWorkflow {
     if (!session || !sourceLookup) return;
     const revision = ++this.revision;
     try {
-      if (this.refinement.pipelineSession.hasDirtyClipSequenceChanges) {
+      if (this.refinement.pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
         reporter.failure('Save or discard the current changes before refining a clip.');
         return;
       }
@@ -66,7 +66,7 @@ export class CollectionRefinementWorkflow {
         return;
       }
       if (request.folderPath !== this.openFolderPath()
-        || collectionFilename !== this.refinement.pipelineSession.activeCollectionFilename()) return;
+        || collectionFilename !== this.refinement.pipelineWorkingCopy.activeCollectionFilename()) return;
       refineScreen.showPreparation('Opening the original movie…');
       await session.openCollectionSource(resolved.source);
       if (this.isSuperseded(revision)) return;

@@ -6,7 +6,7 @@ import { AppText } from '../../src/app/app-text.js';
 import { CollectionNameValidator } from '../../src/app/collection-name-validator.js';
 import { EventSource } from '../../src/app/event-source.js';
 import { NewCollectionNameCheck } from '../../src/app/new-collection-name-check.js';
-import { PipelineSession } from '../../src/app/pipeline-session.js';
+import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 
@@ -22,16 +22,16 @@ function addWorkflow({ writeFails = false } = {}) {
     videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')],
     collections: [Collection.fromFilename({ filename: 'picks.txt', orderedClipNames: ['bravo.mp4'] })],
   });
-  const pipelineSession = new PipelineSession();
-  pipelineSession.loadPipeline(pipeline);
-  const [alpha, bravo] = pipelineSession.currentClipSequence!.orderedClips();
+  const pipelineWorkingCopy = new PipelineWorkingCopy();
+  pipelineWorkingCopy.loadPipeline(pipeline);
+  const [alpha, bravo] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
   const grid = { selectedClipIds: [alpha.id, bravo.id], getSelectedClipIds() { return this.selectedClipIds; }, invalidateView: vi.fn() };
   const dialog = new FakeAddDialog();
   const toolbar = new EventSource<{ addToCollectionRequested: void }>();
   const written: Collection[] = [];
   const entries: { kind: string; message: string }[] = [];
   const workflow = new AddToCollectionWorkflow({
-    pipelineSession,
+    pipelineWorkingCopy,
     grid,
     dialog,
     destinationChoices: {
@@ -39,7 +39,7 @@ function addWorkflow({ writeFails = false } = {}) {
         .map(collection => ({ label: collection.collectionName, value: collection.filename ?? '', collectionFilename: collection.filename })),
     },
     toolbar,
-    nameCheck: new NewCollectionNameCheck(pipelineSession, new CollectionNameValidator(new AppText())),
+    nameCheck: new NewCollectionNameCheck(pipelineWorkingCopy, new CollectionNameValidator(new AppText())),
     fileWriter: {
       write: vi.fn(async (collection: Collection) => {
         if (writeFails) throw new Error('disk full');

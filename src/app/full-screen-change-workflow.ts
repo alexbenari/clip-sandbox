@@ -1,6 +1,6 @@
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { FullscreenSession } from './fullscreen-session.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 import type { ZoomWorkflow } from './zoom-workflow.js';
 
 export interface IMoviePlayerFullScreen {
@@ -15,7 +15,7 @@ type FullScreenChangeDependencies = Readonly<{
   fullScreen: { isDocumentFullScreen(): boolean };
   zoom: Pick<ZoomWorkflow, 'isOpen' | 'close'>;
   collectionFullScreen: Pick<FullscreenSession, 'onFsChange'>;
-  pipelineSession: Pick<PipelineSession, 'currentClipSequence'>;
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'currentClipSequence'>;
   collectionView: Pick<CollectionViewWorkflow, 'renderActiveSequence'>;
 }>;
 
@@ -35,7 +35,7 @@ export class FullScreenChangeWorkflow {
     const collectionFullScreen = this.change.fullScreen.isDocumentFullScreen();
     if (collectionFullScreen && zoom.isOpen()) zoom.close();
     if (collectionFullScreen || this.collectionWasFullScreen) this.change.collectionFullScreen.onFsChange();
-    if (this.collectionWasFullScreen && !collectionFullScreen && this.change.pipelineSession.currentClipSequence) {
+    if (this.collectionWasFullScreen && !collectionFullScreen && this.change.pipelineWorkingCopy.currentClipSequence) {
       this.change.collectionView.renderActiveSequence();
     }
     this.collectionWasFullScreen = collectionFullScreen;

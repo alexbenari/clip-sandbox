@@ -2,12 +2,12 @@ import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { FolderAccess } from './folder-access.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 type OpenFolderRefreshSessionOptions = Readonly<{
   folders: { isActiveFolder(folderSession: FolderAccess | null, folderPath: string): boolean };
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
-  pipelineSession: Pick<PipelineSession, 'hasDirtyClipSequenceChanges'>;
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'hasDirtyClipSequenceChanges'>;
   // Refreshing goes through folder selection, which itself saves first; the composition root closes that loop.
   refreshActiveFolder: () => Promise<void>;
   reporter: Pick<ActivityReporter, 'failure' | 'technicalDetailsOf'>;
@@ -21,7 +21,7 @@ export class OpenFolderRefreshSession {
 
   async onFolderContentsPublished(folderPath: string): Promise<void> {
     if (!this.isActiveFolder(folderPath)) return;
-    if (this.options.pipelineSession.hasDirtyClipSequenceChanges) {
+    if (this.options.pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
       this.pendingFolderPath = folderPath;
       return;
     }
@@ -34,7 +34,7 @@ export class OpenFolderRefreshSession {
       this.pendingFolderPath = null;
       return;
     }
-    if (this.options.pipelineSession.hasDirtyClipSequenceChanges) return;
+    if (this.options.pipelineWorkingCopy.hasDirtyClipSequenceChanges) return;
     this.pendingFolderPath = null;
     await this.refreshActiveFolder();
   }

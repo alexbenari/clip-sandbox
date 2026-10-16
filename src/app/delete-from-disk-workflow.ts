@@ -9,7 +9,7 @@ import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
 import type { FolderAccess } from './folder-access.js';
 import type { FolderSelectionWorkflow } from './folder-selection-workflow.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 type DeleteRequest = Readonly<{
   selectedClipIds: string[];
@@ -43,7 +43,7 @@ export interface IFileDeleter {
 }
 
 type DeleteFromDiskDependencies = Readonly<{
-  pipelineSession: Pick<PipelineSession, 'pipeline' | 'activeCollectionFilename' | 'currentClipSequence' | 'isPipelineMode'
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'activeCollectionFilename' | 'currentClipSequence' | 'isPipelineMode'
     | 'hasDirtyClipSequenceChanges' | 'clipNamesForIdsInOrder'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   files: IFileDeleter;
@@ -75,7 +75,7 @@ export class DeleteFromDiskWorkflow {
     const request = this.requestFromSelection();
     if (!request) return;
     this.pendingRequest = request;
-    if (this.deletion.pipelineSession.hasDirtyClipSequenceChanges) {
+    if (this.deletion.pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
       this.openPreflight();
       return;
     }
@@ -93,18 +93,18 @@ export class DeleteFromDiskWorkflow {
 
   // Removing selected clips from the pipeline view means deleting their files; a collection view only drops them.
   private startFromPipelineViewRemoval(): void {
-    const { pipelineSession } = this.deletion;
-    if (this.deletion.zoom.isOpen() || !pipelineSession.currentClipSequence || !pipelineSession.isPipelineMode()) return;
+    const { pipelineWorkingCopy } = this.deletion;
+    if (this.deletion.zoom.isOpen() || !pipelineWorkingCopy.currentClipSequence || !pipelineWorkingCopy.isPipelineMode()) return;
     this.start();
   }
 
   private requestFromSelection(): DeleteRequest | null {
-    const { pipelineSession } = this.deletion;
-    const pipeline = pipelineSession.pipeline;
-    if (!pipelineSession.currentClipSequence || !pipeline) return null;
+    const { pipelineWorkingCopy } = this.deletion;
+    const pipeline = pipelineWorkingCopy.pipeline;
+    if (!pipelineWorkingCopy.currentClipSequence || !pipeline) return null;
     const selectedClipIds = this.deletion.grid.getSelectedClipIds();
     if (selectedClipIds.length === 0) return null;
-    const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(selectedClipIds);
+    const selectedClipNames = pipelineWorkingCopy.clipNamesForIdsInOrder(selectedClipIds);
     if (selectedClipNames.length === 0) return null;
     return {
       selectedClipIds,
@@ -153,10 +153,10 @@ export class DeleteFromDiskWorkflow {
   }
 
   private async deleteConfirmedRequest(): Promise<void> {
-    const { pipelineSession, appText, reporter } = this.deletion;
+    const { pipelineWorkingCopy, appText, reporter } = this.deletion;
     const request = this.pendingRequest;
-    const pipeline = pipelineSession.pipeline;
-    if (!request || !pipelineSession.currentClipSequence || !pipeline) return;
+    const pipeline = pipelineWorkingCopy.pipeline;
+    if (!request || !pipelineWorkingCopy.currentClipSequence || !pipeline) return;
     this.deletion.dialog.closeConfirm();
     this.pendingRequest = null;
 
@@ -180,7 +180,7 @@ export class DeleteFromDiskWorkflow {
       await this.deletion.folderSelection.reloadSelection({
         pipeline,
         // Removing videos replaced each affected collection; the session still holds the version with the deleted clips.
-        collection: pipeline.getCollectionByFilename(pipelineSession.activeCollectionFilename()),
+        collection: pipeline.getCollectionByFilename(pipelineWorkingCopy.activeCollectionFilename()),
         folderSession: this.deletion.openFolder.currentFolderSession,
       });
     } else {

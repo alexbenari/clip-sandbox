@@ -7,7 +7,7 @@ import type { SaveOutcome } from '../../src/app/collection-save-workflow.js';
 import { EventSource } from '../../src/app/event-source.js';
 import { FolderSelectionWorkflow } from '../../src/app/folder-selection-workflow.js';
 import type { IPipelineCatalogEntry } from '../../src/app/pipeline-catalog.js';
-import { PipelineSession } from '../../src/app/pipeline-session.js';
+import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
 import { CollectionTextFormat } from '../../src/business-logic/collection-text-format.js';
 
@@ -30,7 +30,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   const pipelineCatalog = {
     openPipelineCatalogEntry: vi.fn(async () => ({ folderSession, files: [folderFile('charlie.mp4')], folderName: 'archive' })),
   };
-  const pipelineSession = new PipelineSession();
+  const pipelineWorkingCopy = new PipelineWorkingCopy();
   const openFolder = new AppSessionState();
   const unsavedPrompts: UnsavedPromptRequest[] = [];
   const unsavedChangesPrompt = { open: vi.fn((request: UnsavedPromptRequest) => { unsavedPrompts.push(request); }), close: vi.fn() };
@@ -38,7 +38,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   const collectionView = {
     applySelection: vi.fn((sequence, { collection = null, folderSession: session }: { collection?: unknown; folderSession?: { folderPath: string } | null } = {}) => {
       openFolder.setCurrentFolderSession(session);
-      pipelineSession.activateSelection({ collection: collection as never, sequence });
+      pipelineWorkingCopy.activateSelection({ collection: collection as never, sequence });
     }),
     refreshSelector: vi.fn(),
     cacheKeyFor: () => 'pipeline',
@@ -50,7 +50,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   const navigation = { activate: vi.fn() };
   const activityLog = { log: vi.fn() };
   const workflow = new FolderSelectionWorkflow({
-    pipelineSession,
+    pipelineWorkingCopy,
     openFolder,
     folders,
     pipelineCatalog,
@@ -72,15 +72,15 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     appText: new AppText(),
   });
   const makeViewDirty = () => {
-    const ids = pipelineSession.currentClipSequence!.orderedClips().map(clip => clip.id);
-    pipelineSession.replaceCurrentOrder([...ids].reverse());
+    const ids = pipelineWorkingCopy.currentClipSequence!.orderedClips().map(clip => clip.id);
+    pipelineWorkingCopy.replaceCurrentOrder([...ids].reverse());
   };
-  return { workflow, folders, pipelineSession, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, activityLog, makeViewDirty };
+  return { workflow, folders, pipelineWorkingCopy, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, activityLog, makeViewDirty };
 }
 
 async function openFolder(context: ReturnType<typeof folderWorkflow>) {
   context.toolbar.emit('browseRequested');
-  await vi.waitFor(() => expect(context.pipelineSession.pipeline?.folderName).toBe('clips'));
+  await vi.waitFor(() => expect(context.pipelineWorkingCopy.pipeline?.folderName).toBe('clips'));
 }
 
 describe('FolderSelectionWorkflow', () => {
@@ -89,7 +89,7 @@ describe('FolderSelectionWorkflow', () => {
 
     await openFolder(context);
 
-    expect(context.pipelineSession.currentClipSequence?.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.mp4']);
+    expect(context.pipelineWorkingCopy.currentClipSequence?.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.mp4']);
     expect(context.unsavedChangesPrompt.open).not.toHaveBeenCalled();
     expect(context.activityLog.log).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'success', message: 'Loaded pipeline with 2 clips.' }));
@@ -127,7 +127,7 @@ describe('FolderSelectionWorkflow', () => {
 
     context.unsavedPrompts[0].onSave();
 
-    await vi.waitFor(() => expect(context.pipelineSession.pipeline?.folderName).toBe('archive'));
+    await vi.waitFor(() => expect(context.pipelineWorkingCopy.pipeline?.folderName).toBe('archive'));
     expect(context.collectionSave.saveActive).toHaveBeenCalledOnce();
     expect(context.navigation.activate).toHaveBeenCalledWith('collection');
     expect(context.workflow.pendingSelectionAction).toBeNull();
@@ -167,9 +167,9 @@ describe('FolderSelectionWorkflow', () => {
 
     context.unsavedPrompts[0].onDiscard();
 
-    await vi.waitFor(() => expect(context.pipelineSession.activeCollection?.filename).toBe('subset.txt'));
+    await vi.waitFor(() => expect(context.pipelineWorkingCopy.activeCollection?.filename).toBe('subset.txt'));
     expect(context.collectionSave.saveActive).not.toHaveBeenCalled();
-    expect(context.pipelineSession.currentClipSequence?.clipNamesInOrder()).toEqual(['bravo.mp4']);
+    expect(context.pipelineWorkingCopy.currentClipSequence?.clipNamesInOrder()).toEqual(['bravo.mp4']);
   });
 
   it('only refreshes the selector when the requested view is already showing', async () => {

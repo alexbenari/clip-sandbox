@@ -3,15 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { AppSessionState } from '../../src/app/app-session-state.js';
 import { EventSource } from '../../src/app/event-source.js';
 import { GridContextMenuWorkflow } from '../../src/app/grid-context-menu-workflow.js';
-import { PipelineSession } from '../../src/app/pipeline-session.js';
+import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 
 type MenuRequest = Parameters<ConstructorParameters<typeof GridContextMenuWorkflow>[0]['menu']['open']>[0];
 
 function contextMenu({ canRefine = true, inspect }: { canRefine?: boolean; inspect?: () => Promise<boolean> } = {}) {
-  const pipelineSession = new PipelineSession();
-  pipelineSession.loadPipeline(new Pipeline({ folderName: 'clips', videoFiles: [new File(['a'], 'alpha.mp4')] }));
-  const [alpha] = pipelineSession.currentClipSequence!.orderedClips();
+  const pipelineWorkingCopy = new PipelineWorkingCopy();
+  pipelineWorkingCopy.loadPipeline(new Pipeline({ folderName: 'clips', videoFiles: [new File(['a'], 'alpha.mp4')] }));
+  const [alpha] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
   const folderSession = { folderPath: 'C:/clips' };
   const openFolder = new AppSessionState();
   openFolder.setCurrentFolderSession(folderSession);
@@ -24,7 +24,7 @@ function contextMenu({ canRefine = true, inspect }: { canRefine?: boolean; inspe
   const collectionRefinement = { start: vi.fn(async () => undefined) };
   const deleteFromDisk = { start: vi.fn() };
   const workflow = new GridContextMenuWorkflow({
-    pipelineSession,
+    pipelineWorkingCopy,
     openFolder,
     refinementAvailability: { inspect: vi.fn(inspect ?? (async () => canRefine)) },
     grid,

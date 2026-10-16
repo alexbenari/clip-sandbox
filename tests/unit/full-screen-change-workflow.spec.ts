@@ -16,7 +16,7 @@ function fullScreenChange() {
     fullScreen: { isDocumentFullScreen: () => state.document },
     zoom,
     collectionFullScreen,
-    pipelineSession: { currentClipSequence: {} as never },
+    pipelineWorkingCopy: { currentClipSequence: {} as never },
     collectionView,
   });
   return { workflow, state, heldSteps, zoom, collectionFullScreen, collectionView, utilities };

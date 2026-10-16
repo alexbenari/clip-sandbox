@@ -6,7 +6,7 @@ import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
 import type { FolderAccess } from './folder-access.js';
 import type { IEventSource } from './event-source.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 export interface ICollectionGridEvents {
   cardCountChanged: void;
@@ -48,7 +48,7 @@ export interface ISelectionChangeSurfaces {
 }
 
 type CollectionViewDependencies = Readonly<{
-  pipelineSession: Pick<PipelineSession, 'pipeline' | 'activeCollection' | 'currentClipSequence' | 'isPipelineMode'
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'activeCollection' | 'currentClipSequence' | 'isPipelineMode'
     | 'activateSelection' | 'replaceCurrentOrder' | 'removeFromCurrentSequence' | 'reset'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession' | 'setCurrentFolderSession'>;
   grid: ICollectionGridView;
@@ -77,32 +77,32 @@ export class CollectionViewWorkflow {
   }
 
   activeCacheKey(): string {
-    return this.cacheKeyFor(this.view.pipelineSession.activeCollection);
+    return this.cacheKeyFor(this.view.pipelineWorkingCopy.activeCollection);
   }
 
   refreshSelector(): void {
-    const { pipelineSession } = this.view;
+    const { pipelineWorkingCopy } = this.view;
     this.view.selector.render({
-      pipeline: pipelineSession.pipeline,
-      activeCollection: pipelineSession.activeCollection,
-      currentClipSequence: pipelineSession.currentClipSequence,
+      pipeline: pipelineWorkingCopy.pipeline,
+      activeCollection: pipelineWorkingCopy.activeCollection,
+      currentClipSequence: pipelineWorkingCopy.currentClipSequence,
     });
   }
 
   refreshToolbar(): void {
-    const { pipelineSession, grid } = this.view;
+    const { pipelineWorkingCopy, grid } = this.view;
     this.view.toolbar.render({
       clipCount: grid.getCardCount(),
-      hasPipeline: !!pipelineSession.pipeline,
-      hasSequence: !!pipelineSession.currentClipSequence,
+      hasPipeline: !!pipelineWorkingCopy.pipeline,
+      hasSequence: !!pipelineWorkingCopy.currentClipSequence,
       hasSelection: grid.getSelectedClipIds().length > 0,
-      isPipelineMode: pipelineSession.isPipelineMode(),
+      isPipelineMode: pipelineWorkingCopy.isPipelineMode(),
       titlesHidden: grid.areTitlesHidden(),
     });
   }
 
   applySelection(clipSequence: ClipSequence, {
-    collection = this.view.pipelineSession.activeCollection,
+    collection = this.view.pipelineWorkingCopy.activeCollection,
     folderSession = this.view.openFolder.currentFolderSession,
     statusText = '',
     timeout = 2500,
@@ -117,7 +117,7 @@ export class CollectionViewWorkflow {
     surfaces.contextMenu.close({ restoreFocus: false });
     surfaces.addToCollectionDialog.close();
     this.view.openFolder.setCurrentFolderSession(folderSession || null);
-    this.view.pipelineSession.activateSelection({ collection, sequence: clipSequence });
+    this.view.pipelineWorkingCopy.activateSelection({ collection, sequence: clipSequence });
     this.view.grid.renderCollection(clipSequence, { cacheKey: this.cacheKeyFor(collection) });
     this.refreshSelector();
     this.refreshToolbar();
@@ -125,12 +125,12 @@ export class CollectionViewWorkflow {
   }
 
   renderActiveSequence(): void {
-    this.view.grid.renderCollection(this.view.pipelineSession.currentClipSequence, { cacheKey: this.activeCacheKey() });
+    this.view.grid.renderCollection(this.view.pipelineWorkingCopy.currentClipSequence, { cacheKey: this.activeCacheKey() });
   }
 
   clearLoadedView(): void {
     this.view.grid.clear();
-    this.view.pipelineSession.reset();
+    this.view.pipelineWorkingCopy.reset();
     this.view.openFolder.setCurrentFolderSession(null);
     this.refreshSelector();
     this.refreshToolbar();
@@ -150,20 +150,20 @@ export class CollectionViewWorkflow {
   }
 
   private applyOrder(orderedClipIds: string[]): void {
-    if (!this.view.pipelineSession.currentClipSequence) return;
-    this.view.pipelineSession.replaceCurrentOrder(orderedClipIds);
+    if (!this.view.pipelineWorkingCopy.currentClipSequence) return;
+    this.view.pipelineWorkingCopy.replaceCurrentOrder(orderedClipIds);
     this.refreshSelector();
     this.refreshToolbar();
   }
 
   // Removing from the pipeline view deletes files instead, which the delete flow handles.
   private removeFromCollectionView(orderedClipIds: string[]): void {
-    const { pipelineSession, grid } = this.view;
-    if (this.view.surfaces.zoom.isOpen() || !pipelineSession.currentClipSequence || pipelineSession.isPipelineMode()) return;
-    const removedClipIds = pipelineSession.removeFromCurrentSequence(orderedClipIds);
+    const { pipelineWorkingCopy, grid } = this.view;
+    if (this.view.surfaces.zoom.isOpen() || !pipelineWorkingCopy.currentClipSequence || pipelineWorkingCopy.isPipelineMode()) return;
+    const removedClipIds = pipelineWorkingCopy.removeFromCurrentSequence(orderedClipIds);
     if (removedClipIds.length === 0) return;
     grid.invalidateView(this.activeCacheKey());
-    grid.renderCollection(pipelineSession.currentClipSequence, { cacheKey: this.activeCacheKey() });
+    grid.renderCollection(pipelineWorkingCopy.currentClipSequence, { cacheKey: this.activeCacheKey() });
     this.refreshSelector();
     this.refreshToolbar();
     this.view.reporter.success(this.view.appText.removedClipsText(removedClipIds.length));

@@ -4,7 +4,7 @@ import { AppSessionState } from '../../src/app/app-session-state.js';
 import { AppText } from '../../src/app/app-text.js';
 import { CollectionViewWorkflow, type ICollectionGridEvents } from '../../src/app/collection-view-workflow.js';
 import { EventSource } from '../../src/app/event-source.js';
-import { PipelineSession } from '../../src/app/pipeline-session.js';
+import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 
@@ -35,8 +35,8 @@ function collectionView() {
     videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')],
     collections: [Collection.fromFilename({ filename: 'subset.txt', orderedClipNames: ['bravo.mp4', 'alpha.mp4'] })],
   });
-  const pipelineSession = new PipelineSession();
-  pipelineSession.loadPipeline(pipeline);
+  const pipelineWorkingCopy = new PipelineWorkingCopy();
+  pipelineWorkingCopy.loadPipeline(pipeline);
   const openFolder = new AppSessionState();
   const grid = new FakeGrid();
   const toolbar = new FakeToolbar();
@@ -49,15 +49,15 @@ function collectionView() {
   };
   const reporter = { success: vi.fn() };
   const workflow = new CollectionViewWorkflow({
-    pipelineSession, openFolder, grid, toolbar, selector, surfaces, reporter, appText: new AppText(),
+    pipelineWorkingCopy, openFolder, grid, toolbar, selector, surfaces, reporter, appText: new AppText(),
   });
   const showSubset = () => {
     const subset = pipeline.getCollectionByFilename('subset.txt');
-    const loaded = pipelineSession.materializeSelection(subset);
+    const loaded = pipelineWorkingCopy.materializeSelection(subset);
     if (!loaded || loaded.materialization.kind !== 'loaded') throw new Error('subset did not load');
     workflow.applySelection(loaded.materialization.sequence, { collection: subset });
   };
-  return { workflow, pipelineSession, openFolder, grid, toolbar, selector, surfaces, reporter, showSubset };
+  return { workflow, pipelineWorkingCopy, openFolder, grid, toolbar, selector, surfaces, reporter, showSubset };
 }
 
 describe('CollectionViewWorkflow', () => {
@@ -70,9 +70,9 @@ describe('CollectionViewWorkflow', () => {
   });
 
   it('applies a collection selection: closes transient surfaces, renders it, and reports the status', () => {
-    const { workflow, pipelineSession, grid, selector, surfaces, reporter, openFolder } = collectionView();
-    const subset = pipelineSession.pipeline!.getCollectionByFilename('subset.txt');
-    const loaded = pipelineSession.materializeSelection(subset);
+    const { workflow, pipelineWorkingCopy, grid, selector, surfaces, reporter, openFolder } = collectionView();
+    const subset = pipelineWorkingCopy.pipeline!.getCollectionByFilename('subset.txt');
+    const loaded = pipelineWorkingCopy.materializeSelection(subset);
     if (!loaded || loaded.materialization.kind !== 'loaded') throw new Error('subset did not load');
     const folderSession = { folderPath: 'C:/clips' };
 
@@ -82,7 +82,7 @@ describe('CollectionViewWorkflow', () => {
     expect(surfaces.contextMenu.close).toHaveBeenCalledWith({ restoreFocus: false });
     expect(surfaces.addToCollectionDialog.close).toHaveBeenCalledOnce();
     expect(openFolder.currentFolderSession).toBe(folderSession);
-    expect(pipelineSession.activeCollection).toBe(subset);
+    expect(pipelineWorkingCopy.activeCollection).toBe(subset);
     expect(grid.renders.at(-1)).toEqual({ names: ['bravo.mp4', 'alpha.mp4'], cacheKey: 'collection:subset.txt' });
     expect(selector.render).toHaveBeenLastCalledWith(expect.objectContaining({ activeCollection: subset }));
     expect(reporter.success).toHaveBeenCalledWith('Loaded subset.', 2500);
@@ -104,41 +104,41 @@ describe('CollectionViewWorkflow', () => {
   });
 
   it('applies a reordering to the working sequence', () => {
-    const { grid, pipelineSession, selector, showSubset } = collectionView();
+    const { grid, pipelineWorkingCopy, selector, showSubset } = collectionView();
     showSubset();
-    const ids = pipelineSession.currentClipSequence!.orderedClips().map(clip => clip.id);
+    const ids = pipelineWorkingCopy.currentClipSequence!.orderedClips().map(clip => clip.id);
 
     grid.emit('orderChanged', [...ids].reverse());
 
-    expect(pipelineSession.currentClipSequence!.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.mp4']);
-    expect(pipelineSession.hasDirtyClipSequenceChanges).toBe(true);
+    expect(pipelineWorkingCopy.currentClipSequence!.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.mp4']);
+    expect(pipelineWorkingCopy.hasDirtyClipSequenceChanges).toBe(true);
     expect(selector.render).toHaveBeenCalled();
   });
 
   it('removes selected clips from a collection view and reports how many', () => {
-    const { grid, pipelineSession, reporter, showSubset } = collectionView();
+    const { grid, pipelineWorkingCopy, reporter, showSubset } = collectionView();
     showSubset();
-    const [bravo] = pipelineSession.currentClipSequence!.orderedClips();
+    const [bravo] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
 
     grid.emit('removeSelectedRequested', [bravo.id]);
 
-    expect(pipelineSession.currentClipSequence!.clipNamesInOrder()).toEqual(['alpha.mp4']);
+    expect(pipelineWorkingCopy.currentClipSequence!.clipNamesInOrder()).toEqual(['alpha.mp4']);
     expect(grid.invalidated).toEqual(['collection:subset.txt']);
     expect(grid.renders.at(-1)).toEqual({ names: ['alpha.mp4'], cacheKey: 'collection:subset.txt' });
     expect(reporter.success).toHaveBeenCalledWith(new AppText().removedClipsText(1));
   });
 
   it('leaves removal in the pipeline view, and removal while Zoom is open, to other flows', () => {
-    const { grid, pipelineSession, surfaces, showSubset } = collectionView();
-    const [alpha] = pipelineSession.currentClipSequence!.orderedClips();
+    const { grid, pipelineWorkingCopy, surfaces, showSubset } = collectionView();
+    const [alpha] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
 
     grid.emit('removeSelectedRequested', [alpha.id]);
-    expect(pipelineSession.currentClipSequence!.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.mp4']);
+    expect(pipelineWorkingCopy.currentClipSequence!.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.mp4']);
 
     showSubset();
     surfaces.zoom.isOpen.mockReturnValue(true);
     grid.emit('removeSelectedRequested', [alpha.id]);
-    expect(pipelineSession.currentClipSequence!.clipNamesInOrder()).toEqual(['bravo.mp4', 'alpha.mp4']);
+    expect(pipelineWorkingCopy.currentClipSequence!.clipNamesInOrder()).toEqual(['bravo.mp4', 'alpha.mp4']);
   });
 
   it('toggles clip titles from the toolbar', () => {
@@ -151,26 +151,26 @@ describe('CollectionViewWorkflow', () => {
   });
 
   it('clears the loaded folder from the view', () => {
-    const { workflow, grid, pipelineSession, openFolder, toolbar } = collectionView();
+    const { workflow, grid, pipelineWorkingCopy, openFolder, toolbar } = collectionView();
     openFolder.setCurrentFolderSession({ folderPath: 'C:/clips' });
 
     workflow.clearLoadedView();
 
     expect(grid.cleared).toBe(true);
-    expect(pipelineSession.pipeline).toBeNull();
+    expect(pipelineWorkingCopy.pipeline).toBeNull();
     expect(openFolder.currentFolderSession).toBeNull();
     expect(toolbar.render).toHaveBeenLastCalledWith(expect.objectContaining({ hasPipeline: false, hasSequence: false }));
   });
 
   it('stops reacting to the grid and toolbar once disposed', () => {
-    const { workflow, grid, toolbar, pipelineSession } = collectionView();
-    const ids = pipelineSession.currentClipSequence!.orderedClips().map(clip => clip.id);
+    const { workflow, grid, toolbar, pipelineWorkingCopy } = collectionView();
+    const ids = pipelineWorkingCopy.currentClipSequence!.orderedClips().map(clip => clip.id);
 
     workflow.dispose();
     grid.emit('orderChanged', [...ids].reverse());
     toolbar.emit('toggleTitlesRequested');
 
-    expect(pipelineSession.hasDirtyClipSequenceChanges).toBe(false);
+    expect(pipelineWorkingCopy.hasDirtyClipSequenceChanges).toBe(false);
     expect(grid.titlesHidden).toBe(false);
   });
 });

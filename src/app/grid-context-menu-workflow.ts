@@ -4,7 +4,7 @@ import type { ICollectionClipRefinementService } from './collection-clip-refinem
 import type { CollectionRefinementWorkflow, IScreenNavigation } from './collection-refinement-workflow.js';
 import type { DeleteFromDiskWorkflow } from './delete-from-disk-workflow.js';
 import type { IEventSource } from './event-source.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 type MenuPoint = Readonly<{ x: number; y: number }>;
 
@@ -24,7 +24,7 @@ export interface IClipContextMenu {
 }
 
 type GridContextMenuDependencies = Readonly<{
-  pipelineSession: Pick<PipelineSession, 'pipeline' | 'resolveClip' | 'activeCollectionFilename'>;
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'resolveClip' | 'activeCollectionFilename'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   refinementAvailability: Pick<ICollectionClipRefinementService, 'inspect'> | null;
   grid: IEventSource<{ contextMenuRequested: Readonly<{ point: MenuPoint; clipId: string | null }> }>
@@ -54,10 +54,10 @@ export class GridContextMenuWorkflow {
 
   // Checking whether a clip can be refined is asynchronous, so a newer request or a changed view cancels this one.
   async open(point: MenuPoint, clipId: string | null): Promise<void> {
-    const { pipelineSession, openFolder } = this.menu;
+    const { pipelineWorkingCopy, openFolder } = this.menu;
     const revision = ++this.revision;
-    const clip = pipelineSession.resolveClip(clipId);
-    const collectionFilename = pipelineSession.activeCollectionFilename();
+    const clip = pipelineWorkingCopy.resolveClip(clipId);
+    const collectionFilename = pipelineWorkingCopy.activeCollectionFilename();
     const folderSession = openFolder.currentFolderSession;
     const request = clip && folderSession
       ? { folderPath: folderSession.folderPath, filename: clip.name } : null;
@@ -66,14 +66,14 @@ export class GridContextMenuWorkflow {
       try { canRefine = await this.menu.refinementAvailability.inspect(request); }
       catch { canRefine = false; }
     }
-    if (revision !== this.revision || collectionFilename !== pipelineSession.activeCollectionFilename()
+    if (revision !== this.revision || collectionFilename !== pipelineWorkingCopy.activeCollectionFilename()
       || openFolder.currentFolderSession !== folderSession
       || this.menu.navigation.activeScreen.id !== this.menu.collectionScreenId
-      || (clipId && pipelineSession.resolveClip(clipId) !== clip)) return;
+      || (clipId && pipelineWorkingCopy.resolveClip(clipId) !== clip)) return;
     this.menu.menu.open({
       point,
       hasSelection: this.menu.grid.getSelectedClipIds().length > 0,
-      hasPipeline: !!pipelineSession.pipeline,
+      hasPipeline: !!pipelineWorkingCopy.pipeline,
       hasClip: request !== null,
       canRefine,
       onRefine: () => {

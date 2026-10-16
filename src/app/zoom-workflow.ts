@@ -8,7 +8,7 @@ import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 import { VideoEditNotificationError, ZoomVideoEditWorkflow } from './zoom-video-edit-workflow.js';
 
 type MenuPoint = Readonly<{ x: number; y: number }>;
@@ -45,7 +45,7 @@ export interface IZoomFolderFiles {
 }
 
 type ZoomDependencies = Readonly<{
-  pipelineSession: Pick<PipelineSession, 'pipeline' | 'isPipelineMode' | 'resolveClip'
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'isPipelineMode' | 'resolveClip'
     | 'insertCreatedClipInPipeline' | 'insertCreatedClipAfter'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   folderFiles: IZoomFolderFiles;
@@ -143,7 +143,7 @@ export class ZoomWorkflow {
 
   private zoomedClip(): Clip | null {
     const clipId = this.zoom.zoom.getCurrentClipId();
-    return clipId ? this.zoom.pipelineSession.resolveClip(clipId) : null;
+    return clipId ? this.zoom.pipelineWorkingCopy.resolveClip(clipId) : null;
   }
 
   private openEditMenu(point: MenuPoint): void {
@@ -158,7 +158,7 @@ export class ZoomWorkflow {
   private async runEdit(edit: VideoEdit | null | undefined): Promise<void> {
     const { reporter } = this.zoom;
     const sourceClip = this.zoomedClip();
-    if (!edit || !sourceClip || !this.zoom.pipelineSession.pipeline) return;
+    if (!edit || !sourceClip || !this.zoom.pipelineWorkingCopy.pipeline) return;
     try {
       await this.videoEdits.run({
         edit,
@@ -183,14 +183,14 @@ export class ZoomWorkflow {
   }
 
   private showCreatedClip(sourceClip: Clip, createdFile: CreatedVideoFile): void {
-    const { pipelineSession, reporter, appText, collectionView } = this.zoom;
+    const { pipelineWorkingCopy, reporter, appText, collectionView } = this.zoom;
     const rendererFile = this.zoom.folderFiles.toRendererFile(createdFile);
-    const createdClip = pipelineSession.isPipelineMode()
+    const createdClip = pipelineWorkingCopy.isPipelineMode()
       ? this.insertIntoPipelineView(rendererFile)
       : this.insertIntoCollectionView(sourceClip.id, rendererFile);
     collectionView.refreshToolbar();
     if (!createdClip) {
-      if (pipelineSession.isPipelineMode()) {
+      if (pipelineWorkingCopy.isPipelineMode()) {
         reporter.failure(`${appText.videoEditSucceededText(rendererFile.name)} The pipeline view could not be refreshed.`);
       } else {
         reporter.failure(appText.videoEditPartialSuccessText(rendererFile.name));
@@ -202,7 +202,7 @@ export class ZoomWorkflow {
   }
 
   private insertIntoPipelineView(createdFile: ClipFile): Clip | null {
-    const result = this.zoom.pipelineSession.insertCreatedClipInPipeline(createdFile);
+    const result = this.zoom.pipelineWorkingCopy.insertCreatedClipInPipeline(createdFile);
     if (!result.ok) return null;
     this.zoom.grid.invalidateView('pipeline');
     this.zoom.collectionView.applySelection(result.sequence, {
@@ -215,7 +215,7 @@ export class ZoomWorkflow {
 
   private insertIntoCollectionView(sourceClipId: string, createdFile: ClipFile): Clip | null {
     const { grid, collectionView } = this.zoom;
-    const result = this.zoom.pipelineSession.insertCreatedClipAfter(sourceClipId, createdFile);
+    const result = this.zoom.pipelineWorkingCopy.insertCreatedClipAfter(sourceClipId, createdFile);
     if (!result.ok) return null;
     grid.invalidateView('pipeline');
     grid.invalidateView(collectionView.activeCacheKey());

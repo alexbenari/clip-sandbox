@@ -5,7 +5,7 @@ import type { CollectionFileWriter } from './collection-file-writer.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
 import type { NewCollectionNameCheck } from './new-collection-name-check.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 export type AddToCollectionTarget =
   | Readonly<{ kind: 'new'; name: string }>
@@ -26,7 +26,7 @@ export interface IAddToCollectionDialog extends IEventSource<{ confirmed: AddToC
 type AddedCollection = Extract<ReturnType<Pipeline['addClipsToCollection']>, { ok: true }>;
 
 type AddToCollectionDependencies = Readonly<{
-  pipelineSession: Pick<PipelineSession, 'pipeline' | 'currentClipSequence' | 'activeCollectionFilename' | 'clipNamesForIdsInOrder'>;
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'currentClipSequence' | 'activeCollectionFilename' | 'clipNamesForIdsInOrder'>;
   grid: { getSelectedClipIds(): string[]; invalidateView(cacheKey: string): void };
   dialog: IAddToCollectionDialog;
   destinationChoices: IDestinationChoiceBuilder;
@@ -49,8 +49,8 @@ export class AddToCollectionWorkflow {
   }
 
   openDialog({ startWithNewCollection = false }: { startWithNewCollection?: boolean } = {}): void {
-    const { pipelineSession } = this.add;
-    if (!pipelineSession.pipeline) return;
+    const { pipelineWorkingCopy } = this.add;
+    if (!pipelineWorkingCopy.pipeline) return;
     this.add.dialog.open({
       choices: this.destinationChoices(),
       hasSelection: this.add.grid.getSelectedClipIds().length > 0,
@@ -59,18 +59,18 @@ export class AddToCollectionWorkflow {
   }
 
   destinationChoices(): CollectionDestinationChoice[] {
-    const { pipelineSession } = this.add;
+    const { pipelineWorkingCopy } = this.add;
     return this.add.destinationChoices.buildChoices({
-      pipeline: pipelineSession.pipeline,
-      activeCollectionFilename: pipelineSession.activeCollectionFilename(),
+      pipeline: pipelineWorkingCopy.pipeline,
+      activeCollectionFilename: pipelineWorkingCopy.activeCollectionFilename(),
     });
   }
 
   async addSelectedClips(target: AddToCollectionTarget, { fromDialog = false }: { fromDialog?: boolean } = {}): Promise<void> {
-    const { pipelineSession } = this.add;
-    const pipeline = pipelineSession.pipeline;
-    if (!pipelineSession.currentClipSequence || !pipeline) return;
-    const selectedClipNames = pipelineSession.clipNamesForIdsInOrder(this.add.grid.getSelectedClipIds());
+    const { pipelineWorkingCopy } = this.add;
+    const pipeline = pipelineWorkingCopy.pipeline;
+    if (!pipelineWorkingCopy.currentClipSequence || !pipeline) return;
+    const selectedClipNames = pipelineWorkingCopy.clipNamesForIdsInOrder(this.add.grid.getSelectedClipIds());
     if (selectedClipNames.length === 0) return;
     const collectionFilename = this.destinationFilename(target, fromDialog);
     if (!collectionFilename) return;
@@ -103,7 +103,7 @@ export class AddToCollectionWorkflow {
       if (fromDialog && nameCheck.message) this.add.dialog.showValidationError(nameCheck.message, { focusNameInput: true });
       return null;
     }
-    if (nameCheck.filename === this.add.pipelineSession.activeCollectionFilename()) return null;
+    if (nameCheck.filename === this.add.pipelineWorkingCopy.activeCollectionFilename()) return null;
     return nameCheck.filename;
   }
 

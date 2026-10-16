@@ -42,7 +42,7 @@ function refinementWorkflow({ dirty = false, lookup = async (): Promise<Collecti
     refinedClipList,
     navigation,
     collectionScreenId: 'collection',
-    pipelineSession: { hasDirtyClipSequenceChanges: dirty, activeCollectionFilename: () => 'picks.txt' },
+    pipelineWorkingCopy: { hasDirtyClipSequenceChanges: dirty, activeCollectionFilename: () => 'picks.txt' },
     openFolder,
     diagnostics: { logRuntimeError: vi.fn(async () => undefined) },
     reporter,

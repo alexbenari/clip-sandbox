@@ -13,7 +13,7 @@ import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
 import { LoadStatusText } from './load-status-text.js';
 import type { IPipelineCatalogEntry } from './pipeline-catalog.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 export type PendingSelectionAction =
   | Readonly<{ type: 'browse-folder' }>
@@ -43,7 +43,7 @@ export interface IUnsavedChangesPrompt {
 }
 
 type FolderSelectionDependencies = Readonly<{
-  pipelineSession: Pick<PipelineSession, 'pipeline' | 'activeCollection' | 'activeCollectionFilename'
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'activeCollection' | 'activeCollectionFilename'
     | 'hasDirtyClipSequenceChanges' | 'materializeSelection' | 'loadPipeline'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   folders: IFolderSource;
@@ -87,7 +87,7 @@ export class FolderSelectionWorkflow {
   }
 
   async browseForFolder(): Promise<void> {
-    if (this.folder.pipelineSession.hasDirtyClipSequenceChanges) {
+    if (this.folder.pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
       this.askAboutUnsavedChanges({ type: 'browse-folder' });
       return;
     }
@@ -95,7 +95,7 @@ export class FolderSelectionWorkflow {
   }
 
   async openCatalogPipeline(entry: IPipelineCatalogEntry): Promise<void> {
-    if (this.folder.pipelineSession.hasDirtyClipSequenceChanges) {
+    if (this.folder.pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
       this.askAboutUnsavedChanges({ type: 'open-catalog-pipeline', pipeline: entry });
       return;
     }
@@ -103,12 +103,12 @@ export class FolderSelectionWorkflow {
   }
 
   requestSelection(collectionFilename: string | null): void {
-    const { pipelineSession, collectionView } = this.folder;
-    if (!pipelineSession.pipeline || (collectionFilename || '') === pipelineSession.activeCollectionFilename()) {
+    const { pipelineWorkingCopy, collectionView } = this.folder;
+    if (!pipelineWorkingCopy.pipeline || (collectionFilename || '') === pipelineWorkingCopy.activeCollectionFilename()) {
       collectionView.refreshSelector();
       return;
     }
-    if (pipelineSession.hasDirtyClipSequenceChanges) {
+    if (pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
       this.askAboutUnsavedChanges({ type: 'switch-selection', collectionFilename });
       return;
     }
@@ -116,27 +116,27 @@ export class FolderSelectionWorkflow {
   }
 
   async refreshActiveFolder(): Promise<void> {
-    const { openFolder, folders, pipelineSession } = this.folder;
+    const { openFolder, folders, pipelineWorkingCopy } = this.folder;
     const folderSession = openFolder.currentFolderSession;
     if (!folderSession) return;
-    const activeCollectionFilename = pipelineSession.activeCollectionFilename();
+    const activeCollectionFilename = pipelineWorkingCopy.activeCollectionFilename();
     const selection = await folders.refreshFolder(folderSession);
-    if (openFolder.currentFolderSession !== folderSession || pipelineSession.hasDirtyClipSequenceChanges) return;
+    if (openFolder.currentFolderSession !== folderSession || pipelineWorkingCopy.hasDirtyClipSequenceChanges) return;
     await this.loadPipeline({ ...selection, preserveCollectionFilename: activeCollectionFilename, reportInitialLoad: false });
   }
 
   async reloadSelection({
-    pipeline = this.folder.pipelineSession.pipeline,
-    collection = this.folder.pipelineSession.activeCollection,
+    pipeline = this.folder.pipelineWorkingCopy.pipeline,
+    collection = this.folder.pipelineWorkingCopy.activeCollection,
     folderSession = this.folder.openFolder.currentFolderSession,
   }: {
     pipeline?: Pipeline | null;
     collection?: Collection | null;
     folderSession?: FolderAccess | null;
   } = {}): Promise<void> {
-    const { pipelineSession, collectionView, appText } = this.folder;
+    const { pipelineWorkingCopy, collectionView, appText } = this.folder;
     if (!pipeline) return;
-    const loaded = pipelineSession.materializeSelection(collection);
+    const loaded = pipelineWorkingCopy.materializeSelection(collection);
     if (!loaded) return;
     const { selection, materialization: result } = loaded;
     if (result.kind === 'has-missing') {
@@ -226,8 +226,8 @@ export class FolderSelectionWorkflow {
       grid.invalidateView(collectionView.activeCacheKey());
       grid.retagActiveView(null);
       await this.reloadSelection({
-        pipeline: this.folder.pipelineSession.pipeline,
-        collection: this.folder.pipelineSession.activeCollection,
+        pipeline: this.folder.pipelineWorkingCopy.pipeline,
+        collection: this.folder.pipelineWorkingCopy.activeCollection,
       });
     }
     await this.switchSelectionFromDisk(action.collectionFilename);
@@ -267,7 +267,7 @@ export class FolderSelectionWorkflow {
     preserveCollectionFilename = '',
     reportInitialLoad = true,
   }: FolderContents & { preserveCollectionFilename?: string; reportInitialLoad?: boolean }): Promise<boolean> {
-    const { pipelineSession, grid, collectionView, diagnostics } = this.folder;
+    const { pipelineWorkingCopy, grid, collectionView, diagnostics } = this.folder;
     await this.folder.settings.whenLoaded();
     try {
       const { pipeline } = await this.folder.pipelineFactory.buildPipeline({
@@ -276,7 +276,7 @@ export class FolderSelectionWorkflow {
         collectionFormat: this.folder.collectionFormat,
         logInvalidDescription: result => diagnostics.logInvalidDescription(result, folderSession),
       });
-      const result = pipelineSession.loadPipeline(pipeline);
+      const result = pipelineWorkingCopy.loadPipeline(pipeline);
       if (!result) return false;
       grid.invalidateAllViews();
       grid.retagActiveView(null);
@@ -298,10 +298,10 @@ export class FolderSelectionWorkflow {
   }
 
   private async switchSelectionFromDisk(collectionFilename: string | null): Promise<void> {
-    const { pipelineSession, openFolder, folders, diagnostics } = this.folder;
+    const { pipelineWorkingCopy, openFolder, folders, diagnostics } = this.folder;
     const revision = ++this.selectionRevision;
     const folderSession = openFolder.currentFolderSession;
-    const pipeline = pipelineSession.pipeline;
+    const pipeline = pipelineWorkingCopy.pipeline;
     if (!pipeline) return;
     if (!folderSession) {
       await this.reloadSelection({
@@ -311,7 +311,7 @@ export class FolderSelectionWorkflow {
       return;
     }
     const isStale = () => revision !== this.selectionRevision || openFolder.currentFolderSession !== folderSession
-      || pipelineSession.pipeline !== pipeline || pipelineSession.hasDirtyClipSequenceChanges;
+      || pipelineWorkingCopy.pipeline !== pipeline || pipelineWorkingCopy.hasDirtyClipSequenceChanges;
     try {
       const selection = await folders.refreshFolder(folderSession);
       if (isStale()) return;

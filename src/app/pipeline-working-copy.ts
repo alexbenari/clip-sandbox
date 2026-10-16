@@ -7,7 +7,7 @@ type CreatedClipInsertResult =
   | { ok: false; code: 'missing-pipeline' | 'invalid-file' | 'missing-context' | 'missing-source-clip' }
   | { ok: true; clip: Clip; sequence: ClipSequence };
 
-export class PipelineSession {
+export class PipelineWorkingCopy {
   #pipeline: Pipeline | null = null;
   #activeCollection: Collection | null = null;
   #currentClipSequence: ClipSequence | null = null;

@@ -2,29 +2,29 @@ import { describe, expect, it, vi } from 'vitest';
 import { OpenFolderRefreshSession } from '../../src/app/open-folder-refresh-session.js';
 
 function refreshSession({ activeFolderPath = 'C:/pipelines/extraction-tmp', dirty = false, refreshActiveFolder = vi.fn(async () => undefined) } = {}) {
-  const pipelineSession = { hasDirtyClipSequenceChanges: dirty };
+  const pipelineWorkingCopy = { hasDirtyClipSequenceChanges: dirty };
   const folderSession = { folderPath: activeFolderPath };
   const reporter = { failure: vi.fn(), technicalDetailsOf: (error: unknown) => String(error) };
   const diagnostics = { logRuntimeError: vi.fn(async () => undefined) };
   const session = new OpenFolderRefreshSession({
     folders: { isActiveFolder: (current: { folderPath: string } | null, folderPath: string) => current === folderSession && folderPath === activeFolderPath },
     openFolder: { currentFolderSession: folderSession },
-    pipelineSession,
+    pipelineWorkingCopy,
     refreshActiveFolder,
     reporter,
     diagnostics,
   });
-  return { session, pipelineSession, refreshActiveFolder, reporter, diagnostics };
+  return { session, pipelineWorkingCopy, refreshActiveFolder, reporter, diagnostics };
 }
 
 describe('OpenFolderRefreshSession', () => {
   it('defers a matching folder refresh until its dirty collection has been saved', async () => {
-    const { session, pipelineSession, refreshActiveFolder } = refreshSession({ dirty: true });
+    const { session, pipelineWorkingCopy, refreshActiveFolder } = refreshSession({ dirty: true });
 
     await session.onFolderContentsPublished('C:/pipelines/extraction-tmp');
     expect(refreshActiveFolder).not.toHaveBeenCalled();
 
-    pipelineSession.hasDirtyClipSequenceChanges = false;
+    pipelineWorkingCopy.hasDirtyClipSequenceChanges = false;
     await session.afterCollectionSaved();
 
     expect(refreshActiveFolder).toHaveBeenCalledOnce();

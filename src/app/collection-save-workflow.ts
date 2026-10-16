@@ -6,7 +6,7 @@ import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
 import type { NewCollectionNameCheck } from './new-collection-name-check.js';
 import type { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
-import type { PipelineSession } from './pipeline-session.js';
+import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 export type SaveOutcome = 'saved' | 'cancelled' | 'failed';
 export type SaveAsNewOutcome = Exclude<SaveOutcome, 'failed'>;
@@ -18,7 +18,7 @@ export interface ISaveAsNewDialog extends IEventSource<{ confirmed: string; canc
 }
 
 type CollectionSaveDependencies = Readonly<{
-  pipelineSession: Pick<PipelineSession, 'pipeline' | 'currentClipSequence' | 'isPipelineMode'
+  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'currentClipSequence' | 'isPipelineMode'
     | 'activeCollectionFilename' | 'collectionFromCurrentSequence' | 'markCurrentSequenceSavedAs'>;
   fileWriter: Pick<CollectionFileWriter, 'write'>;
   saveAsNewDialog: ISaveAsNewDialog;
@@ -47,12 +47,12 @@ export class CollectionSaveWorkflow {
   }
 
   async saveActive(): Promise<SaveOutcome> {
-    const { pipelineSession } = this.save;
-    if (!pipelineSession.currentClipSequence || !pipelineSession.pipeline) return 'failed';
-    if (pipelineSession.isPipelineMode()) return this.saveAsNew();
-    const collection = await this.writeCurrentSequence(pipelineSession.activeCollectionFilename());
+    const { pipelineWorkingCopy } = this.save;
+    if (!pipelineWorkingCopy.currentClipSequence || !pipelineWorkingCopy.pipeline) return 'failed';
+    if (pipelineWorkingCopy.isPipelineMode()) return this.saveAsNew();
+    const collection = await this.writeCurrentSequence(pipelineWorkingCopy.activeCollectionFilename());
     if (!collection) return 'failed';
-    pipelineSession.markCurrentSequenceSavedAs(collection);
+    pipelineWorkingCopy.markCurrentSequenceSavedAs(collection);
     await this.save.folderRefresh.afterCollectionSaved();
     this.save.collectionView.refreshSelector();
     this.save.collectionView.refreshToolbar();
@@ -66,7 +66,7 @@ export class CollectionSaveWorkflow {
     let settle: (outcome: SaveAsNewOutcome) => void = () => undefined;
     const outcome = new Promise<SaveAsNewOutcome>(resolve => { settle = resolve; });
     this.saveAsNewWait = { outcome, settle };
-    this.save.saveAsNewDialog.open({ isPipelineMode: this.save.pipelineSession.isPipelineMode() });
+    this.save.saveAsNewDialog.open({ isPipelineMode: this.save.pipelineWorkingCopy.isPipelineMode() });
     return outcome;
   }
 
@@ -81,7 +81,7 @@ export class CollectionSaveWorkflow {
   }
 
   private async confirmSaveAsNew(rawName: string): Promise<void> {
-    const { pipelineSession, collectionView } = this.save;
+    const { pipelineWorkingCopy, collectionView } = this.save;
     const problem = this.save.nameCheck.problemText(rawName);
     if (problem) {
       this.save.saveAsNewDialog.showValidationError(problem, { focusInput: true });
@@ -91,7 +91,7 @@ export class CollectionSaveWorkflow {
     const collection = await this.writeCurrentSequence(filename);
     if (!collection) return;
     const previousCacheKey = collectionView.activeCacheKey();
-    pipelineSession.markCurrentSequenceSavedAs(collection);
+    pipelineWorkingCopy.markCurrentSequenceSavedAs(collection);
     await this.save.folderRefresh.afterCollectionSaved();
     this.save.grid.invalidateView(previousCacheKey);
     this.save.grid.retagActiveView(collectionView.activeCacheKey());
@@ -114,10 +114,10 @@ export class CollectionSaveWorkflow {
   }
 
   private async writeCurrentSequence(filename: string): Promise<Collection | null> {
-    const { pipelineSession } = this.save;
-    const pipeline = pipelineSession.pipeline;
-    if (!pipelineSession.currentClipSequence || !pipeline) return null;
-    const collection = pipelineSession.collectionFromCurrentSequence(filename);
+    const { pipelineWorkingCopy } = this.save;
+    const pipeline = pipelineWorkingCopy.pipeline;
+    if (!pipelineWorkingCopy.currentClipSequence || !pipeline) return null;
+    const collection = pipelineWorkingCopy.collectionFromCurrentSequence(filename);
     if (!collection) return null;
     try {
       await this.save.fileWriter.write(collection);

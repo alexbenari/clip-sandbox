@@ -6,7 +6,7 @@ import { AppText } from '../../src/app/app-text.js';
 import type { SaveOutcome } from '../../src/app/collection-save-workflow.js';
 import { DeleteFromDiskWorkflow } from '../../src/app/delete-from-disk-workflow.js';
 import { EventSource } from '../../src/app/event-source.js';
-import { PipelineSession } from '../../src/app/pipeline-session.js';
+import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 
@@ -25,10 +25,10 @@ function deleteWorkflow({ saveOutcome = 'saved' as SaveOutcome, failingDeletes =
     videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')],
     collections: [Collection.fromFilename({ filename: 'picks.txt', orderedClipNames: ['alpha.mp4', 'bravo.mp4'] })],
   });
-  const pipelineSession = new PipelineSession();
-  pipelineSession.loadPipeline(pipeline);
+  const pipelineWorkingCopy = new PipelineWorkingCopy();
+  pipelineWorkingCopy.loadPipeline(pipeline);
   const grid = new FakeGrid();
-  const [alpha] = pipelineSession.currentClipSequence!.orderedClips();
+  const [alpha] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
   grid.selectedClipIds = [alpha.id];
   const preflights: PreflightRequest[] = [];
   const confirmations: ConfirmHandlers[] = [];
@@ -50,7 +50,7 @@ function deleteWorkflow({ saveOutcome = 'saved' as SaveOutcome, failingDeletes =
   const zoom = { isOpen: vi.fn(() => false) };
   const folderSelection = { reloadSelection: vi.fn(async () => undefined) };
   const workflow = new DeleteFromDiskWorkflow({
-    pipelineSession,
+    pipelineWorkingCopy,
     openFolder: new AppSessionState(),
     files,
     fileWriter: { write: vi.fn(async (collection: Collection) => { written.push(collection); return { mode: 'saved' }; }) },
@@ -66,10 +66,10 @@ function deleteWorkflow({ saveOutcome = 'saved' as SaveOutcome, failingDeletes =
     appText: new AppText(),
   });
   const makeViewDirty = () => {
-    const ids = pipelineSession.currentClipSequence!.orderedClips().map(clip => clip.id);
-    pipelineSession.replaceCurrentOrder([...ids].reverse());
+    const ids = pipelineWorkingCopy.currentClipSequence!.orderedClips().map(clip => clip.id);
+    pipelineWorkingCopy.replaceCurrentOrder([...ids].reverse());
   };
-  return { workflow, pipeline, pipelineSession, grid, dialog, preflights, confirmations, files, written, entries, toolbar, zoom, folderSelection, makeViewDirty };
+  return { workflow, pipeline, pipelineWorkingCopy, grid, dialog, preflights, confirmations, files, written, entries, toolbar, zoom, folderSelection, makeViewDirty };
 }
 
 describe('DeleteFromDiskWorkflow', () => {
@@ -89,9 +89,9 @@ describe('DeleteFromDiskWorkflow', () => {
   it('reloads a collection view from the collection as rewritten without the deleted clip', async () => {
     const context = deleteWorkflow();
     const picks = context.pipeline.getCollectionByFilename('picks.txt');
-    const loaded = context.pipelineSession.materializeSelection(picks);
+    const loaded = context.pipelineWorkingCopy.materializeSelection(picks);
     if (loaded?.materialization.kind !== 'loaded') throw new Error('picks.txt should materialize');
-    context.pipelineSession.activateSelection({ collection: picks, sequence: loaded.materialization.sequence });
+    context.pipelineWorkingCopy.activateSelection({ collection: picks, sequence: loaded.materialization.sequence });
     context.grid.selectedClipIds = [loaded.materialization.sequence.orderedClips()[0].id];
 
     context.workflow.start();
