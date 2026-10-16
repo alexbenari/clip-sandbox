@@ -16,6 +16,9 @@ After this work, each job has its own small class, Collection Refine has its own
 ## Progress
 
 - [ ] M1 Characterization tests and the cause of the failing saved-capture removal test
+  - [x] (2026-10-16) Cases 2-13 added to `tests/unit/gif-extraction-session.spec.ts` ("GifExtractionSession behavior before the split"); all 14 pass on the unchanged code (G1). Case 4's opening half is also covered by the existing test "switches movies with locked captures".
+  - [x] (2026-10-16) Cause of the removal test failure found (G2); see `Surprises & Discoveries`.
+  - [ ] Case 1 and the removal test: waiting for the user's decision on the unreachable stale-movie path (D15).
 - [ ] M2 `GifSessionStatus` and `CurrentMovie`
 - [ ] M3 `RangeExtraction`
 - [ ] M4 `CaptureQueue` and capture storage
@@ -54,6 +57,10 @@ Unavailable skills or fallbacks:
 
 - Discovery: the end-to-end test "a saved capture can be removed when its source movie is unavailable" fails at its first check after restart: the saved range never appears. It fails on `master` and on every branch of this work.
   Evidence: `tests/e2e/gif-extraction-output.spec.ts:129`; `test-evidence/gif-session-boundaries/e2e-small-fixes.log`.
+- Discovery: the removal test checks a flow the product no longer has. Commit `dabd91d` (2026-10-09, "Do not open the last loaded movie when opening the app") removed the startup restore of the last movie's captures. That included listing them as unavailable when the movie file was missing, and the test was not updated. It is a test that outlived its feature, not a regression.
+  Evidence: `git show dabd91d -- electron/clip-captures-ipc.cjs src/app/saved-capture-queue-persistence.ts src/app/clip-captures-store-service.ts` removes the `last` channel, `LastSavedMovie` and `adoptUnavailable`.
+- Discovery: the "saved movie changed" (stale) restore path is now unreachable. A stale result needs an expected fingerprint, which only the removed startup restore supplied; no caller passes one now. So the saved-storage removal rule ("removable while the movie reference exists, even if the movie is unavailable") no longer applies in practice. Ranges still become stale when `prepareSavedRange` finds mismatched frames, and that path stays live.
+  Evidence: `git grep -n expectedFingerprint -- src` shows only pass-through parameters and no caller with a value; `electron/clip-captures-ipc.cjs` returns `stale` only when `payload.expectedFingerprint` is set.
 
 ## Decision Log
 

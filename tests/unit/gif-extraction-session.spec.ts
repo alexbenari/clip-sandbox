@@ -403,3 +403,326 @@ describe('GifExtractionSession modes', () => {
       .toEqual({ kind: 'rejected', message: 'Collection refinement is unavailable.' });
   });
 });
+
+// Characterization tests: they record today's behavior before the session is split (split plan, M1).
+describe('GifExtractionSession behavior before the split', () => {
+  const hash = (frameIndex: number) => frameIndex.toString(16).padStart(16, '0');
+  const fingerprint = Object.freeze({
+    fingerprintVersion: 1 as const, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '100',
+    sourceDurationUs: '1000000', signatureProfileVersion: 'sampled-packets-3m-3m-3x1m-v1',
+    selectedStream: 0, streamMetadataDigest: 'b'.repeat(64),
+  });
+
+  function frameAt(frameIndex: number, frameInfoHash = hash(frameIndex)) {
+    return Object.freeze({
+      ...identity, frameIndex, originalFrameIndex: frameIndex,
+      pts: BigInt(frameIndex * 1_000), frameInfoPts: BigInt(frameIndex * 1_000), frameInfoHash,
+    });
+  }
+
+  function reviewWithFrames({ hashFor = hash, thumbnailsFail = false } = {}) {
+    return Object.assign(reviewSession(), {
+      frameIdentity: vi.fn(async (frameIndex: number) => frameAt(frameIndex, hashFor(frameIndex))),
+      thumbnailFrame: vi.fn(async (frameIndex: number) => {
+        if (thumbnailsFail) throw new Error('Thumbnail frame unavailable.');
+        return Object.freeze({
+          kind: 'exact-frame' as const, identity: frameAt(frameIndex, hashFor(frameIndex)),
+          reviewTimeUs: BigInt(frameIndex * 1_000), sourceGeneration: 1, frameGeneration: 1,
+          width: 2, height: 2, sourceWidth: 640, sourceHeight: 360, pixels: new Blob([new Uint8Array(16)]),
+        });
+      }),
+    });
+  }
+
+  function movieService(review: IFrameReviewSession = reviewWithFrames()): IFrameReviewService {
+    return {
+      chooseSource: vi.fn(async () => ({ name: 'Sample Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
+      open: vi.fn(async () => review),
+    };
+  }
+
+  function savedEndpoint(frameIndex: number) {
+    return { kind: 'exact-frame', frameIndex, frameInfoHash: hash(frameIndex), reviewTimeUs: String(frameIndex * 1_000) };
+  }
+
+  function savedStore(ranges: Array<[number, number]>, draft?: [number, number]): IClipCapturesStoreService {
+    return {
+      attach: vi.fn(async () => ({ kind: 'attached' as const, movieRef: 'capture_12345678', fingerprint, data: {
+        schemaVersion: 1 as const, nextRangeSequence: ranges.length + 1,
+        ...(draft ? { draft: { start: savedEndpoint(draft[0]), end: savedEndpoint(draft[1]) } } : {}),
+        ranges: ranges.map(([start, end], index) => ({ id: `range-${index + 1}`, start: savedEndpoint(start), end: savedEndpoint(end) })),
+      } })),
+      save: vi.fn(async () => undefined),
+    };
+  }
+
+  function exactCapture(frameIndex: number): IFrameReviewDisplayedCapture {
+    const frameIdentity = frameAt(frameIndex);
+    return Object.freeze({
+      point: Object.freeze({ kind: 'exact-frame' as const, identity: frameIdentity }),
+      positionUs: BigInt(frameIndex * 1_000),
+      sourceGeneration: 1,
+      thumbnail: Object.freeze({
+        kind: 'exact-frame' as const, identity: frameIdentity, reviewTimeUs: BigInt(frameIndex * 1_000),
+        sourceGeneration: 1, frameGeneration: 3, width: 2, height: 2, sourceWidth: 640, sourceHeight: 360,
+        pixels: new Blob([new Uint8Array(16)]),
+      }),
+    });
+  }
+
+  function lockExact(session: GifExtractionSession, start: number, end: number) {
+    session.markStart(exactCapture(start));
+    session.markEnd(exactCapture(end));
+    const locked = session.lockRange();
+    if (locked.kind !== 'locked') throw new Error(`Range ${start}-${end} did not lock: ${locked.kind}`);
+    return locked.range;
+  }
+
+  function extractionService(extract: IClipExtractionService['extract']): IClipExtractionService {
+    return {
+      openExtractionDestination: vi.fn(async () => ({ destinationHandle: 'destination_12345678', folderPath: 'C:/extraction-tmp', entries: [] })),
+      extract, saveCollection: vi.fn(async () => undefined), cancelCurrent: vi.fn(async () => undefined),
+    };
+  }
+
+  const createdMedia = (filename: string, warning?: string) => Object.freeze({
+    kind: 'created-media' as const, mediaHandle: `media_${filename.replace(/\W/g, '').padEnd(8, '0')}`, filename,
+    ...(warning ? { warning } : {}),
+  });
+
+  function reporter() { return { progress: vi.fn(), success: vi.fn(), failure: vi.fn() }; }
+
+  async function restoredSession(store: IClipCapturesStoreService, review = reviewWithFrames(), options = {}) {
+    const session = GifExtractionSession.forMovieCapture(movieService(review), thumbnailService(), { captureStore: store, ...options });
+    await session.openMovie();
+    await vi.waitFor(() => expect(session.snapshot.capturesLoading).toBe(false));
+    return session;
+  }
+
+  it('restores saved ranges and a draft and says so', async () => {
+    const session = await restoredSession(savedStore([[2, 4], [10, 12]], [20, 22]));
+
+    expect(session.snapshot.message).toBe('Restored 2 saved ranges and a draft.');
+    expect(session.snapshot.ranges.map(range => range.kind)).toEqual(['saved-exact-range', 'saved-exact-range']);
+  });
+
+  it('reports once, with a count, the saved start thumbnails it could not recreate', async () => {
+    const report = reporter();
+    await restoredSession(savedStore([[2, 4], [10, 12]], [20, 22]), reviewWithFrames({ thumbnailsFail: true }), { reporter: report });
+
+    await vi.waitFor(() => expect(report.failure).toHaveBeenCalledWith(
+      '3 saved start thumbnails could not be recreated. Retry them from Clips.'));
+    expect(report.failure.mock.calls.filter(([message]) => message.includes('thumbnails'))).toHaveLength(1);
+  });
+
+  it('without saved captures, allows removing a range while the movie is open but not while another opens', async () => {
+    let finishOpening: (review: IFrameReviewSession) => void = () => undefined;
+    const service: IFrameReviewService = {
+      chooseSource: vi.fn(async () => ({ name: 'Sample Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
+      open: vi.fn()
+        .mockResolvedValueOnce(reviewWithFrames())
+        .mockReturnValueOnce(new Promise<IFrameReviewSession>(resolve => { finishOpening = resolve; })),
+    };
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService());
+    await session.openMovie();
+    const range = lockExact(session, 3, 6);
+    expect(session.canRemoveRange(range.id)).toBe(true);
+
+    const opening = session.openMovie();
+    await vi.waitFor(() => expect(session.snapshot.lifecycle).toBe('opening'));
+
+    expect(session.canRemoveRange(range.id)).toBe(false);
+    finishOpening(reviewWithFrames());
+    await opening;
+  });
+
+  it('marks a saved range stale when its frames no longer match, and refuses to refine it', async () => {
+    const report = reporter();
+    const session = await restoredSession(savedStore([[2, 4]]), reviewWithFrames({ hashFor: () => 'ffffffffffffffff' }), { reporter: report });
+    const rangeId = session.snapshot.ranges[0]!.id;
+
+    expect(await session.prepareSavedRange(rangeId)).toBe(false);
+
+    expect(report.failure).toHaveBeenCalledWith('Saved frames no longer match this movie. Reopen the original movie.');
+    expect(session.snapshot.ranges[0]?.validation).toBe('stale');
+    expect(session.beginRefinement(rangeId)).toEqual({ kind: 'rejected',
+      message: 'Saved frames no longer match this movie. Remove the range or reopen the original movie.' });
+  });
+
+  it('refuses a saved draft whose frames no longer match the movie', async () => {
+    const report = reporter();
+    const session = await restoredSession(savedStore([], [20, 22]), reviewWithFrames({ hashFor: () => 'ffffffffffffffff' }), { reporter: report });
+
+    expect(await session.prepareSavedDraft()).toBe(false);
+
+    expect(report.failure).toHaveBeenCalledWith('Saved draft frames no longer match this movie. Mark new endpoints before locking.');
+  });
+
+  it('says that some clips need attention when part of an extraction fails', async () => {
+    const report = reporter();
+    const extract = vi.fn()
+      .mockResolvedValueOnce(createdMedia('Sample Movie-001.mp4'))
+      .mockRejectedValueOnce(new Error('Encoder stopped.'));
+    const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
+      { extractionService: extractionService(extract), reporter: report });
+    await session.openMovie();
+    lockExact(session, 3, 6);
+    lockExact(session, 8, 9);
+
+    await session.extractAll();
+
+    expect(session.snapshot.message).toBe('Some clips need attention');
+    expect(report.failure).toHaveBeenCalledWith('Some clips could not be completed. Retry them from Clips.');
+  });
+
+  it('reports a cancelled extraction and keeps the clips already made', async () => {
+    const report = reporter();
+    let finishFirst: (media: ReturnType<typeof createdMedia>) => void = () => undefined;
+    const extract = vi.fn()
+      .mockReturnValueOnce(new Promise(resolve => { finishFirst = resolve; }))
+      .mockResolvedValueOnce(createdMedia('Sample Movie-002.mp4'));
+    const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
+      { extractionService: extractionService(extract), reporter: report });
+    await session.openMovie();
+    lockExact(session, 3, 6);
+    lockExact(session, 8, 9);
+
+    const extracting = session.extractAll();
+    await vi.waitFor(() => expect(extract).toHaveBeenCalledOnce());
+    await session.cancelExtraction();
+    finishFirst(createdMedia('Sample Movie-001.mp4'));
+    await extracting;
+
+    expect(session.snapshot.message).toBe('Extraction cancelled');
+    expect(report.progress).toHaveBeenCalledWith('Extraction stopped. Completed clips were saved.');
+  });
+
+  it('reports each provenance warning once, however many extractions follow', async () => {
+    const report = reporter();
+    const extract = vi.fn()
+      .mockResolvedValueOnce(createdMedia('Sample Movie-001.mp4', 'Source details could not be written into the clip.'))
+      .mockResolvedValueOnce(createdMedia('Sample Movie-002.mp4'));
+    const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
+      { extractionService: extractionService(extract), reporter: report });
+    await session.openMovie();
+    const first = lockExact(session, 3, 6);
+    const second = lockExact(session, 8, 9);
+
+    await session.extractRange(first.id);
+    await session.extractRange(second.id);
+
+    expect(report.success.mock.calls.filter(([message]) => message === 'Source details could not be written into the clip.'))
+      .toEqual([['Source details could not be written into the clip.', 5000]]);
+  });
+
+  it('checks saved ranges first, then extracts every ready range', async () => {
+    const extract = vi.fn()
+      .mockResolvedValueOnce(createdMedia('Sample Movie-001.mp4'))
+      .mockResolvedValueOnce(createdMedia('Sample Movie-002.mp4'));
+    const review = reviewWithFrames();
+    const session = await restoredSession(savedStore([[2, 4], [10, 12]]), review, { extractionService: extractionService(extract) });
+
+    await session.extractAll();
+
+    expect(review.frameIdentity).toHaveBeenCalledWith(2);
+    expect(review.frameIdentity).toHaveBeenCalledWith(12);
+    expect(extract).toHaveBeenCalledTimes(2);
+    expect(session.snapshot.ranges.map(range => range.extraction?.kind)).toEqual(['completed', 'completed']);
+  });
+
+  it('with a destination set, does not extract a range whose refinement is not locked yet', async () => {
+    const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
+      { extractionService: extractionService(vi.fn()) });
+    await session.openMovie();
+    const range = lockExact(session, 3, 6);
+    session.setExtractionDestination({ kind: 'folder', folderPath: 'C:/pipelines/camera' });
+    expect(session.canExtractRange(range.id)).toBe(true);
+
+    expect(session.beginRefinement(range.id).kind).toBe('started');
+
+    expect(session.canExtractRange(range.id)).toBe(false);
+  });
+
+  it('previews the draft, then the selected locked range, and advances the revision only on a real change', async () => {
+    const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService());
+    await session.openMovie();
+    session.markStart(exactCapture(3));
+    session.markEnd(exactCapture(6));
+    expect(session.snapshot.previewTarget).toMatchObject({ kind: 'draft', startFrameIndex: 3, endFrameIndex: 6 });
+    session.lockRange();
+    const first = session.snapshot.ranges[0]!;
+    lockExact(session, 8, 9);
+    expect(session.snapshot.previewTarget).toMatchObject({ kind: 'locked', startFrameIndex: 8, endFrameIndex: 9 });
+
+    const before = session.snapshot.previewRevision;
+    session.selectRange(first.id);
+    const afterSelect = session.snapshot.previewRevision;
+    session.selectRange(first.id);
+
+    expect(session.snapshot.previewTarget).toMatchObject({ kind: 'locked', rangeId: first.id, startFrameIndex: 3 });
+    expect(afterSelect).toBeGreaterThan(before);
+    expect(session.snapshot.previewRevision).toBe(afterSelect);
+  });
+
+  it('refuses capture while a movie opens and while saved captures load', async () => {
+    let finishAttach: (value: unknown) => void = () => undefined;
+    const store: IClipCapturesStoreService = { attach: vi.fn(() => new Promise(resolve => { finishAttach = resolve; })) as never, save: vi.fn() };
+    let finishOpening: (review: IFrameReviewSession) => void = () => undefined;
+    const service: IFrameReviewService = {
+      chooseSource: vi.fn(async () => ({ name: 'Sample Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
+      open: vi.fn(() => new Promise<IFrameReviewSession>(resolve => { finishOpening = resolve; })),
+    };
+    const session = GifExtractionSession.forMovieCapture(service, thumbnailService(), { captureStore: store });
+
+    const opening = session.openMovie();
+    await vi.waitFor(() => expect(session.snapshot.lifecycle).toBe('opening'));
+    expect(session.markStart(exactCapture(3))).toEqual({ kind: 'rejected', message: 'Wait for the movie to finish opening.' });
+    finishOpening(reviewWithFrames());
+    await opening;
+
+    expect(session.markStart(exactCapture(3))).toEqual({ kind: 'rejected', message: 'Saved captures are still loading.' });
+    finishAttach({ kind: 'attached', movieRef: 'capture_12345678', fingerprint, data: { schemaVersion: 1, nextRangeSequence: 1, ranges: [] } });
+  });
+
+  it('refuses to change the extraction destination while a batch runs', async () => {
+    let finish: (media: ReturnType<typeof createdMedia>) => void = () => undefined;
+    const extract = vi.fn(() => new Promise<ReturnType<typeof createdMedia>>(resolve => { finish = resolve; }));
+    const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
+      { extractionService: extractionService(extract) });
+    await session.openMovie();
+    const range = lockExact(session, 3, 6);
+
+    const extracting = session.extractRange(range.id);
+    await vi.waitFor(() => expect(extract).toHaveBeenCalledOnce());
+
+    expect(() => session.setExtractionDestination({ kind: 'folder', folderPath: 'C:/pipelines/camera' }))
+      .toThrow('Wait for the current extraction to finish.');
+    finish(createdMedia('Sample Movie-001.mp4'));
+    await extracting;
+  });
+
+  it('releases the movie and its thumbnails when disposed, then neither writes nor publishes', async () => {
+    const store = savedStore([]);
+    const review = reviewWithFrames();
+    const thumbnails = thumbnailService();
+    const cancelCurrent = vi.fn(async () => undefined);
+    const session = GifExtractionSession.forMovieCapture(movieService(review), thumbnails, {
+      captureStore: store, extractionService: { ...extractionService(vi.fn()), cancelCurrent },
+    });
+    await session.openMovie();
+    await vi.waitFor(() => expect(session.snapshot.capturesLoading).toBe(false));
+    session.markStart(exactCapture(3));
+    const listener = vi.fn();
+    session.subscribe(listener);
+    listener.mockClear();
+    vi.mocked(store.save).mockClear();
+
+    await session.dispose();
+    session.markEnd(exactCapture(6));
+
+    expect(store.save).not.toHaveBeenCalled();
+    expect(review.dispose).toHaveBeenCalledOnce();
+    expect(thumbnails.dispose).toHaveBeenCalledOnce();
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
