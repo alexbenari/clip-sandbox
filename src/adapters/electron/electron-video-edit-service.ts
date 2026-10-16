@@ -21,6 +21,10 @@ export class ElectronVideoEditService {
     this.api = api;
   }
 
+  static fromWindow(win: Window): ElectronVideoEditService {
+    return new ElectronVideoEditService({ api: (win as ElectronVideoEditWindow).clipSandboxDesktop });
+  }
+
   private requireApi(): Required<Pick<ElectronVideoEditApi, 'createVideoEdit'>> {
     if (!this.api?.createVideoEdit) {
       throw new Error('Electron video edit API is unavailable.');

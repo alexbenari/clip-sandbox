@@ -25,7 +25,7 @@ Current runtime entrypoints:
 
 Current renderer-to-desktop boundary:
 
-- `src/adapters/electron/electron-file-system-service.js`
+- the `src/adapters/electron/` services, chiefly `electron-folder-service.js`, `electron-folder-file-service.js` and `electron-pipeline-catalog-service.js`
 
 ## Current scope
 

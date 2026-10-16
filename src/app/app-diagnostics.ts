@@ -1,7 +1,7 @@
 import type { InvalidCollectionDescription } from '../domain/collection-description-validator.js';
 import type { FolderAccess } from './folder-access.js';
 
-type ErrorLogFileSystem = {
+type ErrorLogFiles = {
   appendTextFile(request: { folderSession: FolderAccess | null; filename: string; text: string }): Promise<{ mode?: string }>;
 };
 
@@ -11,20 +11,20 @@ type DeleteFailureSummary = {
 };
 
 export class AppDiagnostics {
-  fileSystem: ErrorLogFileSystem;
+  folderFiles: ErrorLogFiles;
   errorLogFilename: string;
   getCurrentFolderSession: () => FolderAccess | null;
 
   constructor({
-    fileSystem,
+    folderFiles,
     errorLogFilename = 'err.log',
     getCurrentFolderSession = () => null,
   }: {
-    fileSystem: ErrorLogFileSystem;
+    folderFiles: ErrorLogFiles;
     errorLogFilename?: string;
     getCurrentFolderSession?: () => FolderAccess | null;
   }) {
-    this.fileSystem = fileSystem;
+    this.folderFiles = folderFiles;
     this.errorLogFilename = errorLogFilename;
     this.getCurrentFolderSession = getCurrentFolderSession;
   }
@@ -32,7 +32,7 @@ export class AppDiagnostics {
   async appendErrorLog(text: string, folderSession: FolderAccess | null = this.getCurrentFolderSession()): Promise<boolean> {
     if (!text) return false;
     try {
-      const { mode } = await this.fileSystem.appendTextFile({
+      const { mode } = await this.folderFiles.appendTextFile({
         folderSession,
         filename: this.errorLogFilename,
         text,

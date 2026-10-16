@@ -302,14 +302,14 @@ describe('app controller context menu wiring', () => {
     const load = vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
     window.clipSandboxDesktop.createVideoEdit = vi.fn(async () => ({ ok: true, createdFile: desktopFile({ name: 'alpha-looped.mp4' }) }));
     const { AppController } = await import('../../../src/app/app-controller.js');
-    const { ElectronFileSystemService } = await import('../../../src/adapters/electron/electron-file-system-service.js');
+    const { ElectronFolderService } = await import('../../../src/adapters/electron/electron-folder-service.js');
     new AppController().init();
     document.querySelector('#appScreenSelector').value = 'collection';
     document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
     document.getElementById('pickBtn').click();
     await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
     document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-    const conversion = vi.spyOn(ElectronFileSystemService.prototype, 'toRendererFile');
+    const conversion = vi.spyOn(ElectronFolderService.prototype, 'toRendererFile');
     conversion.mockImplementationOnce(() => { throw new Error('Output refresh failed'); });
     const runEdit = async () => {
       document.getElementById('zoomVideo').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));

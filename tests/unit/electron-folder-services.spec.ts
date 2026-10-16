@@ -1,8 +1,11 @@
 // @ts-nocheck
 import { describe, expect, it, vi } from 'vitest';
-import { ElectronFileSystemService } from '../../src/adapters/electron/electron-file-system-service.js';
+import { ElectronFolderFileService } from '../../src/adapters/electron/electron-folder-file-service.js';
+import { ElectronFolderService } from '../../src/adapters/electron/electron-folder-service.js';
+import { ElectronPipelineCatalogService } from '../../src/adapters/electron/electron-pipeline-catalog-service.js';
+import { ElectronVideoEditService } from '../../src/adapters/electron/electron-video-edit-service.js';
 
-describe('electron file system service', () => {
+describe('electron folder services', () => {
   it('builds a writable folder session and renderer files from the desktop api', async () => {
     const api = {
       pickFolder: vi.fn(async () => ({
@@ -23,7 +26,7 @@ describe('electron file system service', () => {
         ],
       })),
     };
-    const service = new ElectronFileSystemService({ api });
+    const service = new ElectronFolderService(api);
 
     const result = await service.pickFolder();
 
@@ -38,7 +41,7 @@ describe('electron file system service', () => {
 
   it('refuses a picked folder that has no path, so no folder access exists without one', async () => {
     const api = { pickFolder: vi.fn(async () => ({ canceled: false, folderPath: '', folderName: 'clips', files: [] })) };
-    const service = new ElectronFileSystemService({ api });
+    const service = new ElectronFolderService(api);
 
     await expect(service.pickFolder()).rejects.toThrow('folder without a path');
   });
@@ -58,7 +61,7 @@ describe('electron file system service', () => {
         }],
       })),
     };
-    const service = new ElectronFileSystemService({ api });
+    const service = new ElectronFolderService(api);
 
     const result = await service.refreshFolder({ folderPath: 'C:/clips' });
 
@@ -83,7 +86,7 @@ describe('electron file system service', () => {
         pipelineId,
       })),
     };
-    const service = new ElectronFileSystemService({ api });
+    const service = new ElectronPipelineCatalogService(api, new ElectronFolderService(api));
     const catalog = await service.listPipelineCatalog();
     if (catalog.kind !== 'available') throw new Error('Expected an available pipeline catalog.');
     const entry = catalog.entries[0]!;
@@ -111,7 +114,7 @@ describe('electron file system service', () => {
         ],
       })),
     };
-    const service = new ElectronFileSystemService({ api });
+    const service = new ElectronFolderFileService(api);
 
     const result = await service.deleteFiles({
       folderSession: { folderPath: 'C:/clips' },
@@ -132,7 +135,7 @@ describe('electron file system service', () => {
       saveTextFile: vi.fn(async () => ({ mode: 'saved' })),
       appendTextFile: vi.fn(async () => ({ mode: 'saved' })),
     };
-    const service = new ElectronFileSystemService({ api });
+    const service = new ElectronFolderFileService(api);
     const folderSession = { folderPath: 'C:/clips' };
 
     await expect(service.saveTextFile({
@@ -159,7 +162,7 @@ describe('electron file system service', () => {
         results: [],
       })),
     };
-    const service = new ElectronFileSystemService({ api });
+    const service = new ElectronFolderFileService(api);
 
     const result = await service.deleteFiles({
       folderSession: { folderPath: 'C:/clips' },
@@ -194,7 +197,7 @@ describe('electron file system service', () => {
         },
       })),
     };
-    const service = new ElectronFileSystemService({ api });
+    const service = new ElectronVideoEditService({ api });
 
     const result = await service.createVideoEdit({
       editId: 'loopify',

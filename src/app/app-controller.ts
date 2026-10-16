@@ -6,7 +6,10 @@ import { VideoEditCatalog } from '../business-logic/video-edit-catalog.js';
 import { AppSessionState } from './app-session-state.js';
 import { PipelineSession } from './pipeline-session.js';
 import { FullscreenAdapter } from '../adapters/browser/fullscreen-adapter.js';
-import { ElectronFileSystemService } from '../adapters/electron/electron-file-system-service.js';
+import { ElectronFolderFileService } from '../adapters/electron/electron-folder-file-service.js';
+import { ElectronFolderService } from '../adapters/electron/electron-folder-service.js';
+import { ElectronPipelineCatalogService } from '../adapters/electron/electron-pipeline-catalog-service.js';
+import { ElectronVideoEditService } from '../adapters/electron/electron-video-edit-service.js';
 import { ClockAdapter } from '../adapters/browser/clock-adapter.js';
 import { AudioFeedbackAdapter } from '../adapters/browser/audio-feedback-adapter.js';
 import { FullscreenSession } from './fullscreen-session.js';
@@ -89,10 +92,12 @@ export class AppController {
     const collectionFormat = new CollectionTextFormat();
     const settingsParser = new AppSettingsParser();
     const settingsService = new AppSettingsService(ElectronAppSettingsService.fromWindow(window, settingsParser));
-    const fileSystem = new ElectronFileSystemService({ win: window });
-    const collectionFileWriter = new CollectionFileWriter(fileSystem, state);
+    const folders = ElectronFolderService.fromWindow(window);
+    const pipelineCatalog = ElectronPipelineCatalogService.fromWindow(window, folders);
+    const folderFiles = ElectronFolderFileService.fromWindow(window);
+    const collectionFileWriter = new CollectionFileWriter(folderFiles, state);
     const collectionRefinementService = ElectronCollectionClipRefinementService.tryCreate(window);
-    const clipEditor = new ClipEditor({ runtimeEditingService: fileSystem, videoEditCatalog });
+    const clipEditor = new ClipEditor({ runtimeEditingService: ElectronVideoEditService.fromWindow(window), videoEditCatalog });
     const activityLogger = new ActivityLogger({ clock: window });
     const activityReporter = new ActivityReporter(activityLogger);
     const audioFeedback = new AudioFeedbackAdapter({ win: window });
@@ -100,7 +105,7 @@ export class AppController {
     const fullscreenAdapter = new FullscreenAdapter({ doc: document });
     const pipelineFactory = new PipelineFactory();
     const diagnostics = new AppDiagnostics({
-      fileSystem,
+      folderFiles,
       errorLogFilename: ERROR_LOG_FILENAME,
       getCurrentFolderSession: () => state.currentFolderSession,
     });
@@ -148,7 +153,7 @@ export class AppController {
       } : undefined,
     });
     const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: fullscreenAdapter });
-    const pipelineCatalogControl = PipelineCatalogControl.fromDocument(document, { catalog: fileSystem });
+    const pipelineCatalogControl = PipelineCatalogControl.fromDocument(document, { catalog: pipelineCatalog });
     const controlFailureReporting = new ControlFailureReporting({
       grid,
       pipelineCatalog: pipelineCatalogControl,
@@ -165,7 +170,7 @@ export class AppController {
     const hasClipsPanel = ApplicationShellControl.sidePanelsIn(document).some(panel => panel.id === 'clips');
     // Saving refreshes the open folder through folder selection, which itself saves first; the callback below closes that loop.
     const openFolderRefreshSession = new OpenFolderRefreshSession({
-      folders: fileSystem,
+      folders,
       openFolder: state,
       pipelineSession,
       refreshActiveFolder: (): Promise<void> => folderSelection.refreshActiveFolder(),
@@ -285,8 +290,8 @@ export class AppController {
     const folderSelection = new FolderSelectionWorkflow({
       pipelineSession,
       openFolder: state,
-      folders: fileSystem,
-      pipelineCatalog: fileSystem,
+      folders,
+      pipelineCatalog,
       pipelineFactory,
       collectionFormat,
       diagnostics,
@@ -307,7 +312,7 @@ export class AppController {
     const deleteFromDisk = new DeleteFromDiskWorkflow({
       pipelineSession,
       openFolder: state,
-      files: fileSystem,
+      files: folderFiles,
       fileWriter: collectionFileWriter,
       dialog: deleteFromDiskDialog,
       grid,
@@ -323,7 +328,7 @@ export class AppController {
     const zoom = new ZoomWorkflow({
       pipelineSession,
       openFolder: state,
-      folderFiles: fileSystem,
+      folderFiles: folders,
       zoom: zoomOverlay,
       grid,
       screens: shell,

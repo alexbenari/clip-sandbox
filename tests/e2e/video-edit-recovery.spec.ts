@@ -24,11 +24,11 @@ test('created edit survives a UI callback failure and editing becomes available 
     await page.locator('#grid .thumb').dblclick();
     // Fault injection at the public adapter conversion boundary, after loading the source.
     await page.evaluate(async () => {
-      const modulePath = './build/src/adapters/electron/electron-file-system-service.js';
-      const { ElectronFileSystemService } = await import(modulePath);
-      const original = ElectronFileSystemService.prototype.toRendererFile;
-      ElectronFileSystemService.prototype.toRendererFile = function () {
-        ElectronFileSystemService.prototype.toRendererFile = original;
+      const modulePath = './build/src/adapters/electron/electron-folder-service.js';
+      const { ElectronFolderService } = await import(modulePath);
+      const original = ElectronFolderService.prototype.toRendererFile;
+      ElectronFolderService.prototype.toRendererFile = function () {
+        ElectronFolderService.prototype.toRendererFile = original;
         throw new Error('Injected output refresh failure');
       };
     });

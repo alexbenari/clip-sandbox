@@ -65,7 +65,7 @@ The renderer is still framework-free. The main architectural change from the OO/
 5. `PipelineSession` in [`src/app/pipeline-session.ts`](../../src/app/pipeline-session.ts): active loaded-pipeline working state. It owns generated clip ids, the selected pipeline/collection sequence, derived dirty-state comparison (never a cached flag), active clip resolution, reorder/remove mutation, and created-clip insertion while keeping the durable `Pipeline` focused on folder contents and saved collections.
 6. `AppSessionState` in [`src/app/app-session-state.ts`](../../src/app/app-session-state.ts): class-backed app-shell state for the active folder session. The pending selection action waiting on the unsaved-changes prompt belongs to `FolderSelectionWorkflow`. It does not own loaded pipeline selection state.
 7. `FullscreenSession` in [`src/app/fullscreen-session.ts`](../../src/app/fullscreen-session.ts): Collection-only full screen coordinator for slot input, title hiding and rotation scheduling. It passes slot values and rotation requests to the grid; it receives no card/video handles. [`FullscreenAdapter`](../../src/adapters/browser/fullscreen-adapter.ts) distinguishes the document-root Collection element from the GIF player's element while retaining an app-wide any-full-screen check.
-8. `folderSession` in [`src/adapters/electron/electron-file-system-service.ts`](../../src/adapters/electron/electron-file-system-service.ts): direct-access desktop folder session backed by an absolute folder path. [`FolderAccessRegistry`](../../electron/folder-access-registry.cjs) records picker-selected paths and explicitly opened catalog pipelines as per-window folder grants; listing or expanding the catalog grants only opaque read access to its entries. Only a granted folder session can write, append, delete, or re-enumerate a folder through Electron IPC.
+8. [`FolderAccess`](../../src/app/folder-access.ts) (held as `folderSession`, `null` when no folder is open): access to the opened desktop folder, backed by its absolute path. Only [`ElectronFolderService`](../../src/adapters/electron/electron-folder-service.ts) creates one, checking the path where it arrives from the desktop API, so callers need only a null check. [`FolderAccessRegistry`](../../electron/folder-access-registry.cjs) records picker-selected paths and explicitly opened catalog pipelines as per-window folder grants; listing or expanding the catalog grants only opaque read access to its entries. Only a granted folder can be written, appended to, deleted from, or re-enumerated through Electron IPC.
 9. `clipSandboxDesktop` in [`electron/preload.cjs`](../../electron/preload.cjs): preload-exposed desktop API used by the renderer-facing filesystem service.
 10. `ClipEditor` in [`src/business-logic/clip-editor.ts`](../../src/business-logic/clip-editor.ts): edit request executor that validates requests, derives preferred output filenames, and delegates execution to the runtime editing service.
 11. `ZoomVideoEditWorkflow` in [`src/app/zoom-video-edit-workflow.ts`](../../src/app/zoom-video-edit-workflow.ts): app-layer workflow boundary that runs `ClipEditor` for a supplied zoom source clip and emits edit lifecycle callbacks without knowing pipeline, grid, toolbar, or zoom overlay details.
@@ -194,7 +194,7 @@ The control listens to logger changes and owns history keyboard navigation, nati
 Read these first:
 
 1. [`electron/preload.cjs`](../../electron/preload.cjs)
-2. [`src/adapters/electron/electron-file-system-service.ts`](../../src/adapters/electron/electron-file-system-service.ts)
+2. [`src/adapters/electron/electron-folder-service.ts`](../../src/adapters/electron/electron-folder-service.ts) and, for Pipelines, [`electron-pipeline-catalog-service.ts`](../../src/adapters/electron/electron-pipeline-catalog-service.ts)
 3. [`src/app/folder-selection-workflow.ts`](../../src/app/folder-selection-workflow.ts) and [`src/app/collection-view-workflow.ts`](../../src/app/collection-view-workflow.ts)
 4. [`src/business-logic/PipelineFactory.ts`](../../src/business-logic/PipelineFactory.ts)
 5. [`src/domain/pipeline.ts`](../../src/domain/pipeline.ts)
@@ -203,7 +203,7 @@ Flow:
 
 1. `FolderSelectionWorkflow` handles the toolbar's browse request or a Pipelines catalog load (behind the unsaved-changes prompt), and the renderer asks the preload bridge to pick a folder,
 2. Electron main enumerates top-level files from the chosen folder and returns lightweight metadata plus collection-file text and video media URLs; absolute paths remain an existing filesystem/edit compatibility field but do not enter the renderer frame-review service contract,
-3. the renderer-facing filesystem service converts those entries into renderer-safe file-like objects,
+3. `ElectronFolderService` converts those entries into renderer-safe file-like objects,
 4. `PipelineFactory.buildPipeline(...)` classifies top-level videos and `.txt` collection files, then builds the durable `Pipeline`,
 5. the initial active selection is pipeline mode, and `PipelineSession.loadPipeline(...)` materializes a runtime `ClipSequence` over canonical clips, creating generated ids only for video files not yet represented by a runtime `Clip`,
 6. collection selection uses `Pipeline.getCollectionByFilename(...)` plus `PipelineSession.materializeSelection(...)` / `activateSelection(...)` to re-materialize a runtime `ClipSequence` from the chosen `Collection` against the current pipeline's canonical clips,
@@ -216,7 +216,7 @@ Read these first:
 
 1. [`src/domain/pipeline.ts`](../../src/domain/pipeline.ts)
 2. [`src/domain/collection.ts`](../../src/domain/collection.ts)
-3. [`src/adapters/electron/electron-file-system-service.ts`](../../src/adapters/electron/electron-file-system-service.ts)
+3. [`src/adapters/electron/electron-folder-file-service.ts`](../../src/adapters/electron/electron-folder-file-service.ts)
 4. [`src/app/collection-view-workflow.ts`](../../src/app/collection-view-workflow.ts), [`src/app/collection-save-workflow.ts`](../../src/app/collection-save-workflow.ts), [`src/app/add-to-collection-workflow.ts`](../../src/app/add-to-collection-workflow.ts), [`src/app/delete-from-disk-workflow.ts`](../../src/app/delete-from-disk-workflow.ts) and [`src/app/collection-file-writer.ts`](../../src/app/collection-file-writer.ts)
 
 Flow:
@@ -277,7 +277,7 @@ Flow:
 1. Change how the TypeScript build, strict-check coverage, or runtime entry works:
    Start with [`package.json`](../../package.json), [`tsconfig.build.json`](../../tsconfig.build.json), [`tsconfig.strict-src.json`](../../tsconfig.strict-src.json), and [`index.html`](../../index.html).
 2. Change how folders, files, save, append, or delete interact with the desktop runtime:
-   Start with [`src/adapters/electron/electron-file-system-service.ts`](../../src/adapters/electron/electron-file-system-service.ts), [`electron/preload.cjs`](../../electron/preload.cjs), and [`electron/main.cjs`](../../electron/main.cjs).
+   Start with [`electron-folder-service.ts`](../../src/adapters/electron/electron-folder-service.ts) (pick, refresh, renderer files), [`electron-folder-file-service.ts`](../../src/adapters/electron/electron-folder-file-service.ts) (save, append, delete), [`electron-pipeline-catalog-service.ts`](../../src/adapters/electron/electron-pipeline-catalog-service.ts), [`electron/preload.cjs`](../../electron/preload.cjs), and [`electron/main.cjs`](../../electron/main.cjs).
 3. Change how videos and collection files are discovered, classified, or turned into a pipeline:
    Start with [`src/business-logic/PipelineFactory.ts`](../../src/business-logic/PipelineFactory.ts).
 4. Change how a selected pipeline or collection is materialized into the runtime working sequence:

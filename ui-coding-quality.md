@@ -116,7 +116,7 @@ The general rules in `coding-quality.md` ("Test reliability") apply. In addition
 - Query component: a name that states the question or rule (`RefineScreenLeavePolicy`, `NewCollectionNameCheck`).
 - Application service: a name for what it holds or does. Give each suffix one meaning across the application; do not use the same suffix (for example `…Session`) for a working copy, a coordinator and a draft.
 - Stateless class: a name for what it computes (`DisplayLayoutRules`, `ClipLabelFormatter`).
-- Adapter: `…Adapter` for a class that wraps a platform API (`FullscreenAdapter`). A platform-backed implementation of a service interface is named after the platform and the service (`ElectronFileSystemService`).
+- Adapter: `…Adapter` for a class that wraps a platform API (`FullscreenAdapter`). A platform-backed implementation of a service interface is named after the platform and the service (`ElectronFolderFileService`).
 - Application event component and composition root: `…Controller` is kept for these two application-level coordinators (`ApplicationEventController`, `AppController`). Do not use it for UI parts, where it would suggest coordination a control never does, or for a helper that a control or screen uses (a keyboard handler, a playback scheduler); name such a helper for what it does.
 - Name events after what happened: `…Requested` for the user's intent (`browseRequested`), `…Changed` for a change of state (`selectionChanged`), `confirmed` and `cancelled` for a dialog's answer, `…Pressed` for raw input a screen passes on (`keyPressed`), and `failed` or `…Failed` for a failure (`playbackFailed`).
 
