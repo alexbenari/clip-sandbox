@@ -16,21 +16,21 @@ export type ExtractionDestination =
   | Readonly<{ kind: 'collection'; folderPath: string; collectionFilename: string }>
   | Readonly<{ kind: 'folder'; folderPath: string }>;
 
-export interface IExtractionDestinationSessionSnapshot {
+export interface IOpenedExtractionDestination {
   readonly destinationHandle: string;
   readonly folderPath: string;
   readonly collectionFilename: string;
   readonly collection: Collection;
 }
 
-type ExtractionDestinationSessionOptions = {
+type ExtractionPublisherOptions = {
   readonly onPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
   readonly onPublishError?: (error: unknown) => void;
   readonly destination?: ExtractionDestination;
   readonly collectionFormat?: Pick<CollectionTextFormat, 'read' | 'write'>;
 };
 
-export class ExtractionDestinationSession {
+export class ExtractionPublisher {
   private readonly collectionFormat: Pick<CollectionTextFormat, 'read' | 'write'>;
   private destinationHandle = '';
   private folderPath = '';
@@ -41,12 +41,12 @@ export class ExtractionDestinationSession {
 
   constructor(
     private readonly service: Pick<IClipExtractionService, 'openExtractionDestination' | 'saveCollection'>,
-    private readonly options: ExtractionDestinationSessionOptions = {},
+    private readonly options: ExtractionPublisherOptions = {},
   ) {
     this.collectionFormat = options.collectionFormat ?? new CollectionTextFormat();
   }
 
-  async open({ movieName }: { movieName: string }): Promise<IExtractionDestinationSessionSnapshot> {
+  async open({ movieName }: { movieName: string }): Promise<IOpenedExtractionDestination> {
     const collectionFilename = (this.options.destination?.kind === 'collection'
       ? this.options.destination.collectionFilename : null)
       ?? Collection.filenameFromCollectionName(this.movieStem(movieName));
@@ -129,7 +129,7 @@ export class ExtractionDestinationSession {
     return validation.name;
   }
 
-  private snapshot(): IExtractionDestinationSessionSnapshot {
+  private snapshot(): IOpenedExtractionDestination {
     this.assertOpen();
     return Object.freeze({
       destinationHandle: this.destinationHandle,

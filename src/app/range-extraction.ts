@@ -11,7 +11,7 @@ import {
   type IExtractionBatchProgress,
 } from './clip-extraction-workflow.js';
 import { EventSource, type EventHandler, type IEventSource } from './event-source.js';
-import { ExtractionDestinationSession, type ExtractionDestination } from './extraction-destination-session.js';
+import { ExtractionPublisher, type ExtractionDestination } from './extraction-publisher.js';
 import type { GifSessionStatus } from './gif-session-status.js';
 
 // Awaited: extraction continues only after the open folder has reacted to the new clip.
@@ -80,7 +80,7 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
     this.workflow = service
       ? new ClipExtractionWorkflow(
         new ClipExtractor(service),
-        new ExtractionDestinationSession(service, {
+        new ExtractionPublisher(service, {
           destination: this.target,
           onPublished: publication => this.deps.publications?.onFolderContentsPublished(publication.folderPath),
           onPublishError: error => this.reportError('The clip was saved, but the Collection view could not refresh.', error),

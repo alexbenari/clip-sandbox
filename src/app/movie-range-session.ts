@@ -16,7 +16,7 @@ import type { CaptureRejectionText } from './capture-rejection-text.js';
 import type { ICaptureStorage } from './capture-storage.js';
 import type { ClipExtractionEntryState, IExtractionBatchProgress } from './clip-extraction-workflow.js';
 import { CurrentMovie } from './current-movie.js';
-import type { ExtractionDestination } from './extraction-destination-session.js';
+import type { ExtractionDestination } from './extraction-publisher.js';
 import type { GifThumbnailState } from './capture-thumbnails.js';
 import { GifSessionStatus } from './gif-session-status.js';
 import { RangeExtraction, type IExtractionMovie, type IExtractionPublicationListener } from './range-extraction.js';

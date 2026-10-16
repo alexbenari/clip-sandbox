@@ -2,7 +2,7 @@ import type { IReadyToExtractRange } from '../domain/captured-range.js';
 import type { ICreatedExtractionMedia } from '../business-logic/clip-extraction-service.js';
 import type { IClipExtractionProgress } from '../business-logic/clip-extraction-service.js';
 import type { ClipExtractor } from '../business-logic/clip-extractor.js';
-import type { ExtractionDestinationSession } from './extraction-destination-session.js';
+import type { ExtractionPublisher } from './extraction-publisher.js';
 
 export type ClipExtractionEntryState =
   | Readonly<{ kind: 'pending' }>
@@ -29,7 +29,7 @@ interface IExtractOneRequest extends IWorkflowContext {
 }
 
 type ExtractorPort = Pick<ClipExtractor, 'extract'> & Partial<Pick<ClipExtractor, 'cancelCurrent'>>;
-type DestinationPort = Pick<ExtractionDestinationSession,
+type DestinationPort = Pick<ExtractionPublisher,
   'open' | 'publishCreatedMedia' | 'retryPublication'>;
 
 export interface IExtractionBatchProgress {

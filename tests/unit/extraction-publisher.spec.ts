@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { describe, expect, it, vi } from 'vitest';
 
-import { ExtractionDestinationSession } from '../../src/app/extraction-destination-session.js';
+import { ExtractionPublisher } from '../../src/app/extraction-publisher.js';
 import { Collection } from '../../src/domain/collection.js';
 
 function destinationService(overrides: Record<string, unknown> = {}) {
@@ -24,12 +24,12 @@ function destinationWithEntries(entries: unknown[]) {
   });
 }
 
-describe('ExtractionDestinationSession', () => {
+describe('ExtractionPublisher', () => {
   it('refuses to open when its collection file lists a clip twice, before anything is written', async () => {
     const service = destinationWithEntries([
       { kind: 'collection', filename: 'Movie.txt', content: 'Movie-001.mp4\nMovie-002.mp4\nMovie-001.mp4\n' },
     ]);
-    const session = new ExtractionDestinationSession(service);
+    const session = new ExtractionPublisher(service);
 
     await expect(session.open({ movieName: 'Movie.mkv' })).rejects.toThrow(
       'Movie.txt cannot receive new clips. Duplicate entries were found: Movie-001.mp4 (x2). Remove the duplicate lines, then extract again.');
@@ -38,7 +38,7 @@ describe('ExtractionDestinationSession', () => {
 
   it('treats an empty collection file as an empty collection', async () => {
     const service = destinationWithEntries([{ kind: 'collection', filename: 'Movie.txt', content: '\n  \n' }]);
-    const session = new ExtractionDestinationSession(service);
+    const session = new ExtractionPublisher(service);
     await session.open({ movieName: 'Movie.mkv' });
 
     await session.publishCreatedMedia({ mediaHandle: 'media_opaque_0001', filename: 'Movie-001.mp4' });
@@ -51,7 +51,7 @@ describe('ExtractionDestinationSession', () => {
       { kind: 'collection', filename: 'Other.txt', content: 'a.mp4\na.mp4\n' },
       { kind: 'collection', filename: 'movie.TXT', content: 'Movie-001.mp4\n' },
     ]);
-    const session = new ExtractionDestinationSession(service);
+    const session = new ExtractionPublisher(service);
     await session.open({ movieName: 'Movie.mkv' });
 
     await session.publishCreatedMedia({ mediaHandle: 'media_opaque_0001', filename: 'Movie-002.mp4' });
@@ -62,7 +62,7 @@ describe('ExtractionDestinationSession', () => {
   it('publishes a refined folder clip without writing a collection file', async () => {
     const service = destinationService();
     const onPublished = vi.fn(async () => undefined);
-    const session = new ExtractionDestinationSession(service, {
+    const session = new ExtractionPublisher(service, {
       destination: { kind: 'folder', folderPath: 'C:/pipelines/extraction-tmp' }, onPublished,
     });
     await session.open({ movieName: 'Sample Movie.mp4' });
@@ -80,7 +80,7 @@ describe('ExtractionDestinationSession', () => {
         entries: [{ kind: 'collection', filename: 'Favorites.txt', content: 'old.mp4\n' }],
       })),
     });
-    const session = new ExtractionDestinationSession(service, {
+    const session = new ExtractionPublisher(service, {
       destination: { kind: 'collection', folderPath: 'C:/pipelines/camera', collectionFilename: 'Favorites.txt' },
     });
     await session.open({ movieName: 'source.mkv' });
@@ -97,7 +97,7 @@ describe('ExtractionDestinationSession', () => {
         entries: [{ kind: 'collection', filename: 'Sample Movie.txt', content: 'old-001.mp4\n' }],
       })),
     });
-    const session = new ExtractionDestinationSession(service);
+    const session = new ExtractionPublisher(service);
 
     const snapshot = await session.open({ movieName: 'Sample Movie.mp4' });
 
@@ -110,7 +110,7 @@ describe('ExtractionDestinationSession', () => {
 
   it('does not save a collection when opening the destination', async () => {
     const service = destinationService();
-    const session = new ExtractionDestinationSession(service);
+    const session = new ExtractionPublisher(service);
 
     await session.open({ movieName: 'Sample Movie.mp4' });
 
@@ -120,7 +120,7 @@ describe('ExtractionDestinationSession', () => {
   it('publishes created media and persists serialized membership only after successful extraction', async () => {
     const service = destinationService();
     const onPublished = vi.fn(async () => undefined);
-    const session = new ExtractionDestinationSession(service, { onPublished });
+    const session = new ExtractionPublisher(service, { onPublished });
     await session.open({ movieName: 'Sample Movie.mp4' });
 
     await session.publishCreatedMedia({ mediaHandle: 'media_opaque_0001', filename: 'Sample Movie-001.mp4' });
@@ -145,7 +145,7 @@ describe('ExtractionDestinationSession', () => {
       .mockResolvedValueOnce(undefined);
     const service = destinationService({ saveCollection });
     const onPublished = vi.fn(async () => undefined);
-    const session = new ExtractionDestinationSession(service, { onPublished });
+    const session = new ExtractionPublisher(service, { onPublished });
     await session.open({ movieName: 'Sample Movie.mp4' });
 
     await expect(session.publishCreatedMedia({ mediaHandle: 'media_opaque_0001', filename: 'Sample Movie-001.mp4' })).rejects.toThrow('collection write failed');
@@ -165,7 +165,7 @@ describe('ExtractionDestinationSession', () => {
           content: 'Sample Movie-002.mp4\nSample Movie-001.mp4\n' }],
       })),
     });
-    const session = new ExtractionDestinationSession(service);
+    const session = new ExtractionPublisher(service);
     await session.open({ movieName: 'Sample Movie.mp4' });
 
     await session.publishCreatedMedia({ mediaHandle: 'media_opaque_0003', filename: 'Sample Movie-003.mp4' });
@@ -181,7 +181,7 @@ describe('ExtractionDestinationSession', () => {
     const saveCollection = vi.fn()
       .mockRejectedValueOnce(new Error('collection write failed'))
       .mockResolvedValue(undefined);
-    const session = new ExtractionDestinationSession(destinationService({ saveCollection }));
+    const session = new ExtractionPublisher(destinationService({ saveCollection }));
     await session.open({ movieName: 'Sample Movie.mp4' });
 
     await expect(session.publishCreatedMedia({
