@@ -41,29 +41,26 @@ describe('ClipCapturesIpcBoundary', () => {
     expect(writes).toEqual([original.sourceSampleDigest, changed.sourceSampleDigest]);
   });
 
-  it('shows the old queue as stale when reopened content has a different fingerprint', async () => {
-    const oldRecord = {
+  it('returns the movie\'s saved queue under a reference only the attaching window can save to', async () => {
+    const record = {
       ...saved, movieFingerprint: original, displayName: 'Movie.mp4', lastKnownPath: 'D:\\movies\\Movie.mp4',
     };
     const store = {
       key: (value: typeof original) => value.sourceSampleDigest,
-      load: vi.fn(async () => oldRecord), save: vi.fn(),
+      load: vi.fn(async () => record), save: vi.fn(async () => undefined),
     };
-    const host = { captureContext: vi.fn(() => ({ sourcePath: 'D:\\movies\\changed.mp4', fingerprint: changed })) };
+    const host = { captureContext: vi.fn(() => ({ sourcePath: 'D:\\movies\\Movie.mp4', fingerprint: original })) };
     const boundary = new ClipCapturesIpcBoundary({ ipcMain: { handle: vi.fn() }, store, hostForEvent: () => host });
     const event = { sender: { id: 7 } };
-    const result = await boundary.attach(event, {
-      sessionId: 'session_12345678', expectedFingerprint: original,
-    });
+    const result = await boundary.attach(event, { sessionId: 'session_12345678' });
 
     expect(result).toMatchObject({ ok: true, result: {
-      stale: true, movieRef: expect.stringMatching(/^capture_/),
-      data: { schemaVersion: 1, ...saved },
+      movieRef: expect.stringMatching(/^capture_/), data: { schemaVersion: 1, ...saved },
     } });
     expect(JSON.stringify(result)).not.toContain('D:\\movies');
-    expect(store.save).not.toHaveBeenCalled();
     const movieRef = result.result.movieRef;
     const changedData = { nextRangeSequence: 2, ranges: [] };
+    store.save.mockClear();
     expect(await boundary.save(event, { movieRef, data: changedData })).toEqual({ ok: true, result: null });
     expect(store.save).toHaveBeenCalledWith({
       fingerprint: original, displayName: 'Movie.mp4', sourcePath: 'D:\\movies\\Movie.mp4', data: changedData,

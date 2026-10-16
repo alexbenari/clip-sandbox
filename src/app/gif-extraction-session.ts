@@ -30,7 +30,6 @@ import type { AppDiagnostics } from './app-diagnostics.js';
 import { ExtractionDestinationSession, type ExtractionDestination, type IExtractionDestinationPublication } from './extraction-destination-session.js';
 import { GifCaptureThumbnailSession, type GifThumbnailState } from './gif-capture-thumbnail-session.js';
 import type { IClipCapturesStoreService } from './clip-captures-store-service.js';
-import type { ISourceFingerprint } from '../frame-review/model/source-fingerprint.js';
 import { SourceFrameIdentity } from '../frame-review/model/source-frame-identity.js';
 import { SavedCaptureQueuePersistence } from './saved-capture-queue-persistence.js';
 
@@ -647,7 +646,6 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
   private async replaceSource(
     selected: IFrameReviewSourceSelection,
     candidate: IFrameReviewSession,
-    expectedFingerprint?: ISourceFingerprint,
   ): Promise<void> {
     this.persistQueue();
     const previous = this.review;
@@ -710,12 +708,12 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       : null;
     this.lifecycle = 'open';
     this.message = this.reviewState.captureEnabled ? 'Exact capture ready' : 'Preparing exact frames';
-    this.subscribeToReview(candidate, expectedFingerprint);
+    this.subscribeToReview(candidate);
     this.publish();
     if (previous) await previous.dispose();
   }
 
-  private subscribeToReview(candidate: IFrameReviewSession, expectedFingerprint?: ISourceFingerprint): void {
+  private subscribeToReview(candidate: IFrameReviewSession): void {
     let exactReadinessAnnounced = false;
     this.unsubscribeReview = candidate.subscribe(event => {
       if (this.disposed || this.review !== candidate) return;
@@ -733,7 +731,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
           exactReadinessAnnounced = true;
           this.announceExactReadiness(event.state);
         }
-        if (becameReady) void this.restoreCaptures(candidate, expectedFingerprint);
+        if (becameReady) void this.restoreCaptures(candidate);
         this.publish();
       } else if (event.type === 'error') {
         this.reportError(event.message);
@@ -744,7 +742,7 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
       exactReadinessAnnounced = true;
       this.announceExactReadiness(currentState);
     }
-    if (currentState?.captureEnabled) void this.restoreCaptures(candidate, expectedFingerprint);
+    if (currentState?.captureEnabled) void this.restoreCaptures(candidate);
   }
 
   private async indexedIdentitiesForSavedEndpoints(
@@ -824,31 +822,16 @@ export class GifExtractionSession implements IRefineGifSessionOwner {
     this.publish();
   }
 
-  private async restoreCaptures(review: IFrameReviewSession, expectedFingerprint?: ISourceFingerprint): Promise<void> {
+  private async restoreCaptures(review: IFrameReviewSession): Promise<void> {
     const savedCaptureQueue = this.savedCaptureQueue;
     if (!savedCaptureQueue || this.review !== review || !this.restoringCaptures || this.restoreStarted) return;
     const generation = this.sourceGeneration;
     this.restoreStarted = true;
     try {
-      const attached = await savedCaptureQueue.attach(review.id, expectedFingerprint);
-      if (!attached || this.disposed || this.review !== review || this.sourceGeneration !== generation
+      const restored = await savedCaptureQueue.attach(review.id);
+      if (!restored || this.disposed || this.review !== review || this.sourceGeneration !== generation
         || this.savedCaptureQueue !== savedCaptureQueue) return;
-      if (attached.kind === 'stale') {
-        if (attached.model) {
-          const restoredModel = attached.model;
-          this.rangeModel = restoredModel;
-          for (const range of restoredModel.snapshot.ranges) {
-            this.captureThumbnails.markRestoredMissing(range.id);
-          }
-        }
-        this.message = 'The saved movie changed. Use Open movie to locate the original captures.';
-        this.restoringCaptures = true;
-        this.capturesLoading = false;
-        this.reportError(this.message);
-        this.publish();
-        return;
-      }
-      this.rangeModel = attached.model;
+      this.rangeModel = restored;
       for (const range of this.rangeModel.snapshot.ranges) this.captureThumbnails.markRestoredMissing(range.id);
       void this.restoreThumbnails(review, generation);
       const continuation = this.rangeModel.continuationEndpoint();

@@ -18,6 +18,12 @@ function captureStore(attach: IClipCapturesStoreService['attach']): IClipCapture
   return { attach, save: vi.fn(async () => undefined) };
 }
 
+const fingerprint = {
+  fingerprintVersion: 1 as const, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '100',
+  sourceDurationUs: '1000000', signatureProfileVersion: 'sampled-packets-3m-3m-3x1m-v1',
+  selectedStream: 0, streamMetadataDigest: 'b'.repeat(64),
+};
+
 describe('SavedCaptureQueuePersistence', () => {
   it('rejects an attach result that arrives after its source is replaced', async () => {
     let finishAttach: (value: AttachedCaptures) => void = () => undefined;
@@ -26,23 +32,24 @@ describe('SavedCaptureQueuePersistence', () => {
     const attaching = queue.attach(FrameReviewOpaqueId.sessionId('session_12345678'));
 
     queue.invalidate();
-    finishAttach({ kind: 'stale', movieRef: 'capture_12345678', data: savedData });
+    finishAttach({ movieRef: 'capture_12345678', fingerprint, data: savedData });
 
     expect(await attaching).toBeNull();
     expect(queue.hasMovieReference).toBe(false);
-    expect(queue.hasStaleRanges).toBe(false);
   });
 
-  it('retains a stale queue without a usable movie reference so captures remain visible', async () => {
-    const queue = new SavedCaptureQueuePersistence(captureStore(async () => ({
-      kind: 'stale', movieRef: null, data: savedData,
-    })), 2, vi.fn());
+  it('restores the saved ranges and writes again only after they change', async () => {
+    const store = captureStore(async () => ({ movieRef: 'capture_12345678', fingerprint, data: savedData }));
+    const queue = new SavedCaptureQueuePersistence(store, 2, vi.fn());
 
     const restored = await queue.attach(FrameReviewOpaqueId.sessionId('session_12345678'));
+    queue.save(restored, new Set());
+    expect(store.save).not.toHaveBeenCalled();
+    restored!.removeRange(restored!.snapshot.ranges[0]!.id);
+    queue.save(restored, new Set());
 
-    expect(restored?.kind).toBe('stale');
-    expect(restored?.model?.snapshot.ranges).toHaveLength(1);
-    expect(queue.hasMovieReference).toBe(false);
-    expect(queue.isStale(restored!.model!.snapshot.ranges[0]!.id)).toBe(true);
+    expect(restored?.snapshot.ranges).toHaveLength(0);
+    expect(queue.hasMovieReference).toBe(true);
+    expect(store.save).toHaveBeenCalledWith('capture_12345678', expect.objectContaining({ ranges: [] }));
   });
 });

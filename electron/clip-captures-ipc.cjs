@@ -39,16 +39,6 @@ class ClipCapturesIpcBoundary {
   async attachOne(event, payload) {
     try {
       const context = this.context(event, payload);
-      if (payload?.expectedFingerprint
-        && this.store.key(payload.expectedFingerprint) !== this.store.key(context.fingerprint)) {
-        const saved = await this.store.load(payload.expectedFingerprint);
-        return { ok: true, result: {
-          stale: true,
-          ...(saved ? { movieRef: this.grant(event, saved) } : {}),
-          data: saved ? { schemaVersion: 1, nextRangeSequence: saved.nextRangeSequence,
-            ...(saved.draft ? { draft: saved.draft } : {}), ranges: saved.ranges } : null,
-        } };
-      }
       let record = await this.store.load(context.fingerprint);
       if (!record) {
         await this.store.save({

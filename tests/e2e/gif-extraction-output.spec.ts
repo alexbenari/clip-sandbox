@@ -103,44 +103,6 @@ test('uses exact fallback when source timestamps needed normalization', async ()
   }
 });
 
-test('a saved capture can be removed when its source movie is unavailable', async () => {
-  test.setTimeout(120_000);
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-capture-missing-'));
-  const profile = path.join(directory, 'profile');
-  const source = path.join(directory, 'source.mkv');
-  await fs.mkdir(profile, { recursive: true });
-  await fs.copyFile(movie, source);
-  const env = { ...process.env, CLIP_SANDBOX_E2E: '1' };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const openApp = () => electron.launch({ args: ['.', `--user-data-dir=${profile}`], cwd: project, env });
-  let app = await openApp();
-  try {
-    let page = await app.firstWindow();
-    await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), source);
-    await page.getByRole('button', { name: 'Open movie...' }).click();
-    await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
-    await lockExactRange(page, page.locator('.frame-review-progress-row input'), 3, 5);
-    await expect(page.locator('[data-range-id="range-1"]')).toHaveCount(1);
-    await app.close();
-
-    await fs.rm(source);
-    app = await openApp();
-    page = await app.firstWindow();
-    await expect(page.locator('[data-range-id="range-1"]')).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Refine range 1' })).toBeDisabled();
-    await page.getByRole('button', { name: 'Remove capture 1' }).click();
-    await expect(page.locator('[data-range-id]')).toHaveCount(0);
-    await app.close();
-
-    app = await openApp();
-    page = await app.firstWindow();
-    await expect(page.locator('[data-range-id]')).toHaveCount(0);
-  } finally {
-    await app.close().catch(() => undefined);
-    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
-  }
-});
-
 test('closing during extraction leaves no temporary workspace or broken collection entry', async () => {
   test.setTimeout(180_000);
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-gif-output-close-'));

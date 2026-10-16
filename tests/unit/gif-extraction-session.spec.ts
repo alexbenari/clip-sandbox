@@ -72,7 +72,7 @@ describe('GifExtractionSession', () => {
     const review = reviewSession();
     const capturePositioning = { showFrameAfterCapture: vi.fn(async () => undefined) };
     const captureStore: IClipCapturesStoreService = {
-      attach: vi.fn(async () => ({ kind: 'attached' as const, movieRef: 'capture_12345678',
+      attach: vi.fn(async () => ({ movieRef: 'capture_12345678',
         fingerprint: {
           fingerprintVersion: 1 as const, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '100',
           sourceDurationUs: '1000000', signatureProfileVersion: 'sampled-packets-3m-3m-3x1m-v1',
@@ -103,7 +103,7 @@ describe('GifExtractionSession', () => {
       sourceDurationUs: '1000000', signatureProfileVersion: 'sampled-packets-3m-3m-3x1m-v1',
       selectedStream: 0, streamMetadataDigest: 'b'.repeat(64),
     };
-    let finishAttach: (value: { kind: 'attached'; movieRef: string; fingerprint: typeof fingerprint;
+    let finishAttach: (value: { movieRef: string; fingerprint: typeof fingerprint;
       data: { schemaVersion: 1; nextRangeSequence: number; ranges: [] } }) => void = () => undefined;
     const pendingAttach = new Promise<Parameters<typeof finishAttach>[0]>(resolve => { finishAttach = resolve; });
     const captureStore: IClipCapturesStoreService = {
@@ -125,7 +125,7 @@ describe('GifExtractionSession', () => {
         }
       });
     });
-    finishAttach({ kind: 'attached', movieRef: 'capture_12345678', fingerprint,
+    finishAttach({ movieRef: 'capture_12345678', fingerprint,
       data: { schemaVersion: 1, nextRangeSequence: 1, ranges: [] } });
     await loaded;
     expect(session.snapshot.capturesLoading).toBe(false);
@@ -447,7 +447,7 @@ describe('GifExtractionSession behavior before the split', () => {
 
   function savedStore(ranges: Array<[number, number]>, draft?: [number, number]): IClipCapturesStoreService {
     return {
-      attach: vi.fn(async () => ({ kind: 'attached' as const, movieRef: 'capture_12345678', fingerprint, data: {
+      attach: vi.fn(async () => ({ movieRef: 'capture_12345678', fingerprint, data: {
         schemaVersion: 1 as const, nextRangeSequence: ranges.length + 1,
         ...(draft ? { draft: { start: savedEndpoint(draft[0]), end: savedEndpoint(draft[1]) } } : {}),
         ranges: ranges.map(([start, end], index) => ({ id: `range-${index + 1}`, start: savedEndpoint(start), end: savedEndpoint(end) })),
@@ -681,7 +681,7 @@ describe('GifExtractionSession behavior before the split', () => {
     await opening;
 
     expect(session.markStart(exactCapture(3))).toEqual({ kind: 'rejected', message: 'Saved captures are still loading.' });
-    finishAttach({ kind: 'attached', movieRef: 'capture_12345678', fingerprint, data: { schemaVersion: 1, nextRangeSequence: 1, ranges: [] } });
+    finishAttach({ movieRef: 'capture_12345678', fingerprint, data: { schemaVersion: 1, nextRangeSequence: 1, ranges: [] } });
   });
 
   it('refuses to change the extraction destination while a batch runs', async () => {

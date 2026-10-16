@@ -1,12 +1,7 @@
 import type { CapturedRangeId } from '../domain/captured-range.js';
 import { RangeCaptureModel, type ISavedRangeCaptureData } from '../domain/range-capture-model.js';
 import type { FrameReviewSessionId } from '../frame-review/frame-review-api.js';
-import type { ISourceFingerprint } from '../frame-review/model/source-fingerprint.js';
 import type { IClipCapturesStoreService } from './clip-captures-store-service.js';
-
-type RestoredQueue =
-  | Readonly<{ kind: 'attached'; model: RangeCaptureModel }>
-  | Readonly<{ kind: 'stale'; model: RangeCaptureModel | null }>;
 
 export class SavedCaptureQueuePersistence {
   private movieRef: string | null = null;
@@ -27,15 +22,11 @@ export class SavedCaptureQueuePersistence {
   markStale(rangeId: CapturedRangeId): void { this.staleRangeIds.add(rangeId); }
   forgetRange(rangeId: CapturedRangeId): void { this.staleRangeIds.delete(rangeId); }
 
-  async attach(sessionId: FrameReviewSessionId, expectedFingerprint?: ISourceFingerprint): Promise<RestoredQueue | null> {
-    const attached = await this.store.attach(sessionId, expectedFingerprint);
+  // Returns null when the source was replaced while the store answered.
+  async attach(sessionId: FrameReviewSessionId): Promise<RangeCaptureModel | null> {
+    const attached = await this.store.attach(sessionId);
     if (!this.active) return null;
-    if (attached.kind === 'stale') {
-      const model = attached.data ? this.adopt(attached.movieRef, attached.data) : null;
-      if (model) this.markAllStale(model);
-      return { kind: 'stale', model };
-    }
-    return { kind: 'attached', model: this.adopt(attached.movieRef, attached.data) };
+    return this.adopt(attached.movieRef, attached.data);
   }
 
   save(model: RangeCaptureModel | null, completedRangeIds: ReadonlySet<string>): void {
@@ -52,15 +43,11 @@ export class SavedCaptureQueuePersistence {
 
   invalidate(): void { this.active = false; }
 
-  private adopt(movieRef: string | null, data: ISavedRangeCaptureData): RangeCaptureModel {
+  private adopt(movieRef: string, data: ISavedRangeCaptureData): RangeCaptureModel {
     const model = RangeCaptureModel.fromSavedData(data, this.sourceGeneration);
     this.movieRef = movieRef;
     this.lastSavedSnapshot = JSON.stringify(data);
     this.staleRangeIds.clear();
     return model;
-  }
-
-  private markAllStale(model: RangeCaptureModel): void {
-    for (const range of model.snapshot.ranges) this.staleRangeIds.add(range.id);
   }
 }

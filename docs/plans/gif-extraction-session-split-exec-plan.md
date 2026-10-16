@@ -1,6 +1,6 @@
 # Split GifExtractionSession by Responsibility
 
-Spec: `docs/specs/gif-extraction-session-split-spec.md`. Decisions D1-D11 below are the spec's decisions, cited by the same IDs. Plan-only decisions start at D12.
+Spec: `docs/specs/gif-extraction-session-split-spec.md`. Decisions D1-D11 and D19 are the spec's decisions, cited by the same IDs. Plan-only decisions are D12-D18.
 
 ## Why this matters
 
@@ -15,10 +15,10 @@ After this work, each job has its own small class, Collection Refine has its own
 
 ## Progress
 
-- [ ] M1 Characterization tests and the cause of the failing saved-capture removal test
+- [x] M1 Characterization tests and the cause of the failing saved-capture removal test
   - [x] (2026-10-16) Cases 2-13 added to `tests/unit/gif-extraction-session.spec.ts` ("GifExtractionSession behavior before the split"); all 14 pass on the unchanged code (G1). Case 4's opening half is also covered by the existing test "switches movies with locked captures".
   - [x] (2026-10-16) Cause of the removal test failure found (G2); see `Surprises & Discoveries`.
-  - [ ] Case 1 and the removal test: waiting for the user's decision on the unreachable stale-movie path (D15).
+  - [x] (2026-10-16) The user chose to remove the unreachable stale-movie path (spec D19). It is removed in the desktop layer and the renderer, along with the obsolete end-to-end test. Case 1 is dropped because it described that path.
 - [ ] M2 `GifSessionStatus` and `CurrentMovie`
 - [ ] M3 `RangeExtraction`
 - [ ] M4 `CaptureQueue` and capture storage
@@ -85,7 +85,7 @@ Unavailable skills or fallbacks:
 | G5 | 4 | Capturing, removing, saving and restoring behave as before | 4 | `npm run typecheck`, then `npx vitest run` | All pass, including `capture-queue.spec.ts` and the storage tests; `git grep -n captureStore -- src/app/gif-extraction-session.ts` finds nothing |
 | G6 | 5 | A restored draft locks and a restored range refines without any caller-side check | 5 | `npx vitest run tests/unit tests/integration` | New tests pass: locking a draft with saved endpoints checks them and locks; refining a saved range checks it and starts; a mismatch reports today's message. `git grep -n -E "prepareSavedDraft|prepareSavedRange" -- src/ui src/app/gif-range-refinement-workflow.ts` finds nothing |
 | G7 | 6 | Collection Refine runs on its own session without saved-capture code | 6 | `npm run typecheck`, then `npx vitest run` | All pass, including `collection-clip-refinement-session.spec.ts` and the domain factory test; `git grep -n "GifExtractionSession\.for" -- src tests` finds nothing; `git grep -n fromSavedData -- src/app/collection-clip-refinement-session.ts` finds nothing |
-| G8 | 7 | The GIF workflows still work end to end | 6 | `npm run e2e -- tests/e2e/collection-refine.spec.ts tests/e2e/gif-exact-preview.spec.ts tests/e2e/gif-extraction-output.spec.ts tests/e2e/gif-extraction-shell.spec.ts tests/e2e/gif-jump-by-seconds.spec.ts tests/e2e/gif-movie-fullscreen.spec.ts tests/e2e/gif-resume-after-capture.spec.ts tests/e2e/gif-startup-empty.spec.ts` | All pass, apart from any failure G2 attributed to a cause outside this work |
+| G8 | 7 | The GIF workflows still work end to end | 6 | `npm run e2e -- tests/e2e/collection-refine.spec.ts tests/e2e/gif-exact-preview.spec.ts tests/e2e/gif-extraction-output.spec.ts tests/e2e/gif-extraction-shell.spec.ts tests/e2e/gif-jump-by-seconds.spec.ts tests/e2e/gif-movie-fullscreen.spec.ts tests/e2e/gif-resume-after-capture.spec.ts tests/e2e/gif-startup-empty.spec.ts` | All pass |
 | G9 | 7 | The spec's acceptance checks hold in the running app | 6 | Temporary Playwright probes against the built Electron app, one per item of spec section 5.3, archived under the evidence folder | Each probe's observations match a run of the same probe on the commit before M2 |
 | G10 | 7 | The split met its size and purity limits | 6 | `(Get-Content <file>).Count` for each new class and both sessions; `git grep -n -w -E "mode|captureStore" -- src/app/gif-extraction-session.ts src/app/collection-clip-refinement-session.ts` | No class over about 350 lines; the search finds nothing |
 | G11 | 7 | The architecture map describes the new parts | 7 | Read `docs/agent-docs/agent-architecture-map.md` entries for the GIF session and its parts; every linked file exists | Accurate, with links that resolve |
@@ -127,7 +127,7 @@ Record today's behavior where tests do not reach it (D10), and find why the save
 
 - File: `tests/unit/gif-extraction-session.spec.ts`
   Edit: add tests that drive a real `GifExtractionSession` with fakes of the frame-review service, thumbnail service, capture store and extraction service. Skip any case an existing test already proves, and record which test proves it in `Progress`. Cases:
-  1. Restoring a changed movie (stale result) keeps the saved ranges listed, sets "The saved movie changed. Use Open movie to locate the original captures.", rejects capture with "Open movie to find the original source before capturing.", and still allows removing a saved range.
+  1. (Dropped: it described the stale-movie restore path that spec D19 removes.)
   2. Restoring two ranges and a draft reports "Restored 2 saved ranges and a draft." and stops showing capture loading.
   3. When saved start thumbnails cannot be recreated, one failure is reported with the count.
   4. Without a capture store, a range can be removed while the movie is open and not while a movie is opening.
@@ -223,12 +223,12 @@ Move the queue, thumbnails, saved-frame checks, saving and restoring out of the 
 
 - File: `src/app/capture-storage.ts` (new)
   Edit: interface `ICaptureStorage` with these members:
-  - `attach(reviewId, expectedFingerprint)`, returning the restored model, a stale result or nothing;
+  - `attach(reviewId)`, returning the restored model, or nothing when the movie was replaced meanwhile;
   - `save(model, completedRangeIds)`, `forgetRange`, `markStale` and `isStale`;
   - `hasStaleRanges`, `restoring` and `loading`;
   - `canRemoveCaptures(movieOpen)`, which answers D5's rule.
   
-  Two classes implement it. `SavedCaptureStorage` wraps `SavedCaptureQueuePersistence` and today's restore steps. `UnsavedCaptureStorage` writes nothing, restores nothing, and allows removal only while the movie is open.
+  Two classes implement it. `SavedCaptureStorage` wraps `SavedCaptureQueuePersistence` and today's restore steps; it allows removal once the queue has loaded. `UnsavedCaptureStorage` writes nothing, restores nothing, and allows removal only while the movie is open.
 - File: `src/app/capture-queue.ts` (new)
   Edit: `CaptureQueue` takes `CurrentMovie`, `GifSessionStatus`, the thumbnail service, the storage, and `RangeExtraction`'s narrow query. It moves in:
   - the range capture model and the selected range;
