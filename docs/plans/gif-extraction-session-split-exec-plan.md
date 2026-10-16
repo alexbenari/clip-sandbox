@@ -31,7 +31,13 @@ After this work, each job has its own small class, Collection Refine has its own
   - The session no longer offers `prepareSavedDraft` or `prepareSavedRange`, so no caller can run the check by hand.
   
   G6: `test-evidence/gif-extraction-session-split/G6-commit-hook.log`; the search for `prepareSaved` in `src/ui` and the refine workflow finds nothing.
-- [ ] M6 `CollectionClipRefinementSession`, the one-range domain factory, and narrow UI interfaces
+- [x] M6 `CollectionClipRefinementSession`, the one-range domain factory, and narrow UI interfaces (2026-10-16).
+  - Both sessions extend `MovieRangeSession` (D20).
+  - `RangeCaptureModel.withExactRange` builds Collection Refine's one range.
+  - The screens and panel use `GifExtractionScreenSession`, `RefineScreenSession` and `RangesPanelSession`. These are type aliases, so per axiom 12 they carry no `I` prefix.
+  - The characterization test fakes both session modules.
+  
+  G7: `test-evidence/gif-extraction-session-split/G7-commit-hook.log`; all three searches find nothing.
 - [ ] M7 Documentation, end-to-end specs and checks in the running app
 
 Evidence logs: `test-evidence/gif-extraction-session-split/` (one log per gate, named after the gate ID, for example `G8-e2e.log`). The pre-commit hook runs the unit and integration tests on every commit; its saved output counts as the `npx vitest run` part of gates G3-G7. The G9 probes reuse the end-to-end fixtures and helpers under `tests/e2e/`.
@@ -80,6 +86,7 @@ Unavailable skills or fallbacks:
 | D12 | Parts report changes through `GifSessionStatus` (D2) instead of their own change callbacks. `GifCaptureThumbnailSession`'s existing `onChanged` callback is pointed at `GifSessionStatus`. | One publisher, no new callback chains. | 2026-10-16 |
 | D13 | Until M6, `GifExtractionSession` keeps its public methods and snapshot unchanged and delegates to the new parts. The screens, the panel and the workflows change only in M5 (D6) and M6 (D4, D8). | Keeps M2-M4 inside the application layer and each commit small. | 2026-10-16 |
 | D14 | Each extracted part gets its own unit test file, `tests/unit/<part-file-name>.spec.ts`. Tests that drive `GifExtractionSession` as a whole stay where they are. They change only in how the session is built (M4, D18; M6, D8) and where they await the asynchronous lock and refinement start (M5, D6). | Proves each part on its own while the existing tests prove the whole. | 2026-10-16 |
+| D20 | `GifExtractionSession` and `CollectionClipRefinementSession` extend an abstract `MovieRangeSession` (`src/app/movie-range-session.ts`). It builds the parts and holds what both share: the snapshot, extraction, refinement, removal, selection, thumbnails, movie replacement and disposal. Each subclass adds only how its movie and ranges arrive: GIF Extraction opens by picker and marks and locks; Collection Refine opens a given source and imports one range. | The screens and the Clips panel use almost all of the shared members on both sessions. Composition would need about 20 forwarding methods in each class, and the base class has no mode. | 2026-10-16 |
 | D15 | If M1 finds that the failing removal test is caused by a product bug, the cause is recorded, the user is told, and the fix is a separate commit before M2 only if the user agrees. A test bug is fixed in M1. | The refactor must not hide or silently fix an unrelated bug. | 2026-10-16 |
 | D16 | The session drives a movie replacement through calls to `CurrentMovie`: open a candidate movie, run the replacement steps in today's order, then switch to it. It reports two things that need no answer as events: `exactCaptureReady` and `reviewEnded` (failed or closed). | Replacement steps must finish before the switch, so they are calls the session owns; readiness and failure need no reply, so they are events. No part calls back into the session. | 2026-10-16 |
 | D17 | `RangeExtraction` reports a change in any range's extraction state as an `extractionStateChanged` event, which the session answers by saving the queue. `CaptureQueue` reads extraction state only through the narrow query in spec section 4. | Avoids a cycle between the queue and extraction. | 2026-10-16 |

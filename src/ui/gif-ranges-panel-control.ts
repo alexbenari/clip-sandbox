@@ -1,11 +1,16 @@
 import { CaptureEndpointValue, type CaptureEndpoint } from '../domain/capture-endpoint.js';
 import type { CapturedRangeId } from '../domain/captured-range.js';
 import type {
-  GifExtractionSession,
   GifRangeView,
   GifThumbnailState,
   IGifExtractionSessionSnapshot,
 } from '../app/gif-extraction-session.js';
+import type { MovieRangeSession } from '../app/movie-range-session.js';
+
+// What the Clips panel asks of the session behind GIF Extraction or Collection Refine.
+export type RangesPanelSession = Pick<MovieRangeSession, 'subscribe' | 'selectRange' | 'retryThumbnail'
+  | 'canExtractRange' | 'extractRange' | 'extractAll' | 'retryExtractionPublication' | 'cancelExtraction'
+  | 'canRemoveRange' | 'removeRange' | 'canRemoveDraft' | 'removeDraft'>;
 import type { IAppPanelContent } from './app-screen.js';
 import type { FrameReviewPlayerControl } from './frame-review-player-control.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
@@ -29,12 +34,12 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
   private readonly keydownListener = (event: KeyboardEvent): void => this.onKeyDown(event);
   private latestSnapshot: IGifExtractionSessionSnapshot | null = null;
 
-  static fromDocument(doc: Document, session: GifExtractionSession, options: Omit<GifRangesPanelControlOptions, 'document'> = {}): GifRangesPanelControl | null {
+  static fromDocument(doc: Document, session: RangesPanelSession, options: Omit<GifRangesPanelControlOptions, 'document'> = {}): GifRangesPanelControl | null {
     const root = new DocumentElements(doc).optional('gifRangesPanel');
     return root ? new GifRangesPanelControl(root, session, { ...options, document: doc }) : null;
   }
 
-  static forCollectionRefinement(session: GifExtractionSession, options: GifRangesPanelControlOptions = {}): GifRangesPanelControl {
+  static forCollectionRefinement(session: RangesPanelSession, options: GifRangesPanelControlOptions = {}): GifRangesPanelControl {
     const root = (options.document ?? document).createElement('section');
     root.setAttribute('aria-label', 'Refined collection clip');
     return new GifRangesPanelControl(root, session, options);
@@ -42,7 +47,7 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
 
   constructor(
     private readonly root: HTMLElement,
-    private readonly session: GifExtractionSession,
+    private readonly session: RangesPanelSession,
     private readonly options: GifRangesPanelControlOptions = {},
   ) {
     this.document = options.document ?? document;

@@ -54,6 +54,15 @@ export class RangeCaptureModel {
     }
   }
 
+  // One exact range and no draft, such as a collection clip whose source frames are known.
+  static withExactRange(start: IExactFrameEndpoint, end: IExactFrameEndpoint, sourceGeneration: number): RangeCaptureModel {
+    const model = new RangeCaptureModel(sourceGeneration);
+    model.assertCurrentSource(start);
+    model.assertCurrentSource(end);
+    model.ranges.push(CapturedRangeValue.lock(CapturedRangeValue.id(++model.sequence), start, end));
+    return model;
+  }
+
   static fromSavedData(value: unknown, sourceGeneration: number): RangeCaptureModel {
     const data = this.record(value, 'Saved capture data');
     if (data.schemaVersion !== 1 || !Array.isArray(data.ranges) || data.ranges.length > 500

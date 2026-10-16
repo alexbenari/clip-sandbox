@@ -45,6 +45,7 @@ import { GifRangesPanelControl } from '../ui/gif-ranges-panel-control.js';
 import { ElectronGifSessionServices } from '../adapters/electron/electron-gif-session-services.js';
 import { ElectronCollectionClipRefinementService } from '../adapters/electron/electron-collection-clip-refinement-service.js';
 import { GifExtractionSession } from './gif-extraction-session.js';
+import { CollectionClipRefinementSession } from './collection-clip-refinement-session.js';
 import { SavedCaptureStorage } from './capture-storage.js';
 import { AppSettingsService } from './app-settings-service.js';
 import { AppSettingsParser, DEFAULT_STARTUP_SCREEN_ID } from './app-settings.js';
@@ -178,7 +179,7 @@ export class AppController {
       publications: openFolderRefreshSession,
     };
     const gifExtractionSession = gifServices
-      ? GifExtractionSession.forMovieCapture(gifServices.frameReview, gifServices.thumbnails, {
+      ? new GifExtractionSession(gifServices.frameReview, gifServices.thumbnails, {
         ...sessionReporting,
         extractionService: gifServices.extractionService,
         captureStorage: new SavedCaptureStorage(gifServices.captureStore, { reporter: activityReporter, diagnostics }),
@@ -186,7 +187,7 @@ export class AppController {
       })
       : null;
     const collectionRefinementSession = collectionRefinementGifServices
-      ? GifExtractionSession.forCollectionRefinement(collectionRefinementGifServices.frameReview, collectionRefinementGifServices.thumbnails, {
+      ? new CollectionClipRefinementSession(collectionRefinementGifServices.frameReview, collectionRefinementGifServices.thumbnails, {
         ...sessionReporting,
         extractionService: collectionRefinementGifServices.extractionService,
       })

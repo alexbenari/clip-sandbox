@@ -1,4 +1,9 @@
-import type { GifExtractionSession, IGifExtractionSessionSnapshot } from '../app/gif-extraction-session.js';
+import type { IGifExtractionSessionSnapshot } from '../app/gif-extraction-session.js';
+import type { MovieRangeSession } from '../app/movie-range-session.js';
+
+// What a Refine screen asks of the session behind GIF Extraction or Collection Refine.
+export type RefineScreenSession = Pick<MovieRangeSession, 'subscribe' | 'snapshot' | 'reviewSession' | 'refinementSession'
+  | 'beginRefinement' | 'abandonRefinement' | 'canExtractRange' | 'extractRange' | 'cancelExtraction'>;
 import type { IRefineGifSessionSnapshot, RefineGifEndpoint } from '../app/refine-gif-session.js';
 import type { CapturedRangeId } from '../domain/captured-range.js';
 import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
@@ -73,7 +78,7 @@ const COLLECTION_REFINEMENT: RefineScreenVariant = Object.freeze({
 type RefineGifScreenOptions = {
   readonly player: FrameReviewPlayerControl;
   readonly keyboard: GifWorkflowKeyboard;
-  readonly session?: GifExtractionSession;
+  readonly session?: RefineScreenSession;
   readonly rangesPanel?: GifRangesPanelControl;
   readonly onExtractCurrent?: (rangeId: CapturedRangeId) => void;
   readonly document?: Document;

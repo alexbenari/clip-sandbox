@@ -4,7 +4,7 @@ import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { ICollectionClipRefinementRequest, ICollectionClipRefinementService } from './collection-clip-refinement.js';
 import type { IEventSource } from './event-source.js';
-import type { GifExtractionSession } from './gif-extraction-session.js';
+import type { CollectionClipRefinementSession } from './collection-clip-refinement-session.js';
 import type { PipelineSession } from './pipeline-session.js';
 
 export interface IScreenNavigation {
@@ -18,7 +18,7 @@ export interface IRefinePreparationScreen extends IEventSource<{ backRequested: 
 }
 
 type CollectionRefinementDependencies = Readonly<{
-  refinementSession: Pick<GifExtractionSession, 'setExtractionDestination' | 'openCollectionSource'
+  refinementSession: Pick<CollectionClipRefinementSession, 'setExtractionDestination' | 'openCollectionSource'
     | 'importCollectionRange' | 'abandonRefinement' | 'beginRefinement'> | null;
   sourceLookup: Pick<ICollectionClipRefinementService, 'resolve'> | null;
   refineScreen: IRefinePreparationScreen;

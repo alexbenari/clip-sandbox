@@ -15,6 +15,16 @@ const identity = (frameIndex: number) => Object.freeze({
 });
 
 describe('RangeCaptureModel', () => {
+  it('starts with one exact range and no draft when built from a known range', () => {
+    const exact = (frameIndex: number) => CaptureEndpointValue.exact(identity(frameIndex), BigInt(frameIndex * 1_000), 2);
+
+    const model = RangeCaptureModel.withExactRange(exact(2), exact(4), 2);
+
+    expect(model.snapshot.ranges).toEqual([expect.objectContaining({ id: 'range-1', kind: 'ready-to-extract' })]);
+    expect(model.snapshot.capture).toMatchObject({ kind: 'draft', start: null, end: null });
+    expect(model.toSavedData().nextRangeSequence).toBe(2);
+    expect(() => RangeCaptureModel.withExactRange(exact(2), exact(4), 3)).toThrow('stale source generation');
+  });
   it('replaces draft endpoints before A and locks an inclusive exact range', () => {
     const model = new RangeCaptureModel(4);
     model.markStart(CaptureEndpointValue.exact(identity(10), 100_000n, 4));

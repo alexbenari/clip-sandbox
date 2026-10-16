@@ -1,4 +1,8 @@
 import type { GifExtractionSession, IGifExtractionSessionSnapshot } from '../app/gif-extraction-session.js';
+
+// What the GIF Extraction screen asks of its session.
+export type GifExtractionScreenSession = Pick<GifExtractionSession, 'subscribe' | 'snapshot' | 'reviewSession'
+  | 'openMovie' | 'markStart' | 'markEnd' | 'lockRange' | 'canExtractRange' | 'extractRange'>;
 import type { IAppPanelContent, IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
 import type { IShortcutDescriptor } from '../app/shortcut-descriptor.js';
 import { FrameReviewPlayerControl } from './frame-review-player-control.js';
@@ -27,7 +31,7 @@ export const GIF_EXTRACTION_SHORTCUTS: readonly IShortcutDescriptor[] = Object.f
 type GifExtractionScreenOptions = {
   readonly player: FrameReviewPlayerControl;
   readonly keyboard: GifWorkflowKeyboard;
-  readonly session?: GifExtractionSession;
+  readonly session?: GifExtractionScreenSession;
   readonly rangesPanel?: IAppPanelContent;
   readonly document?: Document;
 };

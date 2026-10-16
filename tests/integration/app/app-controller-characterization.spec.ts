@@ -4,25 +4,23 @@ import { DesktopAppTestEnvironment, desktopFile, waitFor } from './app-controlle
 import { collectionRefineApi, installGifDesktopApiFakes, installPipelineCatalogFakes } from './desktop-api-fakes.js';
 
 // Records what AppController does today for flows the other app-level tests do not reach.
-// The GIF session is replaced so these tests can observe AppController's wiring around it.
-vi.mock('../../../src/app/gif-extraction-session.js', () => {
+// Both GIF sessions are replaced so these tests can observe AppController's wiring around them.
+const { FakeGifSession } = vi.hoisted(() => {
   const emptySnapshot = Object.freeze({
     lifecycle: 'empty', source: null, reviewState: null, capture: null,
     draftThumbnail: Object.freeze({ kind: 'empty' }), ranges: Object.freeze([]), selectedRangeId: null,
     refinement: null, extractionAvailable: false, extractionBatch: null, captureAvailable: false,
     capturesLoading: false, message: null, previewTarget: null, previewRevision: 0,
   });
-  class GifExtractionSession {
+  class FakeGifSession {
     static instances = [];
-    static forMovieCapture(frameReview, thumbnails, options) { return new GifExtractionSession('movie-capture', options); }
-    static forCollectionRefinement(frameReview, thumbnails, options) { return new GifExtractionSession('collection-refinement', options); }
-    constructor(mode, options = {}) {
-      this.mode = mode;
+    constructor(kind, options = {}) {
+      this.kind = kind;
       this.options = options;
       this.destinations = [];
       this.openCollectionSource = vi.fn(async () => undefined);
       this.importCollectionRange = vi.fn(async () => ({ kind: 'started' }));
-      GifExtractionSession.instances.push(this);
+      FakeGifSession.instances.push(this);
     }
     get snapshot() { return emptySnapshot; }
     get reviewSession() { return null; }
@@ -30,16 +28,20 @@ vi.mock('../../../src/app/gif-extraction-session.js', () => {
     subscribe(listener) { listener(emptySnapshot); return () => undefined; }
     setExtractionDestination(destination) { this.destinations.push(destination); }
     abandonRefinement() { return null; }
-    beginRefinement() { return { kind: 'rejected', message: 'Not used by these tests.' }; }
-    async prepareSavedRange() { return false; }
+    async beginRefinement() { return { kind: 'rejected', message: 'Not used by these tests.' }; }
     canExtractRange() { return false; }
     canRemoveRange() { return false; }
     canRemoveDraft() { return false; }
     async dispose() {}
   }
-  return { GifExtractionSession };
+  return { FakeGifSession };
 });
-
+vi.mock('../../../src/app/gif-extraction-session.js', () => ({
+  GifExtractionSession: class extends FakeGifSession { constructor(frameReview, thumbnails, options) { super('gif-extraction', options); } },
+}));
+vi.mock('../../../src/app/collection-clip-refinement-session.js', () => ({
+  CollectionClipRefinementSession: class extends FakeGifSession { constructor(frameReview, thumbnails, options) { super('collection-refinement', options); } },
+}));
 class FakeFolder {
   constructor(folderPath, entries) {
     this.folderPath = folderPath;
@@ -144,10 +146,10 @@ describe('AppController characterization', () => {
   }
 
   async function gifSessions() {
-    const { GifExtractionSession } = await import('../../../src/app/gif-extraction-session.js');
+
     return {
-      extraction: GifExtractionSession.instances.findLast(session => session.mode === 'movie-capture'),
-      collectionRefinement: GifExtractionSession.instances.findLast(session => session.mode === 'collection-refinement'),
+      extraction: FakeGifSession.instances.findLast(session => session.kind === 'gif-extraction'),
+      collectionRefinement: FakeGifSession.instances.findLast(session => session.kind === 'collection-refinement'),
     };
   }
 
