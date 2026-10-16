@@ -100,6 +100,33 @@ describe('app keydown handler', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  test('leaves letters typed into an open dialog to the dialog instead of the full-screen keys', () => {
+    const context = createContext({
+      saveAsNewDialog: { handleGlobalKeyDown: vi.fn(() => false), isOpen: vi.fn(() => true) },
+    });
+    new AppKeyDownHandler(context);
+    const input = document.createElement('input');
+    const event = new KeyboardEvent('keydown', { key: 'f', cancelable: true });
+    Object.defineProperty(event, 'target', { value: input });
+
+    context.keys.emit('keyPressed', event);
+
+    expect(context.fullScreenKeys.onGlobalKeyDown).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  test('leaves keys typed into an editable field to that field instead of the full-screen keys', () => {
+    const context = createContext();
+    new AppKeyDownHandler(context);
+    const select = document.createElement('select');
+    const event = new KeyboardEvent('keydown', { key: 'f', cancelable: true });
+    Object.defineProperty(event, 'target', { value: select });
+
+    context.keys.emit('keyPressed', event);
+
+    expect(context.fullScreenKeys.onGlobalKeyDown).not.toHaveBeenCalled();
+  });
+
   test('ignores grid shortcuts for editable targets', () => {
     const input = document.createElement('input');
     const context = createContext({

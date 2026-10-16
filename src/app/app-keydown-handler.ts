@@ -49,11 +49,13 @@ export class AppKeyDownHandler {
     this.unsubscribeKeys();
   }
 
-  // Collection shortcuts come first; full-screen keys only see keys those left unhandled.
+  // Collection shortcuts come first. Full-screen keys see only keys those left unhandled, and never keys
+  // the user is typing into an open dialog or an editable field.
   private onCollectionKey(event: KeyboardEvent): void {
     if (this.context.utilities?.isOpen || event.defaultPrevented) return;
     this.handle(event);
-    if (!event.defaultPrevented) this.context.fullScreenKeys.onGlobalKeyDown(event);
+    if (event.defaultPrevented || this.anyDialogOpen() || this.isEditableTarget(event.target)) return;
+    this.context.fullScreenKeys.onGlobalKeyDown(event);
   }
 
   handle(event: KeyboardEvent): boolean {
