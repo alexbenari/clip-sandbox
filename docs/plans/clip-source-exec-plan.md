@@ -12,8 +12,8 @@ Users see no change: opening folders, collections, the grid, Zoom and video edit
 
 - [x] (2026-10-16) M1: delete the unused browser folder adapters. Commit `6f29120`. G1: both type checks clean; the search finds only an archived test-run listing under `sandbox/component-library-evaluation/artifacts/`, left as history. G2: 116 files, 677 tests pass (693 before, minus the 16 tests in the two deleted files); `m1-commit-hook.log`.
 - [x] (2026-10-16) M2: `ClipSource` in the domain; `Clip`, `Pipeline`, the working copy, Zoom, `ClipEditor` and the grid use it. Commit `5810454`. G3: the three domain spec files (27 tests) pass in Node. G4: four `ClipSource` cases pass. G5: no match in `src/domain`. G6: both type checks clean; 117 files, 681 tests pass (`m2-commit-hook.log`). A counted script converted 130 test sites; the rest were edited by hand.
-- [ ] M3: folder listings arrive as `FolderEntry` values; the last `File`-based types are removed.
-- [ ] M4: full end-to-end run, architecture map, acceptance check.
+- [x] (2026-10-16) M3: folder listings arrive as `FolderEntry` values; the last `File`-based types are removed. Commit `24a50a4`. G7: no match in `src/domain`, `src/business-logic`, `src/app` or `src/ui`. G8: the three spec files (14 tests) pass, `pipeline-factory.spec.ts` in Node; both type checks clean; 117 files, 681 tests pass (`m3-commit-hook.log`). The count is unchanged from M2: one `filterAndSortFiles` case removed (P9), one adapter case added for `clipSourceOf` and a video entry without text.
+- [x] (2026-10-16) M4: full end-to-end run, architecture map, acceptance check. G9: `npm run e2e` 33 of 33 pass (`e2e-final.log`), including the edit-recovery test with its failure injected at `clipSourceOf`; the intermittent full-screen check passed. G10: the map describes `ClipSource` and `FolderEntry`, has no stale names, and every link resolves.
 
 Evidence logs: `test-evidence/clip-source/` (ignored by git, never cleaned by a test runner). Each commit's pre-commit hook output goes to `test-evidence/clip-source/m<N>-commit-hook.log`.
 
@@ -77,7 +77,16 @@ Unavailable skills or fallbacks:
 
 ## Outcomes & Retrospective
 
-To be written at M4: what shipped, gate evidence, the final `coding-quality.md` pass, and follow-ups.
+Shipped: the domain describes a clip's media with `ClipSource`; folder listings reach the renderer as `FolderEntry` values; no renderer code under `src/domain`, `src/business-logic`, `src/app` or `src/ui` names the browser `File` type (G5, G7). The domain and pipeline-building tests run in Node (G3, G8). The unused browser folder adapters are deleted (G1). All user flows covered by the end-to-end suite pass unchanged (G9). Commits: `6f29120` (M1), `5810454` (M2), `24a50a4` (M3), M4 documentation.
+
+Spec acceptance: 1 by G7; 2 by G3 and G8; 3 by G6 and G8 (tests changed only in how they build clips, pipelines and folder contents, plus the removed subfolder, `filterAndSortFiles` and `blob:` assertions); 4 by G9; 5 by G10.
+
+Final `coding-quality.md` pass: the new class has explicit ownership and no doc blocks; layers import inward only (`FolderEntry` in business logic, used by the app and the adapter). Remaining tensions, left as follow-ups because renaming them is outside this plan:
+
+- `PipelineFactory.getVideosAndCollectionFiles` and its `collectionFiles` field still say "files" although they now hold folder entries.
+- The grid stores each card's media address in `dataset.objectUrl`, a name left from the removed `blob:` addresses.
+
+Delegation: none (P6).
 
 ## Context and orientation
 
