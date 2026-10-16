@@ -67,7 +67,7 @@ import { DeleteFromDiskDialogControl } from '../ui/delete-from-disk-dialog-contr
 import { SaveAsNewDialogControl } from '../ui/save-as-new-dialog-control.js';
 import { UnsavedChangesDialogControl } from '../ui/unsaved-changes-dialog-control.js';
 import { CollectionTextFormat } from '../business-logic/collection-text-format.js';
-import { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
+import { OpenFolderRefresher } from './open-folder-refresher.js';
 import { ControlFailureReporting } from './control-failure-reporting.js';
 import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
 
@@ -169,7 +169,7 @@ export class AppController {
     const gifWorkflowKeyboard = new GifWorkflowKeyboard();
     const hasClipsPanel = ApplicationShellControl.sidePanelsIn(document).some(panel => panel.id === 'clips');
     // Saving refreshes the open folder through folder selection, which itself saves first; the callback below closes that loop.
-    const openFolderRefreshSession = new OpenFolderRefreshSession({
+    const openFolderRefresher = new OpenFolderRefresher({
       folders,
       openFolder: state,
       pipelineWorkingCopy,
@@ -181,7 +181,7 @@ export class AppController {
       reporter: activityReporter,
       activityLog: activityLogger,
       diagnostics,
-      publications: openFolderRefreshSession,
+      publications: openFolderRefresher,
     };
     const gifExtractionSession = gifServices
       ? new GifExtractionSession(gifServices.frameReview, gifServices.thumbnails, {
@@ -271,7 +271,7 @@ export class AppController {
       nameCheck: newCollectionNameCheck,
       grid,
       collectionView,
-      folderRefresh: openFolderRefreshSession,
+      folderRefresh: openFolderRefresher,
       reporter: activityReporter,
       appText,
     });

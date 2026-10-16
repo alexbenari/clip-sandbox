@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { OpenFolderRefreshSession } from '../../src/app/open-folder-refresh-session.js';
+import { OpenFolderRefresher } from '../../src/app/open-folder-refresher.js';
 
 function refreshSession({ activeFolderPath = 'C:/pipelines/extraction-tmp', dirty = false, refreshActiveFolder = vi.fn(async () => undefined) } = {}) {
   const pipelineWorkingCopy = { hasDirtyClipSequenceChanges: dirty };
   const folderSession = { folderPath: activeFolderPath };
   const reporter = { failure: vi.fn(), technicalDetailsOf: (error: unknown) => String(error) };
   const diagnostics = { logRuntimeError: vi.fn(async () => undefined) };
-  const session = new OpenFolderRefreshSession({
+  const session = new OpenFolderRefresher({
     folders: { isActiveFolder: (current: { folderPath: string } | null, folderPath: string) => current === folderSession && folderPath === activeFolderPath },
     openFolder: { currentFolderSession: folderSession },
     pipelineWorkingCopy,
@@ -17,7 +17,7 @@ function refreshSession({ activeFolderPath = 'C:/pipelines/extraction-tmp', dirt
   return { session, pipelineWorkingCopy, refreshActiveFolder, reporter, diagnostics };
 }
 
-describe('OpenFolderRefreshSession', () => {
+describe('OpenFolderRefresher', () => {
   it('defers a matching folder refresh until its dirty collection has been saved', async () => {
     const { session, pipelineWorkingCopy, refreshActiveFolder } = refreshSession({ dirty: true });
 

@@ -4,7 +4,7 @@ import type { AppSessionState } from './app-session-state.js';
 import type { FolderAccess } from './folder-access.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
-type OpenFolderRefreshSessionOptions = Readonly<{
+type OpenFolderRefresherOptions = Readonly<{
   folders: { isActiveFolder(folderSession: FolderAccess | null, folderPath: string): boolean };
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'hasDirtyClipSequenceChanges'>;
@@ -14,10 +14,10 @@ type OpenFolderRefreshSessionOptions = Readonly<{
   diagnostics: Pick<AppDiagnostics, 'logRuntimeError'>;
 }>;
 
-export class OpenFolderRefreshSession {
+export class OpenFolderRefresher {
   private pendingFolderPath: string | null = null;
 
-  constructor(private readonly options: OpenFolderRefreshSessionOptions) {}
+  constructor(private readonly options: OpenFolderRefresherOptions) {}
 
   async onFolderContentsPublished(folderPath: string): Promise<void> {
     if (!this.isActiveFolder(folderPath)) return;

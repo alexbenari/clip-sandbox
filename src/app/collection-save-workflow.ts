@@ -5,7 +5,7 @@ import type { CollectionFileWriter } from './collection-file-writer.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
 import type { NewCollectionNameCheck } from './new-collection-name-check.js';
-import type { OpenFolderRefreshSession } from './open-folder-refresh-session.js';
+import type { OpenFolderRefresher } from './open-folder-refresher.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 export type SaveOutcome = 'saved' | 'cancelled' | 'failed';
@@ -26,7 +26,7 @@ type CollectionSaveDependencies = Readonly<{
   nameCheck: Pick<NewCollectionNameCheck, 'problemText'>;
   grid: { invalidateView(cacheKey: string): void; retagActiveView(cacheKey: string | null): void };
   collectionView: Pick<CollectionViewWorkflow, 'activeCacheKey' | 'refreshSelector' | 'refreshToolbar'>;
-  folderRefresh: Pick<OpenFolderRefreshSession, 'afterCollectionSaved'>;
+  folderRefresh: Pick<OpenFolderRefresher, 'afterCollectionSaved'>;
   reporter: Pick<ActivityReporter, 'success'>;
   appText: Pick<AppText, 'savedCollectionFileText'>;
 }>;
