@@ -27,8 +27,8 @@ type CollectionSaveDependencies = Readonly<{
   grid: { invalidateView(cacheKey: string): void; retagActiveView(cacheKey: string | null): void };
   collectionView: Pick<CollectionViewWorkflow, 'activeCacheKey' | 'refreshSelector' | 'refreshToolbar'>;
   folderRefresh: Pick<OpenFolderRefresher, 'afterCollectionSaved'>;
-  reporter: Pick<ActivityReporter, 'success'>;
-  appText: Pick<AppText, 'savedCollectionFileText'>;
+  reporter: Pick<ActivityReporter, 'success' | 'failure' | 'technicalDetailsOf'>;
+  appText: Pick<AppText, 'savedCollectionFileText' | 'saveCollectionFailedText'>;
 }>;
 
 type SaveAsNewWait = Readonly<{ outcome: Promise<SaveAsNewOutcome>; settle: (outcome: SaveAsNewOutcome) => void }>;
@@ -124,7 +124,12 @@ export class CollectionSaveWorkflow {
     if (!collection) return null;
     try {
       await this.save.fileWriter.write(collection);
-    } catch {
+    } catch (error) {
+      this.save.reporter.failure(this.save.appText.saveCollectionFailedText(filename), {
+        affected: filename,
+        recovery: 'Check folder access and free disk space, then save again.',
+        technicalDetails: this.save.reporter.technicalDetailsOf(error),
+      });
       return null;
     }
     pipeline.upsertCollection(collection);

@@ -73,6 +73,10 @@ export class AppText {
     return `Saved ${filename} to the current pipeline folder.`;
   }
 
+  saveCollectionFailedText(filename: string): string {
+    return `Could not save ${filename}.`;
+  }
+
   downloadedCollectionFileText(filename: string): string {
     return `Downloaded ${filename}.`;
   }

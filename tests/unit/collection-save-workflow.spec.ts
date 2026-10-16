@@ -40,7 +40,7 @@ function saveWorkflow({ startInCollection = false, writeFails = false } = {}) {
   };
   const dialog = new FakeSaveAsNewDialog();
   const toolbar = new EventSource<{ saveRequested: void; saveAsNewRequested: void }>();
-  const reporter = { success: vi.fn() };
+  const reporter = { success: vi.fn(), failure: vi.fn(), technicalDetailsOf: (error: unknown) => String(error) };
   const workflow = new CollectionSaveWorkflow({
     pipelineWorkingCopy,
     fileWriter,
@@ -73,10 +73,12 @@ describe('CollectionSaveWorkflow', () => {
   });
 
   it('reports a failed collection save without opening any dialog', async () => {
-    const { workflow, dialog } = saveWorkflow({ startInCollection: true, writeFails: true });
+    const { workflow, dialog, reporter } = saveWorkflow({ startInCollection: true, writeFails: true });
 
     await expect(workflow.saveActive()).resolves.toBe('failed');
     expect(dialog.open).not.toHaveBeenCalled();
+    expect(reporter.failure).toHaveBeenCalledWith(new AppText().saveCollectionFailedText('subset.txt'),
+      expect.objectContaining({ affected: 'subset.txt', technicalDetails: expect.stringContaining('disk full') }));
   });
 
   it('asks for a collection name when the pipeline view is saved, and resolves once that save succeeds', async () => {
@@ -94,7 +96,7 @@ describe('CollectionSaveWorkflow', () => {
   });
 
   it('keeps waiting while the name is invalid or the save fails, as the open dialog does', async () => {
-    const { workflow, dialog, fileWriter } = saveWorkflow();
+    const { workflow, dialog, fileWriter, reporter } = saveWorkflow();
     const outcome = workflow.saveAsNew();
 
     dialog.emit('confirmed', '  ');
@@ -104,6 +106,7 @@ describe('CollectionSaveWorkflow', () => {
 
     expect(await settled(outcome)).toBe('pending');
     expect(dialog.isOpen).toBe(true);
+    expect(reporter.failure).toHaveBeenCalledWith(new AppText().saveCollectionFailedText('picks.txt'), expect.anything());
   });
 
   it('settles as cancelled when the dialog reports a cancel, which covers its Cancel button and Escape', async () => {
