@@ -1,16 +1,19 @@
+// @vitest-environment node
 // @ts-nocheck
 import { describe, expect, test } from 'vitest';
-import { Clip, ClipFileSnapshot } from '../../src/domain/clip.js';
+import { Clip } from '../../src/domain/clip.js';
+import { ClipSource } from '../../src/domain/clip-source.js';
 import { ClipSequence } from '../../src/domain/clip-sequence.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 import { CollectionTextFormat } from '../../src/business-logic/collection-text-format.js';
+import { testClip, clipSource } from '../support/clip-source-fixtures.js';
 
 describe('clip and sequence models', () => {
   test('creates clips with stable identity and mutable metadata', () => {
     const clip = new Clip({
       id: 'clip_1',
-      file: new File(['x'], 'alpha.mp4', { type: 'video/mp4' }),
+      source: clipSource('alpha.mp4'),
     });
     expect(clip.id).toBe('clip_1');
     expect(clip.name).toBe('alpha.mp4');
@@ -34,9 +37,9 @@ describe('clip and sequence models', () => {
 
   test('maintains ordered clip-sequence contents and supports full-order replacement', () => {
     const clips = [
-      new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-      new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
-      new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4') }),
+      testClip('clip_1', 'alpha.mp4'),
+      testClip('clip_2', 'bravo.webm'),
+      testClip('clip_3', 'charlie.mp4'),
     ];
     const sequence = new ClipSequence({ name: 'pipeline-view', clips });
     expect(sequence.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.webm', 'charlie.mp4']);
@@ -51,9 +54,9 @@ describe('clip and sequence models', () => {
     const sequence = new ClipSequence({
       name: 'full',
       clips: [
-        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
-        new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4') }),
+        testClip('clip_1', 'alpha.mp4'),
+        testClip('clip_2', 'bravo.webm'),
+        testClip('clip_3', 'charlie.mp4'),
       ],
     });
 
@@ -63,9 +66,9 @@ describe('clip and sequence models', () => {
     const batchSequence = new ClipSequence({
       name: 'full',
       clips: [
-        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
-        new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4') }),
+        testClip('clip_1', 'alpha.mp4'),
+        testClip('clip_2', 'bravo.webm'),
+        testClip('clip_3', 'charlie.mp4'),
       ],
     });
     expect(batchSequence.removeMany(['clip_3', 'missing', 'clip_1'])).toEqual(['clip_3', 'clip_1']);
@@ -78,27 +81,27 @@ describe('clip and sequence models', () => {
     const sequence = new ClipSequence({
       name: 'full',
       clips: [
-        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
+        testClip('clip_1', 'alpha.mp4'),
+        testClip('clip_2', 'bravo.webm'),
       ],
     });
 
     const inserted = sequence.insertAfter('clip_1', new Clip({
       id: 'clip_3',
-      file: new File(['c'], 'alpha-looped.mp4'),
+      source: clipSource('alpha-looped.mp4'),
     }));
 
     expect(inserted).toBe(true);
     expect(sequence.clipNamesInOrder()).toEqual(['alpha.mp4', 'alpha-looped.mp4', 'bravo.webm']);
-    expect(sequence.insertAfter('missing', new Clip({ id: 'clip_4', file: new File(['d'], 'delta.mp4') }))).toBe(false);
+    expect(sequence.insertAfter('missing', testClip('clip_4', 'delta.mp4'))).toBe(false);
   });
 
   test('builds collections from runtime clip sequences', () => {
     const sequence = new ClipSequence({
       name: 'director-cut',
       clips: [
-        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
+        testClip('clip_1', 'alpha.mp4'),
+        testClip('clip_2', 'bravo.webm'),
       ],
     });
     const collection = sequence.toCollection({ filename: 'director-cut.txt' });
@@ -167,10 +170,10 @@ describe('clip and sequence models', () => {
   test('treats the pipeline as the full folder and collections as ordered subsets', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['b'], 'bravo.webm'),
-        new File(['a'], 'alpha.mp4'),
-        new File(['c'], 'charlie.mp4'),
+      videoSources: [
+        clipSource('bravo.webm'),
+        clipSource('alpha.mp4'),
+        clipSource('charlie.mp4'),
       ],
       collections: [
         Collection.fromFilename({
@@ -197,16 +200,16 @@ describe('clip and sequence models', () => {
   test('updates pipeline clip membership when files are removed from disk', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4'),
-        new File(['b'], 'bravo.webm'),
-        new File(['c'], 'charlie.mp4'),
+      videoSources: [
+        clipSource('alpha.mp4'),
+        clipSource('bravo.webm'),
+        clipSource('charlie.mp4'),
       ],
     });
 
-    pipeline.setVideoFiles([
-      new File(['a'], 'alpha.mp4'),
-      new File(['c'], 'charlie.mp4'),
+    pipeline.setVideoSources([
+      clipSource('alpha.mp4'),
+      clipSource('charlie.mp4'),
     ]);
 
     expect(pipeline.videoNames()).toEqual(['alpha.mp4', 'charlie.mp4']);
@@ -215,22 +218,22 @@ describe('clip and sequence models', () => {
   test('upserts one new video file into the pipeline inventory using filename ordering', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['b'], 'bravo.webm'),
-        new File(['d'], 'delta.mp4'),
+      videoSources: [
+        clipSource('bravo.webm'),
+        clipSource('delta.mp4'),
       ],
     });
 
-    expect(pipeline.upsertVideoFile(new File(['a'], 'alpha-looped.mp4'))).toBe(true);
+    expect(pipeline.upsertVideoSource(clipSource('alpha-looped.mp4'))).toBe(true);
     expect(pipeline.videoNames()).toEqual(['alpha-looped.mp4', 'bravo.webm', 'delta.mp4']);
   });
 
   test('reuses canonical clips across pipeline and collection materialization', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['b'], 'bravo.webm'),
-        new File(['a'], 'alpha.mp4'),
+      videoSources: [
+        clipSource('bravo.webm'),
+        clipSource('alpha.mp4'),
       ],
       collections: [
         Collection.fromFilename({
@@ -264,10 +267,10 @@ describe('clip and sequence models', () => {
   test('adds clips to a collection through Pipeline and preserves destination order semantics', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4'),
-        new File(['b'], 'bravo.webm'),
-        new File(['c'], 'charlie.mp4'),
+      videoSources: [
+        clipSource('alpha.mp4'),
+        clipSource('bravo.webm'),
+        clipSource('charlie.mp4'),
       ],
       collections: [
         Collection.fromFilename({
@@ -311,9 +314,9 @@ describe('clip and sequence models', () => {
   test('treats collection filename identity as case-insensitive while preserving stored casing', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4'),
-        new File(['b'], 'bravo.webm'),
+      videoSources: [
+        clipSource('alpha.mp4'),
+        clipSource('bravo.webm'),
       ],
       collections: [
         Collection.fromFilename({
@@ -346,10 +349,10 @@ describe('clip and sequence models', () => {
   test('removeVideos prunes pipeline files and delegates collection cleanup per collection', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4'),
-        new File(['b'], 'bravo.webm'),
-        new File(['c'], 'charlie.mp4'),
+      videoSources: [
+        clipSource('alpha.mp4'),
+        clipSource('bravo.webm'),
+        clipSource('charlie.mp4'),
       ],
       collections: [
         Collection.fromFilename({
@@ -401,30 +404,19 @@ describe('clip and sequence models', () => {
 });
 
 
-test('clip snapshots source metadata on construction and replacement', () => {
-  const file = Object.assign(new File(['video'], 'alpha.mp4'), { mediaSource: 'file:///a.mp4', path: 'C:/a.mp4' });
-  const clip = new Clip({ id: 'a', file });
-  expect(clip.file).toBeInstanceOf(ClipFileSnapshot);
-  file.mediaSource = 'file:///b.mp4';
-  file.path = 'C:/b.mp4';
-  expect(clip.file.mediaSource).toBe('file:///a.mp4');
-  expect(clip.file.path).toBe('C:/a.mp4');
-  expect(Reflect.set(clip.file, 'mediaSource', 'file:///c.mp4')).toBe(false);
-  expect(clip.mediaSource).toBe(clip.file.mediaSource);
-  expect(clip.file.size).toBe(file.size);
-  clip.replaceFile(file);
-  file.mediaSource = 'file:///d.mp4';
+test('a clip keeps an immutable source and follows its replacement', () => {
+  const clip = new Clip({ id: 'a', source: clipSource('alpha.mp4', { mediaSource: 'file:///a.mp4', desktopPath: 'C:/a.mp4' }) });
+  expect(clip.source).toBeInstanceOf(ClipSource);
+  expect(Reflect.set(clip.source, 'mediaSource', 'file:///c.mp4')).toBe(false);
+  expect(clip.mediaSource).toBe('file:///a.mp4');
+  expect(clip.source.desktopPath).toBe('C:/a.mp4');
+  clip.replaceSource(clipSource('alpha.mp4', { mediaSource: 'file:///b.mp4' }));
   expect(clip.mediaSource).toBe('file:///b.mp4');
-  expect(clip.file.mediaSource).toBe('file:///b.mp4');
+  expect(() => clip.replaceSource({ name: 'alpha.mp4', mediaSource: 'file:///d.mp4' })).toThrow('Clip source is required.');
 });
 
-test('clip snapshots omit frame-review session capabilities', () => {
-  const file = Object.assign(new File(['video'], 'alpha.mp4'), {
-    mediaSource: 'file:///a.mp4',
-    frameReviewSourceHandle: 'source_12345678',
-  });
+test('clip sources carry no frame-review session capability', () => {
+  const source = ClipSource.create({ name: 'alpha.mp4', mediaSource: 'file:///a.mp4', frameReviewSourceHandle: 'source_12345678' });
 
-  const clip = new Clip({ id: 'a', file });
-
-  expect(Object.hasOwn(clip.file, 'frameReviewSourceHandle')).toBe(false);
+  expect(Object.hasOwn(source, 'frameReviewSourceHandle')).toBe(false);
 });

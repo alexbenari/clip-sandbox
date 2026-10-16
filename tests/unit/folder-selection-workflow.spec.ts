@@ -17,6 +17,7 @@ function folderFile(name: string, text = ''): File {
   const file = new File([text], name, { type: name.endsWith('.txt') ? 'text/plain' : 'video/mp4' });
   // jsdom's File has no text(); collection files are read through it.
   Object.defineProperty(file, 'text', { value: async () => text });
+  Object.defineProperty(file, 'mediaSource', { value: `file:///clips/${name}` });
   return file;
 }
 

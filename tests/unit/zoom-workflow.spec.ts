@@ -9,6 +9,7 @@ import { ZoomWorkflow } from '../../src/app/zoom-workflow.js';
 import type { ClipEditorResult } from '../../src/business-logic/clip-editor.js';
 import type { VideoEdit } from '../../src/business-logic/video-edit-catalog.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 const loopify = { id: 'loopify', label: 'Loopify' } as VideoEdit;
 
@@ -22,7 +23,7 @@ class FakeZoomView extends EventSource<{ playbackFailed: { name: string; error: 
 }
 
 function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
-  const pipeline = new Pipeline({ folderName: 'clips', videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')] });
+  const pipeline = new Pipeline({ folderName: 'clips', videoSources: [clipSource('alpha.mp4'), clipSource('bravo.mp4')] });
   const pipelineWorkingCopy = new PipelineWorkingCopy();
   pipelineWorkingCopy.loadPipeline(pipeline);
   const [alpha, bravo] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
@@ -47,7 +48,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
   const workflow = new ZoomWorkflow({
     pipelineWorkingCopy,
     openFolder,
-    folderFiles: { toRendererFile: created => created as File },
+    folderFiles: { clipSourceOf: created => clipSource(created.name) },
     zoom: zoomView,
     grid,
     screens,

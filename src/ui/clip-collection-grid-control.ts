@@ -139,10 +139,6 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
 }
 
   private clearGridCards(grid: HTMLElement): void {
-  for (const el of this.gridCards(grid)) {
-    const url = el.dataset.objectUrl;
-    if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
-  }
   grid.innerHTML = '';
 }
 
@@ -975,11 +971,10 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     const metadataToken = this.metadataTracker.start(orderedClips);
     const fragment = this.doc.createDocumentFragment();
     for (const clip of orderedClips) {
-      const mediaSource = clip.mediaSource || URL.createObjectURL(clip.file);
       const card = this.createThumbCard({
         doc: this.doc,
         clip,
-        mediaSource,
+        mediaSource: clip.mediaSource,
         formatLabel: this.formatClipLabel,
         onLoadedMetadata: (element, video, nextClip, token) => this.onLoadedMetadata(element, video, nextClip, token),
         onMetadataError: (element, video, nextClip, token) => this.onMetadataError(element, video, nextClip, token),

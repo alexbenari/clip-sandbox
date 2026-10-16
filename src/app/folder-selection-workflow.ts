@@ -322,7 +322,7 @@ export class FolderSelectionWorkflow {
         logInvalidDescription: result => diagnostics.logInvalidDescription(result, selection.folderAccess),
       });
       if (isStale()) return;
-      pipeline.setVideoFiles(refreshed.pipeline.videoFiles());
+      pipeline.setVideoSources(refreshed.pipeline.videoSources());
       pipeline.setCollections(refreshed.pipeline.collections());
       await this.reloadSelection({
         pipeline,

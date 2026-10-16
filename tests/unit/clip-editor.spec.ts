@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { ClipEditor } from '../../src/business-logic/clip-editor.js';
 import { Clip } from '../../src/domain/clip.js';
 import { VideoEditCatalog } from '../../src/business-logic/video-edit-catalog.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 const videoEditCatalog = new VideoEditCatalog();
 
@@ -15,14 +16,9 @@ describe('clip editor', () => {
       })),
     };
     const editor = new ClipEditor({ runtimeEditingService, videoEditCatalog });
-    const file = new File(['x'], 'alpha.mov', { type: 'video/quicktime' });
-    Object.defineProperty(file, 'path', {
-      configurable: true,
-      value: 'C:/clips/alpha.mov',
-    });
     const clip = new Clip({
       id: 'clip_1',
-      file,
+      source: clipSource('alpha.mov', { desktopPath: 'C:/clips/alpha.mov' }),
     });
 
     const result = await editor.createVideoEdit({
@@ -57,7 +53,7 @@ describe('clip editor', () => {
     await expect(editor.createVideoEdit({
       clip: new Clip({
         id: 'clip_1',
-        file: new File(['x'], 'alpha.mov', { type: 'video/quicktime' }),
+        source: clipSource('alpha.mov'),
       }),
       editId: 'missing',
       folderAccess: { folderPath: 'C:/clips' },

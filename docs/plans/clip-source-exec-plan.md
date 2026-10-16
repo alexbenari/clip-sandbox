@@ -10,7 +10,7 @@ Users see no change: opening folders, collections, the grid, Zoom and video edit
 
 ## Progress
 
-- [ ] M1: delete the unused browser folder adapters.
+- [x] (2026-10-16) M1: delete the unused browser folder adapters. Commit `6f29120`. G1: both type checks clean; the search finds only an archived test-run listing under `sandbox/component-library-evaluation/artifacts/`, left as history. G2: 116 files, 677 tests pass (693 before, minus the 16 tests in the two deleted files); `m1-commit-hook.log`.
 - [ ] M2: `ClipSource` in the domain; `Clip`, `Pipeline`, the working copy, Zoom, `ClipEditor` and the grid use it.
 - [ ] M3: folder listings arrive as `FolderEntry` values; the last `File`-based types are removed.
 - [ ] M4: full end-to-end run, architecture map, acceptance check.

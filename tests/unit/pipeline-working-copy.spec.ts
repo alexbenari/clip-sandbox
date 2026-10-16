@@ -3,9 +3,10 @@ import { describe, expect, test } from 'vitest';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 function videoFile(name) {
-  return new File(['video'], name, { type: 'video/mp4' });
+  return clipSource(name);
 }
 
 describe('pipeline session', () => {
@@ -13,7 +14,7 @@ describe('pipeline session', () => {
     const session = new PipelineWorkingCopy();
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [videoFile('alpha.mp4'), videoFile('bravo.mp4')],
+      videoSources: [videoFile('alpha.mp4'), videoFile('bravo.mp4')],
     });
 
     const result = session.loadPipeline(pipeline);
@@ -34,7 +35,7 @@ describe('pipeline session', () => {
     });
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [videoFile('alpha.mp4'), videoFile('bravo.mp4')],
+      videoSources: [videoFile('alpha.mp4'), videoFile('bravo.mp4')],
       collections: [collection],
     });
     session.loadPipeline(pipeline);
@@ -58,7 +59,7 @@ describe('pipeline session', () => {
     });
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [videoFile('alpha.mp4'), videoFile('bravo.mp4')],
+      videoSources: [videoFile('alpha.mp4'), videoFile('bravo.mp4')],
       collections: [collection],
     });
     session.loadPipeline(pipeline);
@@ -85,7 +86,7 @@ describe('pipeline session', () => {
     });
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [videoFile('alpha.mp4')],
+      videoSources: [videoFile('alpha.mp4')],
       collections: [collection],
     });
     session.loadPipeline(pipeline);
@@ -106,7 +107,7 @@ describe('pipeline session', () => {
     const session = new PipelineWorkingCopy();
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [videoFile('alpha.mp4')],
+      videoSources: [videoFile('alpha.mp4')],
     });
     session.loadPipeline(pipeline);
 
@@ -123,7 +124,7 @@ describe('pipeline session', () => {
 
 test('dirty state reflects mutations through an escaped active sequence', () => {
   const session = new PipelineWorkingCopy();
-  session.loadPipeline(new Pipeline({ videoFiles: [videoFile('alpha.mp4'), videoFile('bravo.mp4')] }));
+  session.loadPipeline(new Pipeline({ videoSources: [videoFile('alpha.mp4'), videoFile('bravo.mp4')] }));
   const sequence = session.currentClipSequence;
   sequence.replaceOrder(['clip_2', 'clip_1']);
   expect(session.hasDirtyClipSequenceChanges).toBe(true);

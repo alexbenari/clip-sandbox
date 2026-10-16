@@ -5,12 +5,13 @@ import { EventSource } from '../../src/app/event-source.js';
 import { GridContextMenuWorkflow } from '../../src/app/grid-context-menu-workflow.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 type MenuRequest = Parameters<ConstructorParameters<typeof GridContextMenuWorkflow>[0]['menu']['open']>[0];
 
 function contextMenu({ canRefine = true, inspect }: { canRefine?: boolean; inspect?: () => Promise<boolean> } = {}) {
   const pipelineWorkingCopy = new PipelineWorkingCopy();
-  pipelineWorkingCopy.loadPipeline(new Pipeline({ folderName: 'clips', videoFiles: [new File(['a'], 'alpha.mp4')] }));
+  pipelineWorkingCopy.loadPipeline(new Pipeline({ folderName: 'clips', videoSources: [clipSource('alpha.mp4')] }));
   const [alpha] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
   const folderAccess = { folderPath: 'C:/clips' };
   const openFolder = new AppSessionState();

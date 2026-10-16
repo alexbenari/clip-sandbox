@@ -9,6 +9,7 @@ import { NewCollectionNameCheck } from '../../src/app/new-collection-name-check.
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 class FakeAddDialog extends EventSource<{ confirmed: AddToCollectionTarget }> {
   open = vi.fn();
@@ -19,7 +20,7 @@ class FakeAddDialog extends EventSource<{ confirmed: AddToCollectionTarget }> {
 function addWorkflow({ writeFails = false } = {}) {
   const pipeline = new Pipeline({
     folderName: 'clips',
-    videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')],
+    videoSources: [clipSource('alpha.mp4'), clipSource('bravo.mp4')],
     collections: [Collection.fromFilename({ filename: 'picks.txt', orderedClipNames: ['bravo.mp4'] })],
   });
   const pipelineWorkingCopy = new PipelineWorkingCopy();

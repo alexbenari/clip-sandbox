@@ -1,4 +1,4 @@
-import type { ClipFile } from '../domain/clip.js';
+import type { ClipFile } from '../business-logic/PipelineFactory.js';
 
 // Only a folder service creates one, from a folder it has just opened, so holding one means the folder is open.
 export type FolderAccess = Readonly<{ folderPath: string }>;

@@ -7,6 +7,7 @@ import { EventSource } from '../../src/app/event-source.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 class FakeGrid extends EventSource<ICollectionGridEvents> {
   renders: { names: string[]; cacheKey: string }[] = [];
@@ -32,7 +33,7 @@ class FakeToolbar extends EventSource<{ toggleTitlesRequested: void }> {
 function collectionView() {
   const pipeline = new Pipeline({
     folderName: 'clips',
-    videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')],
+    videoSources: [clipSource('alpha.mp4'), clipSource('bravo.mp4')],
     collections: [Collection.fromFilename({ filename: 'subset.txt', orderedClipNames: ['bravo.mp4', 'alpha.mp4'] })],
   });
   const pipelineWorkingCopy = new PipelineWorkingCopy();

@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 describe('business logic modules', () => {
   const pipelineFactory = new PipelineFactory();
@@ -26,9 +27,9 @@ describe('business logic modules', () => {
   test('Pipeline materializes a selected collection and reports missing entries', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4', { type: 'video/mp4' }),
-        new File(['b'], 'bravo.mp4', { type: 'video/mp4' }),
+      videoSources: [
+        clipSource('alpha.mp4'),
+        clipSource('bravo.mp4'),
       ],
     });
     const source = Collection.fromFilename({

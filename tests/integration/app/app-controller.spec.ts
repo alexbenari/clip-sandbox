@@ -309,7 +309,7 @@ describe('app controller context menu wiring', () => {
     document.getElementById('pickBtn').click();
     await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
     document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-    const conversion = vi.spyOn(ElectronFolderService.prototype, 'toRendererFile');
+    const conversion = vi.spyOn(ElectronFolderService.prototype, 'clipSourceOf');
     conversion.mockImplementationOnce(() => { throw new Error('Output refresh failed'); });
     const runEdit = async () => {
       document.getElementById('zoomVideo').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));

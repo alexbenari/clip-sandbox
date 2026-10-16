@@ -1,7 +1,7 @@
-import { Clip, ClipFileSnapshot } from './clip.js';
+import { Clip } from './clip.js';
 import { ClipSequence } from './clip-sequence.js';
+import { ClipSource } from './clip-source.js';
 import { Collection } from './collection.js';
-import type { ClipFile } from './clip.js';
 import type { CollectionMaterialization } from './collection.js';
 
 export type PipelineMaterialization = { kind: 'loaded'; sequence: ClipSequence };
@@ -39,20 +39,20 @@ export type RemoveVideosResult = {
 
 export class Pipeline {
   #folderName: string;
-  #videoFilesByName: Map<string, ClipFileSnapshot>;
+  #videoSourcesByName: Map<string, ClipSource>;
   #clipsByName: Map<string, Clip>;
   #collectionsByFilename: Map<string, Collection>;
 
-  constructor({ folderName = '', videoFiles = [], collections = [] }: {
+  constructor({ folderName = '', videoSources = [], collections = [] }: {
     folderName?: string;
-    videoFiles?: Iterable<ClipFile>;
+    videoSources?: Iterable<ClipSource>;
     collections?: Iterable<Collection>;
   } = {}) {
     this.#folderName = String(folderName || '').trim();
-    this.#videoFilesByName = new Map();
+    this.#videoSourcesByName = new Map();
     this.#clipsByName = new Map();
     this.#collectionsByFilename = new Map();
-    this.setVideoFiles(videoFiles);
+    this.setVideoSources(videoSources);
     this.setCollections(collections);
   }
 
@@ -72,31 +72,27 @@ export class Pipeline {
       kind: 'loaded',
       sequence: new ClipSequence({
         name: this.displayLabel(),
-        clips: this.videoFiles().map((file) => this.#clipForFile(file, nextClipId)),
+        clips: this.videoSources().map((source) => this.#clipForSource(source, nextClipId)),
       }),
     };
   }
 
-  setVideoFiles(videoFiles: Iterable<ClipFile>): void {
-    this.#videoFilesByName = new Map(
-      Pipeline.#sortedFiles(videoFiles).map((file) => [file.name, new ClipFileSnapshot(file)])
+  setVideoSources(videoSources: Iterable<ClipSource>): void {
+    this.#videoSourcesByName = new Map(
+      Pipeline.#sortedSources(videoSources).map((source) => [source.name, Pipeline.#requiredSource(source)])
     );
     for (const [name, clip] of Array.from(this.#clipsByName.entries())) {
-      const nextFile = this.#videoFilesByName.get(name);
-      if (nextFile) {
-        clip.replaceFile(nextFile);
+      const nextSource = this.#videoSourcesByName.get(name);
+      if (nextSource) {
+        clip.replaceSource(nextSource);
         continue;
       }
       this.#clipsByName.delete(name);
     }
   }
 
-  videoFiles(): ClipFileSnapshot[] {
-    return Array.from(this.#videoFilesByName.values());
-  }
-
-  videoFileMap(): Map<string, ClipFileSnapshot> {
-    return new Map(this.#videoFilesByName);
+  videoSources(): ClipSource[] {
+    return Array.from(this.#videoSourcesByName.values());
   }
 
   clipMap(): Map<string, Clip> {
@@ -104,19 +100,19 @@ export class Pipeline {
   }
 
   videoNames(): string[] {
-    return Array.from(this.#videoFilesByName.keys());
+    return Array.from(this.#videoSourcesByName.keys());
   }
 
-  upsertVideoFile(videoFile: ClipFile): boolean {
-    if (!videoFile?.name) return false;
-    this.#videoFilesByName.set(videoFile.name, new ClipFileSnapshot(videoFile));
-    this.setVideoFiles(this.#videoFilesByName.values());
+  upsertVideoSource(source: ClipSource): boolean {
+    if (!(source instanceof ClipSource)) return false;
+    this.#videoSourcesByName.set(source.name, source);
+    this.setVideoSources(this.#videoSourcesByName.values());
     return true;
   }
 
-  upsertVideoClip(videoFile: ClipFile, { nextClipId }: { nextClipId?: () => string } = {}): Clip | null {
-    if (!this.upsertVideoFile(videoFile)) return null;
-    return this.#clipForFile(videoFile, nextClipId);
+  upsertVideoClip(source: ClipSource, { nextClipId }: { nextClipId?: () => string } = {}): Clip | null {
+    if (!this.upsertVideoSource(source)) return null;
+    return this.#clipForSource(source, nextClipId);
   }
 
   setCollections(collections: Iterable<Collection>): void {
@@ -207,8 +203,8 @@ export class Pipeline {
 
   materializeCollection(collection: Collection | null | undefined, { nextClipId }: { nextClipId?: () => string } = {}): CollectionMaterialization | null {
     if (!(collection instanceof Collection) || typeof nextClipId !== 'function') return null;
-    for (const file of this.videoFiles()) {
-      this.#clipForFile(file, nextClipId);
+    for (const source of this.videoSources()) {
+      this.#clipForSource(source, nextClipId);
     }
     return collection.materializeClipSequence(this.#clipsByName);
   }
@@ -262,8 +258,8 @@ export class Pipeline {
     }
 
     const removedNameSet = new Set(removedVideoNames);
-    const remainingFiles = this.videoFiles().filter((file) => !removedNameSet.has(file.name));
-    this.setVideoFiles(remainingFiles);
+    const remainingSources = this.videoSources().filter((source) => !removedNameSet.has(source.name));
+    this.setVideoSources(remainingSources);
 
     return {
       removedVideoNames,
@@ -294,29 +290,28 @@ export class Pipeline {
     return Collection.identityKeyFromFilename(filename);
   }
 
-  static #sortedFiles(files: Iterable<ClipFile>): ClipFile[] {
-    return Array.from(files || []).sort((a, b) =>
+  static #sortedSources(sources: Iterable<ClipSource>): ClipSource[] {
+    return Array.from(sources || []).sort((a, b) =>
       (a?.name || '').localeCompare(b?.name || '', undefined, { numeric: true, sensitivity: 'base' })
     );
   }
 
-  #clipForFile(file: ClipFile, nextClipId?: () => string): Clip {
-    const name = file?.name || '';
-    if (!name) throw new Error('Clip file name is required.');
-    const existing = this.#clipsByName.get(name);
+  static #requiredSource(source: ClipSource): ClipSource {
+    if (!(source instanceof ClipSource)) throw new Error('Pipeline video source is required.');
+    return source;
+  }
+
+  #clipForSource(source: ClipSource, nextClipId?: () => string): Clip {
+    const existing = this.#clipsByName.get(source.name);
     if (existing) {
-      existing.replaceFile(file);
+      existing.replaceSource(source);
       return existing;
     }
     if (typeof nextClipId !== 'function') {
       throw new Error('A nextClipId function is required to create a pipeline clip.');
     }
-    const clip = new Clip({
-      id: nextClipId(),
-      file,
-      mediaSource: file?.mediaSource || '',
-    });
-    this.#clipsByName.set(name, clip);
+    const clip = new Clip({ id: nextClipId(), source });
+    this.#clipsByName.set(source.name, clip);
     return clip;
   }
 }

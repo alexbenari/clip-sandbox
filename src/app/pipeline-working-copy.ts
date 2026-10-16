@@ -1,4 +1,5 @@
-import type { ClipFile, Clip } from '../domain/clip.js';
+import type { Clip } from '../domain/clip.js';
+import type { ClipSource } from '../domain/clip-source.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
 import type { Collection } from '../domain/collection.js';
 import type { Pipeline, PipelineMaterialization, RemoveVideosResult } from '../domain/pipeline.js';
@@ -118,9 +119,9 @@ export class PipelineWorkingCopy {
       || currentNames.some((name, index) => name !== baseline[index]);
   }
 
-  insertCreatedClipInPipeline(createdFile: ClipFile): CreatedClipInsertResult {
+  insertCreatedClipInPipeline(createdSource: ClipSource): CreatedClipInsertResult {
     if (!this.#pipeline) return { ok: false, code: 'missing-pipeline' };
-    const clip = this.#pipeline.upsertVideoClip(createdFile, {
+    const clip = this.#pipeline.upsertVideoClip(createdSource, {
       nextClipId: () => this.nextClipId(),
     });
     if (!clip) return { ok: false, code: 'invalid-file' };
@@ -138,14 +139,14 @@ export class PipelineWorkingCopy {
     };
   }
 
-  insertCreatedClipAfter(sourceClipId: string, createdFile: ClipFile): CreatedClipInsertResult {
+  insertCreatedClipAfter(sourceClipId: string, createdSource: ClipSource): CreatedClipInsertResult {
     if (!this.#pipeline || !this.#currentClipSequence) {
       return { ok: false, code: 'missing-context' };
     }
     if (!this.#currentClipSequence.hasClip(sourceClipId)) {
       return { ok: false, code: 'missing-source-clip' };
     }
-    const clip = this.#pipeline.upsertVideoClip(createdFile, {
+    const clip = this.#pipeline.upsertVideoClip(createdSource, {
       nextClipId: () => this.nextClipId(),
     });
     if (!clip) return { ok: false, code: 'invalid-file' };

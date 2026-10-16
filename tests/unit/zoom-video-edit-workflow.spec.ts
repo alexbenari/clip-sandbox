@@ -2,11 +2,12 @@
 import { describe, expect, test, vi } from 'vitest';
 import { ZoomVideoEditWorkflow } from '../../src/app/zoom-video-edit-workflow.js';
 import { Clip } from '../../src/domain/clip.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 function sourceClip() {
   return new Clip({
     id: 'clip_1',
-    file: new File(['source'], 'alpha.mp4', { type: 'video/mp4' }),
+    source: clipSource('alpha.mp4'),
   });
 }
 

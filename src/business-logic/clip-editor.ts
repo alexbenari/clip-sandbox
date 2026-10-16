@@ -65,7 +65,7 @@ export class ClipEditor {
       };
     }
 
-    const sourcePath = String(clip.file.path || '').trim();
+    const sourcePath = clip.source.desktopPath ?? '';
     if (!sourcePath) {
       return {
         ok: false,

@@ -3,23 +3,18 @@ import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
 import { Clip } from '../../../src/domain/clip.js';
 import { ClipSequence } from '../../../src/domain/clip-sequence.js';
 import { ClipCollectionGridControl } from '../../../src/ui/clip-collection-grid-control.js';
+import { testClip, clipSource } from '../../support/clip-source-fixtures.js';
 
 const createClipCollectionGridControl = options => new ClipCollectionGridControl(options);
 
 describe('clip collection grid controller', () => {
-  let originalCreate;
-  let originalRevoke;
   let originalPlay;
   let originalPause;
 
   beforeEach(() => {
     document.body.innerHTML = '<div id="gridWrap"><div id="grid"></div></div>';
-    originalCreate = URL.createObjectURL;
-    originalRevoke = URL.revokeObjectURL;
     originalPlay = HTMLMediaElement.prototype.play;
     originalPause = HTMLMediaElement.prototype.pause;
-    URL.createObjectURL = vi.fn((file) => `blob:${file.name}`);
-    URL.revokeObjectURL = vi.fn();
     HTMLMediaElement.prototype.play = vi.fn(function playPreview() {
       Object.defineProperty(this, 'paused', { value: false, configurable: true });
       return Promise.resolve();
@@ -28,8 +23,6 @@ describe('clip collection grid controller', () => {
   });
 
   afterEach(() => {
-    URL.createObjectURL = originalCreate;
-    URL.revokeObjectURL = originalRevoke;
     HTMLMediaElement.prototype.play = originalPlay;
     HTMLMediaElement.prototype.pause = originalPause;
   });
@@ -38,8 +31,8 @@ describe('clip collection grid controller', () => {
     return new ClipSequence({
       name: 'demo',
       clips: [
-        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
-        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm', { type: 'video/webm' }) }),
+        testClip('clip_1', 'alpha.mp4'),
+        testClip('clip_2', 'bravo.webm'),
       ],
     });
   }
@@ -75,9 +68,9 @@ describe('clip collection grid controller', () => {
     return new ClipSequence({
       name: 'demo',
       clips: [
-        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
-        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm', { type: 'video/webm' }) }),
-        new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4', { type: 'video/mp4' }) }),
+        testClip('clip_1', 'alpha.mp4'),
+        testClip('clip_2', 'bravo.webm'),
+        testClip('clip_3', 'charlie.mp4'),
       ],
     });
   }
@@ -260,7 +253,7 @@ describe('clip collection grid controller', () => {
     expect(orders.at(-1)).toEqual(['clip_2', 'clip_1']);
     document.querySelectorAll('#grid .thumb')[0].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     expect(openRequests).toEqual(['clip_2']);
-    expect(controller.getClipMediaSource('clip_2')).toBe('blob:bravo.webm');
+    expect(controller.getClipMediaSource('clip_2')).toBe('file:///clips/bravo.webm');
     expect(controller.getClipById('clip_2')?.name).toBe('bravo.webm');
     expect(controller.getPrevClip('clip_2')).toBeNull();
     expect(controller.getNextClip('clip_2')?.id).toBe('clip_1');
@@ -280,7 +273,7 @@ describe('clip collection grid controller', () => {
     controller.renderCollection(
       new ClipSequence({
         name: 'demo',
-        clips: [new Clip({ id: 'clip_1', file: new File(['a'], '<img src=x>.mp4', { type: 'video/mp4' }) })],
+        clips: [testClip('clip_1', '<img src=x>.mp4')],
       })
     );
 
@@ -407,7 +400,6 @@ describe('clip collection grid controller', () => {
       'clip_1',
       'clip_2',
     ]);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:alpha.mp4');
   });
 
   test('does not reapply an unchanged cached grid layout when switching back', () => {
@@ -652,7 +644,7 @@ describe('clip collection grid controller', () => {
     expect(document.querySelector('#grid .thumb').style.height).toBe('180px');
   });
 
-  test('revokes object urls and clears drag-over state when rerendering or destroying', () => {
+  test('clears drag-over state when rerendering or destroying', () => {
     const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
@@ -679,7 +671,6 @@ describe('clip collection grid controller', () => {
     expect(cards[1].classList.contains('drag-over')).toBe(false);
 
     controller.renderCollection(makeCollection());
-    expect(URL.revokeObjectURL).toHaveBeenCalled();
     controller.setTitlesHidden(true);
     controller.dispose();
     expect(document.getElementById('grid').children).toHaveLength(0);
@@ -700,9 +691,9 @@ describe('clip collection grid controller', () => {
       new ClipSequence({
         name: 'demo',
         clips: [
-          new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
-          new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm', { type: 'video/webm' }) }),
-          new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4', { type: 'video/mp4' }) }),
+          testClip('clip_1', 'alpha.mp4'),
+          testClip('clip_2', 'bravo.webm'),
+          testClip('clip_3', 'charlie.mp4'),
         ],
       })
     );
@@ -725,7 +716,7 @@ describe('clip collection grid controller', () => {
     controller.renderCollection(
       new ClipSequence({
         name: 'subset',
-        clips: [new Clip({ id: 'clip_3', file: new File(['c'], 'charlie.mp4', { type: 'video/mp4' }) })],
+        clips: [testClip('clip_3', 'charlie.mp4')],
       })
     );
     expect(controller.getSelectedClipIds()).toEqual(['clip_3']);
@@ -746,8 +737,8 @@ describe('clip collection grid controller', () => {
       new ClipSequence({
         name: 'demo',
         clips: [
-          new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4', { type: 'video/mp4' }) }),
-          new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm', { type: 'video/webm' }) }),
+          testClip('clip_1', 'alpha.mp4'),
+          testClip('clip_2', 'bravo.webm'),
         ],
       })
     );
@@ -825,7 +816,7 @@ test('measures allocated grid height using its own current padding', () => {
     coordinateWorkspaceLayout: true,
     layoutRules: { computeBestGrid },
   });
-  controller.renderCollection(new ClipSequence({ clips: [new Clip({ id: 'a', file: new File(['a'], 'a.mp4'), mediaSource: 'file:///a.mp4' })] }));
+  controller.renderCollection(new ClipSequence({ clips: [new Clip({ id: 'a', source: clipSource('a.mp4', { mediaSource: 'file:///a.mp4' }) })] }));
   expect(computeBestGrid).toHaveBeenLastCalledWith(expect.objectContaining({ availH: 448 }));
   root.style.paddingBottom = '30px';
   controller.beginWorkspaceResize(800, 0);

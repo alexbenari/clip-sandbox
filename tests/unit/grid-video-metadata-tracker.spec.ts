@@ -2,9 +2,10 @@
 import { describe, expect, test, vi } from 'vitest';
 import { GridVideoMetadataTracker } from '../../src/ui/grid-video-metadata-tracker.js';
 import { Clip } from '../../src/domain/clip.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 function clip(id, name = `${id}.mp4`) {
-  return new Clip({ id, file: new File(['x'], name, { type: 'video/mp4' }) });
+  return new Clip({ id, source: clipSource(name) });
 }
 
 describe('grid video metadata tracker', () => {

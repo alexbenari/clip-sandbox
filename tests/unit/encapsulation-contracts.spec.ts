@@ -27,7 +27,7 @@ function rejectedConsumerAccess(grid: ClipCollectionGridControl, fullscreen: Col
   // @ts-expect-error No public Zoom media getter.
   zoom.getVideoElement();
   // @ts-expect-error File extension metadata is immutable.
-  clip.file.mediaSource = 'file:///changed.mp4';
+  clip.source.mediaSource = 'file:///changed.mp4';
 }
 
 test('consumer encapsulation contracts are checked by TypeScript', () => {

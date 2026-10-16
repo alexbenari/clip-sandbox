@@ -1,9 +1,11 @@
+// @vitest-environment node
 // @ts-nocheck
 import { describe, expect, test, vi } from 'vitest';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 import { ClipSequence } from '../../src/domain/clip-sequence.js';
 import { Clip } from '../../src/domain/clip.js';
+import { testClip, clipSource } from '../support/clip-source-fixtures.js';
 
 describe('pipeline selections', () => {
   test('hasCollectionWithFilename matches saved collections regardless of letter case', () => {
@@ -19,9 +21,9 @@ describe('pipeline selections', () => {
   test('materializePipeline loads clips in pipeline order', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['b'], 'bravo.webm'),
-        new File(['a'], 'alpha.mp4'),
+      videoSources: [
+        clipSource('bravo.webm'),
+        clipSource('alpha.mp4'),
       ],
     });
 
@@ -37,8 +39,8 @@ describe('pipeline selections', () => {
   test('materializePipeline reuses canonical clip instances on repeated loads', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4'),
+      videoSources: [
+        clipSource('alpha.mp4'),
       ],
     });
     const nextClipId = vi.fn().mockReturnValueOnce('clip_1');
@@ -55,8 +57,8 @@ describe('pipeline selections', () => {
   test('materializeCollection preserves missing-entry conflicts', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['b'], 'bravo.webm'),
+      videoSources: [
+        clipSource('bravo.webm'),
       ],
     });
     const collection = Collection.fromFilename({
@@ -76,9 +78,9 @@ describe('pipeline selections', () => {
   test('materializeCollection references canonical pipeline clips', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
-      videoFiles: [
-        new File(['a'], 'alpha.mp4'),
-        new File(['b'], 'bravo.webm'),
+      videoSources: [
+        clipSource('alpha.mp4'),
+        clipSource('bravo.webm'),
       ],
     });
     const nextClipId = vi.fn().mockReturnValueOnce('clip_1').mockReturnValueOnce('clip_2');
@@ -102,8 +104,8 @@ describe('clip sequence to collection conversion', () => {
     const sequence = new ClipSequence({
       name: 'highlights',
       clips: [
-        new Clip({ id: 'clip_1', file: new File(['a'], 'alpha.mp4') }),
-        new Clip({ id: 'clip_2', file: new File(['b'], 'bravo.webm') }),
+        testClip('clip_1', 'alpha.mp4'),
+        testClip('clip_2', 'bravo.webm'),
       ],
     });
 

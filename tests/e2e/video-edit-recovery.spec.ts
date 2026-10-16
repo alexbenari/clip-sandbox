@@ -26,9 +26,9 @@ test('created edit survives a UI callback failure and editing becomes available 
     await page.evaluate(async () => {
       const modulePath = './build/src/adapters/electron/electron-folder-service.js';
       const { ElectronFolderService } = await import(modulePath);
-      const original = ElectronFolderService.prototype.toRendererFile;
-      ElectronFolderService.prototype.toRendererFile = function () {
-        ElectronFolderService.prototype.toRendererFile = original;
+      const original = ElectronFolderService.prototype.clipSourceOf;
+      ElectronFolderService.prototype.clipSourceOf = function () {
+        ElectronFolderService.prototype.clipSourceOf = original;
         throw new Error('Injected output refresh failure');
       };
     });

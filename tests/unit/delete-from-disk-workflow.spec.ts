@@ -9,6 +9,7 @@ import { EventSource } from '../../src/app/event-source.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 type PreflightRequest = { text: string; onSave: () => void; onDiscard: () => void; onCancel: () => void };
 type ConfirmHandlers = { onConfirm: () => void; onCancel: () => void };
@@ -22,7 +23,7 @@ class FakeGrid extends EventSource<{ removeSelectedRequested: string[] }> {
 function deleteWorkflow({ saveOutcome = 'saved' as SaveOutcome, failingDeletes = [] as string[], unavailable = false } = {}) {
   const pipeline = new Pipeline({
     folderName: 'clips',
-    videoFiles: [new File(['a'], 'alpha.mp4'), new File(['b'], 'bravo.mp4')],
+    videoSources: [clipSource('alpha.mp4'), clipSource('bravo.mp4')],
     collections: [Collection.fromFilename({ filename: 'picks.txt', orderedClipNames: ['alpha.mp4', 'bravo.mp4'] })],
   });
   const pipelineWorkingCopy = new PipelineWorkingCopy();

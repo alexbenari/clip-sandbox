@@ -1,11 +1,16 @@
+import { ClipSource } from '../domain/clip-source.js';
 import { Pipeline } from '../domain/pipeline.js';
-import type { ClipFile } from '../domain/clip.js';
 import type { Collection } from '../domain/collection.js';
 import type { CollectionDescriptionResult, InvalidCollectionDescription } from '../domain/collection-description-validator.js';
 import type { CollectionTextFormat } from './collection-text-format.js';
 
 const VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm', 'ogv', 'avi', 'mkv', 'mpg', 'mpeg']);
 const COLLECTION_FILE_EXT = '.txt';
+
+export type ClipFile = File & {
+  mediaSource?: string;
+  path?: string;
+};
 
 type FolderEntryFile = ClipFile & {
   relativePath?: string;
@@ -88,7 +93,7 @@ export class PipelineFactory {
 
     const pipeline = new Pipeline({
       folderName,
-      videoFiles: videos,
+      videoSources: videos.map((file) => ClipSource.create({ name: file.name, mediaSource: file.mediaSource ?? '', desktopPath: file.path })),
       collections: validCollections,
     });
 

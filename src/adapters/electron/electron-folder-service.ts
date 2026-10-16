@@ -1,5 +1,6 @@
 import type { CreatedVideoFile } from '../../business-logic/clip-editor.js';
-import type { ClipFile } from '../../domain/clip.js';
+import type { ClipFile } from '../../business-logic/PipelineFactory.js';
+import { ClipSource } from '../../domain/clip-source.js';
 import type { FolderAccess, FolderContents } from '../../app/folder-access.js';
 
 type ElectronFolderEntry = {
@@ -68,7 +69,11 @@ export class ElectronFolderService {
     };
   }
 
-  toRendererFile(entry: ElectronFolderEntry | CreatedVideoFile): ClipFile {
+  clipSourceOf(created: CreatedVideoFile): ClipSource {
+    return ClipSource.create({ name: created.name, mediaSource: created.mediaSource ?? '', desktopPath: created.path });
+  }
+
+  toRendererFile(entry: ElectronFolderEntry): ClipFile {
     const lastModifiedMs = 'lastModifiedMs' in entry ? entry.lastModifiedMs : undefined;
     const file = new File(
       [typeof entry?.text === 'string' ? entry.text : ''],

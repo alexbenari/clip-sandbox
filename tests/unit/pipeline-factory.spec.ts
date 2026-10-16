@@ -9,6 +9,7 @@ describe('pipeline factory', () => {
   function createFile(content, name, type) {
     const file = new File([content], name, { type });
     file.text = () => Promise.resolve(String(content));
+    file.mediaSource = `file:///clips/${name}`;
     return file;
   }
 
@@ -38,6 +39,7 @@ describe('pipeline selection loading', () => {
   function createFile(content, name, type) {
     const file = new File([content], name, { type });
     file.text = () => Promise.resolve(String(content));
+    file.mediaSource = `file:///clips/${name}`;
     return file;
   }
 
