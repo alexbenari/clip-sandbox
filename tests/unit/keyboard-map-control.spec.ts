@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { COLLECTION_SHORTCUTS } from '../../src/app/app-keydown-handler.js';
-import { FULLSCREEN_SHORTCUTS } from '../../src/app/fullscreen-session.js';
+import { FULLSCREEN_SHORTCUTS } from '../../src/app/collection-full-screen-workflow.js';
 import type { IShortcutDescriptor } from '../../src/app/shortcut-descriptor.js';
 import { KeyboardMapControl } from '../../src/ui/keyboard-map-control.js';
 

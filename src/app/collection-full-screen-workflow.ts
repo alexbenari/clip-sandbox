@@ -49,7 +49,7 @@ export interface IRepeatingClock {
   clear(id: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout>): void;
 }
 
-type FullscreenSessionOptions = {
+type CollectionFullScreenWorkflowOptions = {
   layout: IFullScreenLayout;
   grid: IFullscreenGrid;
   toolbar: IFullscreenButton;
@@ -60,13 +60,13 @@ type FullscreenSessionOptions = {
   appText: Pick<AppText, 'fullscreenSlotsText'>;
 };
 
-export class FullscreenSession {
+export class CollectionFullScreenWorkflow {
   private readonly fullscreenState: FullscreenState = { savedTitlesHidden: null, digitBuffer: '', digitTimer: null, slots: 12, randInterval: null };
 
   private readonly unsubscribeToolbar: () => void;
 
   // Entering Collection full screen closes Zoom through the full-screen change, before the grid changes.
-  constructor(private readonly session: FullscreenSessionOptions) {
+  constructor(private readonly session: CollectionFullScreenWorkflowOptions) {
     this.unsubscribeToolbar = session.toolbar.on('toggleFullscreenRequested', () => this.onFsToggle());
   }
 

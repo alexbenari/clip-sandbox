@@ -1,10 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { EventSource } from '../../src/app/event-source.js';
-import { FullscreenSession } from '../../src/app/fullscreen-session.js';
+import { CollectionFullScreenWorkflow } from '../../src/app/collection-full-screen-workflow.js';
 
 afterEach(() => { vi.useRealTimers(); });
 
-function fullscreenSession() {
+function collectionFullScreen() {
   let active = false;
   const grid = {
     areTitlesHidden: () => false,
@@ -18,7 +18,7 @@ function fullscreenSession() {
   const reporter = { success: vi.fn() };
   const layout = { setFullScreenLayout: vi.fn() };
   const toolbar = Object.assign(new EventSource<{ toggleFullscreenRequested: void }>(), { setFullscreenButtonState: vi.fn() });
-  const session = new FullscreenSession({
+  const session = new CollectionFullScreenWorkflow({
     layout,
     grid,
     toolbar,
@@ -36,7 +36,7 @@ function fullscreenSession() {
 }
 
 test('the toolbar full-screen request enters and leaves full screen', async () => {
-  const { session, toolbar, isActive } = fullscreenSession();
+  const { session, toolbar, isActive } = collectionFullScreen();
 
   toolbar.emit('toggleFullscreenRequested');
   await Promise.resolve();
@@ -53,7 +53,7 @@ test('the toolbar full-screen request enters and leaves full screen', async () =
 
 test('fullscreen exit and disposal cancel rotation and delayed slot input', async () => {
   vi.useFakeTimers();
-  const { session, grid } = fullscreenSession();
+  const { session, grid } = collectionFullScreen();
   await session.enterFullScreen();
   session.onFsChange();
   vi.advanceTimersByTime(3000);
@@ -76,7 +76,7 @@ test('fullscreen exit and disposal cancel rotation and delayed slot input', asyn
 });
 
 test('the window layout follows full screen in both directions', async () => {
-  const { session, layout } = fullscreenSession();
+  const { session, layout } = collectionFullScreen();
   await session.enterFullScreen();
   session.onFsChange();
   await session.exitFullScreen();
@@ -88,7 +88,7 @@ test('the window layout follows full screen in both directions', async () => {
 
 test('a typed clip count is normalized by the grid, applied and reported', async () => {
   vi.useFakeTimers();
-  const { session, grid, reporter } = fullscreenSession();
+  const { session, grid, reporter } = collectionFullScreen();
   await session.enterFullScreen();
   session.onFsChange();
 

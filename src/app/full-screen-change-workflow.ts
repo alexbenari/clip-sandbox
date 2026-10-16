@@ -1,5 +1,5 @@
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
-import type { FullscreenSession } from './fullscreen-session.js';
+import type { CollectionFullScreenWorkflow } from './collection-full-screen-workflow.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 import type { ZoomWorkflow } from './zoom-workflow.js';
 
@@ -14,7 +14,7 @@ type FullScreenChangeDependencies = Readonly<{
   heldSteps: { releaseHeldSteps(): void };
   fullScreen: { isDocumentFullScreen(): boolean };
   zoom: Pick<ZoomWorkflow, 'isOpen' | 'close'>;
-  collectionFullScreen: Pick<FullscreenSession, 'onFsChange'>;
+  collectionFullScreen: Pick<CollectionFullScreenWorkflow, 'onFsChange'>;
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'currentClipSequence'>;
   collectionView: Pick<CollectionViewWorkflow, 'renderActiveSequence'>;
 }>;

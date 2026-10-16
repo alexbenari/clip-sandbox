@@ -1,7 +1,7 @@
 import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
 import type { IShortcutDescriptor } from '../app/shortcut-descriptor.js';
 import { COLLECTION_SHORTCUTS } from '../app/app-keydown-handler.js';
-import { FULLSCREEN_SHORTCUTS } from '../app/fullscreen-session.js';
+import { FULLSCREEN_SHORTCUTS } from '../app/collection-full-screen-workflow.js';
 import { DocumentElements } from './document-elements.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 

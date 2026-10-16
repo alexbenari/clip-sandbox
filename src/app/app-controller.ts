@@ -12,7 +12,7 @@ import { ElectronPipelineCatalogService } from '../adapters/electron/electron-pi
 import { ElectronVideoEditService } from '../adapters/electron/electron-video-edit-service.js';
 import { ClockAdapter } from '../adapters/browser/clock-adapter.js';
 import { AudioFeedbackAdapter } from '../adapters/browser/audio-feedback-adapter.js';
-import { FullscreenSession } from './fullscreen-session.js';
+import { CollectionFullScreenWorkflow } from './collection-full-screen-workflow.js';
 import { AppDiagnostics } from './app-diagnostics.js';
 import { AppKeyDownHandler } from './app-keydown-handler.js';
 import { ApplicationEventController } from './application-event-controller.js';
@@ -377,7 +377,7 @@ export class AppController {
       navigation: shell,
       reporter: activityReporter,
     });
-    const fullscreenSession = new FullscreenSession({
+    const collectionFullScreen = new CollectionFullScreenWorkflow({
       layout: shell,
       grid,
       toolbar: mainToolbarControl,
@@ -393,7 +393,7 @@ export class AppController {
       heldSteps: gifWorkflowKeyboard,
       fullScreen: fullscreenAdapter,
       zoom,
-      collectionFullScreen: fullscreenSession,
+      collectionFullScreen,
       pipelineWorkingCopy,
       collectionView,
     });
@@ -414,7 +414,7 @@ export class AppController {
       fullScreen: fullscreenAdapter,
       keys: collectionScreen,
       utilities,
-      fullScreenKeys: fullscreenSession,
+      fullScreenKeys: collectionFullScreen,
     });
 
     // Startup: show an empty Collection view, activate the first screen, then load settings.
@@ -426,7 +426,7 @@ export class AppController {
     const shutdown = new ApplicationShutdownCoordinator({
       stopActions: () => {
         appKeyDownHandler.dispose();
-        fullscreenSession.destroy();
+        collectionFullScreen.destroy();
         shell.destroy();
       },
       disposeWorkflow: async () => {
