@@ -9,7 +9,7 @@ import type { ICaptureStorage } from './capture-storage.js';
 import type { CurrentMovie } from './current-movie.js';
 import { EventSource, type EventHandler, type IEventSource } from './event-source.js';
 import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capture.js';
-import { GifCaptureThumbnailSession, type GifThumbnailState } from './gif-capture-thumbnail-session.js';
+import { CaptureThumbnails, type GifThumbnailState } from './capture-thumbnails.js';
 import type { GifSessionStatus } from './gif-session-status.js';
 import type { IExtractionProgressQuery } from './range-extraction.js';
 import type { IThumbnailCacheService } from './thumbnail-cache-service.js';
@@ -45,14 +45,14 @@ type CaptureQueueDependencies = Readonly<{
 // The draft and locked ranges of the current movie, their start thumbnails, and their saved copy.
 export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   private readonly events = new EventSource<ICaptureQueueEvents>();
-  private readonly captureThumbnails: GifCaptureThumbnailSession;
+  private readonly captureThumbnails: CaptureThumbnails;
   private model: RangeCaptureModel | null = null;
   private selected: CapturedRangeId | null = null;
   private restoreStarted = false;
   private disposed = false;
 
   constructor(private readonly deps: CaptureQueueDependencies) {
-    this.captureThumbnails = new GifCaptureThumbnailSession(deps.thumbnails, {
+    this.captureThumbnails = new CaptureThumbnails(deps.thumbnails, {
       onChanged: () => deps.status.changed(),
       onError: (message, error) => this.reportError(message, error),
     });

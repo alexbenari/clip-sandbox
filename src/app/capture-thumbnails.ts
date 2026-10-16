@@ -17,12 +17,12 @@ type ThumbnailSlot = {
   state: GifThumbnailState;
 };
 
-type GifCaptureThumbnailSessionOptions = Readonly<{
+type CaptureThumbnailsOptions = Readonly<{
   onChanged: () => void;
   onError: (message: string, error?: unknown) => void;
 }>;
 
-export class GifCaptureThumbnailSession {
+export class CaptureThumbnails {
   private readonly rangeThumbnails = new Map<CapturedRangeId, ThumbnailSlot>();
   private readonly restoredMissing = new Set<CapturedRangeId>();
   private draftThumbnail: ThumbnailSlot | null = null;
@@ -30,7 +30,7 @@ export class GifCaptureThumbnailSession {
 
   constructor(
     private readonly thumbnails: IThumbnailCacheService,
-    private readonly options: GifCaptureThumbnailSessionOptions,
+    private readonly options: CaptureThumbnailsOptions,
   ) {}
 
   get draftState(): GifThumbnailState {

@@ -6,7 +6,7 @@ import { MovieRangeSession, type MovieRangeSessionOptions } from './movie-range-
 import type { IThumbnailCacheService } from './thumbnail-cache-service.js';
 
 export type { IThumbnailCacheService } from './thumbnail-cache-service.js';
-export type { GifThumbnailState } from './gif-capture-thumbnail-session.js';
+export type { GifThumbnailState } from './capture-thumbnails.js';
 export type { IExtractionPublicationListener } from './range-extraction.js';
 export type { ICapturePositioning } from './capture-queue.js';
 export type { BeginRefinementResult } from './range-refinement.js';
