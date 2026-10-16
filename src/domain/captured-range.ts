@@ -48,24 +48,28 @@ export class CapturedRanges {
     return `range-${sequence}` as CapturedRangeId;
   }
 
+  // Why two endpoints cannot form a range, or null when they can.
+  static problemWith(start: CaptureEndpoint, end: CaptureEndpoint): 'mixed-source-generations' | 'end-before-start' | null {
+    if (start.sourceGeneration !== end.sourceGeneration) return 'mixed-source-generations';
+    const endsFirst = start.kind === 'exact-frame' && end.kind === 'exact-frame'
+      ? end.identity.frameIndex < start.identity.frameIndex
+      : start.kind === 'saved-exact-frame' && end.kind === 'saved-exact-frame'
+        ? end.frameIndex < start.frameIndex
+        : CaptureEndpoints.positionUs(end) < CaptureEndpoints.positionUs(start);
+    return endsFirst ? 'end-before-start' : null;
+  }
+
   static lock(id: CapturedRangeId, start: CaptureEndpoint, end: CaptureEndpoint): CapturedRange {
-    if (start.sourceGeneration !== end.sourceGeneration) {
-      throw new Error('Captured range endpoints belong to different source generations.');
-    }
+    const problem = this.problemWith(start, end);
+    if (problem === 'mixed-source-generations') throw new Error('Captured range endpoints belong to different source generations.');
+    if (problem === 'end-before-start') throw new Error('The end must not precede the start.');
     if (start.kind === 'exact-frame' && end.kind === 'exact-frame') {
-      if (end.identity.frameIndex < start.identity.frameIndex) {
-        throw new Error('The end must not precede the start.');
-      }
       return Object.freeze({
         kind: 'ready-to-extract', id, sourceGeneration: start.sourceGeneration, start, end,
       });
     }
     if (start.kind === 'saved-exact-frame' && end.kind === 'saved-exact-frame') {
-      if (end.frameIndex < start.frameIndex) throw new Error('The end must not precede the start.');
       return Object.freeze({ kind: 'saved-exact-range', id, sourceGeneration: start.sourceGeneration, start, end });
-    }
-    if (CaptureEndpoints.positionUs(end) < CaptureEndpoints.positionUs(start)) {
-      throw new Error('The end must not precede the start.');
     }
     return Object.freeze({
       kind: 'needs-exact-frames', id, sourceGeneration: start.sourceGeneration, start, end,

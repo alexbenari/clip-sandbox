@@ -62,12 +62,6 @@ export class CollectionDescriptionValidator {
     });
   }
 
-  formatLogEntry(result: CollectionDescriptionResult | null | undefined, context = 'Collection validation'): string {
-    if (!result || result.ok === true) return '';
-    const filename = result.filename ? `File: ${result.filename}\n` : '';
-    return `${context}\n${filename}Problem: ${result.code}\nDetails: ${result.message}\n\n`;
-  }
-
   #normalizedLines(lines: Iterable<string>): string[] {
     return Array.from(lines || [])
       .map((line) => String(line || '').trim())

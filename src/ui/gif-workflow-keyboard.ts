@@ -1,5 +1,12 @@
 import type { AdjacentDirection } from '../frame-review/adjacent-step-scheduler.js';
 
+// The capture keys of both GIF screens. Shortcut lists and messages name keys from here, so they always match the bindings.
+export const GIF_CAPTURE_KEYS = Object.freeze({
+  markStart: 'Q', markEnd: 'W', jumpStart: 'A', jumpEnd: 'S', loop: 'Z', lock: 'X', extract: 'E',
+});
+
+const boundTo = (key: string, binding: string): boolean => key === binding.toLowerCase();
+
 export interface IGifWorkflowPlayerCommands {
   toggleMovieFullScreen(): void;
   exitMovieFullScreen(): Promise<void>;
@@ -105,13 +112,13 @@ export class GifWorkflowKeyboard {
   private commandForKey(key: string): (() => void) | null {
     if (!this.target) return null;
     if (key === ' ') return () => this.target?.player.togglePlayback();
-    if (key === 'q' && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markStart();
-    if (key === 'w' && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markEnd();
-    if (key === 'a' && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpStart();
-    if (key === 's' && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpEnd();
-    if (key === 'z' && this.target.capture?.canLoop?.() === true) return () => this.target?.capture?.startLoop();
-    if (key === 'x' && this.target.capture?.canLock?.() === true) return () => this.target?.capture?.lockRange();
-    if (key === 'e' && this.target.capture?.extractCurrent
+    if (boundTo(key, GIF_CAPTURE_KEYS.markStart) && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markStart();
+    if (boundTo(key, GIF_CAPTURE_KEYS.markEnd) && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markEnd();
+    if (boundTo(key, GIF_CAPTURE_KEYS.jumpStart) && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpStart();
+    if (boundTo(key, GIF_CAPTURE_KEYS.jumpEnd) && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpEnd();
+    if (boundTo(key, GIF_CAPTURE_KEYS.loop) && this.target.capture?.canLoop?.() === true) return () => this.target?.capture?.startLoop();
+    if (boundTo(key, GIF_CAPTURE_KEYS.lock) && this.target.capture?.canLock?.() === true) return () => this.target?.capture?.lockRange();
+    if (boundTo(key, GIF_CAPTURE_KEYS.extract) && this.target.capture?.extractCurrent
       && this.target.capture.canExtractCurrent?.() === true) {
       return () => this.target?.capture?.extractCurrent?.();
     }

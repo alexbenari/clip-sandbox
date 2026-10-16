@@ -12,6 +12,7 @@ import type { ActivityInput } from './activity-logger.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
 import { CaptureQueue, type ICapturePositioning } from './capture-queue.js';
+import type { CaptureRejectionText } from './capture-rejection-text.js';
 import type { ICaptureStorage } from './capture-storage.js';
 import type { ClipExtractionEntryState, IExtractionBatchProgress } from './clip-extraction-workflow.js';
 import { CurrentMovie } from './current-movie.js';
@@ -62,6 +63,7 @@ export type MovieRangeSessionOptions = {
   readonly activityLog?: { log(entry: ActivityInput): unknown };
   readonly diagnostics?: Pick<AppDiagnostics, 'logRuntimeError'>;
   readonly capturePositioning?: ICapturePositioning;
+  readonly rejectionText?: CaptureRejectionText;
   readonly extractionService?: IClipExtractionService;
   readonly publications?: IExtractionPublicationListener;
   readonly destination?: ExtractionDestination;
@@ -99,7 +101,7 @@ export abstract class MovieRangeSession {
     });
     this.queue = new CaptureQueue({
       movie: this.movie, status: this.status, thumbnails, storage, extraction: this.extraction,
-      capturePositioning: options.capturePositioning, reporter, diagnostics,
+      capturePositioning: options.capturePositioning, rejectionText: options.rejectionText, reporter, diagnostics,
     });
     this.refinement = new RangeRefinement({ queue: this.queue, extraction: this.extraction, movie: this.movie, status: this.status });
     this.status.on('changed', () => this.publish());

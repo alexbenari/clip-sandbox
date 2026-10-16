@@ -397,7 +397,6 @@ describe('clip and sequence models', () => {
     });
     expect(invalid.ok).toBe(false);
     expect(invalid.code).toBe('invalid-duplicates');
-    expect(validator.formatLogEntry(invalid)).toContain('Problem: invalid-duplicates');
   });
 });
 

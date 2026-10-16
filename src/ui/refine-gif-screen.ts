@@ -13,6 +13,7 @@ import { FrameReviewPlayerControl } from './frame-review-player-control.js';
 import type { GifRangesPanelControl } from './gif-ranges-panel-control.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import {
+  GIF_CAPTURE_KEYS,
   GifWorkflowKeyboard,
   type IGifWorkflowKeyboardTarget,
 } from './gif-workflow-keyboard.js';
@@ -28,13 +29,13 @@ const REFINE_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
   { description: 'Jump 5 seconds', sequences: [['3']] },
   { description: 'Jump 7 seconds', sequences: [['4']] },
   { description: 'Jump 10 seconds', sequences: [['5']] },
-  { description: 'Set exact start at the displayed frame', sequences: [['Q']] },
-  { description: 'Set exact end at the displayed frame', sequences: [['W']] },
-  { description: 'Jump to exact start', sequences: [['A']] },
-  { description: 'Jump to exact end', sequences: [['S']] },
-  { description: 'Loop the exact range', sequences: [['Z']] },
-  { description: 'Lock the exact replacement', sequences: [['X']] },
-  { description: 'Extract the current exact range', sequences: [['E']] },
+  { description: 'Set exact start at the displayed frame', sequences: [[GIF_CAPTURE_KEYS.markStart]] },
+  { description: 'Set exact end at the displayed frame', sequences: [[GIF_CAPTURE_KEYS.markEnd]] },
+  { description: 'Jump to exact start', sequences: [[GIF_CAPTURE_KEYS.jumpStart]] },
+  { description: 'Jump to exact end', sequences: [[GIF_CAPTURE_KEYS.jumpEnd]] },
+  { description: 'Loop the exact range', sequences: [[GIF_CAPTURE_KEYS.loop]] },
+  { description: 'Lock the exact replacement', sequences: [[GIF_CAPTURE_KEYS.lock]] },
+  { description: 'Extract the current exact range', sequences: [[GIF_CAPTURE_KEYS.extract]] },
 ]);
 
 type RefineScreenVariant = Readonly<{
@@ -517,7 +518,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     if (refinement.status === 'committed') return this.variant.lockedInstruction;
     if (refinement.status === 'invalidated') return this.variant.invalidatedInstruction;
     const label = refinement.focusedEndpoint === 'start' ? 'start' : 'end';
-    return `Scrub to the exact ${label} frame, then set it with ${label === 'start' ? 'Q' : 'W'}.`;
+    return `Scrub to the exact ${label} frame, then set it with ${label === 'start' ? GIF_CAPTURE_KEYS.markStart : GIF_CAPTURE_KEYS.markEnd}.`;
   }
 
   private rangeNumber(rangeId: CapturedRangeId): string {

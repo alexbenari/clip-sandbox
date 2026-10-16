@@ -1,5 +1,5 @@
 import type { IFrameReviewService } from '../frame-review/frame-review-api.js';
-import type { RangeCaptureTransition } from '../domain/range-capture-model.js';
+import type { CaptureTransition } from './capture-queue.js';
 import { UnsavedCaptureStorage, type ICaptureStorage } from './capture-storage.js';
 import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capture.js';
 import { MovieRangeSession, type MovieRangeSessionOptions } from './movie-range-session.js';
@@ -45,7 +45,7 @@ export class GifExtractionSession extends MovieRangeSession {
     }
   }
 
-  markStart(capture: IFrameReviewDisplayedCapture | null): RangeCaptureTransition { return this.queue.markStart(capture); }
-  markEnd(capture: IFrameReviewDisplayedCapture | null): RangeCaptureTransition { return this.queue.markEnd(capture); }
-  lockRange(): Promise<RangeCaptureTransition> { return this.queue.lockRange(); }
+  markStart(capture: IFrameReviewDisplayedCapture | null): CaptureTransition { return this.queue.markStart(capture); }
+  markEnd(capture: IFrameReviewDisplayedCapture | null): CaptureTransition { return this.queue.markEnd(capture); }
+  lockRange(): Promise<CaptureTransition> { return this.queue.lockRange(); }
 }

@@ -6,19 +6,27 @@ import {
   type CapturedRangeId,
 } from './captured-range.js';
 
+// Why a mark or lock was refused. The application words these for the user.
+export type RangeCaptureRejection =
+  | 'locked-range-needs-new-start'
+  | 'range-already-locked'
+  | 'endpoints-missing'
+  | 'saved-frames-unchecked'
+  | 'end-before-start'
+  | 'mixed-source-generations';
+
 export type RangeCaptureTransition =
   | Readonly<{ kind: 'marked-start' | 'marked-end' }>
   | Readonly<{ kind: 'locked'; range: CapturedRange }>
-  | Readonly<{ kind: 'rejected'; message: string }>;
+  | Readonly<{ kind: 'rejected'; reason: RangeCaptureRejection }>;
 
 export type RangeCaptureState =
   | Readonly<{
     kind: 'draft';
     start: CaptureEndpoint | null;
     end: CaptureEndpoint | null;
-    message: string | null;
   }>
-  | Readonly<{ kind: 'locked'; rangeId: CapturedRangeId; message: string | null }>;
+  | Readonly<{ kind: 'locked'; rangeId: CapturedRangeId }>;
 
 export interface IRangeCaptureSnapshot {
   readonly sourceGeneration: number;
@@ -44,7 +52,6 @@ export class RangeCaptureModel {
   private start: CaptureEndpoint | null = null;
   private end: CaptureEndpoint | null = null;
   private latestLockedRangeId: CapturedRangeId | null = null;
-  private message: string | null = null;
   private sequence = 0;
   private readonly ranges: CapturedRange[] = [];
 
@@ -188,34 +195,26 @@ export class RangeCaptureModel {
     this.assertCurrentSource(endpoint);
     if (this.latestLockedRangeId) this.beginNextDraft();
     this.start = endpoint;
-    this.message = null;
     return Object.freeze({ kind: 'marked-start' });
   }
 
   markEnd(endpoint: CaptureEndpoint): RangeCaptureTransition {
     this.assertCurrentSource(endpoint);
-    if (this.latestLockedRangeId) return this.reject('Press Q to begin a new range.');
+    if (this.latestLockedRangeId) return this.reject('locked-range-needs-new-start');
     this.end = endpoint;
-    this.message = null;
     return Object.freeze({ kind: 'marked-end' });
   }
 
   lockRange(): RangeCaptureTransition {
-    if (this.latestLockedRangeId) return this.reject('The current range is already locked.');
-    if (!this.start || !this.end) return this.reject('Mark a start and end before locking.');
-    if (this.start.kind === 'saved-exact-frame' || this.end.kind === 'saved-exact-frame') {
-      return this.reject('Check the saved exact frames before locking this draft.');
-    }
-    try {
-      const range = CapturedRanges.lock(CapturedRanges.id(++this.sequence), this.start, this.end);
-      this.ranges.push(range);
-      this.latestLockedRangeId = range.id;
-      this.message = null;
-      return Object.freeze({ kind: 'locked', range });
-    } catch (error) {
-      this.sequence -= 1;
-      return this.reject(error instanceof Error ? error.message : 'The range could not be locked.');
-    }
+    if (this.latestLockedRangeId) return this.reject('range-already-locked');
+    if (!this.start || !this.end) return this.reject('endpoints-missing');
+    if (this.start.kind === 'saved-exact-frame' || this.end.kind === 'saved-exact-frame') return this.reject('saved-frames-unchecked');
+    const problem = CapturedRanges.problemWith(this.start, this.end);
+    if (problem) return this.reject(problem);
+    const range = CapturedRanges.lock(CapturedRanges.id(++this.sequence), this.start, this.end);
+    this.ranges.push(range);
+    this.latestLockedRangeId = range.id;
+    return Object.freeze({ kind: 'locked', range });
   }
 
   replaceRangeWithExactEndpoints(
@@ -246,14 +245,13 @@ export class RangeCaptureModel {
     if (this.latestLockedRangeId || (!this.start && !this.end)) return false;
     this.start = null;
     this.end = null;
-    this.message = null;
     return true;
   }
 
   get snapshot(): IRangeCaptureSnapshot {
     const capture: RangeCaptureState = this.latestLockedRangeId
-      ? Object.freeze({ kind: 'locked', rangeId: this.latestLockedRangeId, message: this.message })
-      : Object.freeze({ kind: 'draft', start: this.start, end: this.end, message: this.message });
+      ? Object.freeze({ kind: 'locked', rangeId: this.latestLockedRangeId })
+      : Object.freeze({ kind: 'draft', start: this.start, end: this.end });
     return Object.freeze({
       sourceGeneration: this.sourceGeneration,
       capture,
@@ -269,7 +267,6 @@ export class RangeCaptureModel {
     this.start = null;
     this.end = null;
     this.latestLockedRangeId = null;
-    this.message = null;
   }
 
   private assertCurrentSource(endpoint: CaptureEndpoint): void {
@@ -278,8 +275,7 @@ export class RangeCaptureModel {
     }
   }
 
-  private reject(message: string): RangeCaptureTransition {
-    this.message = message;
-    return Object.freeze({ kind: 'rejected', message });
+  private reject(reason: RangeCaptureRejection): RangeCaptureTransition {
+    return Object.freeze({ kind: 'rejected', reason });
   }
 }

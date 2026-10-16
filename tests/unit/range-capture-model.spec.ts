@@ -63,7 +63,7 @@ describe('RangeCaptureModel', () => {
     expect(locked.kind).toBe('locked');
 
     expect(model.markEnd(CaptureEndpoints.timestamp(300_000n, 2))).toEqual({
-      kind: 'rejected', message: 'Press Q to begin a new range.',
+      kind: 'rejected', reason: 'locked-range-needs-new-start',
     });
     model.markStart(CaptureEndpoints.timestamp(400_000n, 2));
 
@@ -102,11 +102,11 @@ describe('RangeCaptureModel', () => {
 
   it('rejects missing, reversed, and stale-generation endpoints without creating a range', () => {
     const model = new RangeCaptureModel(9);
-    expect(model.lockRange()).toEqual({ kind: 'rejected', message: 'Mark a start and end before locking.' });
+    expect(model.lockRange()).toEqual({ kind: 'rejected', reason: 'endpoints-missing' });
     expect(() => model.markStart(CaptureEndpoints.timestamp(1n, 8))).toThrow('source generation');
     model.markStart(CaptureEndpoints.timestamp(200n, 9));
     model.markEnd(CaptureEndpoints.timestamp(100n, 9));
-    expect(model.lockRange()).toEqual({ kind: 'rejected', message: 'The end must not precede the start.' });
+    expect(model.lockRange()).toEqual({ kind: 'rejected', reason: 'end-before-start' });
     expect(model.snapshot.ranges).toHaveLength(0);
   });
 

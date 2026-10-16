@@ -1,6 +1,7 @@
 import { CaptureEndpoints, type CaptureEndpoint, type IExactFrameEndpoint, type ISavedExactFrameEndpoint } from '../domain/capture-endpoint.js';
 import type { CapturedRange, CapturedRangeId } from '../domain/captured-range.js';
 import { RangeCaptureModel, type IRangeCaptureSnapshot, type RangeCaptureTransition } from '../domain/range-capture-model.js';
+import { CaptureRejectionText } from './capture-rejection-text.js';
 import type { FrameReviewDisplayFrame, IFrameReviewSession } from '../frame-review/frame-review-api.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
@@ -18,6 +19,12 @@ export interface ICapturePositioning {
   showFrameAfterCapture(review: IFrameReviewSession, endpoint: CaptureEndpoint): Promise<void>;
 }
 
+// A mark or lock as the screens see it: a refusal carries the text to show.
+export type CaptureTransition =
+  | Readonly<{ kind: 'marked-start' | 'marked-end' }>
+  | Readonly<{ kind: 'locked'; range: CapturedRange }>
+  | Readonly<{ kind: 'rejected'; message: string }>;
+
 export interface ICaptureQueueEvents {
   // Sent before the change is published, so a refinement of that range can be ended first.
   rangeRemoved: CapturedRangeId;
@@ -30,6 +37,7 @@ type CaptureQueueDependencies = Readonly<{
   storage: ICaptureStorage;
   extraction: IExtractionProgressQuery;
   capturePositioning?: ICapturePositioning;
+  rejectionText?: Pick<CaptureRejectionText, 'textFor'>;
   reporter?: Pick<ActivityReporter, 'failure'>;
   diagnostics?: Pick<AppDiagnostics, 'logRuntimeError'>;
 }>;
@@ -91,11 +99,11 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   endRestore(): void { this.deps.storage.endRestore(); }
   stopShowingLoading(): void { this.deps.storage.stopShowingLoading(); }
 
-  markStart(capture: IFrameReviewDisplayedCapture | null): RangeCaptureTransition {
+  markStart(capture: IFrameReviewDisplayedCapture | null): CaptureTransition {
     if (this.deps.storage.restoring || this.deps.movie.lifecycle !== 'open') return this.captureUnavailable();
     const endpoint = this.endpointFromCapture(capture);
     if (!endpoint || !capture || !this.model) return this.captureUnavailable();
-    const transition = this.model.markStart(endpoint);
+    const transition = this.worded(this.model.markStart(endpoint));
     if (transition.kind === 'marked-start') {
       this.deps.status.advancePreview();
       this.captureThumbnails.replaceDraft(capture.thumbnail);
@@ -106,11 +114,11 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     return transition;
   }
 
-  markEnd(capture: IFrameReviewDisplayedCapture | null): RangeCaptureTransition {
+  markEnd(capture: IFrameReviewDisplayedCapture | null): CaptureTransition {
     if (this.deps.storage.restoring || this.deps.movie.lifecycle !== 'open') return this.captureUnavailable();
     const endpoint = this.endpointFromCapture(capture);
     if (!endpoint || !this.model) return this.captureUnavailable();
-    const transition = this.model.markEnd(endpoint);
+    const transition = this.worded(this.model.markEnd(endpoint));
     if (transition.kind === 'marked-end') {
       this.deps.status.advancePreview();
       this.save();
@@ -121,7 +129,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   }
 
   // A draft with saved endpoints is first checked against the movie, so no caller has to remember to do it.
-  async lockRange(): Promise<RangeCaptureTransition> {
+  async lockRange(): Promise<CaptureTransition> {
     const draft = this.model?.snapshot.capture;
     if (draft?.kind === 'draft' && (draft.start?.kind === 'saved-exact-frame' || draft.end?.kind === 'saved-exact-frame')
       && !await this.prepareSavedDraft()) {
@@ -130,9 +138,9 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     return this.lockDraft();
   }
 
-  private lockDraft(): RangeCaptureTransition {
+  private lockDraft(): CaptureTransition {
     if (!this.model || this.deps.storage.restoring || this.deps.movie.lifecycle !== 'open') return this.captureUnavailable();
-    const transition = this.model.lockRange();
+    const transition = this.worded(this.model.lockRange());
     if (transition.kind === 'locked') {
       this.deps.status.advancePreview();
       this.captureThumbnails.commitDraftToRange(transition.range.id);
@@ -269,7 +277,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     this.deps.storage.save(this.model, completed);
   }
 
-  captureUnavailable(): RangeCaptureTransition {
+  captureUnavailable(): CaptureTransition {
     const message = this.deps.storage.hasStaleRanges
       ? 'Open movie to find the original source before capturing.'
       : this.deps.movie.lifecycle === 'opening' ? 'Wait for the movie to finish opening.'
@@ -329,6 +337,12 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   async dispose(): Promise<void> {
     this.stopSaving();
     await this.captureThumbnails.dispose();
+  }
+
+  private worded(transition: RangeCaptureTransition): CaptureTransition {
+    if (transition.kind !== 'rejected') return transition;
+    const text = this.deps.rejectionText ?? new CaptureRejectionText();
+    return Object.freeze({ kind: 'rejected', message: text.textFor(transition.reason) });
   }
 
   private canRemoveCaptures(): boolean {

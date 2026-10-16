@@ -40,7 +40,8 @@ import { SettingsScreen } from '../ui/settings-screen.js';
 import { GifExtractionScreen } from '../ui/gif-extraction-screen.js';
 import { RefineGifScreen } from '../ui/refine-gif-screen.js';
 import { FrameReviewPlayerControl } from '../ui/frame-review-player-control.js';
-import { GifWorkflowKeyboard } from '../ui/gif-workflow-keyboard.js';
+import { GIF_CAPTURE_KEYS, GifWorkflowKeyboard } from '../ui/gif-workflow-keyboard.js';
+import { CaptureRejectionText } from './capture-rejection-text.js';
 import { GifRangesPanelControl } from '../ui/gif-ranges-panel-control.js';
 import { ElectronGifSessionServices } from '../adapters/electron/electron-gif-session-services.js';
 import { ElectronCollectionClipRefinementService } from '../adapters/electron/electron-collection-clip-refinement-service.js';
@@ -100,7 +101,6 @@ export class AppController {
     const pipelineFactory = new PipelineFactory();
     const diagnostics = new AppDiagnostics({
       fileSystem,
-      validator,
       errorLogFilename: ERROR_LOG_FILENAME,
       getCurrentFolderSession: () => state.currentFolderSession,
     });
@@ -183,6 +183,7 @@ export class AppController {
         ...sessionReporting,
         extractionService: gifServices.extractionService,
         captureStorage: new SavedCaptureStorage(gifServices.captureStore, { reporter: activityReporter, diagnostics }),
+        rejectionText: new CaptureRejectionText(GIF_CAPTURE_KEYS.markStart),
         capturePositioning: frameReviewPlayer,
       })
       : null;

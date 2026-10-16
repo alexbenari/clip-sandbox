@@ -6,7 +6,7 @@ export type GifExtractionScreenSession = Pick<GifExtractionSession, 'subscribe' 
 import type { IAppPanelContent, IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
 import type { IShortcutDescriptor } from '../app/shortcut-descriptor.js';
 import { FrameReviewPlayerControl } from './frame-review-player-control.js';
-import { GifWorkflowKeyboard } from './gif-workflow-keyboard.js';
+import { GIF_CAPTURE_KEYS, GifWorkflowKeyboard } from './gif-workflow-keyboard.js';
 
 export const GIF_EXTRACTION_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
   { description: 'Enter or exit movie full screen', sequences: [['F']] },
@@ -19,13 +19,13 @@ export const GIF_EXTRACTION_SHORTCUTS: readonly IShortcutDescriptor[] = Object.f
   { description: 'Jump 5 seconds', sequences: [['3']] },
   { description: 'Jump 7 seconds', sequences: [['4']] },
   { description: 'Jump 10 seconds', sequences: [['5']] },
-  { description: 'Set or replace range start', sequences: [['Q']] },
-  { description: 'Set or replace range end', sequences: [['W']] },
-  { description: 'Jump to exact start', sequences: [['A']] },
-  { description: 'Jump to exact end', sequences: [['S']] },
-  { description: 'Loop the exact range', sequences: [['Z']] },
-  { description: 'Lock the current range', sequences: [['X']] },
-  { description: 'Extract the selected exact range', sequences: [['E']] },
+  { description: 'Set or replace range start', sequences: [[GIF_CAPTURE_KEYS.markStart]] },
+  { description: 'Set or replace range end', sequences: [[GIF_CAPTURE_KEYS.markEnd]] },
+  { description: 'Jump to exact start', sequences: [[GIF_CAPTURE_KEYS.jumpStart]] },
+  { description: 'Jump to exact end', sequences: [[GIF_CAPTURE_KEYS.jumpEnd]] },
+  { description: 'Loop the exact range', sequences: [[GIF_CAPTURE_KEYS.loop]] },
+  { description: 'Lock the current range', sequences: [[GIF_CAPTURE_KEYS.lock]] },
+  { description: 'Extract the selected exact range', sequences: [[GIF_CAPTURE_KEYS.extract]] },
 ]);
 
 type GifExtractionScreenOptions = {

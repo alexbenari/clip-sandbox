@@ -1,9 +1,7 @@
+import type { InvalidCollectionDescription } from '../domain/collection-description-validator.js';
+
 type ErrorLogFileSystem = {
   appendTextFile(request: { folderSession?: unknown; filename: string; text: string }): Promise<{ mode?: string }>;
-};
-
-type ErrorLogValidator = {
-  formatLogEntry(result: unknown, context?: string): string;
 };
 
 type DeleteFailureSummary = {
@@ -13,23 +11,19 @@ type DeleteFailureSummary = {
 
 export class AppDiagnostics {
   fileSystem: ErrorLogFileSystem;
-  validator: ErrorLogValidator;
   errorLogFilename: string;
   getCurrentFolderSession: () => unknown;
 
   constructor({
     fileSystem,
-    validator,
     errorLogFilename = 'err.log',
     getCurrentFolderSession = () => null,
   }: {
     fileSystem: ErrorLogFileSystem;
-    validator: ErrorLogValidator;
     errorLogFilename?: string;
     getCurrentFolderSession?: () => unknown;
   }) {
     this.fileSystem = fileSystem;
-    this.validator = validator;
     this.errorLogFilename = errorLogFilename;
     this.getCurrentFolderSession = getCurrentFolderSession;
   }
@@ -50,8 +44,9 @@ export class AppDiagnostics {
     return false;
   }
 
-  async logInvalidDescription(result: unknown, folderSession: unknown): Promise<void> {
-    await this.appendErrorLog(this.validator.formatLogEntry(result, 'Collection enumeration'), folderSession);
+  async logInvalidDescription(result: InvalidCollectionDescription, folderSession: unknown): Promise<void> {
+    const file = result.filename ? `File: ${result.filename}\n` : '';
+    await this.appendErrorLog(`Collection enumeration\n${file}Problem: ${result.code}\nDetails: ${result.message}\n\n`, folderSession);
   }
 
   async logRuntimeError(problem: string, err: unknown, folderSession: unknown = this.getCurrentFolderSession()): Promise<void> {
