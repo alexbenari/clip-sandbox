@@ -43,7 +43,8 @@ export class RangeRefinement implements IRangeRefinementDraftOwner {
   async beginRefinement(rangeId: CapturedRangeId): Promise<BeginRefinementResult> {
     const request = ++this.latestRequest;
     const { queue, movie } = this.deps;
-    if (queue.range(rangeId)?.kind === 'saved-exact-range' && movie.lifecycle === 'open' && !queue.isStale(rangeId)) {
+    if (queue.range(rangeId)?.kind === 'saved-exact-range' && movie.lifecycle === 'open' && !queue.isStale(rangeId)
+      && movie.reviewState?.captureEnabled) {
       const generation = movie.sourceGeneration;
       const checked = await queue.prepareSavedRange(rangeId);
       if (!checked || request !== this.latestRequest || movie.sourceGeneration !== generation) return STOPPED;
@@ -161,10 +162,10 @@ export class RangeRefinement implements IRangeRefinementDraftOwner {
     if (queue.isStale(rangeId)) {
       return this.reject('Saved frames no longer match this movie. Remove the range or reopen the original movie.');
     }
-    if (range.kind === 'saved-exact-range') return this.reject('Check the saved range against the movie before refining it.');
     if (!movie.reviewState?.captureEnabled || range.sourceGeneration !== movie.sourceGeneration) {
       return this.reject('Exact frame review is not ready for this range.');
     }
+    if (range.kind === 'saved-exact-range') return this.reject('Check the saved range against the movie before refining it.');
     this.refinement = new RangeRefinementDraft(this, range);
     this.lastSeenRevision = 0;
     status.advancePreview();

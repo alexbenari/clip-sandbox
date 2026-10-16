@@ -47,7 +47,7 @@ function rangeRefinement(ranges: CapturedRange[]) {
   const extraction = { revisionBlock: () => null, state: () => Object.freeze({ kind: 'pending' as const }), resetForRevision: vi.fn() };
   const status = new GifSessionStatus();
   const refinement = new RangeRefinement({ queue, extraction, movie, status });
-  return { refinement, checks, queue, status };
+  return { refinement, checks, queue, status, movie };
 }
 
 describe('RangeRefinement', () => {
@@ -75,6 +75,18 @@ describe('RangeRefinement', () => {
     expect(await firstRequest).toEqual({ kind: 'stopped' });
     expect((await secondRequest).kind).toBe('started');
     expect(refinement.active?.snapshot.rangeId).toBe(second.id);
+  });
+
+  it('says why a saved range cannot be refined while exact frames are unavailable', async () => {
+    const range = savedRange(1);
+    const { refinement, checks, movie, status } = rangeRefinement([range]);
+    movie.reviewState = FrameReviewState.create('failed', 1, { message: 'Indexing failed.' });
+
+    const request = refinement.beginRefinement(range.id);
+    checks.get(range.id)?.(false);
+
+    expect(await request).toEqual({ kind: 'rejected', message: 'Exact frame review is not ready for this range.' });
+    expect(status.message).toBe('Exact frame review is not ready for this range.');
   });
 
   it('blocks extraction of the range being refined until its refinement is locked', async () => {
