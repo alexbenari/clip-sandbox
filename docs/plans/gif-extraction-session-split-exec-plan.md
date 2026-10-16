@@ -38,7 +38,11 @@ After this work, each job has its own small class, Collection Refine has its own
   - The characterization test fakes both session modules.
   
   G7: `test-evidence/gif-extraction-session-split/G7-commit-hook.log`; all three searches find nothing.
-- [ ] M7 Documentation, end-to-end specs and checks in the running app
+- [x] M7 Documentation, end-to-end specs and checks in the running app (2026-10-16).
+  - G8: all 14 tests in the eight GIF end-to-end specs pass (`G8-e2e.log`).
+  - G9: the probe `G9-probe.spec.ts` covers what the end-to-end specs leave out: locking a restored draft, refining a restored range, and refining then extracting two ranges. Its observations on `3a1d97f` (before M2) and on `1b91801` are identical (`G9-before.json`, `G9-after.json`).
+  - G10: the searches find nothing. Only `CaptureQueue` is over the size limit (see `Outcomes & Retrospective`).
+  - G11: the architecture map is updated, and every link resolves.
 
 Evidence logs: `test-evidence/gif-extraction-session-split/` (one log per gate, named after the gate ID, for example `G8-e2e.log`). The pre-commit hook runs the unit and integration tests on every commit; its saved output counts as the `npx vitest run` part of gates G3-G7. The G9 probes reuse the end-to-end fixtures and helpers under `tests/e2e/`.
 
@@ -110,7 +114,41 @@ Unavailable skills or fallbacks:
 
 ## Outcomes & Retrospective
 
-To be written at completion.
+Shipped: `GifExtractionSession` (about 990 lines) is now:
+
+| File | Lines |
+|---|---|
+| `GifExtractionSession` | 51 |
+| `CollectionClipRefinementSession` | 77 |
+| `MovieRangeSession` (shared base) | 294 |
+| `GifSessionStatus` | 28 |
+| `CurrentMovie` | 188 |
+| `CaptureQueue` | 404 |
+| capture storage (`SavedCaptureStorage`, `UnsavedCaptureStorage`) | 99 |
+| `RangeExtraction` | 206 |
+| `RangeRefinement` | 184 |
+
+What changed besides the structure:
+- Locking a restored draft and refining a restored range check their saved frames themselves.
+- Collection Refine builds its range with `RangeCaptureModel.withExactRange` instead of a fake saved record.
+- The unreachable "saved movie changed" restore path and its obsolete end-to-end test are gone (spec D19).
+- Users see no change; G9 compared the running app before and after.
+
+Evidence: `test-evidence/gif-extraction-session-split/`. Each milestone's hook log shows the unit and integration tests passing, ending at 683 tests. G8 and the G9 probe logs and observations are there too.
+
+Deviations and open points:
+- `CaptureQueue` is 404 lines, against G10's "about 350". Restoring saved captures and recreating their thumbnails account for most of the excess. Every split tried would pass the queue's model back and forth through callbacks, so it stays whole until the user decides.
+- The shared base class `MovieRangeSession` (D20) is a design choice the plan did not foresee.
+- `CurrentMovie` exposes the steps of a movie change separately (D16). Only the base class calls them, and in a fixed order.
+- Cancelling an extraction is checked by unit tests only. The fixture movie is too short to cancel reliably in the running app.
+
+Final review against `coding-quality.md` and `ui-coding-quality.md`:
+- No part imports from `src/ui/`.
+- The UI depends on narrow session types.
+- New classes follow D9's naming.
+- Events are used only for notices that need no answer.
+
+Follow-up: the vocabulary renames left out of scope (review finding #15) can now proceed on the smaller classes.
 
 ## Context and orientation
 
