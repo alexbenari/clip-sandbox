@@ -317,6 +317,16 @@ describe('AppController characterization', () => {
       expect(document.querySelector('#appScreenSelector').value).toBe('collection');
     });
 
+    test('works without the saved-captures desktop API, which only GIF Extraction uses', async () => {
+      delete window.clipSandboxDesktop.clipCaptures;
+      await startCollectionScreen();
+      await openFolder(['alpha.mp4', 'bravo.mp4']);
+
+      await chooseRefineOnFirstClip();
+
+      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection-refine'));
+    });
+
     test('returns to Collection when the source lookup is cancelled', async () => {
       await startCollectionScreen();
       await openFolder(['alpha.mp4', 'bravo.mp4']);

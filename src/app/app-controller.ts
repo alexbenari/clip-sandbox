@@ -47,6 +47,7 @@ import { GIF_CAPTURE_KEYS, GifWorkflowKeyboard } from '../ui/gif-workflow-keyboa
 import { CaptureRejectionText } from './capture-rejection-text.js';
 import { GifRangesPanelControl } from '../ui/gif-ranges-panel-control.js';
 import { ElectronGifSessionServices } from '../adapters/electron/electron-gif-session-services.js';
+import { ElectronClipCapturesStoreService } from '../adapters/electron/electron-clip-captures-store-service.js';
 import { ElectronCollectionClipRefinementService } from '../adapters/electron/electron-collection-clip-refinement-service.js';
 import { GifExtractionSession } from './gif-extraction-session.js';
 import { CollectionClipRefinementSession } from './collection-clip-refinement-session.js';
@@ -110,10 +111,10 @@ export class AppController {
       getCurrentFolderAccess: () => state.currentFolderAccess,
     });
     // Non-Electron DOM tests and unsupported hosts keep the shell available without native movie opening.
-    const gifServices = ElectronGifSessionServices.tryCreate(window);
-    const collectionRefinementGifServices = gifServices && collectionRefinementService
-      ? ElectronGifSessionServices.tryCreate(window)
-      : null;
+    // GIF Extraction keeps its captures in the desktop store; Collection Refine saves none.
+    const captureStore = ElectronClipCapturesStoreService.tryCreate(window);
+    const gifExtractionServices = captureStore ? ElectronGifSessionServices.tryCreate(window) : null;
+    const collectionRefinementGifServices = collectionRefinementService ? ElectronGifSessionServices.tryCreate(window) : null;
 
     // Controls.
     const zoomOverlay = ZoomOverlayControl.fromDocument(document, {
@@ -183,11 +184,12 @@ export class AppController {
       diagnostics,
       publications: openFolderRefresher,
     };
-    const gifExtractionSession = gifServices
-      ? new GifExtractionSession(gifServices.frameReview, gifServices.thumbnails, {
+    // The services exist only with a capture store; naming it again lets the compiler know it is set.
+    const gifExtractionSession = gifExtractionServices && captureStore
+      ? new GifExtractionSession(gifExtractionServices.frameReview, gifExtractionServices.thumbnails, {
         ...sessionReporting,
-        extractionService: gifServices.extractionService,
-        captureStorage: new SavedCaptureStorage(gifServices.captureStore, { reporter: activityReporter, diagnostics }),
+        extractionService: gifExtractionServices.extractionService,
+        captureStorage: new SavedCaptureStorage(captureStore, { reporter: activityReporter, diagnostics }),
         rejectionText: new CaptureRejectionText(GIF_CAPTURE_KEYS.markStart),
         capturePositioning: frameReviewPlayer,
       })
