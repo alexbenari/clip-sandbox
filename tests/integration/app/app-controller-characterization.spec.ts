@@ -24,7 +24,7 @@ const { FakeGifSession } = vi.hoisted(() => {
     }
     get snapshot() { return emptySnapshot; }
     get reviewSession() { return null; }
-    get refinementSession() { return null; }
+    get refinementDraft() { return null; }
     subscribe(listener) { listener(emptySnapshot); return () => undefined; }
     setExtractionDestination(destination) { this.destinations.push(destination); }
     abandonRefinement() { return null; }

@@ -16,7 +16,7 @@ export type RefineGifTransition =
   | Readonly<{ kind: 'committed'; range: IReadyToExtractRange }>
   | Readonly<{ kind: 'rejected'; message: string }>;
 
-export interface IRefineGifSessionSnapshot {
+export interface IRangeRefinementDraftSnapshot {
   readonly rangeId: CapturedRangeId;
   readonly sourceGeneration: number;
   readonly status: 'editing' | 'committed' | 'invalidated';
@@ -33,7 +33,7 @@ export interface IRefineGifSessionSnapshot {
 }
 
 export interface IRefineGifCommitRequest {
-  readonly session: RefineGifSession;
+  readonly session: RangeRefinementDraft;
   readonly rangeId: CapturedRangeId;
   readonly sourceGeneration: number;
   readonly start: IExactFrameEndpoint;
@@ -45,26 +45,26 @@ export type RefineGifCommitResult =
   | Readonly<{ kind: 'committed'; range: IReadyToExtractRange; message: string }>
   | Readonly<{ kind: 'rejected'; message: string }>;
 
-export interface IRefineGifSessionOwner {
+export interface IRangeRefinementDraftOwner {
   currentSourceGeneration(): number | null;
   exactEndpointFromDisplayedCapture(capture: IFrameReviewDisplayedCapture | null): IExactFrameEndpoint | null;
   commitRefinement(request: IRefineGifCommitRequest): RefineGifCommitResult;
   nextInexactRangeId(afterRangeId: CapturedRangeId): CapturedRangeId | null;
-  refinementChanged(session: RefineGifSession): void;
+  refinementChanged(session: RangeRefinementDraft): void;
 }
 
-export class RefineGifSession {
+export class RangeRefinementDraft {
   private start: CaptureEndpoint;
   private end: CaptureEndpoint;
   private focusedEndpoint: RefineGifEndpoint;
-  private status: IRefineGifSessionSnapshot['status'] = 'editing';
+  private status: IRangeRefinementDraftSnapshot['status'] = 'editing';
   private message: string | null = null;
   private seekRevision = 1;
   private stagedRevision = 0;
   private startThumbnail: FrameReviewDisplayFrame | null = null;
 
   constructor(
-    private readonly owner: IRefineGifSessionOwner,
+    private readonly owner: IRangeRefinementDraftOwner,
     private readonly original: CapturedRange,
   ) {
     this.start = original.start;
@@ -72,7 +72,7 @@ export class RefineGifSession {
     this.focusedEndpoint = 'start';
   }
 
-  get snapshot(): IRefineGifSessionSnapshot {
+  get snapshot(): IRangeRefinementDraftSnapshot {
     return Object.freeze({
       rangeId: this.original.id,
       sourceGeneration: this.original.sourceGeneration,

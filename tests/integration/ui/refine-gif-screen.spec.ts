@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { IGifExtractionSessionSnapshot } from '../../../src/app/gif-extraction-session.js';
-import type { IRefineGifSessionSnapshot } from '../../../src/app/refine-gif-session.js';
+import type { IRangeRefinementDraftSnapshot } from '../../../src/app/range-refinement-draft.js';
 import { FrameReviewPlayerControl } from '../../../src/ui/frame-review-player-control.js';
 import { GifWorkflowKeyboard } from '../../../src/ui/gif-workflow-keyboard.js';
 import { RefineGifScreen } from '../../../src/ui/refine-gif-screen.js';
@@ -13,8 +13,8 @@ const identity = (frameIndex: number) => Object.freeze({
 });
 
 function refinementSnapshot(
-  status: IRefineGifSessionSnapshot['status'] = 'editing',
-): IRefineGifSessionSnapshot {
+  status: IRangeRefinementDraftSnapshot['status'] = 'editing',
+): IRangeRefinementDraftSnapshot {
   const exact = status === 'committed';
   const original = Object.freeze({
     id: 'range-1' as never,
@@ -44,7 +44,7 @@ function refinementSnapshot(
   });
 }
 
-function extractionSnapshot(refinement: IRefineGifSessionSnapshot): IGifExtractionSessionSnapshot {
+function extractionSnapshot(refinement: IRangeRefinementDraftSnapshot): IGifExtractionSessionSnapshot {
   return Object.freeze({
     lifecycle: 'open',
     source: { name: 'Feature.mp4', sourceHandle: 'source_12345678' } as never,
@@ -117,7 +117,7 @@ describe('RefineGifScreen', () => {
     const session = {
       reviewSession: {} as never,
       get snapshot() { return extractionSnapshot(currentRefinement); },
-      get refinementSession() { return refinement; },
+      get refinementDraft() { return refinement; },
       subscribe: vi.fn((listener: (snapshot: IGifExtractionSessionSnapshot) => void) => {
         publish = listener;
         listener(extractionSnapshot(currentRefinement));

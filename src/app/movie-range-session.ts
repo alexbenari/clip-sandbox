@@ -21,7 +21,7 @@ import type { GifThumbnailState } from './gif-capture-thumbnail-session.js';
 import { GifSessionStatus } from './gif-session-status.js';
 import { RangeExtraction, type IExtractionMovie, type IExtractionPublicationListener } from './range-extraction.js';
 import { RangeRefinement, type BeginRefinementResult } from './range-refinement.js';
-import type { IRefineGifSessionSnapshot, RefineGifSession } from './refine-gif-session.js';
+import type { IRangeRefinementDraftSnapshot, RangeRefinementDraft } from './range-refinement-draft.js';
 import type { IThumbnailCacheService } from './thumbnail-cache-service.js';
 
 export type GifRangeView = CapturedRange & Readonly<{
@@ -47,7 +47,7 @@ export interface IGifExtractionSessionSnapshot {
   readonly draftThumbnail: GifThumbnailState;
   readonly ranges: readonly GifRangeView[];
   readonly selectedRangeId: CapturedRangeId | null;
-  readonly refinement: IRefineGifSessionSnapshot | null;
+  readonly refinement: IRangeRefinementDraftSnapshot | null;
   readonly extractionAvailable?: boolean;
   readonly extractionBatch?: IExtractionBatchProgress | null;
   readonly captureAvailable?: boolean;
@@ -115,7 +115,7 @@ export abstract class MovieRangeSession {
   }
 
   get reviewSession(): IFrameReviewSession | null { return this.movie.review; }
-  get refinementSession(): RefineGifSession | null { return this.refinement.active; }
+  get refinementDraft(): RangeRefinementDraft | null { return this.refinement.active; }
 
   get snapshot(): IGifExtractionSessionSnapshot {
     const { queue } = this;

@@ -2,9 +2,9 @@ import type { IGifExtractionSessionSnapshot } from '../app/gif-extraction-sessio
 import type { MovieRangeSession } from '../app/movie-range-session.js';
 
 // What a Refine screen asks of the session behind GIF Extraction or Collection Refine.
-export type RefineScreenSession = Pick<MovieRangeSession, 'subscribe' | 'snapshot' | 'reviewSession' | 'refinementSession'
+export type RefineScreenSession = Pick<MovieRangeSession, 'subscribe' | 'snapshot' | 'reviewSession' | 'refinementDraft'
   | 'beginRefinement' | 'abandonRefinement' | 'canExtractRange' | 'extractRange' | 'cancelExtraction'>;
-import type { IRefineGifSessionSnapshot, RefineGifEndpoint } from '../app/refine-gif-session.js';
+import type { IRangeRefinementDraftSnapshot, RefineGifEndpoint } from '../app/range-refinement-draft.js';
 import { CaptureEndpoints } from '../domain/capture-endpoint.js';
 import type { CapturedRangeId } from '../domain/captured-range.js';
 import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
@@ -129,7 +129,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
   private destroyed = false;
   private lastSeekKey: string | null = null;
   private seekGeneration = 0;
-  private pendingSeek: IRefineGifSessionSnapshot | null = null;
+  private pendingSeek: IRangeRefinementDraftSnapshot | null = null;
   private seeking = false;
   private previewRevision: number | null = null;
   private previewOperation = 0;
@@ -308,7 +308,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
   private markEndpoint(endpoint: RefineGifEndpoint): void {
     if (this.options.player.exactPreviewPhase() === 'running') return;
     this.options.player.interruptJumps();
-    const refinement = this.options.session?.refinementSession;
+    const refinement = this.options.session?.refinementDraft;
     if (!refinement) return;
     const capture = this.options.player.displayedCapture();
     if (endpoint === 'start') refinement.markStart(capture);
@@ -321,7 +321,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
       this.jump(endpoint);
       return;
     }
-    this.options.session?.refinementSession?.focus(endpoint);
+    this.options.session?.refinementDraft?.focus(endpoint);
   }
 
   private canJump(): boolean {
@@ -358,7 +358,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
 
   private async commitAsync(): Promise<void> {
     const session = this.options.session;
-    const refinement = session?.refinementSession;
+    const refinement = session?.refinementDraft;
     if (!session || !refinement || !refinement.snapshot.canCommit) return;
     const revision = session.snapshot.previewRevision;
     if (this.options.player.exactPreviewPhase() !== 'inactive') {
@@ -367,7 +367,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
         this.localStatus.textContent = error instanceof Error ? error.message : 'Playback recovery failed.';
       }
     }
-    if (session.snapshot.previewRevision !== revision || session.refinementSession !== refinement) return;
+    if (session.snapshot.previewRevision !== revision || session.refinementDraft !== refinement) return;
     refinement.commit();
   }
 
@@ -464,7 +464,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     this.localStatus.textContent = refinement.message ?? this.instruction(refinement);
   }
 
-  private renderEndpoint(endpoint: RefineGifEndpoint, refinement: IRefineGifSessionSnapshot): void {
+  private renderEndpoint(endpoint: RefineGifEndpoint, refinement: IRangeRefinementDraftSnapshot): void {
     const value = endpoint === 'start' ? refinement.start : refinement.end;
     const original = endpoint === 'start' ? refinement.original.start : refinement.original.end;
     const button = endpoint === 'start' ? this.jumpStart : this.jumpEnd;
@@ -480,7 +480,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
       : `Captured at frame ${CaptureEndpoints.frameIndexOf(original).toLocaleString()}`;
   }
 
-  private requestExactPosition(refinement: IRefineGifSessionSnapshot): void {
+  private requestExactPosition(refinement: IRangeRefinementDraftSnapshot): void {
     if (refinement.status !== 'editing') return;
     const key = `${refinement.rangeId}:${refinement.seekRevision}`;
     if (this.lastSeekKey === key) return;
@@ -514,7 +514,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     }
   }
 
-  private instruction(refinement: IRefineGifSessionSnapshot): string {
+  private instruction(refinement: IRangeRefinementDraftSnapshot): string {
     if (refinement.status === 'committed') return this.variant.lockedInstruction;
     if (refinement.status === 'invalidated') return this.variant.invalidatedInstruction;
     const label = refinement.focusedEndpoint === 'start' ? 'start' : 'end';

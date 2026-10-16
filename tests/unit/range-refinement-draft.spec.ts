@@ -126,7 +126,7 @@ async function lockExactRange(session: GifExtractionSession, startFrame = 10, en
   return locked.range;
 }
 
-describe('RefineGifSession', () => {
+describe('RangeRefinementDraft', () => {
   it('leaves the other captures available when the active refinement is removed', async () => {
     const { session } = await openSession();
     const first = await lockExactRange(session, 10, 20);

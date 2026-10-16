@@ -6,16 +6,16 @@ import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capt
 import type { GifSessionStatus } from './gif-session-status.js';
 import type { RangeExtraction } from './range-extraction.js';
 import {
-  RefineGifSession,
+  RangeRefinementDraft,
   type IRefineGifCommitRequest,
-  type IRefineGifSessionOwner,
+  type IRangeRefinementDraftOwner,
   type RefineGifCommitResult,
-} from './refine-gif-session.js';
+} from './range-refinement-draft.js';
 
 // 'stopped' means nothing more needs saying: the saved-frame check already reported its failure,
 // or a newer request or a different movie replaced this one while the frames were being checked.
 export type BeginRefinementResult =
-  | Readonly<{ kind: 'started'; session: RefineGifSession }>
+  | Readonly<{ kind: 'started'; session: RangeRefinementDraft }>
   | Readonly<{ kind: 'rejected'; message: string }>
   | Readonly<{ kind: 'stopped' }>;
 
@@ -30,14 +30,14 @@ type RangeRefinementDependencies = Readonly<{
 const STOPPED: BeginRefinementResult = Object.freeze({ kind: 'stopped' });
 
 // The refinement of one range against exact frames, and whether it may replace that range.
-export class RangeRefinement implements IRefineGifSessionOwner {
-  private refinement: RefineGifSession | null = null;
+export class RangeRefinement implements IRangeRefinementDraftOwner {
+  private refinement: RangeRefinementDraft | null = null;
   private lastSeenRevision: number | null = null;
   private latestRequest = 0;
 
   constructor(private readonly deps: RangeRefinementDependencies) {}
 
-  get active(): RefineGifSession | null { return this.refinement; }
+  get active(): RangeRefinementDraft | null { return this.refinement; }
 
   // A saved range is first checked against the movie, so no caller has to remember to do it.
   async beginRefinement(rangeId: CapturedRangeId): Promise<BeginRefinementResult> {
@@ -143,7 +143,7 @@ export class RangeRefinement implements IRefineGifSessionOwner {
     return ranges.slice(currentIndex + 1).find(range => range.kind === 'needs-exact-frames')?.id ?? null;
   }
 
-  refinementChanged(session: RefineGifSession): void {
+  refinementChanged(session: RangeRefinementDraft): void {
     if (this.refinement !== session) return;
     const current = session.snapshot.stagedRevision;
     if (current !== this.lastSeenRevision || session.snapshot.status !== 'editing') {
@@ -165,7 +165,7 @@ export class RangeRefinement implements IRefineGifSessionOwner {
     if (!movie.reviewState?.captureEnabled || range.sourceGeneration !== movie.sourceGeneration) {
       return this.reject('Exact frame review is not ready for this range.');
     }
-    this.refinement = new RefineGifSession(this, range);
+    this.refinement = new RangeRefinementDraft(this, range);
     this.lastSeenRevision = 0;
     status.advancePreview();
     queue.markSelected(rangeId);
