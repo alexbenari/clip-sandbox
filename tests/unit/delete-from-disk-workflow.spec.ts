@@ -50,16 +50,20 @@ function deleteWorkflow({ saveOutcome = 'saved' as SaveOutcome, failingDeletes =
   const toolbar = new EventSource<{ deleteFromDiskRequested: void }>();
   const zoom = { isOpen: vi.fn(() => false) };
   const folderSelection = { reloadSelection: vi.fn(async () => undefined) };
+  const openFolder = new AppSessionState();
+  openFolder.setCurrentFolderAccess({ folderPath: 'D:\\clips' });
+  const collectionSave = { saveActive: vi.fn(async (): Promise<SaveOutcome> => saveOutcome) };
   const workflow = new DeleteFromDiskWorkflow({
     pipelineWorkingCopy,
-    openFolder: new AppSessionState(),
+    openFolder,
+    folders: { isActiveFolder: (folderAccess: { folderPath: string } | null, folderPath: string) => folderAccess?.folderPath === folderPath },
     files,
     fileWriter: { write: vi.fn(async (collection: Collection) => { written.push(collection); return { mode: 'saved' }; }) },
     dialog,
     grid,
     toolbar,
     zoom,
-    collectionSave: { saveActive: vi.fn(async () => saveOutcome) },
+    collectionSave,
     folderSelection,
     collectionView: { refreshToolbar: vi.fn() },
     diagnostics: { logDeleteFailures: vi.fn(async () => undefined) },
@@ -70,7 +74,10 @@ function deleteWorkflow({ saveOutcome = 'saved' as SaveOutcome, failingDeletes =
     const ids = pipelineWorkingCopy.currentClipSequence!.orderedClips().map(clip => clip.id);
     pipelineWorkingCopy.replaceCurrentOrder([...ids].reverse());
   };
-  return { workflow, pipeline, pipelineWorkingCopy, grid, dialog, preflights, confirmations, files, written, entries, toolbar, zoom, folderSelection, makeViewDirty };
+  return {
+    workflow, pipeline, pipelineWorkingCopy, grid, dialog, preflights, confirmations, files, written, entries, toolbar, zoom,
+    folderSelection, openFolder, collectionSave, makeViewDirty,
+  };
 }
 
 describe('DeleteFromDiskWorkflow', () => {
@@ -136,6 +143,50 @@ describe('DeleteFromDiskWorkflow', () => {
 
     expect(context.confirmations).toHaveLength(0);
     expect(context.preflights).toHaveLength(1);
+  });
+
+  it('drops the deletion, without asking to confirm, when another folder was opened while its save was pending', async () => {
+    const context = deleteWorkflow();
+    context.makeViewDirty();
+    context.collectionSave.saveActive.mockImplementationOnce(async () => {
+      context.openFolder.setCurrentFolderAccess({ folderPath: 'D:\\other' });
+      return 'saved';
+    });
+
+    context.workflow.start();
+    context.preflights[0].onSave();
+
+    await vi.waitFor(() => expect(context.entries.at(-1)).toMatchObject({ kind: 'error', affected: 'alpha.mp4' }));
+    expect(context.confirmations).toHaveLength(0);
+    expect(context.files.deleteFiles).not.toHaveBeenCalled();
+  });
+
+  it('deletes nothing when another folder was opened while the confirmation was showing', async () => {
+    const context = deleteWorkflow();
+
+    context.workflow.start();
+    context.openFolder.setCurrentFolderAccess({ folderPath: 'D:\\other' });
+    context.confirmations[0].onConfirm();
+
+    await vi.waitFor(() => expect(context.entries.at(-1)).toMatchObject({ kind: 'error', affected: 'alpha.mp4' }));
+    expect(context.files.deleteFiles).not.toHaveBeenCalled();
+  });
+
+  it('still deletes when saving refreshed the same folder', async () => {
+    const context = deleteWorkflow();
+    context.makeViewDirty();
+    context.collectionSave.saveActive.mockImplementationOnce(async () => {
+      context.openFolder.setCurrentFolderAccess({ folderPath: 'D:\\clips' });
+      return 'saved';
+    });
+
+    context.workflow.start();
+    context.preflights[0].onSave();
+    await vi.waitFor(() => expect(context.confirmations).toHaveLength(1));
+    context.confirmations[0].onConfirm();
+
+    await vi.waitFor(() => expect(context.files.deleteFiles)
+      .toHaveBeenCalledWith(expect.objectContaining({ filenames: ['alpha.mp4'] })));
   });
 
   it('reports which files could not be deleted', async () => {

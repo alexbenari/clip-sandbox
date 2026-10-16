@@ -12,6 +12,8 @@ import type { FolderSelectionWorkflow } from './folder-selection-workflow.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 type DeleteRequest = Readonly<{
+  // Kept so a confirmation never deletes same-named files from a folder opened since.
+  folderAccess: FolderAccess;
   selectedClipIds: string[];
   selectedClipNames: string[];
   affectedSavedCollectionCount: number;
@@ -35,6 +37,10 @@ export interface IDeleteFromDiskDialog {
   closeAll(): void;
 }
 
+export interface IActiveFolderCheck {
+  isActiveFolder(folderAccess: FolderAccess | null, folderPath: string): boolean;
+}
+
 export interface IFileDeleter {
   deleteFiles(request: { folderAccess: FolderAccess | null; filenames: string[] }): Promise<{
     code: string;
@@ -46,6 +52,7 @@ type DeleteFromDiskDependencies = Readonly<{
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'activeCollectionFilename' | 'currentClipSequence' | 'isPipelineMode'
     | 'hasDirtyClipSequenceChanges' | 'clipNamesForIdsInOrder'>;
   openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
+  folders: IActiveFolderCheck;
   files: IFileDeleter;
   fileWriter: Pick<CollectionFileWriter, 'write'>;
   dialog: IDeleteFromDiskDialog;
@@ -101,12 +108,14 @@ export class DeleteFromDiskWorkflow {
   private requestFromSelection(): DeleteRequest | null {
     const { pipelineWorkingCopy } = this.deletion;
     const pipeline = pipelineWorkingCopy.pipeline;
-    if (!pipelineWorkingCopy.currentClipSequence || !pipeline) return null;
+    const folderAccess = this.deletion.openFolder.currentFolderAccess;
+    if (!pipelineWorkingCopy.currentClipSequence || !pipeline || !folderAccess) return null;
     const selectedClipIds = this.deletion.grid.getSelectedClipIds();
     if (selectedClipIds.length === 0) return null;
     const selectedClipNames = pipelineWorkingCopy.clipNamesForIdsInOrder(selectedClipIds);
     if (selectedClipNames.length === 0) return null;
     return {
+      folderAccess,
       selectedClipIds,
       selectedClipNames,
       affectedSavedCollectionCount: pipeline.savedCollectionEntriesContainingClipNames(selectedClipNames).length,
@@ -143,6 +152,11 @@ export class DeleteFromDiskWorkflow {
       this.openPreflight();
       return;
     }
+    if (!this.isForOpenFolder(request)) {
+      this.pendingRequest = null;
+      this.reportFolderChanged(request);
+      return;
+    }
     this.openConfirmation(request);
   }
 
@@ -159,6 +173,10 @@ export class DeleteFromDiskWorkflow {
     if (!request || !pipelineWorkingCopy.currentClipSequence || !pipeline) return;
     this.deletion.dialog.closeConfirm();
     this.pendingRequest = null;
+    if (!this.isForOpenFolder(request)) {
+      this.reportFolderChanged(request);
+      return;
+    }
 
     const outcome = await this.deleteFilesAndUpdatePipeline(request, pipeline);
     if (!outcome) {
@@ -204,7 +222,7 @@ export class DeleteFromDiskWorkflow {
 
   private async deleteFilesAndUpdatePipeline(request: DeleteRequest, pipeline: Pipeline): Promise<DeleteOutcome | null> {
     const deleteResult = await this.deletion.files.deleteFiles({
-      folderAccess: this.deletion.openFolder.currentFolderAccess,
+      folderAccess: request.folderAccess,
       filenames: request.selectedClipNames,
     });
     if (deleteResult.code === 'unavailable') return null;
@@ -233,6 +251,18 @@ export class DeleteFromDiskWorkflow {
       }
     }
     return { cleanedSavedCollectionCount, failedCollectionRewrites };
+  }
+
+  // A refresh of the same folder replaces its access object, so the folder is compared by path.
+  private isForOpenFolder(request: DeleteRequest): boolean {
+    return this.deletion.folders.isActiveFolder(this.deletion.openFolder.currentFolderAccess, request.folderAccess.folderPath);
+  }
+
+  private reportFolderChanged(request: DeleteRequest): void {
+    this.deletion.reporter.failure('Nothing was deleted because another folder was opened.', {
+      affected: request.selectedClipNames.join(', '),
+      recovery: 'Select the clips again in the open folder, then delete them.',
+    });
   }
 
   private reportFailedDeletion(statusText: string, outcome: DeleteOutcome): void {

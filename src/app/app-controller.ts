@@ -312,6 +312,7 @@ export class AppController {
     const deleteFromDisk = new DeleteFromDiskWorkflow({
       pipelineWorkingCopy,
       openFolder: state,
+      folders,
       files: folderFiles,
       fileWriter: collectionFileWriter,
       dialog: deleteFromDiskDialog,
