@@ -73,11 +73,6 @@ export class CollectionSaveWorkflow {
     return outcome;
   }
 
-  cancelSaveAsNew(): void {
-    this.save.saveAsNewDialog.close();
-    this.settleSaveAsNew('cancelled');
-  }
-
   dispose(): void {
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe();
     this.settleSaveAsNew('cancelled');

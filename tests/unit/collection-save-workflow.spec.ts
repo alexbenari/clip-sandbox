@@ -118,17 +118,13 @@ describe('CollectionSaveWorkflow', () => {
     await expect(outcome).resolves.toBe('cancelled');
   });
 
-  it('settles as cancelled when the dialog is closed directly or the workflow is disposed', async () => {
-    const closedDirectly = saveWorkflow();
-    const directOutcome = closedDirectly.workflow.saveAsNew();
-    closedDirectly.workflow.cancelSaveAsNew();
-    await expect(directOutcome).resolves.toBe('cancelled');
-    expect(closedDirectly.dialog.close).toHaveBeenCalled();
+  it('settles as cancelled when the workflow is disposed', async () => {
+    const { workflow } = saveWorkflow();
+    const outcome = workflow.saveAsNew();
 
-    const disposed = saveWorkflow();
-    const disposedOutcome = disposed.workflow.saveAsNew();
-    disposed.workflow.dispose();
-    await expect(disposedOutcome).resolves.toBe('cancelled');
+    workflow.dispose();
+
+    await expect(outcome).resolves.toBe('cancelled');
   });
 
   it('hands the open dialog to a newer request, so only the latest caller resumes after the save', async () => {
