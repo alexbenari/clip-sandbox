@@ -28,7 +28,6 @@ export type DesktopDeleteFileResult =
 const WINDOWS_INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000]/;
 const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
-/** Saves, appends to and deletes top-level files of the open folder, refusing names that would leave it. */
 export class ElectronFolderFileService {
   constructor(private readonly api: ElectronFolderFileApi | null | undefined) {}
 

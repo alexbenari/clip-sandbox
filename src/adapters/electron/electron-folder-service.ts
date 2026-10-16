@@ -28,7 +28,6 @@ type ElectronFolderWindow = Window & {
   clipSandboxDesktop?: ElectronFolderApi;
 };
 
-/** Opens and refreshes desktop folders, and turns what the desktop API lists into renderer files. */
 export class ElectronFolderService {
   constructor(private readonly api: ElectronFolderApi | null | undefined) {}
 

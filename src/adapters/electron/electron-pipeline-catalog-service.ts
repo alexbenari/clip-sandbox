@@ -17,7 +17,6 @@ type ElectronPipelineCatalogWindow = Window & {
   clipSandboxDesktop?: ElectronPipelineCatalogApi;
 };
 
-/** Lists, describes and opens the configured Pipelines through the desktop API, checking each response. */
 export class ElectronPipelineCatalogService {
   constructor(
     private readonly api: ElectronPipelineCatalogApi | null | undefined,
