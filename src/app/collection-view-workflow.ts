@@ -4,6 +4,7 @@ import type { Pipeline } from '../domain/pipeline.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
+import type { FolderAccess } from './folder-access.js';
 import type { IEventSource } from './event-source.js';
 import type { PipelineSession } from './pipeline-session.js';
 
@@ -107,7 +108,7 @@ export class CollectionViewWorkflow {
     timeout = 2500,
   }: {
     collection?: Collection | null;
-    folderSession?: unknown;
+    folderSession?: FolderAccess | null;
     statusText?: string;
     timeout?: number;
   } = {}): void {

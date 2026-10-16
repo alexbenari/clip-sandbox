@@ -11,8 +11,8 @@ describe('app state', () => {
   test('records the open folder session', () => {
     const state = new AppSessionState();
 
-    state.setCurrentFolderSession({ accessMode: 'readwrite' });
+    state.setCurrentFolderSession({ folderPath: 'C:/clips' });
 
-    expect(state.currentFolderSession).toEqual({ accessMode: 'readwrite' });
+    expect(state.currentFolderSession).toEqual({ folderPath: 'C:/clips' });
   });
 });

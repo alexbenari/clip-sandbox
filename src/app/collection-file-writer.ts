@@ -1,12 +1,13 @@
 import type { Collection } from '../domain/collection.js';
 import { CollectionTextFormat } from '../business-logic/collection-text-format.js';
+import type { FolderAccess } from './folder-access.js';
 
 export interface ITextFileSaver {
-  saveTextFile(request: { folderSession?: unknown; filename?: string; text?: string }): Promise<{ mode?: string }>;
+  saveTextFile(request: { folderSession: FolderAccess | null; filename?: string; text?: string }): Promise<{ mode?: string }>;
 }
 
 export interface IOpenFolderSource {
-  readonly currentFolderSession: unknown;
+  readonly currentFolderSession: FolderAccess | null;
 }
 
 export class CollectionFileWriter {

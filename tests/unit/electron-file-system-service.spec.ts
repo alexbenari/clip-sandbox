@@ -27,17 +27,20 @@ describe('electron file system service', () => {
 
     const result = await service.pickFolder();
 
-    expect(result.folderSession).toEqual({
-      kind: 'desktop-directory',
-      accessMode: 'readwrite',
-      folderPath: 'C:/clips',
-    });
+    expect(result.folderSession).toEqual({ folderPath: 'C:/clips' });
     expect(result.folderName).toBe('clips');
     expect(result.files).toHaveLength(1);
     expect(result.files[0].name).toBe('alpha.txt');
     expect(result.files[0].webkitRelativePath).toBe('alpha.txt');
     expect(result.files[0].path).toBe('C:/clips/alpha.txt');
     expect(Object.hasOwn(result.files[0], 'frameReviewSourceHandle')).toBe(false);
+  });
+
+  it('refuses a picked folder that has no path, so no folder access exists without one', async () => {
+    const api = { pickFolder: vi.fn(async () => ({ canceled: false, folderPath: '', folderName: 'clips', files: [] })) };
+    const service = new ElectronFileSystemService({ api });
+
+    await expect(service.pickFolder()).rejects.toThrow('folder without a path');
   });
 
   it('reloads a previously selected desktop folder through the desktop api', async () => {
@@ -57,14 +60,10 @@ describe('electron file system service', () => {
     };
     const service = new ElectronFileSystemService({ api });
 
-    const result = await service.refreshFolder({ accessMode: 'readwrite', folderPath: 'C:/clips' });
+    const result = await service.refreshFolder({ folderPath: 'C:/clips' });
 
     expect(api.refreshFolder).toHaveBeenCalledWith({ folderPath: 'C:/clips' });
-    expect(result.folderSession).toEqual({
-      kind: 'desktop-directory',
-      accessMode: 'readwrite',
-      folderPath: 'C:/clips',
-    });
+    expect(result.folderSession).toEqual({ folderPath: 'C:/clips' });
     expect(result.folderName).toBe('clips');
     expect(result.files.map(file => file.name)).toEqual(['bravo.mp4']);
   });
@@ -115,7 +114,7 @@ describe('electron file system service', () => {
     const service = new ElectronFileSystemService({ api });
 
     const result = await service.deleteFiles({
-      folderSession: { accessMode: 'readwrite', folderPath: 'C:/clips' },
+      folderSession: { folderPath: 'C:/clips' },
       filenames: ['alpha.mp4', 'bravo.mp4'],
     });
 
@@ -134,7 +133,7 @@ describe('electron file system service', () => {
       appendTextFile: vi.fn(async () => ({ mode: 'saved' })),
     };
     const service = new ElectronFileSystemService({ api });
-    const folderSession = { accessMode: 'readwrite', folderPath: 'C:/clips' };
+    const folderSession = { folderPath: 'C:/clips' };
 
     await expect(service.saveTextFile({
       folderSession,
@@ -163,7 +162,7 @@ describe('electron file system service', () => {
     const service = new ElectronFileSystemService({ api });
 
     const result = await service.deleteFiles({
-      folderSession: { accessMode: 'readwrite', folderPath: 'C:/clips' },
+      folderSession: { folderPath: 'C:/clips' },
       filenames: ['alpha.mp4', '..\\secret.mp4'],
     });
 

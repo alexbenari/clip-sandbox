@@ -47,10 +47,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
   const workflow = new ZoomWorkflow({
     pipelineSession,
     openFolder,
-    folderFiles: {
-      canMutateDisk: (session: unknown): session is { folderPath: string } => session === folderSession,
-      toRendererFile: created => created as File,
-    },
+    folderFiles: { toRendererFile: created => created as File },
     zoom: zoomView,
     grid,
     screens,

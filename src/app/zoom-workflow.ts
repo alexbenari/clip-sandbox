@@ -41,7 +41,6 @@ export interface IZoomEditMenu {
 }
 
 export interface IZoomFolderFiles {
-  canMutateDisk(folderSession: unknown): folderSession is { folderPath: string };
   toRendererFile(createdFile: CreatedVideoFile): ClipFile;
 }
 
@@ -160,12 +159,11 @@ export class ZoomWorkflow {
     const { reporter } = this.zoom;
     const sourceClip = this.zoomedClip();
     if (!edit || !sourceClip || !this.zoom.pipelineSession.pipeline) return;
-    const folderSession = this.zoom.openFolder.currentFolderSession;
     try {
       await this.videoEdits.run({
         edit,
         sourceClip,
-        folderSession: this.zoom.folderFiles.canMutateDisk(folderSession) ? folderSession : null,
+        folderSession: this.zoom.openFolder.currentFolderSession,
       });
     } catch (error) {
       const problem = error instanceof VideoEditNotificationError

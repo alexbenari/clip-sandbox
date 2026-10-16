@@ -1,10 +1,11 @@
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
+import type { FolderAccess } from './folder-access.js';
 import type { PipelineSession } from './pipeline-session.js';
 
 type OpenFolderRefreshSessionOptions = Readonly<{
-  folders: { isActiveFolder(folderSession: unknown, folderPath: string): boolean };
+  folders: { isActiveFolder(folderSession: FolderAccess | null, folderPath: string): boolean };
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   pipelineSession: Pick<PipelineSession, 'hasDirtyClipSequenceChanges'>;
   // Refreshing goes through folder selection, which itself saves first; the composition root closes that loop.

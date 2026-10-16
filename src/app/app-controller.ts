@@ -286,6 +286,7 @@ export class AppController {
       pipelineSession,
       openFolder: state,
       folders: fileSystem,
+      pipelineCatalog: fileSystem,
       pipelineFactory,
       collectionFormat,
       diagnostics,
@@ -346,14 +347,12 @@ export class AppController {
       collectionScreenId: collectionScreen.id,
       pipelineSession,
       openFolder: state,
-      folders: fileSystem,
       diagnostics,
       reporter: activityReporter,
     });
     const gridContextMenu = new GridContextMenuWorkflow({
       pipelineSession,
       openFolder: state,
-      folders: fileSystem,
       refinementAvailability: collectionRefinementService,
       grid,
       menu: gridContextMenuControl,

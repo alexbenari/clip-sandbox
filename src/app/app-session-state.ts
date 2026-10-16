@@ -1,7 +1,9 @@
-export class AppSessionState {
-  currentFolderSession: unknown = null;
+import type { FolderAccess } from './folder-access.js';
 
-  setCurrentFolderSession(folderSession: unknown): void {
+export class AppSessionState {
+  currentFolderSession: FolderAccess | null = null;
+
+  setCurrentFolderSession(folderSession: FolderAccess | null): void {
     this.currentFolderSession = folderSession || null;
   }
 }

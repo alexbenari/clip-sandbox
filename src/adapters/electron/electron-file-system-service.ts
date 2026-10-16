@@ -8,6 +8,7 @@ import type {
   IPipelineCatalogEntry,
   PipelineCatalogResult,
 } from '../../app/pipeline-catalog.js';
+import type { FolderAccess, FolderContents } from '../../app/folder-access.js';
 
 type ElectronFolderEntry = {
   name?: string;
@@ -55,12 +56,6 @@ type ElectronFileSystemWindow = Window & {
 const WINDOWS_INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000]/;
 const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
-export type DesktopFolderSession = {
-  kind: 'desktop-directory';
-  accessMode: 'readwrite';
-  folderPath: string;
-};
-
 export type DesktopDeleteFileResult =
   | { filename: string; ok: true; error: null }
   | { filename: string; ok: false; code: string; error: Error };
@@ -82,14 +77,6 @@ export class ElectronFileSystemService {
     this.win = win as ElectronFileSystemWindow;
     this.api = api;
     this.videoEditService = videoEditService || new ElectronVideoEditService({ api });
-  }
-
-  createFolderSession(folderPath: string): DesktopFolderSession {
-    return {
-      kind: 'desktop-directory',
-      accessMode: 'readwrite',
-      folderPath,
-    };
   }
 
   toRendererFile(entry: ElectronFolderEntry | CreatedVideoFile): ClipFile {
@@ -132,19 +119,8 @@ export class ElectronFileSystemService {
     return this.api as Required<Pick<ElectronDesktopApi, 'pickFolder' | 'refreshFolder' | 'saveTextFile' | 'appendTextFile' | 'deleteFiles'>> & ElectronDesktopApi;
   }
 
-  canMutateDisk(folderSession: unknown): folderSession is DesktopFolderSession {
-    const session = folderSession as Partial<DesktopFolderSession> | null;
-    return !!(
-      typeof folderSession === 'object'
-      && folderSession !== null
-      && session?.accessMode === 'readwrite'
-      && typeof session.folderPath === 'string'
-      && session.folderPath.length > 0
-    );
-  }
-
-  isActiveFolder(folderSession: unknown, folderPath: string): boolean {
-    return this.canMutateDisk(folderSession)
+  isActiveFolder(folderSession: FolderAccess | null, folderPath: string): boolean {
+    return !!folderSession
       && this.normalizedFolderPath(folderSession.folderPath) === this.normalizedFolderPath(folderPath);
   }
 
@@ -165,7 +141,7 @@ export class ElectronFileSystemService {
     return normalizedFilename;
   }
 
-  async pickFolder(_options: { onFileReadError?: (info: unknown, folderSession: DesktopFolderSession) => void } = {}): Promise<{ folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string }> {
+  async pickFolder(): Promise<FolderContents> {
     const result = await this.requireApi().pickFolder();
     if (!result || result.canceled) {
       throw new DOMException('The user aborted a request.', 'AbortError');
@@ -173,10 +149,7 @@ export class ElectronFileSystemService {
     return this.folderSelection(result);
   }
 
-  async refreshFolder(folderSession: unknown): Promise<{ folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string }> {
-    if (!this.canMutateDisk(folderSession)) {
-      throw new Error('Folder refresh is unavailable for the current folder session.');
-    }
+  async refreshFolder(folderSession: FolderAccess): Promise<FolderContents> {
     const result = await this.requireApi().refreshFolder({ folderPath: folderSession.folderPath });
     if (!result || result.canceled) {
       throw new Error('The current folder could not be refreshed.');
@@ -212,7 +185,7 @@ export class ElectronFileSystemService {
     };
   }
 
-  async openPipelineCatalogEntry(entry: IPipelineCatalogEntry): Promise<{ folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string }> {
+  async openPipelineCatalogEntry(entry: IPipelineCatalogEntry): Promise<FolderContents> {
     const api = this.requireApi();
     if (!api.openPipelineCatalogEntry) throw new Error('Pipeline catalog is unavailable.');
     const result = await api.openPipelineCatalogEntry({ pipelineId: entry.id });
@@ -220,9 +193,13 @@ export class ElectronFileSystemService {
     return this.folderSelection(result);
   }
 
-  private folderSelection(result: DesktopFolderResult): { folderSession: DesktopFolderSession; files: ClipFile[]; folderName: string } {
+  // The desktop API is the only source of folder access, so its folder path is checked here, once.
+  private folderSelection(result: DesktopFolderResult): FolderContents {
+    if (typeof result.folderPath !== 'string' || result.folderPath.length === 0) {
+      throw new Error('The desktop API returned a folder without a path.');
+    }
     return {
-      folderSession: this.createFolderSession(result.folderPath),
+      folderSession: Object.freeze({ folderPath: result.folderPath }),
       files: Array.from(result.files || []).map((entry) => this.toRendererFile(entry)),
       folderName: result.folderName || '',
     };
@@ -269,8 +246,8 @@ export class ElectronFileSystemService {
     folderSession = null,
     filename = 'default-collection.txt',
     text = '',
-  }: { folderSession?: unknown; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
-    if (!this.canMutateDisk(folderSession)) {
+  }: { folderSession?: FolderAccess | null; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
+    if (!folderSession) {
       throw new Error('Disk mutation is unavailable for the current folder session.');
     }
     const normalizedFilename = this.validateTopLevelFilename(filename);
@@ -285,8 +262,8 @@ export class ElectronFileSystemService {
     folderSession = null,
     filename = '',
     text = '',
-  }: { folderSession?: unknown; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
-    if (!this.canMutateDisk(folderSession)) {
+  }: { folderSession?: FolderAccess | null; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
+    if (!folderSession) {
       return { mode: 'unavailable' };
     }
     const normalizedFilename = this.validateTopLevelFilename(filename);
@@ -300,13 +277,13 @@ export class ElectronFileSystemService {
   async deleteFiles({
     folderSession = null,
     filenames = [],
-  }: { folderSession?: unknown; filenames?: Iterable<string> } = {}): Promise<{
+  }: { folderSession?: FolderAccess | null; filenames?: Iterable<string> } = {}): Promise<{
     ok: boolean;
     code: string;
     results: DesktopDeleteFileResult[];
   }> {
     const rawFilenames = Array.from(filenames || []).map((filename) => String(filename || '').trim());
-    if (!this.canMutateDisk(folderSession)) {
+    if (!folderSession) {
       return {
         ok: false,
         code: 'unavailable',

@@ -7,6 +7,7 @@ import type { CollectionFileWriter } from './collection-file-writer.js';
 import type { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
+import type { FolderAccess } from './folder-access.js';
 import type { FolderSelectionWorkflow } from './folder-selection-workflow.js';
 import type { PipelineSession } from './pipeline-session.js';
 
@@ -35,7 +36,7 @@ export interface IDeleteFromDiskDialog {
 }
 
 export interface IFileDeleter {
-  deleteFiles(request: { folderSession: unknown; filenames: string[] }): Promise<{
+  deleteFiles(request: { folderSession: FolderAccess | null; filenames: string[] }): Promise<{
     code: string;
     results: ReadonlyArray<{ filename: string; ok: boolean; code?: string; error?: unknown }>;
   }>;

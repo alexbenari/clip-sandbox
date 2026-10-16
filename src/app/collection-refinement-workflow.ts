@@ -27,7 +27,6 @@ type CollectionRefinementDependencies = Readonly<{
   collectionScreenId: string;
   pipelineSession: Pick<PipelineSession, 'hasDirtyClipSequenceChanges' | 'activeCollectionFilename'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
-  folders: { canMutateDisk(folderSession: unknown): folderSession is { folderPath: string } };
   diagnostics: Pick<AppDiagnostics, 'logRuntimeError'>;
   reporter: Pick<ActivityReporter, 'failure'>;
 }>;
@@ -113,7 +112,6 @@ export class CollectionRefinementWorkflow {
   }
 
   private openFolderPath(): string | null {
-    const folderSession = this.refinement.openFolder.currentFolderSession;
-    return this.refinement.folders.canMutateDisk(folderSession) ? folderSession.folderPath : null;
+    return this.refinement.openFolder.currentFolderSession?.folderPath ?? null;
   }
 }

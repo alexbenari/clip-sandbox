@@ -1,7 +1,8 @@
 import type { InvalidCollectionDescription } from '../domain/collection-description-validator.js';
+import type { FolderAccess } from './folder-access.js';
 
 type ErrorLogFileSystem = {
-  appendTextFile(request: { folderSession?: unknown; filename: string; text: string }): Promise<{ mode?: string }>;
+  appendTextFile(request: { folderSession: FolderAccess | null; filename: string; text: string }): Promise<{ mode?: string }>;
 };
 
 type DeleteFailureSummary = {
@@ -12,7 +13,7 @@ type DeleteFailureSummary = {
 export class AppDiagnostics {
   fileSystem: ErrorLogFileSystem;
   errorLogFilename: string;
-  getCurrentFolderSession: () => unknown;
+  getCurrentFolderSession: () => FolderAccess | null;
 
   constructor({
     fileSystem,
@@ -21,14 +22,14 @@ export class AppDiagnostics {
   }: {
     fileSystem: ErrorLogFileSystem;
     errorLogFilename?: string;
-    getCurrentFolderSession?: () => unknown;
+    getCurrentFolderSession?: () => FolderAccess | null;
   }) {
     this.fileSystem = fileSystem;
     this.errorLogFilename = errorLogFilename;
     this.getCurrentFolderSession = getCurrentFolderSession;
   }
 
-  async appendErrorLog(text: string, folderSession: unknown = this.getCurrentFolderSession()): Promise<boolean> {
+  async appendErrorLog(text: string, folderSession: FolderAccess | null = this.getCurrentFolderSession()): Promise<boolean> {
     if (!text) return false;
     try {
       const { mode } = await this.fileSystem.appendTextFile({
@@ -44,25 +45,17 @@ export class AppDiagnostics {
     return false;
   }
 
-  async logInvalidDescription(result: InvalidCollectionDescription, folderSession: unknown): Promise<void> {
+  async logInvalidDescription(result: InvalidCollectionDescription, folderSession: FolderAccess | null): Promise<void> {
     const file = result.filename ? `File: ${result.filename}\n` : '';
     await this.appendErrorLog(`Collection enumeration\n${file}Problem: ${result.code}\nDetails: ${result.message}\n\n`, folderSession);
   }
 
-  async logRuntimeError(problem: string, err: unknown, folderSession: unknown = this.getCurrentFolderSession()): Promise<void> {
+  async logRuntimeError(problem: string, err: unknown, folderSession: FolderAccess | null = this.getCurrentFolderSession()): Promise<void> {
     const detail = `Runtime error\nProblem: ${problem}\nDetails: ${this.errorDetail(err)}\n\n`;
     await this.appendErrorLog(detail, folderSession);
   }
 
-  async logDirectoryReadError({ filename = '', attempts = 0, error }: { filename?: string; attempts?: number; error?: unknown } = {}, folderSession: unknown): Promise<void> {
-    const problem = filename
-      ? `Failed to read folder entry: ${filename}`
-      : 'Failed to read folder entry';
-    const detail = `Directory enumeration error\nProblem: ${problem}\nAttempts: ${attempts}\nDetails: ${this.errorDetail(error)}\n\n`;
-    await this.appendErrorLog(detail, folderSession);
-  }
-
-  async logVideoMetadataFailure({ filename = '', error }: { filename?: string; error?: unknown } = {}, folderSession: unknown = this.getCurrentFolderSession()): Promise<void> {
+  async logVideoMetadataFailure({ filename = '', error }: { filename?: string; error?: unknown } = {}, folderSession: FolderAccess | null = this.getCurrentFolderSession()): Promise<void> {
     const problem = filename
       ? `Failed to load video metadata: ${filename}`
       : 'Failed to load video metadata';
@@ -70,7 +63,7 @@ export class AppDiagnostics {
     await this.appendErrorLog(detail, folderSession);
   }
 
-  async logDeleteFailures(result: DeleteFailureSummary, folderSession: unknown = this.getCurrentFolderSession()): Promise<void> {
+  async logDeleteFailures(result: DeleteFailureSummary, folderSession: FolderAccess | null = this.getCurrentFolderSession()): Promise<void> {
     for (const failedDelete of Array.from(result?.failedDeletes || [])) {
       await this.appendErrorLog(
         `Disk delete error\nFile: ${failedDelete.filename}\nDetails: ${this.errorDetail(failedDelete.error) || failedDelete.code}\n\n`,

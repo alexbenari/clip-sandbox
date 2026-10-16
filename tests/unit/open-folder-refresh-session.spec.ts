@@ -7,7 +7,7 @@ function refreshSession({ activeFolderPath = 'C:/pipelines/extraction-tmp', dirt
   const reporter = { failure: vi.fn(), technicalDetailsOf: (error: unknown) => String(error) };
   const diagnostics = { logRuntimeError: vi.fn(async () => undefined) };
   const session = new OpenFolderRefreshSession({
-    folders: { isActiveFolder: (current: unknown, folderPath: string) => current === folderSession && folderPath === activeFolderPath },
+    folders: { isActiveFolder: (current: { folderPath: string } | null, folderPath: string) => current === folderSession && folderPath === activeFolderPath },
     openFolder: { currentFolderSession: folderSession },
     pipelineSession,
     refreshActiveFolder,

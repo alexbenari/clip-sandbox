@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CollectionFileWriter } from '../../src/app/collection-file-writer.js';
 import { Collection } from '../../src/domain/collection.js';
 
-const openFolder = { currentFolderSession: { kind: 'desktop-directory', accessMode: 'readwrite', folderPath: 'C:/clips' } };
+const openFolder = { currentFolderSession: { folderPath: 'C:/clips' } };
 
 describe('CollectionFileWriter', () => {
   it('writes the collection as one clip name per line into the open folder', async () => {

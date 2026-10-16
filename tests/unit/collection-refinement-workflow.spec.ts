@@ -44,7 +44,6 @@ function refinementWorkflow({ dirty = false, lookup = async (): Promise<Collecti
     collectionScreenId: 'collection',
     pipelineSession: { hasDirtyClipSequenceChanges: dirty, activeCollectionFilename: () => 'picks.txt' },
     openFolder,
-    folders: { canMutateDisk: (session: unknown): session is { folderPath: string } => session === folderSession },
     diagnostics: { logRuntimeError: vi.fn(async () => undefined) },
     reporter,
   });

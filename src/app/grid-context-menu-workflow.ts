@@ -26,7 +26,6 @@ export interface IClipContextMenu {
 type GridContextMenuDependencies = Readonly<{
   pipelineSession: Pick<PipelineSession, 'pipeline' | 'resolveClip' | 'activeCollectionFilename'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
-  folders: { canMutateDisk(folderSession: unknown): folderSession is { folderPath: string } };
   refinementAvailability: Pick<ICollectionClipRefinementService, 'inspect'> | null;
   grid: IEventSource<{ contextMenuRequested: Readonly<{ point: MenuPoint; clipId: string | null }> }>
     & { getSelectedClipIds(): string[] };
@@ -60,7 +59,7 @@ export class GridContextMenuWorkflow {
     const clip = pipelineSession.resolveClip(clipId);
     const collectionFilename = pipelineSession.activeCollectionFilename();
     const folderSession = openFolder.currentFolderSession;
-    const request = clip && this.menu.folders.canMutateDisk(folderSession)
+    const request = clip && folderSession
       ? { folderPath: folderSession.folderPath, filename: clip.name } : null;
     let canRefine = false;
     if (request && this.menu.refinementAvailability) {

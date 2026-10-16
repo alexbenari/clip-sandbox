@@ -26,7 +26,6 @@ function contextMenu({ canRefine = true, inspect }: { canRefine?: boolean; inspe
   const workflow = new GridContextMenuWorkflow({
     pipelineSession,
     openFolder,
-    folders: { canMutateDisk: (session: unknown): session is { folderPath: string } => session === folderSession },
     refinementAvailability: { inspect: vi.fn(inspect ?? (async () => canRefine)) },
     grid,
     menu: { open: request => { menuRequests.push(request); } },

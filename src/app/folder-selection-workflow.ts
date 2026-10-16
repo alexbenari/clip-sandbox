@@ -1,4 +1,3 @@
-import type { ClipFile } from '../domain/clip.js';
 import { Collection } from '../domain/collection.js';
 import type { CollectionTextFormat } from '../business-logic/collection-text-format.js';
 import type { Pipeline } from '../domain/pipeline.js';
@@ -7,6 +6,7 @@ import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
+import type { FolderAccess, FolderContents } from './folder-access.js';
 import type { IScreenNavigation } from './collection-refinement-workflow.js';
 import type { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
@@ -20,13 +20,13 @@ export type PendingSelectionAction =
   | Readonly<{ type: 'open-catalog-pipeline'; pipeline: IPipelineCatalogEntry }>
   | Readonly<{ type: 'switch-selection'; collectionFilename: string | null }>;
 
-type FolderContents = { folderSession: unknown; files: ClipFile[]; folderName: string };
-
 export interface IFolderSource {
-  pickFolder(options: { onFileReadError?: (info: unknown, folderSession: unknown) => void }): Promise<FolderContents>;
-  refreshFolder(folderSession: unknown): Promise<FolderContents>;
+  pickFolder(): Promise<FolderContents>;
+  refreshFolder(folderSession: FolderAccess): Promise<FolderContents>;
+}
+
+export interface IPipelineCatalogOpener {
   openPipelineCatalogEntry(entry: IPipelineCatalogEntry): Promise<FolderContents>;
-  canMutateDisk(folderSession: unknown): folderSession is { folderPath: string };
 }
 
 export interface IMissingClipsPrompt {
@@ -47,9 +47,10 @@ type FolderSelectionDependencies = Readonly<{
     | 'hasDirtyClipSequenceChanges' | 'materializeSelection' | 'loadPipeline'>;
   openFolder: Pick<AppSessionState, 'currentFolderSession'>;
   folders: IFolderSource;
+  pipelineCatalog: IPipelineCatalogOpener;
   pipelineFactory: Pick<PipelineFactory, 'buildPipeline'>;
   collectionFormat: Pick<CollectionTextFormat, 'readFile'>;
-  diagnostics: Pick<AppDiagnostics, 'logInvalidDescription' | 'logRuntimeError' | 'logDirectoryReadError'>;
+  diagnostics: Pick<AppDiagnostics, 'logInvalidDescription' | 'logRuntimeError'>;
   grid: { invalidateView(cacheKey: string): void; invalidateAllViews(): void; retagActiveView(cacheKey: string | null): void };
   collectionView: Pick<CollectionViewWorkflow, 'applySelection' | 'refreshSelector' | 'cacheKeyFor' | 'activeCacheKey'>;
   missingClipsPrompt: IMissingClipsPrompt;
@@ -117,7 +118,7 @@ export class FolderSelectionWorkflow {
   async refreshActiveFolder(): Promise<void> {
     const { openFolder, folders, pipelineSession } = this.folder;
     const folderSession = openFolder.currentFolderSession;
-    if (!folders.canMutateDisk(folderSession)) return;
+    if (!folderSession) return;
     const activeCollectionFilename = pipelineSession.activeCollectionFilename();
     const selection = await folders.refreshFolder(folderSession);
     if (openFolder.currentFolderSession !== folderSession || pipelineSession.hasDirtyClipSequenceChanges) return;
@@ -131,7 +132,7 @@ export class FolderSelectionWorkflow {
   }: {
     pipeline?: Pipeline | null;
     collection?: Collection | null;
-    folderSession?: unknown;
+    folderSession?: FolderAccess | null;
   } = {}): Promise<void> {
     const { pipelineSession, collectionView, appText } = this.folder;
     if (!pipeline) return;
@@ -236,11 +237,7 @@ export class FolderSelectionWorkflow {
     const { folders, diagnostics } = this.folder;
     this.folder.missingClipsPrompt.hide();
     try {
-      const selection = await folders.pickFolder({
-        onFileReadError: (info, folderSession) => {
-          void diagnostics.logDirectoryReadError(info as Parameters<typeof diagnostics.logDirectoryReadError>[0], folderSession);
-        },
-      });
+      const selection = await folders.pickFolder();
       await this.loadPipeline(selection);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -251,7 +248,7 @@ export class FolderSelectionWorkflow {
 
   private async loadCatalogPipeline(entry: IPipelineCatalogEntry): Promise<void> {
     try {
-      const selection = await this.folder.folders.openPipelineCatalogEntry(entry);
+      const selection = await this.folder.pipelineCatalog.openPipelineCatalogEntry(entry);
       if (await this.loadPipeline(selection)) this.folder.navigation.activate(this.folder.collectionScreenId);
     } catch (err) {
       await this.folder.diagnostics.logRuntimeError(`Failed to open pipeline ${entry.name}.`, err, this.folder.openFolder.currentFolderSession);
@@ -264,12 +261,12 @@ export class FolderSelectionWorkflow {
   }
 
   private async loadPipeline({
-    folderSession = null,
-    files = [],
-    folderName = '',
+    folderSession,
+    files,
+    folderName,
     preserveCollectionFilename = '',
     reportInitialLoad = true,
-  }: Partial<FolderContents> & { preserveCollectionFilename?: string; reportInitialLoad?: boolean }): Promise<boolean> {
+  }: FolderContents & { preserveCollectionFilename?: string; reportInitialLoad?: boolean }): Promise<boolean> {
     const { pipelineSession, grid, collectionView, diagnostics } = this.folder;
     await this.folder.settings.whenLoaded();
     try {
@@ -306,7 +303,7 @@ export class FolderSelectionWorkflow {
     const folderSession = openFolder.currentFolderSession;
     const pipeline = pipelineSession.pipeline;
     if (!pipeline) return;
-    if (!folders.canMutateDisk(folderSession)) {
+    if (!folderSession) {
       await this.reloadSelection({
         pipeline,
         collection: collectionFilename ? pipeline.getCollectionByFilename(collectionFilename) : null,
