@@ -52,7 +52,8 @@ export class ExtractionPublisher {
       ?? Collection.filenameFromCollectionName(this.movieStem(movieName));
     const destination = await this.service.openExtractionDestination(
       this.options.destination ? { folderPath: this.options.destination.folderPath } : undefined);
-    const collection = this.existingCollection(destination, collectionFilename)
+    // A folder destination never writes its collection file, so that file's content must not block it.
+    const collection = (this.options.destination?.kind === 'folder' ? null : this.existingCollection(destination, collectionFilename))
       ?? Collection.fromFilename({ filename: collectionFilename, orderedClipNames: [] });
     this.destinationHandle = destination.destinationHandle;
     this.folderPath = destination.folderPath;

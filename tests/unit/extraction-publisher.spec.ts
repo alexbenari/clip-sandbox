@@ -36,6 +36,17 @@ describe('ExtractionPublisher', () => {
     expect(service.saveCollection).not.toHaveBeenCalled();
   });
 
+  it('opens a folder destination even when a same-named collection file lists a clip twice, since it writes no collection', async () => {
+    const service = destinationWithEntries([
+      { kind: 'collection', filename: 'Movie.txt', content: 'Movie-001.mp4\nMovie-001.mp4\n' },
+    ]);
+    const session = new ExtractionPublisher(service, {
+      destination: { kind: 'folder', folderPath: 'C:/pipelines/extraction-tmp' },
+    });
+
+    await expect(session.open({ movieName: 'Movie.mkv' })).resolves.toMatchObject({ collectionFilename: 'Movie.txt' });
+  });
+
   it('treats an empty collection file as an empty collection', async () => {
     const service = destinationWithEntries([{ kind: 'collection', filename: 'Movie.txt', content: '\n  \n' }]);
     const session = new ExtractionPublisher(service);
