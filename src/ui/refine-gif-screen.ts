@@ -383,7 +383,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     const nextRangeId = this.snapshot?.refinement?.nextInexactRangeId ?? null;
     if (!nextRangeId) return;
     this.lastSeekKey = null;
-    this.options.session?.beginRefinement(nextRangeId);
+    void this.options.session?.beginRefinement(nextRangeId);
   }
 
   private backToExtraction(): void {

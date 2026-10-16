@@ -245,7 +245,7 @@ describe('GifExtractionSession', () => {
     expect(await session.openMovie()).toBe('opened');
     session.markStart(displayedCapture('timestamp', 400_000n));
     session.markEnd(displayedCapture('exact', 900_000n));
-    const result = session.lockRange();
+    const result = await session.lockRange();
     await vi.waitFor(() => expect(session.snapshot.ranges[0]?.thumbnail.kind).toBe('ready'));
 
     expect(result).toMatchObject({ kind: 'locked', range: { kind: 'needs-exact-frames' } });
@@ -272,7 +272,7 @@ describe('GifExtractionSession', () => {
     await session.openMovie();
     session.markStart(displayedCapture('exact'));
     session.markEnd(displayedCapture('exact'));
-    const locked = session.lockRange();
+    const locked = await session.lockRange();
     if (locked.kind !== 'locked') throw new Error('Range did not lock.');
 
     await session.extractRange(locked.range.id);
@@ -302,7 +302,7 @@ describe('GifExtractionSession', () => {
     await session.openMovie();
     session.markStart(displayedCapture('exact'));
     session.markEnd(displayedCapture('exact'));
-    const locked = session.lockRange();
+    const locked = await session.lockRange();
     if (locked.kind !== 'locked') throw new Error('Range did not lock.');
 
     await session.extractRange(locked.range.id);
@@ -328,7 +328,7 @@ describe('GifExtractionSession', () => {
     await session.openMovie();
     session.markStart(displayedCapture('timestamp', 10n));
     session.markEnd(displayedCapture('timestamp', 20n));
-    session.lockRange();
+    await session.lockRange();
 
     const opening = session.openMovie();
     await vi.waitFor(() => expect(session.snapshot.lifecycle).toBe('opening'));
@@ -359,7 +359,7 @@ describe('GifExtractionSession', () => {
     await session.openMovie();
     session.markStart(displayedCapture('timestamp', 10n));
     session.markEnd(displayedCapture('timestamp', 20n));
-    session.lockRange();
+    await session.lockRange();
     await vi.waitFor(() => expect(session.snapshot.ranges[0]?.thumbnail.kind).toBe('ready'));
 
     expect(await session.openMovie()).toBe('opened');
@@ -471,10 +471,10 @@ describe('GifExtractionSession behavior before the split', () => {
     });
   }
 
-  function lockExact(session: GifExtractionSession, start: number, end: number) {
+  async function lockExact(session: GifExtractionSession, start: number, end: number) {
     session.markStart(exactCapture(start));
     session.markEnd(exactCapture(end));
-    const locked = session.lockRange();
+    const locked = await session.lockRange();
     if (locked.kind !== 'locked') throw new Error(`Range ${start}-${end} did not lock: ${locked.kind}`);
     return locked.range;
   }
@@ -526,7 +526,7 @@ describe('GifExtractionSession behavior before the split', () => {
     };
     const session = GifExtractionSession.forMovieCapture(service, thumbnailService());
     await session.openMovie();
-    const range = lockExact(session, 3, 6);
+    const range = await lockExact(session, 3, 6);
     expect(session.canRemoveRange(range.id)).toBe(true);
 
     const opening = session.openMovie();
@@ -542,21 +542,12 @@ describe('GifExtractionSession behavior before the split', () => {
     const session = await restoredSession(savedStore([[2, 4]]), reviewWithFrames({ hashFor: () => 'ffffffffffffffff' }), { reporter: report });
     const rangeId = session.snapshot.ranges[0]!.id;
 
-    expect(await session.prepareSavedRange(rangeId)).toBe(false);
+    expect(await session.beginRefinement(rangeId)).toEqual({ kind: 'stopped' });
 
     expect(report.failure).toHaveBeenCalledWith('Saved frames no longer match this movie. Reopen the original movie.');
     expect(session.snapshot.ranges[0]?.validation).toBe('stale');
-    expect(session.beginRefinement(rangeId)).toEqual({ kind: 'rejected',
+    expect(await session.beginRefinement(rangeId)).toEqual({ kind: 'rejected',
       message: 'Saved frames no longer match this movie. Remove the range or reopen the original movie.' });
-  });
-
-  it('refuses a saved draft whose frames no longer match the movie', async () => {
-    const report = reporter();
-    const session = await restoredSession(savedStore([], [20, 22]), reviewWithFrames({ hashFor: () => 'ffffffffffffffff' }), { reporter: report });
-
-    expect(await session.prepareSavedDraft()).toBe(false);
-
-    expect(report.failure).toHaveBeenCalledWith('Saved draft frames no longer match this movie. Mark new endpoints before locking.');
   });
 
   it('says that some clips need attention when part of an extraction fails', async () => {
@@ -567,8 +558,8 @@ describe('GifExtractionSession behavior before the split', () => {
     const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
       { extractionService: extractionService(extract), reporter: report });
     await session.openMovie();
-    lockExact(session, 3, 6);
-    lockExact(session, 8, 9);
+    await lockExact(session, 3, 6);
+    await lockExact(session, 8, 9);
 
     await session.extractAll();
 
@@ -585,8 +576,8 @@ describe('GifExtractionSession behavior before the split', () => {
     const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
       { extractionService: extractionService(extract), reporter: report });
     await session.openMovie();
-    lockExact(session, 3, 6);
-    lockExact(session, 8, 9);
+    await lockExact(session, 3, 6);
+    await lockExact(session, 8, 9);
 
     const extracting = session.extractAll();
     await vi.waitFor(() => expect(extract).toHaveBeenCalledOnce());
@@ -606,8 +597,8 @@ describe('GifExtractionSession behavior before the split', () => {
     const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
       { extractionService: extractionService(extract), reporter: report });
     await session.openMovie();
-    const first = lockExact(session, 3, 6);
-    const second = lockExact(session, 8, 9);
+    const first = await lockExact(session, 3, 6);
+    const second = await lockExact(session, 8, 9);
 
     await session.extractRange(first.id);
     await session.extractRange(second.id);
@@ -635,11 +626,11 @@ describe('GifExtractionSession behavior before the split', () => {
     const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
       { extractionService: extractionService(vi.fn()) });
     await session.openMovie();
-    const range = lockExact(session, 3, 6);
+    const range = await lockExact(session, 3, 6);
     session.setExtractionDestination({ kind: 'folder', folderPath: 'C:/pipelines/camera' });
     expect(session.canExtractRange(range.id)).toBe(true);
 
-    expect(session.beginRefinement(range.id).kind).toBe('started');
+    expect((await session.beginRefinement(range.id)).kind).toBe('started');
 
     expect(session.canExtractRange(range.id)).toBe(false);
   });
@@ -650,9 +641,9 @@ describe('GifExtractionSession behavior before the split', () => {
     session.markStart(exactCapture(3));
     session.markEnd(exactCapture(6));
     expect(session.snapshot.previewTarget).toMatchObject({ kind: 'draft', startFrameIndex: 3, endFrameIndex: 6 });
-    session.lockRange();
+    await session.lockRange();
     const first = session.snapshot.ranges[0]!;
-    lockExact(session, 8, 9);
+    await lockExact(session, 8, 9);
     expect(session.snapshot.previewTarget).toMatchObject({ kind: 'locked', startFrameIndex: 8, endFrameIndex: 9 });
 
     const before = session.snapshot.previewRevision;
@@ -691,7 +682,7 @@ describe('GifExtractionSession behavior before the split', () => {
     const session = GifExtractionSession.forMovieCapture(movieService(), thumbnailService(),
       { extractionService: extractionService(extract) });
     await session.openMovie();
-    const range = lockExact(session, 3, 6);
+    const range = await lockExact(session, 3, 6);
 
     const extracting = session.extractRange(range.id);
     await vi.waitFor(() => expect(extract).toHaveBeenCalledOnce());
@@ -725,5 +716,43 @@ describe('GifExtractionSession behavior before the split', () => {
     expect(review.dispose).toHaveBeenCalledOnce();
     expect(thumbnails.dispose).toHaveBeenCalledOnce();
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('checks a restored draft\'s saved frames itself when asked to lock it', async () => {
+    const review = reviewWithFrames();
+    const session = await restoredSession(savedStore([], [20, 22]), review);
+
+    const locked = await session.lockRange();
+
+    expect(locked.kind).toBe('locked');
+    expect(review.frameIdentity).toHaveBeenCalledWith(20);
+    expect(session.snapshot.ranges).toHaveLength(1);
+  });
+
+  it('refuses to lock a restored draft whose frames no longer match, with the reason', async () => {
+    const report = reporter();
+    const session = await restoredSession(savedStore([], [20, 22]), reviewWithFrames({ hashFor: () => 'ffffffffffffffff' }), { reporter: report });
+
+    expect(await session.lockRange()).toEqual({ kind: 'rejected',
+      message: 'Saved draft frames no longer match this movie. Mark new endpoints before locking.' });
+    expect(session.snapshot.ranges).toHaveLength(0);
+  });
+
+  it('checks a restored range\'s saved frames itself when asked to refine it', async () => {
+    const review = reviewWithFrames();
+    const session = await restoredSession(savedStore([[2, 4]]), review);
+
+    const started = await session.beginRefinement(session.snapshot.ranges[0]!.id);
+
+    expect(started.kind).toBe('started');
+    expect(review.frameIdentity).toHaveBeenCalledWith(4);
+  });
+
+  it('stops quietly when refining a restored range whose frames no longer match; the check already said why', async () => {
+    const report = reporter();
+    const session = await restoredSession(savedStore([[2, 4]]), reviewWithFrames({ hashFor: () => 'ffffffffffffffff' }), { reporter: report });
+
+    expect(await session.beginRefinement(session.snapshot.ranges[0]!.id)).toEqual({ kind: 'stopped' });
+    expect(report.failure).toHaveBeenCalledWith('Saved frames no longer match this movie. Reopen the original movie.');
   });
 });

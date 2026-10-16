@@ -27,7 +27,7 @@ function refinementWorkflow({ dirty = false, lookup = async (): Promise<Collecti
     openCollectionSource: vi.fn(async () => undefined),
     importCollectionRange: vi.fn(async () => ({ kind: 'started' as const, session: {} as never })),
     abandonRefinement: vi.fn(() => null),
-    beginRefinement: vi.fn(() => ({ kind: 'rejected' as const, message: 'Wait for the movie to finish opening.' })),
+    beginRefinement: vi.fn(async () => ({ kind: 'rejected' as const, message: 'Wait for the movie to finish opening.' })),
   };
   const folderSession = { folderPath: 'C:/clips' };
   const openFolder = new AppSessionState();
@@ -105,11 +105,11 @@ describe('CollectionRefinementWorkflow', () => {
     expect(refineScreen.showPreparation).toHaveBeenLastCalledWith(null);
   });
 
-  it('reports a rejected request to refine the clip again', () => {
+  it('reports a rejected request to refine the clip again', async () => {
     const { refinedClipList, reporter } = refinementWorkflow();
 
     refinedClipList.emit('refineRequested', 'range-1' as CapturedRangeId);
 
-    expect(reporter.failure).toHaveBeenCalledWith('Wait for the movie to finish opening.');
+    await vi.waitFor(() => expect(reporter.failure).toHaveBeenCalledWith('Wait for the movie to finish opening.'));
   });
 });

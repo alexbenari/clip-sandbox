@@ -2,16 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { EventSource } from '../../src/app/event-source.js';
 import { GifRangeRefinementWorkflow } from '../../src/app/gif-range-refinement-workflow.js';
+import type { BeginRefinementResult } from '../../src/app/range-refinement.js';
 import type { CapturedRangeId } from '../../src/domain/captured-range.js';
 
 const range1 = 'range-1' as CapturedRangeId;
 const range2 = 'range-2' as CapturedRangeId;
+const started = { kind: 'started', session: {} } as unknown as BeginRefinementResult;
 
-function gifRefinement({ beginResult = { kind: 'started' as const } as { kind: 'started' } | { kind: 'rejected'; message: string } } = {}) {
-  const preparations = new Map<CapturedRangeId, (prepared: boolean) => void>();
+function gifRefinement() {
+  const pending = new Map<CapturedRangeId, (result: BeginRefinementResult) => void>();
   const session = {
-    prepareSavedRange: vi.fn((rangeId: CapturedRangeId) => new Promise<boolean>(resolve => { preparations.set(rangeId, resolve); })),
-    beginRefinement: vi.fn(() => ({ ...beginResult, session: {} }) as never),
+    beginRefinement: vi.fn((rangeId: CapturedRangeId) => new Promise<BeginRefinementResult>(resolve => { pending.set(rangeId, resolve); })),
   };
   const captureList = Object.assign(new EventSource<{ refineRequested: CapturedRangeId }>(), { focusRange: vi.fn() });
   const refineScreen = Object.assign(new EventSource<{ backRequested: CapturedRangeId | null }>(), { id: 'refine-gif' });
@@ -20,40 +21,52 @@ function gifRefinement({ beginResult = { kind: 'started' as const } as { kind: '
   const workflow = new GifRangeRefinementWorkflow({
     session, captureList, refineScreen, extractionScreenId: 'gif-extraction', navigation, reporter,
   });
-  return { workflow, preparations, session, captureList, refineScreen, navigation, reporter };
+  return { workflow, pending, session, captureList, refineScreen, navigation, reporter };
 }
 
 describe('GifRangeRefinementWorkflow', () => {
-  it('checks a saved range, then opens it on the Refine screen', async () => {
-    const { captureList, preparations, navigation, session } = gifRefinement();
+  it('opens a started refinement on the Refine screen', async () => {
+    const { captureList, pending, navigation, session } = gifRefinement();
 
     captureList.emit('refineRequested', range1);
-    preparations.get(range1)?.(true);
+    pending.get(range1)?.(started);
 
     await vi.waitFor(() => expect(navigation.activate).toHaveBeenCalledWith('refine-gif'));
     expect(session.beginRefinement).toHaveBeenCalledWith(range1);
   });
 
-  it('acts only on the newest request when the user picks another range during the check', async () => {
-    const { captureList, preparations, session } = gifRefinement();
+  it('acts only on the newest request when the user picks another range meanwhile', async () => {
+    const { captureList, pending, navigation } = gifRefinement();
 
     captureList.emit('refineRequested', range1);
     captureList.emit('refineRequested', range2);
-    preparations.get(range1)?.(true);
-    preparations.get(range2)?.(true);
+    pending.get(range2)?.(started);
+    pending.get(range1)?.(started);
 
-    await vi.waitFor(() => expect(session.beginRefinement).toHaveBeenCalledOnce());
-    expect(session.beginRefinement).toHaveBeenCalledWith(range2);
+    await vi.waitFor(() => expect(navigation.activate).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    expect(navigation.activate).toHaveBeenCalledOnce();
   });
 
   it('reports a rejected refinement and stays on the current screen', async () => {
-    const { workflow, preparations, navigation, reporter } = gifRefinement({ beginResult: { kind: 'rejected', message: 'Exact frame review is not ready for this range.' } });
+    const { workflow, pending, navigation, reporter } = gifRefinement();
 
     const refining = workflow.refine(range1);
-    preparations.get(range1)?.(true);
+    pending.get(range1)?.({ kind: 'rejected', message: 'Exact frame review is not ready for this range.' });
     await refining;
 
     expect(reporter.failure).toHaveBeenCalledWith('Exact frame review is not ready for this range.');
+    expect(navigation.activate).not.toHaveBeenCalled();
+  });
+
+  it('says nothing more when the saved-frame check already reported why it stopped', async () => {
+    const { workflow, pending, navigation, reporter } = gifRefinement();
+
+    const refining = workflow.refine(range1);
+    pending.get(range1)?.({ kind: 'stopped' });
+    await refining;
+
+    expect(reporter.failure).not.toHaveBeenCalled();
     expect(navigation.activate).not.toHaveBeenCalled();
   });
 

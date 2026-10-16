@@ -26,7 +26,11 @@ After this work, each job has its own small class, Collection Refine has its own
   - A removed range is reported as a `rangeRemoved` event before the queue publishes, so the session ends a refinement of that range in the same order as before.
   
   G5: `test-evidence/gif-extraction-session-split/G5-commit-hook.log`; the search for `captureStore` in the session finds nothing.
-- [ ] M5 `RangeRefinement`, with locking and refinement checking saved frames themselves
+- [x] M5 `RangeRefinement`, with locking and refinement checking saved frames themselves (2026-10-16). Changes beyond the plan text:
+  - `beginRefinement` gained a third result, `stopped`. It means the saved-frame check already reported why it failed, or a newer request or another movie replaced this one during the check. `RangeRefinement` now owns the superseded-request guard that the refine workflow ran around its manual check.
+  - The session no longer offers `prepareSavedDraft` or `prepareSavedRange`, so no caller can run the check by hand.
+  
+  G6: `test-evidence/gif-extraction-session-split/G6-commit-hook.log`; the search for `prepareSaved` in `src/ui` and the refine workflow finds nothing.
 - [ ] M6 `CollectionClipRefinementSession`, the one-range domain factory, and narrow UI interfaces
 - [ ] M7 Documentation, end-to-end specs and checks in the running app
 

@@ -213,19 +213,12 @@ export class GifExtractionScreen implements IAppScreen {
         this.commandStatus.textContent = error instanceof Error ? error.message : 'Playback recovery failed.';
       }
     }
-    if (session.snapshot.previewRevision !== revision || session.snapshot.capture?.sourceGeneration !== generation) return;
-    const draft = session.snapshot.capture?.capture;
-    if (draft?.kind === 'draft'
-      && (draft.start?.kind === 'saved-exact-frame' || draft.end?.kind === 'saved-exact-frame')) {
-      try { if (!await session.prepareSavedDraft()) return; }
-      catch (error) {
-        this.commandStatus.textContent = error instanceof Error ? error.message : 'Saved frames could not be checked.';
-        return;
-      }
-    }
     if (session.snapshot.previewRevision !== revision || session.snapshot.capture?.sourceGeneration !== generation
       || session.snapshot.capture?.capture.kind !== 'draft') return;
-    session.lockRange();
+    try { await session.lockRange(); }
+    catch (error) {
+      this.commandStatus.textContent = error instanceof Error ? error.message : 'Saved frames could not be checked.';
+    }
   }
 
   private canLock(): boolean {

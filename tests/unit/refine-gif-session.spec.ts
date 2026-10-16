@@ -110,18 +110,18 @@ function extractionService(): IClipExtractionService {
   };
 }
 
-function lockTimestampRange(session: GifExtractionSession, startUs = 100_000n, endUs = 300_000n) {
+async function lockTimestampRange(session: GifExtractionSession, startUs = 100_000n, endUs = 300_000n) {
   session.markStart(displayedCapture('timestamp', startUs));
   session.markEnd(displayedCapture('timestamp', endUs));
-  const locked = session.lockRange();
+  const locked = await session.lockRange();
   if (locked.kind !== 'locked') throw new Error(locked.kind === 'rejected' ? locked.message : 'Range did not lock.');
   return locked.range;
 }
 
-function lockExactRange(session: GifExtractionSession, startFrame = 10, endFrame = 30) {
+async function lockExactRange(session: GifExtractionSession, startFrame = 10, endFrame = 30) {
   session.markStart(displayedCapture('exact', BigInt(startFrame * 10_000), startFrame));
   session.markEnd(displayedCapture('exact', BigInt(endFrame * 10_000), endFrame));
-  const locked = session.lockRange();
+  const locked = await session.lockRange();
   if (locked.kind !== 'locked') throw new Error(locked.kind === 'rejected' ? locked.message : 'Range did not lock.');
   return locked.range;
 }
@@ -129,26 +129,26 @@ function lockExactRange(session: GifExtractionSession, startFrame = 10, endFrame
 describe('RefineGifSession', () => {
   it('leaves the other captures available when the active refinement is removed', async () => {
     const { session } = await openSession();
-    const first = lockExactRange(session, 10, 20);
-    const second = lockExactRange(session, 30, 40);
-    expect(session.beginRefinement(first.id).kind).toBe('started');
+    const first = await lockExactRange(session, 10, 20);
+    const second = await lockExactRange(session, 30, 40);
+    expect((await session.beginRefinement(first.id)).kind).toBe('started');
 
     expect(session.removeRange(first.id)).toBe(true);
 
     expect(session.snapshot.refinement).toBeNull();
     expect(session.snapshot.ranges.map(range => range.id)).toEqual([second.id]);
-    expect(session.beginRefinement(second.id).kind).toBe('started');
+    expect((await session.beginRefinement(second.id)).kind).toBe('started');
   });
 
   it('replaces an unfinished refinement when another capture is selected', async () => {
     const { session } = await openSession();
-    const first = lockExactRange(session, 10, 20);
-    const second = lockExactRange(session, 30, 40);
-    const firstRefinement = session.beginRefinement(first.id);
-    if (firstRefinement.kind !== 'started') throw new Error(firstRefinement.message);
+    const first = await lockExactRange(session, 10, 20);
+    const second = await lockExactRange(session, 30, 40);
+    const firstRefinement = await session.beginRefinement(first.id);
+    if (firstRefinement.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(firstRefinement));
     firstRefinement.session.markStart(displayedCapture('exact', 120_000n, 12));
 
-    const replacement = session.beginRefinement(second.id);
+    const replacement = await session.beginRefinement(second.id);
 
     expect(replacement).toMatchObject({ kind: 'started' });
     expect(session.snapshot.refinement?.rangeId).toBe(second.id);
@@ -159,17 +159,17 @@ describe('RefineGifSession', () => {
 
   it('opens an exact capture, discards staged edits on Back, then replaces the same panel entry on Lock', async () => {
     const { session } = await openSession();
-    const first = lockExactRange(session);
-    const second = lockExactRange(session, 40, 50);
-    const begin = session.beginRefinement(first.id);
-    if (begin.kind !== 'started') throw new Error(begin.message);
+    const first = await lockExactRange(session);
+    const second = await lockExactRange(session, 40, 50);
+    const begin = await session.beginRefinement(first.id);
+    if (begin.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(begin));
     expect(begin.session.snapshot).toMatchObject({ focusedEndpoint: 'start', canCommit: true });
     begin.session.markStart(displayedCapture('exact', 120_000n, 12));
     session.abandonRefinement();
     expect(session.snapshot.ranges[0]?.start).toMatchObject({ identity: { frameIndex: 10 } });
 
-    const again = session.beginRefinement(first.id);
-    if (again.kind !== 'started') throw new Error(again.message);
+    const again = await session.beginRefinement(first.id);
+    if (again.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(again));
     again.session.markStart(displayedCapture('exact', 120_000n, 12));
     expect(again.session.commit()).toMatchObject({ kind: 'committed', range: { id: first.id } });
     expect(session.snapshot.ranges.map(range => range.id)).toEqual([first.id, second.id]);
@@ -179,19 +179,19 @@ describe('RefineGifSession', () => {
   it('preserves an unchanged completed extraction and makes a changed exact revision extractable again', async () => {
     const extraction = extractionService();
     const { session } = await openSession(thumbnailService(), extraction);
-    const captured = lockExactRange(session);
+    const captured = await lockExactRange(session);
     await session.extractRange(captured.id);
     expect(session.snapshot.ranges[0]?.extraction).toMatchObject({ kind: 'completed',
       media: { filename: 'Feature-001.mp4' } });
 
-    const unchanged = session.beginRefinement(captured.id);
-    if (unchanged.kind !== 'started') throw new Error(unchanged.message);
+    const unchanged = await session.beginRefinement(captured.id);
+    if (unchanged.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(unchanged));
     expect(unchanged.session.commit()).toMatchObject({ kind: 'committed', message: expect.stringContaining('unchanged') });
     expect(session.canExtractRange(captured.id)).toBe(false);
     expect(extraction.extract).toHaveBeenCalledOnce();
 
-    const revised = session.beginRefinement(captured.id);
-    if (revised.kind !== 'started') throw new Error(revised.message);
+    const revised = await session.beginRefinement(captured.id);
+    if (revised.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(revised));
     revised.session.markEnd(displayedCapture('exact', 320_000n, 32));
     revised.session.markEnd(displayedCapture('exact', 320_000n, 32));
     expect(revised.session.commit()).toMatchObject({ kind: 'committed',
@@ -210,11 +210,11 @@ describe('RefineGifSession', () => {
     const extraction = extractionService();
     vi.mocked(extraction.saveCollection).mockRejectedValueOnce(new Error('disk busy'));
     const { session } = await openSession(thumbnailService(), extraction);
-    const captured = lockExactRange(session);
+    const captured = await lockExactRange(session);
     await session.extractRange(captured.id);
     expect(session.snapshot.ranges[0]?.extraction).toMatchObject({ kind: 'publication-failed' });
-    const refine = session.beginRefinement(captured.id);
-    if (refine.kind !== 'started') throw new Error(refine.message);
+    const refine = await session.beginRefinement(captured.id);
+    if (refine.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(refine));
     refine.session.markEnd(displayedCapture('exact', 320_000n, 32));
     refine.session.markEnd(displayedCapture('exact', 320_000n, 32));
     expect(refine.session.commit()).toMatchObject({ kind: 'rejected', message: expect.stringContaining('Retry') });
@@ -225,11 +225,11 @@ describe('RefineGifSession', () => {
   });
   it('stages exact endpoints one at a time and atomically preserves range identity and order', async () => {
     const { session, thumbnails } = await openSession();
-    const first = lockTimestampRange(session);
-    const second = lockTimestampRange(session, 500_000n, 700_000n);
+    const first = await lockTimestampRange(session);
+    const second = await lockTimestampRange(session, 500_000n, 700_000n);
     await vi.waitFor(() => expect(session.snapshot.ranges).toHaveLength(2));
 
-    const begin = session.beginRefinement(first.id);
+    const begin = await session.beginRefinement(first.id);
     expect(begin.kind).toBe('started');
     if (begin.kind !== 'started') return;
     expect(begin.session.snapshot).toMatchObject({ focusedEndpoint: 'start', canCommit: false });
@@ -258,9 +258,9 @@ describe('RefineGifSession', () => {
 
   it('rejects a reversed exact pair and leaves the original inexact range untouched until A', async () => {
     const { session } = await openSession();
-    const original = lockTimestampRange(session);
-    const begin = session.beginRefinement(original.id);
-    if (begin.kind !== 'started') throw new Error(begin.message);
+    const original = await lockTimestampRange(session);
+    const begin = await session.beginRefinement(original.id);
+    if (begin.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(begin));
 
     begin.session.markStart(displayedCapture('exact', 400_000n, 40));
     begin.session.markEnd(displayedCapture('exact', 200_000n, 20));
@@ -278,11 +278,11 @@ describe('RefineGifSession', () => {
     const { session } = await openSession();
     session.markStart(displayedCapture('exact', 100_000n, 10));
     session.markEnd(displayedCapture('timestamp', 300_000n));
-    const mixed = session.lockRange();
+    const mixed = await session.lockRange();
     if (mixed.kind !== 'locked') throw new Error(mixed.kind === 'rejected' ? mixed.message : 'Range did not lock.');
-    const next = lockTimestampRange(session, 500_000n, 700_000n);
-    const begin = session.beginRefinement(mixed.range.id);
-    if (begin.kind !== 'started') throw new Error(begin.message);
+    const next = await lockTimestampRange(session, 500_000n, 700_000n);
+    const begin = await session.beginRefinement(mixed.range.id);
+    if (begin.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(begin));
 
     expect(begin.session.snapshot).toMatchObject({ focusedEndpoint: 'start', seekTimeUs: 100_000n });
     begin.session.markEnd(displayedCapture('exact', 300_000n, 30));
@@ -292,15 +292,15 @@ describe('RefineGifSession', () => {
 
   it('invalidates refinement when its range is removed or its source generation changes', async () => {
     const { session, service } = await openSession();
-    const range = lockTimestampRange(session);
-    const removed = session.beginRefinement(range.id);
-    if (removed.kind !== 'started') throw new Error(removed.message);
+    const range = await lockTimestampRange(session);
+    const removed = await session.beginRefinement(range.id);
+    if (removed.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(removed));
     session.removeRange(range.id);
     expect(removed.session.commit()).toMatchObject({ kind: 'rejected', message: expect.stringContaining('removed') });
 
-    const replacement = lockTimestampRange(session, 500_000n, 700_000n);
-    const stale = session.beginRefinement(replacement.id);
-    if (stale.kind !== 'started') throw new Error(stale.message);
+    const replacement = await lockTimestampRange(session, 500_000n, 700_000n);
+    const stale = await session.beginRefinement(replacement.id);
+    if (stale.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(stale));
     vi.mocked(service.chooseSource).mockResolvedValueOnce({
       name: 'Replacement.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_987654321'),
     });

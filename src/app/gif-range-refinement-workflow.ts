@@ -9,7 +9,7 @@ export interface ICaptureList extends IEventSource<{ refineRequested: CapturedRa
 }
 
 type GifRangeRefinementDependencies = Readonly<{
-  session: Pick<GifExtractionSession, 'prepareSavedRange' | 'beginRefinement'> | null;
+  session: Pick<GifExtractionSession, 'beginRefinement'> | null;
   captureList: ICaptureList | null;
   refineScreen: IEventSource<{ backRequested: CapturedRangeId | null }> & Readonly<{ id: string }>;
   extractionScreenId: string;
@@ -32,9 +32,8 @@ export class GifRangeRefinementWorkflow {
 
   async refine(rangeId: CapturedRangeId): Promise<void> {
     const revision = ++this.revision;
-    if (!await this.refinement.session?.prepareSavedRange(rangeId)) return;
+    const result = await this.refinement.session?.beginRefinement(rangeId);
     if (revision !== this.revision) return;
-    const result = this.refinement.session?.beginRefinement(rangeId);
     if (result?.kind === 'started') this.refinement.navigation.activate(this.refinement.refineScreen.id);
     else if (result?.kind === 'rejected') this.refinement.reporter.failure(result.message);
   }

@@ -60,21 +60,21 @@ function captureQueue({ storage = new UnsavedCaptureStorage() as ICaptureStorage
   return { queue, status, movie };
 }
 
-function lock(queue: CaptureQueue, start: number, end: number) {
+async function lock(queue: CaptureQueue, start: number, end: number) {
   queue.markStart(exactCapture(start));
   queue.markEnd(exactCapture(end));
-  const locked = queue.lockRange();
+  const locked = await queue.lockRange();
   if (locked.kind !== 'locked') throw new Error(`Range did not lock: ${locked.kind}`);
   return locked.range;
 }
 
 describe('CaptureQueue', () => {
-  it('locks a marked draft into a selected range and announces each step', () => {
+  it('locks a marked draft into a selected range and announces each step', async () => {
     const { queue, status } = captureQueue();
     const changed = vi.fn();
     status.on('changed', changed);
 
-    const range = lock(queue, 3, 6);
+    const range = await lock(queue, 3, 6);
 
     expect(queue.ranges).toEqual([range]);
     expect(queue.selectedRangeId).toBe(range.id);
@@ -89,9 +89,9 @@ describe('CaptureQueue', () => {
     expect(queue.markStart(exactCapture(3))).toEqual({ kind: 'rejected', message: 'Wait for the movie to finish opening.' });
   });
 
-  it('reports a removed range before publishing, so a refinement of it can end first', () => {
+  it('reports a removed range before publishing, so a refinement of it can end first', async () => {
     const { queue, status } = captureQueue();
-    const range = lock(queue, 3, 6);
+    const range = await lock(queue, 3, 6);
     const order: string[] = [];
     queue.on('rangeRemoved', rangeId => order.push(`removed ${rangeId}`));
     status.on('changed', () => order.push('changed'));
@@ -103,22 +103,22 @@ describe('CaptureQueue', () => {
     expect(queue.ranges).toHaveLength(0);
   });
 
-  it('keeps a range that a running extraction still holds', () => {
+  it('keeps a range that a running extraction still holds', async () => {
     const held = new Set<string>();
     const { queue } = captureQueue({ held });
-    const range = lock(queue, 3, 6);
+    const range = await lock(queue, 3, 6);
     held.add(range.id);
 
     expect(queue.canRemoveRange(range.id)).toBe(false);
     expect(queue.removeRange(range.id)).toBe(false);
   });
 
-  it('leaves fully extracted ranges out of the saved queue', () => {
+  it('leaves fully extracted ranges out of the saved queue', async () => {
     const completed = new Set<string>();
     const storage = Object.assign(new UnsavedCaptureStorage(), { save: vi.fn() });
     const { queue } = captureQueue({ storage, completed });
-    const first = lock(queue, 3, 6);
-    lock(queue, 8, 9);
+    const first = await lock(queue, 3, 6);
+    await lock(queue, 8, 9);
     completed.add(first.id);
     storage.save.mockClear();
 

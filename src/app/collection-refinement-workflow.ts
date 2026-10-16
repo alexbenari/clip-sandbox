@@ -40,7 +40,7 @@ export class CollectionRefinementWorkflow {
     this.unsubscribes = [
       refinement.refineScreen.on('backRequested', () => this.backToCollection()),
       ...(refinement.refinedClipList
-        ? [refinement.refinedClipList.on('refineRequested', rangeId => this.refineAgain(rangeId))]
+        ? [refinement.refinedClipList.on('refineRequested', rangeId => { void this.refineAgain(rangeId); })]
         : []),
     ];
   }
@@ -103,8 +103,8 @@ export class CollectionRefinementWorkflow {
     }
   }
 
-  private refineAgain(rangeId: CapturedRangeId): void {
-    const started = this.refinement.refinementSession?.beginRefinement(rangeId);
+  private async refineAgain(rangeId: CapturedRangeId): Promise<void> {
+    const started = await this.refinement.refinementSession?.beginRefinement(rangeId);
     if (started?.kind === 'rejected') this.refinement.reporter.failure(started.message);
   }
 

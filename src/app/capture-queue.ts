@@ -25,7 +25,7 @@ export interface ICaptureQueueEvents {
 
 type CaptureQueueDependencies = Readonly<{
   movie: Pick<CurrentMovie, 'review' | 'reviewState' | 'sourceGeneration' | 'lifecycle' | 'opening'>;
-  status: Pick<GifSessionStatus, 'show' | 'advancePreview' | 'changed'>;
+  status: Pick<GifSessionStatus, 'message' | 'show' | 'advancePreview' | 'changed'>;
   thumbnails: IThumbnailCacheService;
   storage: ICaptureStorage;
   extraction: IExtractionProgressQuery;
@@ -120,7 +120,17 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     return transition;
   }
 
-  lockRange(): RangeCaptureTransition {
+  // A draft with saved endpoints is first checked against the movie, so no caller has to remember to do it.
+  async lockRange(): Promise<RangeCaptureTransition> {
+    const draft = this.model?.snapshot.capture;
+    if (draft?.kind === 'draft' && (draft.start?.kind === 'saved-exact-frame' || draft.end?.kind === 'saved-exact-frame')
+      && !await this.prepareSavedDraft()) {
+      return Object.freeze({ kind: 'rejected', message: this.deps.status.message ?? 'Saved draft frames could not be checked.' });
+    }
+    return this.lockDraft();
+  }
+
+  private lockDraft(): RangeCaptureTransition {
     if (!this.model || this.deps.storage.restoring || this.deps.movie.lifecycle !== 'open') return this.captureUnavailable();
     const transition = this.model.lockRange();
     if (transition.kind === 'locked') {
