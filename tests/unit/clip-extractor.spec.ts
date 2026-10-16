@@ -2,8 +2,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ClipExtractor, type IClipExtractionService } from '../../src/business-logic/clip-extractor.js';
-import { CaptureEndpointValue } from '../../src/domain/capture-endpoint.js';
-import { CapturedRangeValue } from '../../src/domain/captured-range.js';
+import { CaptureEndpoints } from '../../src/domain/capture-endpoint.js';
+import { CapturedRanges } from '../../src/domain/captured-range.js';
 import type { ISourceFrameIdentity } from '../../src/frame-review/model/source-frame-identity.js';
 
 const identity = (frameIndex: number): ISourceFrameIdentity => Object.freeze({
@@ -18,10 +18,10 @@ const identity = (frameIndex: number): ISourceFrameIdentity => Object.freeze({
 });
 
 function exactRange(sourceGeneration = 4) {
-  return CapturedRangeValue.lock(
-    CapturedRangeValue.id(1),
-    CaptureEndpointValue.exact(identity(12), 12_000n, sourceGeneration),
-    CaptureEndpointValue.exact(identity(18), 18_000n, sourceGeneration),
+  return CapturedRanges.lock(
+    CapturedRanges.id(1),
+    CaptureEndpoints.exact(identity(12), 12_000n, sourceGeneration),
+    CaptureEndpoints.exact(identity(18), 18_000n, sourceGeneration),
   );
 }
 
@@ -54,7 +54,7 @@ describe('ClipExtractor', () => {
   });
 
   it.each([
-    ['timestamp endpoint', () => CapturedRangeValue.lock(CapturedRangeValue.id(2), CaptureEndpointValue.timestamp(12_000n, 4), CaptureEndpointValue.exact(identity(18), 18_000n, 4))],
+    ['timestamp endpoint', () => CapturedRanges.lock(CapturedRanges.id(2), CaptureEndpoints.timestamp(12_000n, 4), CaptureEndpoints.exact(identity(18), 18_000n, 4))],
     ['stale source generation', () => exactRange(3)],
     ['missing source handle', () => exactRange()],
     ['missing destination handle', () => exactRange()],

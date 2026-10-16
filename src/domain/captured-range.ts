@@ -1,5 +1,5 @@
 import {
-  CaptureEndpointValue,
+  CaptureEndpoints,
   type CaptureEndpoint,
   type IExactFrameEndpoint,
   type ISavedExactFrameEndpoint,
@@ -34,7 +34,7 @@ export interface ISavedExactRange extends ICapturedRangeBase {
 
 export type CapturedRange = INeedsExactFramesRange | IReadyToExtractRange | ISavedExactRange;
 
-export class CapturedRangeValue {
+export class CapturedRanges {
   static hasExactFrames(range: CapturedRange, start: IExactFrameEndpoint, end: IExactFrameEndpoint): boolean {
     return range.kind === 'ready-to-extract'
       && range.start.identity.frameIndex === start.identity.frameIndex
@@ -64,7 +64,7 @@ export class CapturedRangeValue {
       if (end.frameIndex < start.frameIndex) throw new Error('The end must not precede the start.');
       return Object.freeze({ kind: 'saved-exact-range', id, sourceGeneration: start.sourceGeneration, start, end });
     }
-    if (CaptureEndpointValue.positionUs(end) < CaptureEndpointValue.positionUs(start)) {
+    if (CaptureEndpoints.positionUs(end) < CaptureEndpoints.positionUs(start)) {
       throw new Error('The end must not precede the start.');
     }
     return Object.freeze({

@@ -9,7 +9,7 @@ export interface ISourceFrameIdentity {
   readonly frameInfoHash: string;
 }
 
-export class FrameReviewWireValue {
+export class FrameReviewWire {
   static record(value: unknown, label: string): Record<string, unknown> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error(`${label} must be an object.`);
@@ -45,16 +45,16 @@ export class FrameReviewWireValue {
 
 export class SourceFrameIdentity {
   static fromWire(value: unknown): ISourceFrameIdentity {
-    const record = FrameReviewWireValue.record(value, 'frame identity');
+    const record = FrameReviewWire.record(value, 'frame identity');
     const identity = {
-      frameIndex: FrameReviewWireValue.nonnegativeInteger(record.frameIndex, 'frameIndex'),
-      originalFrameIndex: FrameReviewWireValue.nonnegativeInteger(record.originalFrameIndex, 'originalFrameIndex'),
-      pts: FrameReviewWireValue.decimalBigInt(record.pts, 'pts'),
-      duration: FrameReviewWireValue.decimalBigInt(record.duration, 'duration'),
-      timebaseNumerator: FrameReviewWireValue.decimalBigInt(record.timebaseNumerator, 'timebaseNumerator'),
-      timebaseDenominator: FrameReviewWireValue.decimalBigInt(record.timebaseDenominator, 'timebaseDenominator'),
-      frameInfoPts: FrameReviewWireValue.decimalBigInt(record.frameInfoPts, 'frameInfoPts'),
-      frameInfoHash: FrameReviewWireValue.nonemptyString(record.frameInfoHash, 'frameInfoHash'),
+      frameIndex: FrameReviewWire.nonnegativeInteger(record.frameIndex, 'frameIndex'),
+      originalFrameIndex: FrameReviewWire.nonnegativeInteger(record.originalFrameIndex, 'originalFrameIndex'),
+      pts: FrameReviewWire.decimalBigInt(record.pts, 'pts'),
+      duration: FrameReviewWire.decimalBigInt(record.duration, 'duration'),
+      timebaseNumerator: FrameReviewWire.decimalBigInt(record.timebaseNumerator, 'timebaseNumerator'),
+      timebaseDenominator: FrameReviewWire.decimalBigInt(record.timebaseDenominator, 'timebaseDenominator'),
+      frameInfoPts: FrameReviewWire.decimalBigInt(record.frameInfoPts, 'frameInfoPts'),
+      frameInfoHash: FrameReviewWire.nonemptyString(record.frameInfoHash, 'frameInfoHash'),
     };
     if (identity.timebaseNumerator <= 0n || identity.timebaseDenominator <= 0n) {
       throw new Error('Frame identity timebase must be positive.');

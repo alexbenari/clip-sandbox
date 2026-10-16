@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { GifSessionStatus } from '../../src/app/gif-session-status.js';
 import { RangeRefinement } from '../../src/app/range-refinement.js';
-import { CaptureEndpointValue } from '../../src/domain/capture-endpoint.js';
-import { CapturedRangeValue, type CapturedRange, type CapturedRangeId } from '../../src/domain/captured-range.js';
+import { CaptureEndpoints } from '../../src/domain/capture-endpoint.js';
+import { CapturedRanges, type CapturedRange, type CapturedRangeId } from '../../src/domain/captured-range.js';
 import { FrameReviewState } from '../../src/frame-review/model/frame-review-state.js';
 
 function frame(frameIndex: number) {
@@ -15,9 +15,9 @@ function frame(frameIndex: number) {
 }
 
 const readyRange = (sequence: number): CapturedRange => Object.freeze({
-  id: CapturedRangeValue.id(sequence), kind: 'ready-to-extract', sourceGeneration: 1,
-  start: CaptureEndpointValue.exact(frame(sequence * 10), BigInt(sequence * 10_000), 1),
-  end: CaptureEndpointValue.exact(frame(sequence * 10 + 5), BigInt(sequence * 10_000 + 5_000), 1),
+  id: CapturedRanges.id(sequence), kind: 'ready-to-extract', sourceGeneration: 1,
+  start: CaptureEndpoints.exact(frame(sequence * 10), BigInt(sequence * 10_000), 1),
+  end: CaptureEndpoints.exact(frame(sequence * 10 + 5), BigInt(sequence * 10_000 + 5_000), 1),
 }) as CapturedRange;
 
 const savedRange = (sequence: number): CapturedRange => Object.freeze({

@@ -4,6 +4,7 @@ import type {
   IFrameReviewSourceSelection,
 } from '../frame-review/frame-review-api.js';
 import type { IFrameReviewState } from '../frame-review/model/frame-review-state.js';
+import { CaptureEndpoints } from '../domain/capture-endpoint.js';
 import type { CapturedRange, CapturedRangeId, IReadyToExtractRange } from '../domain/captured-range.js';
 import type { IRangeCaptureSnapshot } from '../domain/range-capture-model.js';
 import type { IClipExtractionService } from '../frame-review/clip-extraction-api.js';
@@ -277,18 +278,17 @@ export abstract class MovieRangeSession {
     if (capture?.kind === 'draft') {
       const start = capture.start;
       const end = capture.end;
-      if ((start?.kind !== 'exact-frame' && start?.kind !== 'saved-exact-frame')
-        || (end?.kind !== 'exact-frame' && end?.kind !== 'saved-exact-frame')) return null;
+      if (!CaptureEndpoints.isFrame(start) || !CaptureEndpoints.isFrame(end)) return null;
       return Object.freeze({ kind: 'draft', rangeId: null,
-        startFrameIndex: start.kind === 'exact-frame' ? start.identity.frameIndex : start.frameIndex,
-        endFrameIndex: end.kind === 'exact-frame' ? end.identity.frameIndex : end.frameIndex, sourceGeneration, revision });
+        startFrameIndex: CaptureEndpoints.frameIndexOf(start),
+        endFrameIndex: CaptureEndpoints.frameIndexOf(end), sourceGeneration, revision });
     }
     const selected = this.queue.selectedRangeId;
     const range = selected ? this.queue.range(selected) : undefined;
     if ((range?.kind !== 'ready-to-extract' && range?.kind !== 'saved-exact-range') || this.queue.isStale(range.id)) return null;
     return Object.freeze({ kind: 'locked', rangeId: range.id,
-      startFrameIndex: range.start.kind === 'exact-frame' ? range.start.identity.frameIndex : range.start.frameIndex,
-      endFrameIndex: range.end.kind === 'exact-frame' ? range.end.identity.frameIndex : range.end.frameIndex,
+      startFrameIndex: CaptureEndpoints.frameIndexOf(range.start),
+      endFrameIndex: CaptureEndpoints.frameIndexOf(range.end),
       sourceGeneration, revision });
   }
 }

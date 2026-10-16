@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { BinaryFrameProtocol, BinaryFrameProtocolParser, type IBinaryProtocolMessage } from '../binary-frame-protocol.js';
 import { BackendError, type BackendErrorCategory } from '../model/backend-error.js';
-import { FrameReviewWireValue } from '../model/source-frame-identity.js';
+import { FrameReviewWire } from '../model/source-frame-identity.js';
 
 export interface INativeProcessClientOptions {
   readonly executable: string;
@@ -148,7 +148,7 @@ export class NativeProcessClient {
     clearTimeout(pending.timer);
     this.pending.delete(requestId);
     if (message.metadata.type === 'error') {
-      const wire = FrameReviewWireValue.record(message.metadata.error, 'native error');
+      const wire = FrameReviewWire.record(message.metadata.error, 'native error');
       pending.reject(new BackendError(
         this.category(wire?.category),
         typeof wire?.message === 'string' ? wire.message : 'Native backend failed.',

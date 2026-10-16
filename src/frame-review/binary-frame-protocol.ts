@@ -1,5 +1,5 @@
 import { BackendError } from './model/backend-error.js';
-import { FrameReviewWireValue } from './model/source-frame-identity.js';
+import { FrameReviewWire } from './model/source-frame-identity.js';
 
 const MAGIC = Buffer.from('FVSP', 'ascii');
 export const FRAME_REVIEW_PROTOCOL_VERSION = 1;
@@ -54,7 +54,7 @@ export class BinaryFrameProtocolParser {
       this.consume(FRAME_REVIEW_WIRE_HEADER_BYTES);
       let metadata: Record<string, unknown>;
       try {
-        metadata = FrameReviewWireValue.record(JSON.parse(this.read(metadataLength).toString('utf8')), 'protocol metadata');
+        metadata = FrameReviewWire.record(JSON.parse(this.read(metadataLength).toString('utf8')), 'protocol metadata');
       } catch (error) {
         throw new BackendError('protocol-error', `Protocol metadata is invalid JSON: ${String(error)}`, false);
       }

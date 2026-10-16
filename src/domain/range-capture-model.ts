@@ -1,7 +1,7 @@
-import { CaptureEndpointValue, type CaptureEndpoint, type IExactFrameEndpoint } from './capture-endpoint.js';
+import { CaptureEndpoints, type CaptureEndpoint, type IExactFrameEndpoint } from './capture-endpoint.js';
 import type { ISourceFrameIdentity } from '../frame-review/model/source-frame-identity.js';
 import {
-  CapturedRangeValue,
+  CapturedRanges,
   type CapturedRange,
   type CapturedRangeId,
 } from './captured-range.js';
@@ -59,7 +59,7 @@ export class RangeCaptureModel {
     const model = new RangeCaptureModel(sourceGeneration);
     model.assertCurrentSource(start);
     model.assertCurrentSource(end);
-    model.ranges.push(CapturedRangeValue.lock(CapturedRangeValue.id(++model.sequence), start, end));
+    model.ranges.push(CapturedRanges.lock(CapturedRanges.id(++model.sequence), start, end));
     return model;
   }
 
@@ -83,7 +83,7 @@ export class RangeCaptureModel {
       ids.add(range.id);
       const start = this.savedEndpoint(range.start, sourceGeneration);
       const end = this.savedEndpoint(range.end, sourceGeneration);
-      model.ranges.push(CapturedRangeValue.lock(CapturedRangeValue.id(sequence), start, end));
+      model.ranges.push(CapturedRanges.lock(CapturedRanges.id(sequence), start, end));
     }
     if ((data.nextRangeSequence as number) <= highestId) throw new Error('Saved range sequence would reuse an ID.');
     if (data.draft !== undefined && data.draft !== null) {
@@ -124,12 +124,12 @@ export class RangeCaptureModel {
     const hydrate = (endpoint: CaptureEndpoint, identity?: ISourceFrameIdentity): CaptureEndpoint | null => {
       if (endpoint.kind !== 'saved-exact-frame') return endpoint;
       if (!identity || endpoint.frameIndex !== identity.frameIndex || endpoint.frameInfoHash !== identity.frameInfoHash) return null;
-      return CaptureEndpointValue.exact(identity, endpoint.reviewTimeUs, this.sourceGeneration);
+      return CaptureEndpoints.exact(identity, endpoint.reviewTimeUs, this.sourceGeneration);
     };
     const start = hydrate(range.start, identities.start);
     const end = hydrate(range.end, identities.end);
     if (!start || !end) return null;
-    const replacement = CapturedRangeValue.lock(rangeId, start, end);
+    const replacement = CapturedRanges.lock(rangeId, start, end);
     this.ranges[index] = replacement;
     return replacement;
   }
@@ -138,7 +138,7 @@ export class RangeCaptureModel {
     const hydrate = (endpoint: CaptureEndpoint | null, identity?: ISourceFrameIdentity): CaptureEndpoint | null | undefined => {
       if (endpoint?.kind !== 'saved-exact-frame') return endpoint;
       if (!identity || endpoint.frameIndex !== identity.frameIndex || endpoint.frameInfoHash !== identity.frameInfoHash) return undefined;
-      return CaptureEndpointValue.exact(identity, endpoint.reviewTimeUs, this.sourceGeneration);
+      return CaptureEndpoints.exact(identity, endpoint.reviewTimeUs, this.sourceGeneration);
     };
     const start = hydrate(this.start, identities.start);
     const end = hydrate(this.end, identities.end);
@@ -154,8 +154,8 @@ export class RangeCaptureModel {
     }
     return Object.freeze({
       kind: 'exact-frame',
-      frameIndex: endpoint.kind === 'exact-frame' ? endpoint.identity.frameIndex : endpoint.frameIndex,
-      frameInfoHash: endpoint.kind === 'exact-frame' ? endpoint.identity.frameInfoHash : endpoint.frameInfoHash,
+      frameIndex: CaptureEndpoints.frameIndexOf(endpoint),
+      frameInfoHash: CaptureEndpoints.frameHashOf(endpoint),
       reviewTimeUs: endpoint.reviewTimeUs.toString(),
     });
   }
@@ -163,10 +163,10 @@ export class RangeCaptureModel {
   private static savedEndpoint(value: unknown, sourceGeneration: number): CaptureEndpoint {
     const record = this.record(value, 'Saved endpoint');
     if (record.kind === 'playback-timestamp') {
-      return CaptureEndpointValue.timestamp(this.decimal(record.timestampUs, 'timestampUs'), sourceGeneration);
+      return CaptureEndpoints.timestamp(this.decimal(record.timestampUs, 'timestampUs'), sourceGeneration);
     }
     if (record.kind === 'exact-frame') {
-      return CaptureEndpointValue.savedExact(record.frameIndex as number, record.frameInfoHash as string,
+      return CaptureEndpoints.savedExact(record.frameIndex as number, record.frameInfoHash as string,
         this.decimal(record.reviewTimeUs, 'reviewTimeUs'), sourceGeneration);
     }
     throw new Error('Saved endpoint kind is unsupported.');
@@ -207,7 +207,7 @@ export class RangeCaptureModel {
       return this.reject('Check the saved exact frames before locking this draft.');
     }
     try {
-      const range = CapturedRangeValue.lock(CapturedRangeValue.id(++this.sequence), this.start, this.end);
+      const range = CapturedRanges.lock(CapturedRanges.id(++this.sequence), this.start, this.end);
       this.ranges.push(range);
       this.latestLockedRangeId = range.id;
       this.message = null;
@@ -225,7 +225,7 @@ export class RangeCaptureModel {
   ): CapturedRange | null {
     const index = this.ranges.findIndex(range => range.id === rangeId);
     if (index < 0) return null;
-    const replacement = CapturedRangeValue.lock(rangeId, start, end);
+    const replacement = CapturedRanges.lock(rangeId, start, end);
     this.ranges[index] = replacement;
     return replacement;
   }

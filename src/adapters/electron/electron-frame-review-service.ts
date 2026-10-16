@@ -13,7 +13,7 @@ import {
 import { BackendError, type BackendErrorCategory } from '../../frame-review/model/backend-error.js';
 import type { IFrameReviewState } from '../../frame-review/model/frame-review-state.js';
 import { PreparedReviewMetadata } from '../../frame-review/model/prepared-review.js';
-import { FrameReviewWireValue, SourceFrameIdentity } from '../../frame-review/model/source-frame-identity.js';
+import { FrameReviewWire, SourceFrameIdentity } from '../../frame-review/model/source-frame-identity.js';
 import type { ISourceFrameIdentity } from '../../frame-review/model/source-frame-identity.js';
 
 interface IWireResponse {
@@ -52,7 +52,7 @@ export class ElectronFrameReviewService implements IFrameReviewService {
   }
 
   async chooseSource(): Promise<IFrameReviewSourceSelection | null> {
-    const result = FrameReviewWireValue.record(this.response(await this.api.chooseSource()), 'frame-review source selection');
+    const result = FrameReviewWire.record(this.response(await this.api.chooseSource()), 'frame-review source selection');
     if (result.canceled === true) return null;
     if (typeof result.name !== 'string' || result.name.length < 1 || result.name.length > 512) {
       throw new BackendError('protocol-error', 'Selected movie name is invalid.', false);
@@ -68,7 +68,7 @@ export class ElectronFrameReviewService implements IFrameReviewService {
       sourceHandle: request.sourceHandle,
       previewBounds: request.previewBounds,
     }));
-    const result = FrameReviewWireValue.record(response, 'frame-review open result');
+    const result = FrameReviewWire.record(response, 'frame-review open result');
     const sessionId = FrameReviewOpaqueId.sessionId(result.sessionId);
     return new ElectronFrameReviewSession(this.api, sessionId, this.state(result.state));
   }
@@ -79,7 +79,7 @@ export class ElectronFrameReviewService implements IFrameReviewService {
   }
 
   private error(value: unknown): BackendError {
-    const record = FrameReviewWireValue.record(value, 'frame-review error');
+    const record = FrameReviewWire.record(value, 'frame-review error');
     return new BackendError(
       ElectronFrameReviewService.backendCategory(record.category),
       typeof record.message === 'string' ? record.message : 'Frame review failed.',
@@ -122,7 +122,7 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
   pause(): Promise<void> { return this.voidCommand('pause'); }
   seekPlayback(timestampUs: bigint): Promise<void> { return this.voidCommand('seek-playback', { timestampUs: timestampUs.toString() }); }
   async jumpPlaybackBy(deltaUs: bigint): Promise<bigint> {
-    return FrameReviewWireValue.decimalBigInt(await this.command('jump-playback-by', { deltaUs: deltaUs.toString() }), 'jump position');
+    return FrameReviewWire.decimalBigInt(await this.command('jump-playback-by', { deltaUs: deltaUs.toString() }), 'jump position');
   }
   startExactPreview(range: Readonly<{ startFrameIndex: number; endFrameIndex: number }>): Promise<void> {
     return this.voidCommand('start-exact-preview', range);
@@ -145,14 +145,14 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
   }
 
   async captureCurrentPoint(): Promise<FrameReviewCapturePoint> {
-    const result = FrameReviewWireValue.record(await this.command('capture-current-point'), 'capture point');
+    const result = FrameReviewWire.record(await this.command('capture-current-point'), 'capture point');
     if (result.kind === 'exact-frame') {
       return Object.freeze({ kind: 'exact-frame', identity: SourceFrameIdentity.fromWire(result.identity) });
     }
     if (result.kind === 'playback-timestamp') {
       return Object.freeze({
         kind: 'playback-timestamp',
-        timestampUs: FrameReviewWireValue.decimalBigInt(result.timestampUs, 'timestampUs'),
+        timestampUs: FrameReviewWire.decimalBigInt(result.timestampUs, 'timestampUs'),
       });
     }
     throw new BackendError('protocol-error', 'Frame-review capture point is invalid.', false);
@@ -193,9 +193,9 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
 
   private onWireEvent(value: unknown): void {
     if (this.disposed) return;
-    const envelope = FrameReviewWireValue.record(value, 'frame-review event envelope');
+    const envelope = FrameReviewWire.record(value, 'frame-review event envelope');
     if (envelope.sessionId !== this.id) return;
-    const wire = FrameReviewWireValue.record(envelope.event, 'frame-review event');
+    const wire = FrameReviewWire.record(envelope.event, 'frame-review event');
     let event: FrameReviewEvent;
     if (wire.type === 'state') {
       this.currentState = ElectronFrameReviewSession.parseState(wire.state);
@@ -218,13 +218,13 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
   }
 
   private parseFrame(value: unknown, expectedKind?: FrameReviewDisplayFrame['kind']): FrameReviewDisplayFrame {
-    const frame = FrameReviewWireValue.record(value, 'display frame');
+    const frame = FrameReviewWire.record(value, 'display frame');
     if (frame.kind !== 'exact-frame' && frame.kind !== 'playback-frame') {
       throw new BackendError('protocol-error', 'Display-frame kind is invalid.', false);
     }
     if (expectedKind && frame.kind !== expectedKind) throw new BackendError('protocol-error', 'Expected an exact frame.', false);
-    const width = FrameReviewWireValue.nonnegativeInteger(frame.width, 'width');
-    const height = FrameReviewWireValue.nonnegativeInteger(frame.height, 'height');
+    const width = FrameReviewWire.nonnegativeInteger(frame.width, 'width');
+    const height = FrameReviewWire.nonnegativeInteger(frame.height, 'height');
     if (width < 1 || height < 1 || !(frame.pixels instanceof Uint8Array) || frame.pixels.byteLength !== width * height * 4) {
       throw new BackendError('protocol-error', 'Display-frame pixel payload is invalid.', false);
     }
@@ -234,12 +234,12 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
       throw new BackendError('protocol-error', 'Playback acknowledgement timing is invalid.', false);
     }
     const common = {
-      sourceGeneration: FrameReviewWireValue.nonnegativeInteger(frame.sourceGeneration, 'sourceGeneration'),
-      frameGeneration: FrameReviewWireValue.nonnegativeInteger(frame.frameGeneration, 'frameGeneration'),
+      sourceGeneration: FrameReviewWire.nonnegativeInteger(frame.sourceGeneration, 'sourceGeneration'),
+      frameGeneration: FrameReviewWire.nonnegativeInteger(frame.frameGeneration, 'frameGeneration'),
       width,
       height,
-      sourceWidth: FrameReviewWireValue.nonnegativeInteger(frame.sourceWidth, 'sourceWidth'),
-      sourceHeight: FrameReviewWireValue.nonnegativeInteger(frame.sourceHeight, 'sourceHeight'),
+      sourceWidth: FrameReviewWire.nonnegativeInteger(frame.sourceWidth, 'sourceWidth'),
+      sourceHeight: FrameReviewWire.nonnegativeInteger(frame.sourceHeight, 'sourceHeight'),
       pixels: new Blob([Uint8Array.from(frame.pixels)], { type: 'application/x-rgba' }),
     };
     return frame.kind === 'exact-frame'
@@ -247,21 +247,21 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
         ...common,
         kind: 'exact-frame',
         identity: SourceFrameIdentity.fromWire(frame.identity),
-        reviewTimeUs: FrameReviewWireValue.decimalBigInt(frame.reviewTimeUs, 'reviewTimeUs'),
+        reviewTimeUs: FrameReviewWire.decimalBigInt(frame.reviewTimeUs, 'reviewTimeUs'),
       })
       : Object.freeze({
         ...common,
         kind: 'playback-frame',
-        playbackTimestampUs: FrameReviewWireValue.decimalBigInt(frame.playbackTimestampUs, 'playbackTimestampUs'),
+        playbackTimestampUs: FrameReviewWire.decimalBigInt(frame.playbackTimestampUs, 'playbackTimestampUs'),
         droppedBeforeWrite: frame.droppedBeforeWrite === undefined ? undefined
-          : FrameReviewWireValue.nonnegativeInteger(frame.droppedBeforeWrite, 'droppedBeforeWrite'),
+          : FrameReviewWire.nonnegativeInteger(frame.droppedBeforeWrite, 'droppedBeforeWrite'),
         previousAckRoundTripMs: ackRoundTripMs,
       });
   }
 
   private response(value: IWireResponse): unknown {
     if (value?.ok === true) return value.result;
-    const error = FrameReviewWireValue.record(value?.error, 'frame-review error');
+    const error = FrameReviewWire.record(value?.error, 'frame-review error');
     throw new BackendError(
       ElectronFrameReviewService.backendCategory(error.category),
       typeof error.message === 'string' ? error.message : 'Frame review failed.',
@@ -270,7 +270,7 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
   }
 
   static parseState(value: unknown): IFrameReviewState {
-    const state = FrameReviewWireValue.record(value, 'frame-review state');
+    const state = FrameReviewWire.record(value, 'frame-review state');
     const phases = ['opening', 'playback-ready', 'inspecting', 'cache-validation', 'normalizing', 'indexing',
       'proxy-encoding', 'proxy-indexing', 'validating', 'exact-ready', 'failed', 'closed'] as const;
     if (!phases.includes(state.phase as typeof phases[number]) || typeof state.captureEnabled !== 'boolean') {
@@ -283,10 +283,10 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
     }
     return Object.freeze({
       phase: state.phase as typeof phases[number],
-      sourceGeneration: FrameReviewWireValue.nonnegativeInteger(state.sourceGeneration, 'sourceGeneration'),
+      sourceGeneration: FrameReviewWire.nonnegativeInteger(state.sourceGeneration, 'sourceGeneration'),
       captureEnabled: state.captureEnabled,
       playbackDurationUs: state.playbackDurationUs === null || state.playbackDurationUs === undefined
-        ? null : FrameReviewWireValue.decimalBigInt(state.playbackDurationUs, 'playbackDurationUs'),
+        ? null : FrameReviewWire.decimalBigInt(state.playbackDurationUs, 'playbackDurationUs'),
       progressPercent,
       message: state.message === null ? null : String(state.message),
       preparedReview: state.preparedReview === null ? null : PreparedReviewMetadata.fromWire(state.preparedReview),

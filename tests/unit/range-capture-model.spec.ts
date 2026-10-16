@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CaptureEndpointValue } from '../../src/domain/capture-endpoint.js';
+import { CaptureEndpoints } from '../../src/domain/capture-endpoint.js';
 import { RangeCaptureModel } from '../../src/domain/range-capture-model.js';
 
 const identity = (frameIndex: number) => Object.freeze({
@@ -16,7 +16,7 @@ const identity = (frameIndex: number) => Object.freeze({
 
 describe('RangeCaptureModel', () => {
   it('starts with one exact range and no draft when built from a known range', () => {
-    const exact = (frameIndex: number) => CaptureEndpointValue.exact(identity(frameIndex), BigInt(frameIndex * 1_000), 2);
+    const exact = (frameIndex: number) => CaptureEndpoints.exact(identity(frameIndex), BigInt(frameIndex * 1_000), 2);
 
     const model = RangeCaptureModel.withExactRange(exact(2), exact(4), 2);
 
@@ -27,9 +27,9 @@ describe('RangeCaptureModel', () => {
   });
   it('replaces draft endpoints before A and locks an inclusive exact range', () => {
     const model = new RangeCaptureModel(4);
-    model.markStart(CaptureEndpointValue.exact(identity(10), 100_000n, 4));
-    model.markStart(CaptureEndpointValue.exact(identity(12), 120_000n, 4));
-    model.markEnd(CaptureEndpointValue.exact(identity(12), 120_000n, 4));
+    model.markStart(CaptureEndpoints.exact(identity(10), 100_000n, 4));
+    model.markStart(CaptureEndpoints.exact(identity(12), 120_000n, 4));
+    model.markEnd(CaptureEndpoints.exact(identity(12), 120_000n, 4));
 
     const result = model.lockRange();
 
@@ -44,9 +44,9 @@ describe('RangeCaptureModel', () => {
   });
 
   it.each([
-    ['exact then timestamp', CaptureEndpointValue.exact(identity(10), 100_000n, 7), CaptureEndpointValue.timestamp(200_000n, 7)],
-    ['timestamp then exact', CaptureEndpointValue.timestamp(100_000n, 7), CaptureEndpointValue.exact(identity(20), 200_000n, 7)],
-    ['two timestamps', CaptureEndpointValue.timestamp(100_000n, 7), CaptureEndpointValue.timestamp(200_000n, 7)],
+    ['exact then timestamp', CaptureEndpoints.exact(identity(10), 100_000n, 7), CaptureEndpoints.timestamp(200_000n, 7)],
+    ['timestamp then exact', CaptureEndpoints.timestamp(100_000n, 7), CaptureEndpoints.exact(identity(20), 200_000n, 7)],
+    ['two timestamps', CaptureEndpoints.timestamp(100_000n, 7), CaptureEndpoints.timestamp(200_000n, 7)],
   ])('derives Needs exact frames for %s', (_label, start, end) => {
     const model = new RangeCaptureModel(7);
     model.markStart(start);
@@ -57,15 +57,15 @@ describe('RangeCaptureModel', () => {
 
   it('keeps the locked range immutable, ignores W, and starts a new draft on the next Q', () => {
     const model = new RangeCaptureModel(2);
-    model.markStart(CaptureEndpointValue.timestamp(100_000n, 2));
-    model.markEnd(CaptureEndpointValue.timestamp(200_000n, 2));
+    model.markStart(CaptureEndpoints.timestamp(100_000n, 2));
+    model.markEnd(CaptureEndpoints.timestamp(200_000n, 2));
     const locked = model.lockRange();
     expect(locked.kind).toBe('locked');
 
-    expect(model.markEnd(CaptureEndpointValue.timestamp(300_000n, 2))).toEqual({
+    expect(model.markEnd(CaptureEndpoints.timestamp(300_000n, 2))).toEqual({
       kind: 'rejected', message: 'Press Q to begin a new range.',
     });
-    model.markStart(CaptureEndpointValue.timestamp(400_000n, 2));
+    model.markStart(CaptureEndpoints.timestamp(400_000n, 2));
 
     expect(model.snapshot.ranges).toHaveLength(1);
     expect(model.snapshot.capture).toMatchObject({ kind: 'draft', start: { timestampUs: 400_000n }, end: null });
@@ -73,8 +73,8 @@ describe('RangeCaptureModel', () => {
 
   it('removes the latest locked capture without restoring it as a draft', () => {
     const model = new RangeCaptureModel(1);
-    model.markStart(CaptureEndpointValue.timestamp(100_000n, 1));
-    model.markEnd(CaptureEndpointValue.timestamp(200_000n, 1));
+    model.markStart(CaptureEndpoints.timestamp(100_000n, 1));
+    model.markEnd(CaptureEndpoints.timestamp(200_000n, 1));
     const locked = model.lockRange();
     if (locked.kind !== 'locked') throw new Error('Expected a locked capture.');
 
@@ -88,10 +88,10 @@ describe('RangeCaptureModel', () => {
 
   it('discards an unfinished draft while retaining locked captures', () => {
     const model = new RangeCaptureModel(1);
-    model.markStart(CaptureEndpointValue.timestamp(100_000n, 1));
-    model.markEnd(CaptureEndpointValue.timestamp(200_000n, 1));
+    model.markStart(CaptureEndpoints.timestamp(100_000n, 1));
+    model.markEnd(CaptureEndpoints.timestamp(200_000n, 1));
     model.lockRange();
-    model.markStart(CaptureEndpointValue.timestamp(300_000n, 1));
+    model.markStart(CaptureEndpoints.timestamp(300_000n, 1));
 
     expect(model.discardDraft()).toBe(true);
 
@@ -103,20 +103,20 @@ describe('RangeCaptureModel', () => {
   it('rejects missing, reversed, and stale-generation endpoints without creating a range', () => {
     const model = new RangeCaptureModel(9);
     expect(model.lockRange()).toEqual({ kind: 'rejected', message: 'Mark a start and end before locking.' });
-    expect(() => model.markStart(CaptureEndpointValue.timestamp(1n, 8))).toThrow('source generation');
-    model.markStart(CaptureEndpointValue.timestamp(200n, 9));
-    model.markEnd(CaptureEndpointValue.timestamp(100n, 9));
+    expect(() => model.markStart(CaptureEndpoints.timestamp(1n, 8))).toThrow('source generation');
+    model.markStart(CaptureEndpoints.timestamp(200n, 9));
+    model.markEnd(CaptureEndpoints.timestamp(100n, 9));
     expect(model.lockRange()).toEqual({ kind: 'rejected', message: 'The end must not precede the start.' });
     expect(model.snapshot.ranges).toHaveLength(0);
   });
 
   it('serializes locked ranges compactly and checks exact frames only when requested', () => {
     const original = new RangeCaptureModel(1);
-    original.markStart(CaptureEndpointValue.exact(identity(10), 100_000n, 1));
-    original.markEnd(CaptureEndpointValue.exact(identity(12), 120_000n, 1));
+    original.markStart(CaptureEndpoints.exact(identity(10), 100_000n, 1));
+    original.markEnd(CaptureEndpoints.exact(identity(12), 120_000n, 1));
     original.lockRange();
-    original.markStart(CaptureEndpointValue.exact(identity(20), 200_000n, 1));
-    original.markEnd(CaptureEndpointValue.timestamp(300_000n, 1));
+    original.markStart(CaptureEndpoints.exact(identity(20), 200_000n, 1));
+    original.markEnd(CaptureEndpoints.timestamp(300_000n, 1));
     original.lockRange();
 
     const saved = original.toSavedData();
@@ -151,8 +151,8 @@ describe('RangeCaptureModel', () => {
 
   it('restores an approximate draft without making it exact', () => {
     const original = new RangeCaptureModel(1);
-    original.markStart(CaptureEndpointValue.timestamp(100_000n, 1));
-    original.markEnd(CaptureEndpointValue.timestamp(200_000n, 1));
+    original.markStart(CaptureEndpoints.timestamp(100_000n, 1));
+    original.markEnd(CaptureEndpoints.timestamp(200_000n, 1));
 
     const saved = original.toSavedData();
     expect(saved.draft).toEqual({
@@ -169,21 +169,21 @@ describe('RangeCaptureModel', () => {
 
   it('resumes after the latest draft endpoint ahead of saved ranges', () => {
     const original = new RangeCaptureModel(1);
-    original.markStart(CaptureEndpointValue.exact(identity(10), 100_000n, 1));
-    original.markEnd(CaptureEndpointValue.exact(identity(12), 120_000n, 1));
+    original.markStart(CaptureEndpoints.exact(identity(10), 100_000n, 1));
+    original.markEnd(CaptureEndpoints.exact(identity(12), 120_000n, 1));
     original.lockRange();
-    original.markStart(CaptureEndpointValue.exact(identity(20), 200_000n, 1));
+    original.markStart(CaptureEndpoints.exact(identity(20), 200_000n, 1));
     const restored = RangeCaptureModel.fromSavedData(original.toSavedData(), 2);
 
     expect(restored.continuationEndpoint()).toMatchObject({ kind: 'saved-exact-frame', frameIndex: 20 });
-    restored.markEnd(CaptureEndpointValue.timestamp(230_000n, 2));
+    restored.markEnd(CaptureEndpoints.timestamp(230_000n, 2));
     expect(restored.continuationEndpoint()).toMatchObject({ kind: 'playback-timestamp', timestampUs: 230_000n });
   });
 
   it('checks a restored exact draft before it can be locked', () => {
     const original = new RangeCaptureModel(1);
-    original.markStart(CaptureEndpointValue.exact(identity(10), 100_000n, 1));
-    original.markEnd(CaptureEndpointValue.exact(identity(12), 120_000n, 1));
+    original.markStart(CaptureEndpoints.exact(identity(10), 100_000n, 1));
+    original.markEnd(CaptureEndpoints.exact(identity(12), 120_000n, 1));
     const restored = RangeCaptureModel.fromSavedData(original.toSavedData(), 2);
 
     expect(restored.lockRange().kind).toBe('rejected');
@@ -194,8 +194,8 @@ describe('RangeCaptureModel', () => {
 
   it('restores a mixed exact and approximate draft without upgrading the approximate endpoint', () => {
     const original = new RangeCaptureModel(1);
-    original.markStart(CaptureEndpointValue.exact(identity(10), 100_000n, 1));
-    original.markEnd(CaptureEndpointValue.timestamp(200_000n, 1));
+    original.markStart(CaptureEndpoints.exact(identity(10), 100_000n, 1));
+    original.markEnd(CaptureEndpoints.timestamp(200_000n, 1));
     const restored = RangeCaptureModel.fromSavedData(original.toSavedData(), 2);
 
     expect(restored.lockRange().kind).toBe('rejected');

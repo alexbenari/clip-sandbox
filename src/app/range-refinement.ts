@@ -1,5 +1,5 @@
-import { CaptureEndpointValue, type IExactFrameEndpoint } from '../domain/capture-endpoint.js';
-import { CapturedRangeValue, type CapturedRangeId } from '../domain/captured-range.js';
+import { CaptureEndpoints, type IExactFrameEndpoint } from '../domain/capture-endpoint.js';
+import { CapturedRanges, type CapturedRangeId } from '../domain/captured-range.js';
 import type { CaptureQueue } from './capture-queue.js';
 import type { CurrentMovie } from './current-movie.js';
 import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capture.js';
@@ -90,7 +90,7 @@ export class RangeRefinement implements IRefineGifSessionOwner {
     const { movie, queue } = this.deps;
     if (!capture || capture.point.kind !== 'exact-frame' || !movie.reviewState?.captureEnabled
       || capture.sourceGeneration !== movie.reviewState.sourceGeneration || !queue.hasModel) return null;
-    return CaptureEndpointValue.exact(capture.point.identity, capture.positionUs, movie.sourceGeneration);
+    return CaptureEndpoints.exact(capture.point.identity, capture.positionUs, movie.sourceGeneration);
   }
 
   commitRefinement(request: IRefineGifCommitRequest): RefineGifCommitResult {
@@ -108,7 +108,7 @@ export class RangeRefinement implements IRefineGifSessionOwner {
     if (current !== request.session.snapshot.original) {
       return Object.freeze({ kind: 'rejected', message: 'This range changed before the refinement was locked.' });
     }
-    const changed = !CapturedRangeValue.hasExactFrames(current, request.start, request.end);
+    const changed = !CapturedRanges.hasExactFrames(current, request.start, request.end);
     const block = changed ? extraction.revisionBlock(request.rangeId) : null;
     if (block) return Object.freeze({ kind: 'rejected', message: block });
     if (!changed && current.kind === 'ready-to-extract') {

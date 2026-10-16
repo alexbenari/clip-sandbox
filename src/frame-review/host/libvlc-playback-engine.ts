@@ -1,5 +1,5 @@
 import { BackendError } from '../model/backend-error.js';
-import { FrameReviewWireValue } from '../model/source-frame-identity.js';
+import { FrameReviewWire } from '../model/source-frame-identity.js';
 import type { NativeProcessClient, ITimedProtocolMessage } from './native-process-client.js';
 
 export interface IPlaybackStatus {
@@ -103,17 +103,17 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
 
   private onEvent(message: ITimedProtocolMessage): void {
     if (message.metadata.type === 'playback-ended') {
-      if (FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceGeneration, 'sourceGeneration')
+      if (FrameReviewWire.nonnegativeInteger(message.metadata.sourceGeneration, 'sourceGeneration')
         === this.sourceGeneration) this.endedListener?.();
       return;
     }
     if (message.metadata.type !== 'playback-frame') return;
-    const sourceGeneration = FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceGeneration, 'sourceGeneration');
-    const frameGeneration = FrameReviewWireValue.nonnegativeInteger(message.metadata.frameGeneration, 'frameGeneration');
+    const sourceGeneration = FrameReviewWire.nonnegativeInteger(message.metadata.sourceGeneration, 'sourceGeneration');
+    const frameGeneration = FrameReviewWire.nonnegativeInteger(message.metadata.frameGeneration, 'frameGeneration');
     if (sourceGeneration !== this.sourceGeneration) return;
-    const width = FrameReviewWireValue.nonnegativeInteger(message.metadata.width, 'width');
-    const height = FrameReviewWireValue.nonnegativeInteger(message.metadata.height, 'height');
-    const stride = FrameReviewWireValue.nonnegativeInteger(message.metadata.stride, 'stride');
+    const width = FrameReviewWire.nonnegativeInteger(message.metadata.width, 'width');
+    const height = FrameReviewWire.nonnegativeInteger(message.metadata.height, 'height');
+    const stride = FrameReviewWire.nonnegativeInteger(message.metadata.stride, 'stride');
     if (message.metadata.pixelFormat !== 'RGBA8888' || width < 1 || height < 1 || stride < width * 4
       || message.payload.length !== stride * height) {
       throw new BackendError('protocol-error', 'LibVLC returned invalid frame pixels.', false);
@@ -122,13 +122,13 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
       kind: 'playback-frame',
       sourceGeneration,
       frameGeneration,
-      playbackTimestampUs: FrameReviewWireValue.decimalBigInt(message.metadata.playbackTimestampUs, 'playbackTimestampUs'),
+      playbackTimestampUs: FrameReviewWire.decimalBigInt(message.metadata.playbackTimestampUs, 'playbackTimestampUs'),
       width,
       height,
-      sourceWidth: FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceWidth, 'sourceWidth'),
-      sourceHeight: FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceHeight, 'sourceHeight'),
+      sourceWidth: FrameReviewWire.nonnegativeInteger(message.metadata.sourceWidth, 'sourceWidth'),
+      sourceHeight: FrameReviewWire.nonnegativeInteger(message.metadata.sourceHeight, 'sourceHeight'),
       pixels: this.packPixels(message.payload, width, height, stride),
-      droppedBeforeWrite: FrameReviewWireValue.nonnegativeInteger(
+      droppedBeforeWrite: FrameReviewWire.nonnegativeInteger(
         message.metadata.droppedBeforeWrite, 'droppedBeforeWrite'),
       previousAckRoundTripMs: this.previousAckRoundTripMs,
     }));
@@ -138,15 +138,15 @@ export class LibVlcPlaybackEngine implements IReviewPlaybackEngine {
   }
 
   private parseStatus(message: ITimedProtocolMessage, expectedGeneration: number): IPlaybackStatus {
-    const generation = FrameReviewWireValue.nonnegativeInteger(message.metadata.sourceGeneration, 'sourceGeneration');
+    const generation = FrameReviewWire.nonnegativeInteger(message.metadata.sourceGeneration, 'sourceGeneration');
     if (generation !== expectedGeneration) throw new BackendError('stale-response', 'Playback status is obsolete.', true);
     return Object.freeze({
       state: String(message.metadata.state),
       sourceGeneration: generation,
       timestampUs: message.metadata.timeUs === undefined
-        ? 0n : FrameReviewWireValue.decimalBigInt(message.metadata.timeUs, 'timeUs'),
+        ? 0n : FrameReviewWire.decimalBigInt(message.metadata.timeUs, 'timeUs'),
       lengthUs: message.metadata.lengthUs === undefined
-        ? null : FrameReviewWireValue.decimalBigInt(message.metadata.lengthUs, 'lengthUs'),
+        ? null : FrameReviewWire.decimalBigInt(message.metadata.lengthUs, 'lengthUs'),
     });
   }
 

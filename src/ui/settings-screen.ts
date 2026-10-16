@@ -1,6 +1,6 @@
 import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
-import { isStartupScreenId, type IAppSettings } from '../app/app-settings.js';
+import { AppSettingsParser, type IAppSettings } from '../app/app-settings.js';
 
 export interface ISettingsScreenEvents {
   folderChooseRequested: void;
@@ -66,7 +66,7 @@ export class SettingsScreen implements IAppScreen, IEventSource<ISettingsScreenE
       this.events.emit('preferenceChangeRequested', { singleClipAudioDefault: audio.checked });
     });
     startupScreen.addEventListener('change', () => {
-      if (isStartupScreenId(startupScreen.value)) {
+      if (AppSettingsParser.isStartupScreenId(startupScreen.value)) {
         this.events.emit('preferenceChangeRequested', { startupScreenId: startupScreen.value });
       }
     });

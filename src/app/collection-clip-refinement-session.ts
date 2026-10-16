@@ -1,6 +1,6 @@
 import type { IFrameReviewService, IFrameReviewSession, IFrameReviewSourceSelection } from '../frame-review/frame-review-api.js';
 import { SourceFrameIdentity } from '../frame-review/model/source-frame-identity.js';
-import { CaptureEndpointValue } from '../domain/capture-endpoint.js';
+import { CaptureEndpoints } from '../domain/capture-endpoint.js';
 import { RangeCaptureModel } from '../domain/range-capture-model.js';
 import { UnsavedCaptureStorage } from './capture-storage.js';
 import { MovieRangeSession, type MovieRangeSessionOptions } from './movie-range-session.js';
@@ -49,8 +49,8 @@ export class CollectionClipRefinementSession extends MovieRangeSession {
       return this.rejectRefinement('The source range no longer matches this clip.');
     }
     const model = RangeCaptureModel.withExactRange(
-      CaptureEndpointValue.exact(start, SourceFrameIdentity.timeUs(start), generation),
-      CaptureEndpointValue.exact(end, SourceFrameIdentity.timeUs(end), generation),
+      CaptureEndpoints.exact(start, SourceFrameIdentity.timeUs(start), generation),
+      CaptureEndpoints.exact(end, SourceFrameIdentity.timeUs(end), generation),
       generation);
     this.queue.useModel(model);
     return this.refinement.beginRefinement(model.snapshot.ranges[0]!.id);

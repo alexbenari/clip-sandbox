@@ -1,5 +1,5 @@
 import type { IExactFrameEndpoint } from '../domain/capture-endpoint.js';
-import { CaptureEndpointValue, type CaptureEndpoint } from '../domain/capture-endpoint.js';
+import { CaptureEndpoints, type CaptureEndpoint } from '../domain/capture-endpoint.js';
 import type {
   CapturedRangeId,
   CapturedRange,
@@ -81,7 +81,7 @@ export class RefineGifSession {
       start: this.start,
       end: this.end,
       focusedEndpoint: this.focusedEndpoint,
-      seekTimeUs: CaptureEndpointValue.positionUs(this.focusedValue()),
+      seekTimeUs: CaptureEndpoints.positionUs(this.focusedValue()),
       seekRevision: this.seekRevision,
       stagedRevision: this.stagedRevision,
       canCommit: this.commitProblem() === null,

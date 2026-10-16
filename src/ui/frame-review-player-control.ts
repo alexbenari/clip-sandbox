@@ -7,7 +7,7 @@ import type {
   IFrameReviewSession,
 } from '../frame-review/frame-review-api.js';
 import type { IFrameReviewState } from '../frame-review/model/frame-review-state.js';
-import type { CaptureEndpoint } from '../domain/capture-endpoint.js';
+import { CaptureEndpoints, type CaptureEndpoint } from '../domain/capture-endpoint.js';
 import type { IFrameReviewDisplayedCapture } from '../app/frame-review-displayed-capture.js';
 
 export interface IFrameReviewFrameRenderer {
@@ -605,7 +605,7 @@ export class FrameReviewPlayerControl {
     }
     const frameCount = this.reviewState?.preparedReview?.frameCount ?? 0;
     if (frameCount < 1) return;
-    const frameIndex = endpoint.kind === 'exact-frame' ? endpoint.identity.frameIndex : endpoint.frameIndex;
+    const frameIndex = CaptureEndpoints.frameIndexOf(endpoint);
     await this.enterExactScrubAtFrame(frameIndex < frameCount - 1 ? frameIndex + 1 : frameCount - 1);
   }
 

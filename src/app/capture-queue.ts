@@ -1,4 +1,4 @@
-import { CaptureEndpointValue, type CaptureEndpoint, type IExactFrameEndpoint, type ISavedExactFrameEndpoint } from '../domain/capture-endpoint.js';
+import { CaptureEndpoints, type CaptureEndpoint, type IExactFrameEndpoint, type ISavedExactFrameEndpoint } from '../domain/capture-endpoint.js';
 import type { CapturedRange, CapturedRangeId } from '../domain/captured-range.js';
 import { RangeCaptureModel, type IRangeCaptureSnapshot, type RangeCaptureTransition } from '../domain/range-capture-model.js';
 import type { FrameReviewDisplayFrame, IFrameReviewSession } from '../frame-review/frame-review-api.js';
@@ -198,13 +198,12 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     const range = this.range(rangeId);
     const review = this.deps.movie.review;
     const generation = this.deps.movie.sourceGeneration;
-    if (range && range.start.kind !== 'playback-timestamp' && review?.state().captureEnabled
+    if (range && CaptureEndpoints.isFrame(range.start) && review?.state().captureEnabled
       && this.captureThumbnails.stateForRange(rangeId).kind === 'missing') {
-      const frameIndex = range.start.kind === 'exact-frame' ? range.start.identity.frameIndex : range.start.frameIndex;
-      const frame = await review.thumbnailFrame(frameIndex);
+      const start = range.start;
+      const frame = await review.thumbnailFrame(CaptureEndpoints.frameIndexOf(start));
       if (this.deps.movie.review !== review || this.deps.movie.sourceGeneration !== generation) return;
-      const savedHash = range.start.kind === 'saved-exact-frame' ? range.start.frameInfoHash : range.start.identity.frameInfoHash;
-      if (frame.identity.frameInfoHash !== savedHash) return;
+      if (frame.identity.frameInfoHash !== CaptureEndpoints.frameHashOf(start)) return;
       this.captureThumbnails.replaceRange(rangeId, frame);
       return;
     }
@@ -342,8 +341,8 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     if (!capture || !this.model || !movie.reviewState?.captureEnabled
       || capture.sourceGeneration !== movie.reviewState.sourceGeneration) return null;
     return capture.point.kind === 'exact-frame'
-      ? CaptureEndpointValue.exact(capture.point.identity, capture.positionUs, movie.sourceGeneration)
-      : CaptureEndpointValue.timestamp(capture.point.timestampUs, movie.sourceGeneration);
+      ? CaptureEndpoints.exact(capture.point.identity, capture.positionUs, movie.sourceGeneration)
+      : CaptureEndpoints.timestamp(capture.point.timestampUs, movie.sourceGeneration);
   }
 
   private async indexedIdentities(

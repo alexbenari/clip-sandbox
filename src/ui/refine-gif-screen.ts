@@ -5,6 +5,7 @@ import type { MovieRangeSession } from '../app/movie-range-session.js';
 export type RefineScreenSession = Pick<MovieRangeSession, 'subscribe' | 'snapshot' | 'reviewSession' | 'refinementSession'
   | 'beginRefinement' | 'abandonRefinement' | 'canExtractRange' | 'extractRange' | 'cancelExtraction'>;
 import type { IRefineGifSessionSnapshot, RefineGifEndpoint } from '../app/refine-gif-session.js';
+import { CaptureEndpoints } from '../domain/capture-endpoint.js';
 import type { CapturedRangeId } from '../domain/captured-range.js';
 import type { IAppScreen, IAppScreenPanelContribution } from './app-screen.js';
 import type { IShortcutDescriptor } from '../app/shortcut-descriptor.js';
@@ -475,8 +476,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
       : 'Needs exact frame';
     approximation.textContent = original.kind === 'playback-timestamp'
       ? `Approx. ${this.timeText(original.timestampUs)}`
-      : `Captured at frame ${(original.kind === 'exact-frame'
-        ? original.identity.frameIndex : original.frameIndex).toLocaleString()}`;
+      : `Captured at frame ${CaptureEndpoints.frameIndexOf(original).toLocaleString()}`;
   }
 
   private requestExactPosition(refinement: IRefineGifSessionSnapshot): void {

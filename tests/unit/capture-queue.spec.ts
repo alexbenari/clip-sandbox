@@ -7,7 +7,7 @@ import { GifSessionStatus } from '../../src/app/gif-session-status.js';
 import { ThumbnailOpaqueId, type IThumbnailCacheService } from '../../src/app/thumbnail-cache-service.js';
 import { FrameReviewState } from '../../src/frame-review/model/frame-review-state.js';
 import { RangeCaptureModel } from '../../src/domain/range-capture-model.js';
-import { CaptureEndpointValue } from '../../src/domain/capture-endpoint.js';
+import { CaptureEndpoints } from '../../src/domain/capture-endpoint.js';
 import type { IFrameReviewSession } from '../../src/frame-review/frame-review-api.js';
 
 function frame(frameIndex: number) {
@@ -129,8 +129,8 @@ describe('CaptureQueue', () => {
 
   it('restores a saved queue, positions the movie after it, and says what came back', async () => {
     const saved = new RangeCaptureModel(1);
-    saved.markStart(CaptureEndpointValue.exact(frame(3), 3_000n, 1));
-    saved.markEnd(CaptureEndpointValue.exact(frame(6), 6_000n, 1));
+    saved.markStart(CaptureEndpoints.exact(frame(3), 3_000n, 1));
+    saved.markEnd(CaptureEndpoints.exact(frame(6), 6_000n, 1));
     saved.lockRange();
     const storage = Object.assign(new UnsavedCaptureStorage(), {
       restoring: true, loading: true,

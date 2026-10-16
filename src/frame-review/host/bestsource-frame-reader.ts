@@ -1,5 +1,5 @@
 import { BackendError } from '../model/backend-error.js';
-import { FrameReviewWireValue, SourceFrameIdentity, type ISourceFrameIdentity } from '../model/source-frame-identity.js';
+import { FrameReviewWire, SourceFrameIdentity, type ISourceFrameIdentity } from '../model/source-frame-identity.js';
 import type { NativeProcessClient, ITimedProtocolMessage } from './native-process-client.js';
 
 export interface IHostExactFrame {
@@ -50,7 +50,7 @@ export class BestSourceFrameReader implements IExactFrameReader {
       maxPreviewHeight: request.maxHeight,
     }, 60_000);
     this.assertGeneration(response, generation);
-    return FrameReviewWireValue.nonnegativeInteger(response.metadata.numFrames, 'numFrames');
+    return FrameReviewWire.nonnegativeInteger(response.metadata.numFrames, 'numFrames');
   }
 
   exact(frameIndex: number): Promise<IHostExactFrame> { return this.frame('exact', { frameIndex }); }
@@ -70,34 +70,34 @@ export class BestSourceFrameReader implements IExactFrameReader {
     const generation = this.sourceGeneration;
     const response = await this.client.request(command, fields);
     this.assertGeneration(response, generation);
-    const width = FrameReviewWireValue.nonnegativeInteger(response.metadata.width, 'width');
-    const height = FrameReviewWireValue.nonnegativeInteger(response.metadata.height, 'height');
-    const stride = FrameReviewWireValue.nonnegativeInteger(response.metadata.stride, 'stride');
+    const width = FrameReviewWire.nonnegativeInteger(response.metadata.width, 'width');
+    const height = FrameReviewWire.nonnegativeInteger(response.metadata.height, 'height');
+    const stride = FrameReviewWire.nonnegativeInteger(response.metadata.stride, 'stride');
     if (response.metadata.pixelFormat !== 'RGBA8888' || width < 1 || height < 1 || stride < width * 4
       || response.payload.length !== stride * height) {
       throw new BackendError('protocol-error', 'BestSource returned invalid frame pixels.', false);
     }
-    const reviewTime = FrameReviewWireValue.record(response.metadata.reviewTime, 'reviewTime');
-    const pts = FrameReviewWireValue.decimalBigInt(reviewTime.pts, 'reviewTime.pts');
-    const numerator = FrameReviewWireValue.decimalBigInt(reviewTime.timebaseNumerator, 'reviewTime.timebaseNumerator');
-    const denominator = FrameReviewWireValue.decimalBigInt(reviewTime.timebaseDenominator, 'reviewTime.timebaseDenominator');
+    const reviewTime = FrameReviewWire.record(response.metadata.reviewTime, 'reviewTime');
+    const pts = FrameReviewWire.decimalBigInt(reviewTime.pts, 'reviewTime.pts');
+    const numerator = FrameReviewWire.decimalBigInt(reviewTime.timebaseNumerator, 'reviewTime.timebaseNumerator');
+    const denominator = FrameReviewWire.decimalBigInt(reviewTime.timebaseDenominator, 'reviewTime.timebaseDenominator');
     if (numerator <= 0n || denominator <= 0n) throw new BackendError('protocol-error', 'Review timebase is invalid.', false);
     return Object.freeze({
       kind: 'exact-frame',
       identity: SourceFrameIdentity.fromWire(response.metadata.identity),
       reviewTimeUs: pts * numerator * 1_000_000n / denominator,
       sourceGeneration: generation,
-      frameGeneration: FrameReviewWireValue.nonnegativeInteger(response.metadata.frameGeneration, 'frameGeneration'),
+      frameGeneration: FrameReviewWire.nonnegativeInteger(response.metadata.frameGeneration, 'frameGeneration'),
       width,
       height,
-      sourceWidth: FrameReviewWireValue.nonnegativeInteger(response.metadata.sourceWidth, 'sourceWidth'),
-      sourceHeight: FrameReviewWireValue.nonnegativeInteger(response.metadata.sourceHeight, 'sourceHeight'),
+      sourceWidth: FrameReviewWire.nonnegativeInteger(response.metadata.sourceWidth, 'sourceWidth'),
+      sourceHeight: FrameReviewWire.nonnegativeInteger(response.metadata.sourceHeight, 'sourceHeight'),
       pixels: Uint8Array.from(response.payload),
     });
   }
 
   private assertGeneration(response: ITimedProtocolMessage, expected: number): void {
-    const generation = FrameReviewWireValue.nonnegativeInteger(response.metadata.sourceGeneration, 'sourceGeneration');
+    const generation = FrameReviewWire.nonnegativeInteger(response.metadata.sourceGeneration, 'sourceGeneration');
     if (generation !== expected) throw new BackendError('stale-response', 'Exact frame response is obsolete.', true);
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { CapturedRangeValue, type IReadyToExtractRange } from '../../src/domain/captured-range.js';
-import { CaptureEndpointValue } from '../../src/domain/capture-endpoint.js';
+import { CapturedRanges, type IReadyToExtractRange } from '../../src/domain/captured-range.js';
+import { CaptureEndpoints } from '../../src/domain/capture-endpoint.js';
 import type { IClipExtractionService } from '../../src/frame-review/clip-extraction-api.js';
 import { GifSessionStatus } from '../../src/app/gif-session-status.js';
 import { RangeExtraction } from '../../src/app/range-extraction.js';
@@ -18,9 +18,9 @@ function frame(frameIndex: number) {
 
 function readyRange(sequence: number, start: number, end: number): IReadyToExtractRange {
   return Object.freeze({
-    id: CapturedRangeValue.id(sequence), kind: 'ready-to-extract', sourceGeneration: 1,
-    start: CaptureEndpointValue.exact(frame(start), BigInt(start * 1_000), 1),
-    end: CaptureEndpointValue.exact(frame(end), BigInt(end * 1_000), 1),
+    id: CapturedRanges.id(sequence), kind: 'ready-to-extract', sourceGeneration: 1,
+    start: CaptureEndpoints.exact(frame(start), BigInt(start * 1_000), 1),
+    end: CaptureEndpoints.exact(frame(end), BigInt(end * 1_000), 1),
   }) as IReadyToExtractRange;
 }
 
@@ -125,7 +125,7 @@ describe('RangeExtraction', () => {
     extraction.startForMovie(movie.movieName);
 
     expect(extraction.available).toBe(false);
-    expect(extraction.canStart(CapturedRangeValue.id(1))).toBe(false);
-    expect(extraction.state(CapturedRangeValue.id(1)).kind).toBe('pending');
+    expect(extraction.canStart(CapturedRanges.id(1))).toBe(false);
+    expect(extraction.state(CapturedRanges.id(1)).kind).toBe('pending');
   });
 });

@@ -14,11 +14,11 @@ export const DEFAULT_APP_SETTINGS: IAppSettings = Object.freeze({
   startupScreenId: DEFAULT_STARTUP_SCREEN_ID,
 });
 
-export function isStartupScreenId(value: unknown): value is StartupScreenId {
-  return value === 'gif-extraction' || value === 'collection';
-}
-
 export class AppSettingsParser {
+  static isStartupScreenId(value: unknown): value is StartupScreenId {
+    return value === 'gif-extraction' || value === 'collection';
+  }
+
   parse(value: unknown): IAppSettings | null {
     if (!value || typeof value !== 'object') return null;
     const candidate = value as Record<string, unknown>;
@@ -28,7 +28,7 @@ export class AppSettingsParser {
     if (typeof candidate.singleClipAudioDefault !== 'boolean') return null;
     let parsedStartupScreenId = DEFAULT_STARTUP_SCREEN_ID;
     if (startupScreenId !== undefined) {
-      if (!isStartupScreenId(startupScreenId)) return null;
+      if (!AppSettingsParser.isStartupScreenId(startupScreenId)) return null;
       parsedStartupScreenId = startupScreenId;
     }
     return Object.freeze({

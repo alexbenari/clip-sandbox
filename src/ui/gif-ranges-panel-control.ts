@@ -1,4 +1,4 @@
-import { CaptureEndpointValue, type CaptureEndpoint } from '../domain/capture-endpoint.js';
+import { CaptureEndpoints, type CaptureEndpoint } from '../domain/capture-endpoint.js';
 import type { CapturedRangeId } from '../domain/captured-range.js';
 import type {
   GifRangeView,
@@ -448,7 +448,7 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
   }
 
   private durationText(start: CaptureEndpoint, end: CaptureEndpoint): string {
-    const duration = CaptureEndpointValue.positionUs(end) - CaptureEndpointValue.positionUs(start);
+    const duration = CaptureEndpoints.positionUs(end) - CaptureEndpoints.positionUs(start);
     const seconds = duration / 1_000_000n;
     const milliseconds = (duration % 1_000_000n) / 1_000n;
     return `(${seconds}.${String(milliseconds).padStart(3, '0')} sec)`;
