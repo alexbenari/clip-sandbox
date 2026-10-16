@@ -63,7 +63,7 @@ type ClipCard = HTMLElement & {
   dataset: DOMStringMap & {
     clipId?: string;
     name?: string;
-    objectUrl?: string;
+    mediaSource?: string;
     durationSeconds?: string;
     layoutCols?: string;
     layoutCellHeight?: string;
@@ -222,7 +222,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   card.draggable = true;
   card.dataset.clipId = clip.id;
   card.dataset.name = clip.name;
-  card.dataset.objectUrl = mediaSource;
+  card.dataset.mediaSource = mediaSource;
   card.dataset.durationSeconds = Number.isFinite(clip.durationSec) ? String(clip.durationSec) : '';
 
   const vid = doc.createElement('video');
@@ -1000,7 +1000,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   }
 
   getClipMediaSource(clipId: string | null | undefined): string {
-    return this.getCardByClipId(clipId)?.dataset.objectUrl || '';
+    return this.getCardByClipId(clipId)?.dataset.mediaSource || '';
   }
 
   dispose(): void {

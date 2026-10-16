@@ -10,8 +10,8 @@ const COLLECTION_FILE_EXT = '.txt';
 
 export type PipelineBuildResult = {
   pipeline: Pipeline;
-  videos: FolderEntry[];
-  collectionFiles: FolderEntry[];
+  videoEntries: FolderEntry[];
+  collectionEntries: FolderEntry[];
   validCollections: Collection[];
   invalidDescriptions: InvalidCollectionDescription[];
 };
@@ -27,11 +27,11 @@ export class PipelineFactory {
     return entry.name.toLowerCase().endsWith(COLLECTION_FILE_EXT);
   }
 
-  getVideosAndCollectionFiles(entries: Iterable<FolderEntry>): { videos: FolderEntry[]; collectionFiles: FolderEntry[] } {
+  classifyEntries(entries: Iterable<FolderEntry>): { videoEntries: FolderEntry[]; collectionEntries: FolderEntry[] } {
     const all = Array.from(entries || []);
     return {
-      videos: PipelineFactory.sortedByName(all.filter((entry) => this.isVideoEntry(entry))),
-      collectionFiles: PipelineFactory.sortedByName(all.filter((entry) => this.isCollectionEntry(entry))),
+      videoEntries: PipelineFactory.sortedByName(all.filter((entry) => this.isVideoEntry(entry))),
+      collectionEntries: PipelineFactory.sortedByName(all.filter((entry) => this.isCollectionEntry(entry))),
     };
   }
 
@@ -46,11 +46,11 @@ export class PipelineFactory {
     collectionFormat: Pick<CollectionTextFormat, 'read'>;
     logInvalidDescription?: (result: InvalidCollectionDescription) => void | Promise<void>;
   }): Promise<PipelineBuildResult> {
-    const { videos, collectionFiles } = this.getVideosAndCollectionFiles(files);
+    const { videoEntries, collectionEntries } = this.classifyEntries(files);
     const validCollections: Collection[] = [];
     const invalidDescriptions: InvalidCollectionDescription[] = [];
 
-    for (const entry of collectionFiles) {
+    for (const entry of collectionEntries) {
       const result = collectionFormat.read({ text: entry.text ?? '', filename: entry.name });
       if (result.ok === true) {
         validCollections.push(result.content);
@@ -62,7 +62,7 @@ export class PipelineFactory {
 
     const pipeline = new Pipeline({
       folderName,
-      videoSources: videos.map((entry) => ClipSource.create({
+      videoSources: videoEntries.map((entry) => ClipSource.create({
         name: entry.name,
         mediaSource: entry.mediaSource,
         desktopPath: entry.desktopPath,
@@ -72,8 +72,8 @@ export class PipelineFactory {
 
     return {
       pipeline,
-      videos,
-      collectionFiles,
+      videoEntries,
+      collectionEntries,
       validCollections,
       invalidDescriptions,
     };

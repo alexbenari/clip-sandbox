@@ -81,10 +81,10 @@ Shipped: the domain describes a clip's media with `ClipSource`; folder listings 
 
 Spec acceptance: 1 by G7; 2 by G3 and G8; 3 by G6 and G8 (tests changed only in how they build clips, pipelines and folder contents, plus the removed subfolder, `filterAndSortFiles` and `blob:` assertions); 4 by G9; 5 by G10.
 
-Final `coding-quality.md` pass: the new class has explicit ownership and no doc blocks; layers import inward only (`FolderEntry` in business logic, used by the app and the adapter). Remaining tensions, left as follow-ups because renaming them is outside this plan:
+Final `coding-quality.md` pass: the new class has explicit ownership and no doc blocks; layers import inward only (`FolderEntry` in business logic, used by the app and the adapter). Two naming leftovers it found were fixed afterwards at the user's request:
 
-- `PipelineFactory.getVideosAndCollectionFiles` and its `collectionFiles` field still say "files" although they now hold folder entries.
-- The grid stores each card's media address in `dataset.objectUrl`, a name left from the removed `blob:` addresses.
+- `PipelineFactory.getVideosAndCollectionFiles` is now `classifyEntries`, and it and the build result return `videoEntries` and `collectionEntries`.
+- The grid stores each card's media address in `dataset.mediaSource` (`data-media-source`) instead of `dataset.objectUrl`, a name left from the removed `blob:` addresses.
 
 Delegation: none (P6).
 

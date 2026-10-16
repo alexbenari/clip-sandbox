@@ -29,8 +29,8 @@ describe('pipeline factory', () => {
 
     expect(result.pipeline.folderName).toBe('clips');
     expect(result.pipeline.collections().map((collection) => collection.collectionName)).toEqual(['subset']);
-    expect(result.videos.map((file) => file.name)).toEqual(['alpha.mp4', 'bravo.mp4']);
-    expect(result.collectionFiles.map((file) => file.name)).toEqual(['subset.txt']);
+    expect(result.videoEntries.map((entry) => entry.name)).toEqual(['alpha.mp4', 'bravo.mp4']);
+    expect(result.collectionEntries.map((entry) => entry.name)).toEqual(['subset.txt']);
   });
 });
 

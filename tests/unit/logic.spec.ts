@@ -27,13 +27,13 @@ describe('video helpers', () => {
   });
 
   it('splits videos and collection files, each sorted by natural name order', () => {
-    const { videos, collectionFiles } = pipelineFactory.getVideosAndCollectionFiles([
+    const { videoEntries, collectionEntries } = pipelineFactory.classifyEntries([
       folderEntry('clip10.mp4'),
       folderEntry('clip2.mp4'),
       folderEntry('subset.txt', { text: '' }),
     ]);
-    expect(videos.map((file) => file.name)).toEqual(['clip2.mp4', 'clip10.mp4']);
-    expect(collectionFiles.map((file) => file.name)).toEqual(['subset.txt']);
+    expect(videoEntries.map((entry) => entry.name)).toEqual(['clip2.mp4', 'clip10.mp4']);
+    expect(collectionEntries.map((entry) => entry.name)).toEqual(['subset.txt']);
   });
 });
 

@@ -8,15 +8,15 @@ import { clipSource, folderEntry } from '../support/clip-source-fixtures.js';
 describe('business logic modules', () => {
   const pipelineFactory = new PipelineFactory();
 
-  test('getVideosAndCollectionFiles classifies and sorts folder entries', () => {
-    const result = pipelineFactory.getVideosAndCollectionFiles([
+  test('classifyEntries classifies and sorts folder entries', () => {
+    const result = pipelineFactory.classifyEntries([
       folderEntry('b.mp4'),
       folderEntry('subset.txt', { text: 'a.mp4\n' }),
       folderEntry('a.mp4'),
     ]);
 
-    expect(result.videos.map((file) => file.name)).toEqual(['a.mp4', 'b.mp4']);
-    expect(result.collectionFiles.map((file) => file.name)).toEqual(['subset.txt']);
+    expect(result.videoEntries.map((entry) => entry.name)).toEqual(['a.mp4', 'b.mp4']);
+    expect(result.collectionEntries.map((entry) => entry.name)).toEqual(['subset.txt']);
   });
 
   test('Pipeline materializes a selected collection and reports missing entries', () => {
