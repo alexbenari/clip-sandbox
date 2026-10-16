@@ -20,7 +20,7 @@ After this work, each job has its own small class, Collection Refine has its own
   - [x] (2026-10-16) Cause of the removal test failure found (G2); see `Surprises & Discoveries`.
   - [x] (2026-10-16) The user chose to remove the unreachable stale-movie path (spec D19). It is removed in the desktop layer and the renderer, along with the obsolete end-to-end test. Case 1 is dropped because it described that path.
 - [x] M2 `GifSessionStatus` and `CurrentMovie` (2026-10-16). The session drives a change of movie through `beginChange`, `chooseSource`, `openCandidate`, `stopFollowingReview`, `switchTo` and `followReview` (D16). `openMovie` now reports "Opening ..." to Activity just after publishing the opening snapshot rather than just before; the order is not visible to users. G3: `test-evidence/gif-extraction-session-split/G3-commit-hook.log`.
-- [ ] M3 `RangeExtraction`
+- [x] M3 `RangeExtraction` (2026-10-16). The outcome of a run is judged over every queued range, as before. The caller passes those range ids with each call, so extraction does not depend on the queue. `IExtractionPublicationListener` moved with it, and the session re-exports it. G4: `test-evidence/gif-extraction-session-split/G4-commit-hook.log`.
 - [ ] M4 `CaptureQueue` and capture storage
 - [ ] M5 `RangeRefinement`, with locking and refinement checking saved frames themselves
 - [ ] M6 `CollectionClipRefinementSession`, the one-range domain factory, and narrow UI interfaces
