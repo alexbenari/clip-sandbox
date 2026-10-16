@@ -43,11 +43,11 @@ export class ClipEditor {
   async createVideoEdit({
     clip = null,
     editId = '',
-    folderSession = null,
+    folderAccess = null,
   }: {
     clip?: Clip | null;
     editId?: string;
-    folderSession?: { folderPath?: string } | null;
+    folderAccess?: { folderPath?: string } | null;
   } = {}): Promise<ClipEditorResult> {
     const edit = this.videoEditCatalog.findById(editId);
     if (!edit) {
@@ -74,7 +74,7 @@ export class ClipEditor {
       };
     }
 
-    const outputFolderPath = String(folderSession?.folderPath || '').trim();
+    const outputFolderPath = String(folderAccess?.folderPath || '').trim();
     if (!outputFolderPath) {
       return {
         ok: false,

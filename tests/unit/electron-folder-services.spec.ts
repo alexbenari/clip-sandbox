@@ -6,7 +6,7 @@ import { ElectronPipelineCatalogService } from '../../src/adapters/electron/elec
 import { ElectronVideoEditService } from '../../src/adapters/electron/electron-video-edit-service.js';
 
 describe('electron folder services', () => {
-  it('builds a writable folder session and renderer files from the desktop api', async () => {
+  it('builds folder access and renderer files from the desktop api', async () => {
     const api = {
       pickFolder: vi.fn(async () => ({
         canceled: false,
@@ -30,7 +30,7 @@ describe('electron folder services', () => {
 
     const result = await service.pickFolder();
 
-    expect(result.folderSession).toEqual({ folderPath: 'C:/clips' });
+    expect(result.folderAccess).toEqual({ folderPath: 'C:/clips' });
     expect(result.folderName).toBe('clips');
     expect(result.files).toHaveLength(1);
     expect(result.files[0].name).toBe('alpha.txt');
@@ -66,7 +66,7 @@ describe('electron folder services', () => {
     const result = await service.refreshFolder({ folderPath: 'C:/clips' });
 
     expect(api.refreshFolder).toHaveBeenCalledWith({ folderPath: 'C:/clips' });
-    expect(result.folderSession).toEqual({ folderPath: 'C:/clips' });
+    expect(result.folderAccess).toEqual({ folderPath: 'C:/clips' });
     expect(result.folderName).toBe('clips');
     expect(result.files.map(file => file.name)).toEqual(['bravo.mp4']);
   });
@@ -97,7 +97,7 @@ describe('electron folder services', () => {
     });
     await expect(service.openPipelineCatalogEntry(entry)).resolves.toMatchObject({
       folderName: 'Sample',
-      folderSession: { folderPath: 'C:/pipelines/Sample' },
+      folderAccess: { folderPath: 'C:/pipelines/Sample' },
     });
     expect(api.describePipelineCatalogEntry).toHaveBeenCalledWith({ pipelineId: 'pipeline_1' });
     expect(api.openPipelineCatalogEntry).toHaveBeenCalledWith({ pipelineId: 'pipeline_1' });
@@ -117,7 +117,7 @@ describe('electron folder services', () => {
     const service = new ElectronFolderFileService(api);
 
     const result = await service.deleteFiles({
-      folderSession: { folderPath: 'C:/clips' },
+      folderAccess: { folderPath: 'C:/clips' },
       filenames: ['alpha.mp4', 'bravo.mp4'],
     });
 
@@ -136,16 +136,16 @@ describe('electron folder services', () => {
       appendTextFile: vi.fn(async () => ({ mode: 'saved' })),
     };
     const service = new ElectronFolderFileService(api);
-    const folderSession = { folderPath: 'C:/clips' };
+    const folderAccess = { folderPath: 'C:/clips' };
 
     await expect(service.saveTextFile({
-      folderSession,
+      folderAccess,
       filename: '../outside.txt',
       text: 'alpha.mp4\n',
     })).rejects.toThrow('Invalid top-level filename');
 
     await expect(service.appendTextFile({
-      folderSession,
+      folderAccess,
       filename: 'CON',
       text: 'problem',
     })).rejects.toThrow('Invalid top-level filename');
@@ -165,7 +165,7 @@ describe('electron folder services', () => {
     const service = new ElectronFolderFileService(api);
 
     const result = await service.deleteFiles({
-      folderSession: { folderPath: 'C:/clips' },
+      folderAccess: { folderPath: 'C:/clips' },
       filenames: ['alpha.mp4', '..\\secret.mp4'],
     });
 

@@ -74,14 +74,14 @@ describe('CollectionViewWorkflow', () => {
     const subset = pipelineWorkingCopy.pipeline!.getCollectionByFilename('subset.txt');
     const loaded = pipelineWorkingCopy.materializeSelection(subset);
     if (!loaded || loaded.materialization.kind !== 'loaded') throw new Error('subset did not load');
-    const folderSession = { folderPath: 'C:/clips' };
+    const folderAccess = { folderPath: 'C:/clips' };
 
-    workflow.applySelection(loaded.materialization.sequence, { collection: subset, folderSession, statusText: 'Loaded subset.' });
+    workflow.applySelection(loaded.materialization.sequence, { collection: subset, folderAccess, statusText: 'Loaded subset.' });
 
     expect(surfaces.collectionConflict.hide).toHaveBeenCalledOnce();
     expect(surfaces.contextMenu.close).toHaveBeenCalledWith({ restoreFocus: false });
     expect(surfaces.addToCollectionDialog.close).toHaveBeenCalledOnce();
-    expect(openFolder.currentFolderSession).toBe(folderSession);
+    expect(openFolder.currentFolderAccess).toBe(folderAccess);
     expect(pipelineWorkingCopy.activeCollection).toBe(subset);
     expect(grid.renders.at(-1)).toEqual({ names: ['bravo.mp4', 'alpha.mp4'], cacheKey: 'collection:subset.txt' });
     expect(selector.render).toHaveBeenLastCalledWith(expect.objectContaining({ activeCollection: subset }));
@@ -152,13 +152,13 @@ describe('CollectionViewWorkflow', () => {
 
   it('clears the loaded folder from the view', () => {
     const { workflow, grid, pipelineWorkingCopy, openFolder, toolbar } = collectionView();
-    openFolder.setCurrentFolderSession({ folderPath: 'C:/clips' });
+    openFolder.setCurrentFolderAccess({ folderPath: 'C:/clips' });
 
     workflow.clearLoadedView();
 
     expect(grid.cleared).toBe(true);
     expect(pipelineWorkingCopy.pipeline).toBeNull();
-    expect(openFolder.currentFolderSession).toBeNull();
+    expect(openFolder.currentFolderAccess).toBeNull();
     expect(toolbar.render).toHaveBeenLastCalledWith(expect.objectContaining({ hasPipeline: false, hasSequence: false }));
   });
 

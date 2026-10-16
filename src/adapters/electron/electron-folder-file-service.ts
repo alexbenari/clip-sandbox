@@ -54,47 +54,47 @@ export class ElectronFolderFileService {
   }
 
   async saveTextFile({
-    folderSession = null,
+    folderAccess = null,
     filename = 'default-collection.txt',
     text = '',
-  }: { folderSession?: FolderAccess | null; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
-    if (!folderSession) {
-      throw new Error('Disk mutation is unavailable for the current folder session.');
+  }: { folderAccess?: FolderAccess | null; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
+    if (!folderAccess) {
+      throw new Error('Disk changes are unavailable because no folder is open.');
     }
     const normalizedFilename = this.validateTopLevelFilename(filename);
     return this.requireApi().saveTextFile({
-      folderPath: folderSession.folderPath,
+      folderPath: folderAccess.folderPath,
       filename: normalizedFilename,
       text,
     });
   }
 
   async appendTextFile({
-    folderSession = null,
+    folderAccess = null,
     filename = '',
     text = '',
-  }: { folderSession?: FolderAccess | null; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
-    if (!folderSession) {
+  }: { folderAccess?: FolderAccess | null; filename?: string; text?: string } = {}): Promise<{ mode?: string }> {
+    if (!folderAccess) {
       return { mode: 'unavailable' };
     }
     const normalizedFilename = this.validateTopLevelFilename(filename);
     return this.requireApi().appendTextFile({
-      folderPath: folderSession.folderPath,
+      folderPath: folderAccess.folderPath,
       filename: normalizedFilename,
       text,
     });
   }
 
   async deleteFiles({
-    folderSession = null,
+    folderAccess = null,
     filenames = [],
-  }: { folderSession?: FolderAccess | null; filenames?: Iterable<string> } = {}): Promise<{
+  }: { folderAccess?: FolderAccess | null; filenames?: Iterable<string> } = {}): Promise<{
     ok: boolean;
     code: string;
     results: DesktopDeleteFileResult[];
   }> {
     const rawFilenames = Array.from(filenames || []).map((filename) => String(filename || '').trim());
-    if (!folderSession) {
+    if (!folderAccess) {
       return {
         ok: false,
         code: 'unavailable',
@@ -102,7 +102,7 @@ export class ElectronFolderFileService {
           filename,
           ok: false,
           code: 'unavailable',
-          error: new Error('Disk mutation is unavailable for the current folder session.'),
+          error: new Error('Disk changes are unavailable because no folder is open.'),
         })),
       };
     }
@@ -123,7 +123,7 @@ export class ElectronFolderFileService {
     }
 
     const response = await this.requireApi().deleteFiles({
-      folderPath: folderSession.folderPath,
+      folderPath: folderAccess.folderPath,
       filenames: rawFilenames,
     });
     return {

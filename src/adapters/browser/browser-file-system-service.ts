@@ -54,46 +54,46 @@ export class BrowserFileSystemService {
     return this.fileSystemAdapter.canUseDirectoryPicker();
   }
 
-  canMutateDisk(folderSession: BrowserFolderSession): folderSession is BrowserReadwriteSession {
+  canMutateDisk(folderAccess: BrowserFolderSession): folderAccess is BrowserReadwriteSession {
     return !!(
-      folderSession?.accessMode === 'readwrite'
-      && folderSession?.directoryHandle?.kind === 'directory'
-      && folderSession?.directoryHandle?.getFileHandle
+      folderAccess?.accessMode === 'readwrite'
+      && folderAccess?.directoryHandle?.kind === 'directory'
+      && folderAccess?.directoryHandle?.getFileHandle
     );
   }
 
   async pickFolder({ onFileReadError }: {
-    onFileReadError?: (info: FileReadErrorInfo, folderSession: BrowserReadwriteSession) => void | Promise<void>;
-  } = {}): Promise<{ folderSession: BrowserReadwriteSession; files: FolderEntryFile[]; folderName: string }> {
+    onFileReadError?: (info: FileReadErrorInfo, folderAccess: BrowserReadwriteSession) => void | Promise<void>;
+  } = {}): Promise<{ folderAccess: BrowserReadwriteSession; files: FolderEntryFile[]; folderName: string }> {
     const directoryHandle = await this.fileSystemAdapter.pickDirectory();
-    const folderSession = this.createReadwriteSession(directoryHandle);
+    const folderAccess = this.createReadwriteSession(directoryHandle);
     const files = await this.fileSystemAdapter.readFilesFromDirectory(directoryHandle, {
-      onFileReadError: (info) => onFileReadError?.(info, folderSession),
+      onFileReadError: (info) => onFileReadError?.(info, folderAccess),
     });
     return {
-      folderSession,
+      folderAccess,
       files,
       folderName: directoryHandle?.name || '',
     };
   }
 
-  selectionFromFileList(fileList: Iterable<FolderEntryFile>): { folderSession: BrowserReadonlySession; files: FolderEntryFile[]; folderName: string } {
+  selectionFromFileList(fileList: Iterable<FolderEntryFile>): { folderAccess: BrowserReadonlySession; files: FolderEntryFile[]; folderName: string } {
     const files = Array.from(fileList || []);
     return {
-      folderSession: this.createReadonlySession(),
+      folderAccess: this.createReadonlySession(),
       files,
       folderName: this.fileSystemAdapter.folderNameFromFiles(files),
     };
   }
 
   async saveTextFile({
-    folderSession = null,
+    folderAccess = null,
     filename = 'default-collection.txt',
     text = '',
-  }: { folderSession?: BrowserFolderSession; filename?: string; text?: string } = {}): Promise<{ mode: 'saved' | 'downloaded' }> {
-    if (this.canMutateDisk(folderSession)) {
+  }: { folderAccess?: BrowserFolderSession; filename?: string; text?: string } = {}): Promise<{ mode: 'saved' | 'downloaded' }> {
+    if (this.canMutateDisk(folderAccess)) {
       try {
-        await this.fileSystemAdapter.saveTextToDirectory(folderSession.directoryHandle, filename, text);
+        await this.fileSystemAdapter.saveTextToDirectory(folderAccess.directoryHandle, filename, text);
         return { mode: 'saved' };
       } catch (error) {
         console.warn('Direct save failed, falling back to download.', error);
@@ -104,26 +104,26 @@ export class BrowserFileSystemService {
   }
 
   async appendTextFile({
-    folderSession = null,
+    folderAccess = null,
     filename = '',
     text = '',
-  }: { folderSession?: BrowserFolderSession; filename?: string; text?: string } = {}): Promise<{ mode: 'saved' | 'unavailable' }> {
-    if (!this.canMutateDisk(folderSession)) {
+  }: { folderAccess?: BrowserFolderSession; filename?: string; text?: string } = {}): Promise<{ mode: 'saved' | 'unavailable' }> {
+    if (!this.canMutateDisk(folderAccess)) {
       return { mode: 'unavailable' };
     }
-    await this.fileSystemAdapter.appendTextToDirectoryFile(folderSession.directoryHandle, filename, text);
+    await this.fileSystemAdapter.appendTextToDirectoryFile(folderAccess.directoryHandle, filename, text);
     return { mode: 'saved' };
   }
 
   async deleteFiles({
-    folderSession = null,
+    folderAccess = null,
     filenames = [],
-  }: { folderSession?: BrowserFolderSession; filenames?: Iterable<string> } = {}): Promise<{
+  }: { folderAccess?: BrowserFolderSession; filenames?: Iterable<string> } = {}): Promise<{
     ok: boolean;
     code: 'deleted' | 'partial' | 'unavailable';
     results: BrowserDeleteFileResult[];
   }> {
-    if (!this.canMutateDisk(folderSession)) {
+    if (!this.canMutateDisk(folderAccess)) {
       return {
         ok: false,
         code: 'unavailable',
@@ -139,7 +139,7 @@ export class BrowserFileSystemService {
     const results: BrowserDeleteFileResult[] = [];
     for (const filename of Array.from(filenames || [])) {
       try {
-        await this.fileSystemAdapter.deleteTopLevelEntry(folderSession.directoryHandle, filename);
+        await this.fileSystemAdapter.deleteTopLevelEntry(folderAccess.directoryHandle, filename);
         results.push({ filename, ok: true });
       } catch (error) {
         results.push({

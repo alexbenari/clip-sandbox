@@ -107,7 +107,7 @@ export class AppController {
     const diagnostics = new AppDiagnostics({
       folderFiles,
       errorLogFilename: ERROR_LOG_FILENAME,
-      getCurrentFolderSession: () => state.currentFolderSession,
+      getCurrentFolderAccess: () => state.currentFolderAccess,
     });
     // Non-Electron DOM tests and unsupported hosts keep the shell available without native movie opening.
     const gifServices = ElectronGifSessionServices.tryCreate(window);

@@ -36,7 +36,7 @@ export interface IDeleteFromDiskDialog {
 }
 
 export interface IFileDeleter {
-  deleteFiles(request: { folderSession: FolderAccess | null; filenames: string[] }): Promise<{
+  deleteFiles(request: { folderAccess: FolderAccess | null; filenames: string[] }): Promise<{
     code: string;
     results: ReadonlyArray<{ filename: string; ok: boolean; code?: string; error?: unknown }>;
   }>;
@@ -45,7 +45,7 @@ export interface IFileDeleter {
 type DeleteFromDiskDependencies = Readonly<{
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'activeCollectionFilename' | 'currentClipSequence' | 'isPipelineMode'
     | 'hasDirtyClipSequenceChanges' | 'clipNamesForIdsInOrder'>;
-  openFolder: Pick<AppSessionState, 'currentFolderSession'>;
+  openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   files: IFileDeleter;
   fileWriter: Pick<CollectionFileWriter, 'write'>;
   dialog: IDeleteFromDiskDialog;
@@ -170,7 +170,7 @@ export class DeleteFromDiskWorkflow {
       }), {
         affected: request.selectedClipNames.join(', '),
         recovery: 'Open the folder again before retrying the deletion.',
-        technicalDetails: 'Disk access is unavailable for the current folder session.',
+        technicalDetails: 'Disk access is unavailable because no folder is open.',
       });
       return;
     }
@@ -181,7 +181,7 @@ export class DeleteFromDiskWorkflow {
         pipeline,
         // Removing videos replaced each affected collection; the session still holds the version with the deleted clips.
         collection: pipeline.getCollectionByFilename(pipelineWorkingCopy.activeCollectionFilename()),
-        folderSession: this.deletion.openFolder.currentFolderSession,
+        folderAccess: this.deletion.openFolder.currentFolderAccess,
       });
     } else {
       this.deletion.collectionView.refreshToolbar();
@@ -204,7 +204,7 @@ export class DeleteFromDiskWorkflow {
 
   private async deleteFilesAndUpdatePipeline(request: DeleteRequest, pipeline: Pipeline): Promise<DeleteOutcome | null> {
     const deleteResult = await this.deletion.files.deleteFiles({
-      folderSession: this.deletion.openFolder.currentFolderSession,
+      folderAccess: this.deletion.openFolder.currentFolderAccess,
       filenames: request.selectedClipNames,
     });
     if (deleteResult.code === 'unavailable') return null;

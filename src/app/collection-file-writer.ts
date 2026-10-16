@@ -3,11 +3,11 @@ import { CollectionTextFormat } from '../business-logic/collection-text-format.j
 import type { FolderAccess } from './folder-access.js';
 
 export interface ITextFileSaver {
-  saveTextFile(request: { folderSession: FolderAccess | null; filename?: string; text?: string }): Promise<{ mode?: string }>;
+  saveTextFile(request: { folderAccess: FolderAccess | null; filename?: string; text?: string }): Promise<{ mode?: string }>;
 }
 
 export interface IOpenFolderSource {
-  readonly currentFolderSession: FolderAccess | null;
+  readonly currentFolderAccess: FolderAccess | null;
 }
 
 export class CollectionFileWriter {
@@ -20,7 +20,7 @@ export class CollectionFileWriter {
   async write(collection: Collection): Promise<{ mode: string | undefined }> {
     if (!collection.filename) throw new Error('Collection filename is required.');
     const { mode } = await this.files.saveTextFile({
-      folderSession: this.openFolder.currentFolderSession,
+      folderAccess: this.openFolder.currentFolderAccess,
       filename: collection.filename,
       text: this.format.write(collection),
     });

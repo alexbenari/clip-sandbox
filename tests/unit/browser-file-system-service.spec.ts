@@ -31,7 +31,7 @@ describe('browser file system service', () => {
 
     expect(result.folderName).toBe('clips');
     expect(result.files).toEqual([{ name: 'alpha.mp4' }]);
-    expect(result.folderSession).toMatchObject({
+    expect(result.folderAccess).toMatchObject({
       kind: 'browser-directory',
       accessMode: 'readwrite',
     });
@@ -49,7 +49,7 @@ describe('browser file system service', () => {
 
     expect(result.folderName).toBe('clips');
     expect(result.files).toEqual(files);
-    expect(result.folderSession).toEqual({
+    expect(result.folderAccess).toEqual({
       kind: 'browser-file-list',
       accessMode: 'read-only',
     });
@@ -64,19 +64,19 @@ describe('browser file system service', () => {
         downloadText,
       },
     });
-    const folderSession = {
+    const folderAccess = {
       accessMode: 'readwrite',
       directoryHandle: { kind: 'directory', getFileHandle: vi.fn() },
     };
 
     const result = await service.saveTextFile({
-      folderSession,
+      folderAccess,
       filename: 'subset.txt',
       text: 'alpha.mp4\n',
     });
 
     expect(result).toEqual({ mode: 'saved' });
-    expect(saveTextToDirectory).toHaveBeenCalledWith(folderSession.directoryHandle, 'subset.txt', 'alpha.mp4\n');
+    expect(saveTextToDirectory).toHaveBeenCalledWith(folderAccess.directoryHandle, 'subset.txt', 'alpha.mp4\n');
     expect(downloadText).not.toHaveBeenCalled();
   });
 
@@ -91,7 +91,7 @@ describe('browser file system service', () => {
     });
 
     const result = await service.saveTextFile({
-      folderSession: { accessMode: 'read-only' },
+      folderAccess: { accessMode: 'read-only' },
       filename: 'subset.txt',
       text: 'alpha.mp4\n',
     });
@@ -108,7 +108,7 @@ describe('browser file system service', () => {
     });
 
     const result = await service.appendTextFile({
-      folderSession: { accessMode: 'read-only' },
+      folderAccess: { accessMode: 'read-only' },
       filename: 'err.log',
       text: 'problem',
     });
@@ -122,13 +122,13 @@ describe('browser file system service', () => {
     const service = new BrowserFileSystemService({
       fileSystemAdapter: { deleteTopLevelEntry },
     });
-    const folderSession = {
+    const folderAccess = {
       accessMode: 'readwrite',
       directoryHandle: { kind: 'directory', getFileHandle: vi.fn() },
     };
 
     const result = await service.deleteFiles({
-      folderSession,
+      folderAccess,
       filenames: ['alpha.mp4', 'bravo.webm'],
     });
 
@@ -141,8 +141,8 @@ describe('browser file system service', () => {
       ],
     });
     expect(deleteTopLevelEntry.mock.calls).toEqual([
-      [folderSession.directoryHandle, 'alpha.mp4'],
-      [folderSession.directoryHandle, 'bravo.webm'],
+      [folderAccess.directoryHandle, 'alpha.mp4'],
+      [folderAccess.directoryHandle, 'bravo.webm'],
     ]);
   });
 
@@ -153,7 +153,7 @@ describe('browser file system service', () => {
     });
 
     const result = await service.deleteFiles({
-      folderSession: { accessMode: 'read-only' },
+      folderAccess: { accessMode: 'read-only' },
       filenames: ['alpha.mp4'],
     });
 
@@ -176,13 +176,13 @@ describe('browser file system service', () => {
     const service = new BrowserFileSystemService({
       fileSystemAdapter: { deleteTopLevelEntry },
     });
-    const folderSession = {
+    const folderAccess = {
       accessMode: 'readwrite',
       directoryHandle: { kind: 'directory', getFileHandle: vi.fn() },
     };
 
     const result = await service.deleteFiles({
-      folderSession,
+      folderAccess,
       filenames: ['alpha.mp4', 'bravo.webm', 'charlie.mp4'],
     });
 

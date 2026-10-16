@@ -65,13 +65,13 @@ export class ZoomVideoEditWorkflow {
   async run({
     edit = null,
     sourceClip = null,
-    folderSession = null,
+    folderAccess = null,
   }: {
     edit?: VideoEdit | null;
     sourceClip?: Clip | null;
-    folderSession?: { folderPath?: string } | null;
+    folderAccess?: { folderPath?: string } | null;
   } = {}): Promise<ClipEditorResult | ProcessFailedResult | NotRunnableResult> {
-    if (this.#isRunning || !edit || !sourceClip || !folderSession) {
+    if (this.#isRunning || !edit || !sourceClip || !folderAccess) {
       return { ok: false, code: 'not-runnable' };
     }
 
@@ -81,7 +81,7 @@ export class ZoomVideoEditWorkflow {
     try {
       this.onStarted({ edit, sourceClip });
       try {
-        result = await this.clipEditor.createVideoEdit({ clip: sourceClip, editId: edit.id, folderSession });
+        result = await this.clipEditor.createVideoEdit({ clip: sourceClip, editId: edit.id, folderAccess });
       } catch {
         result = { ok: false, code: 'process-failed' };
       }

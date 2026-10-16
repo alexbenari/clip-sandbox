@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CollectionFileWriter } from '../../src/app/collection-file-writer.js';
 import { Collection } from '../../src/domain/collection.js';
 
-const openFolder = { currentFolderSession: { folderPath: 'C:/clips' } };
+const openFolder = { currentFolderAccess: { folderPath: 'C:/clips' } };
 
 describe('CollectionFileWriter', () => {
   it('writes the collection as one clip name per line into the open folder', async () => {
@@ -14,7 +14,7 @@ describe('CollectionFileWriter', () => {
     await expect(writer.write(collection)).resolves.toEqual({ mode: 'saved' });
 
     expect(saveTextFile).toHaveBeenCalledWith({
-      folderSession: openFolder.currentFolderSession,
+      folderAccess: openFolder.currentFolderAccess,
       filename: 'subset.txt',
       text: 'bravo.mp4\nalpha.mp4\n',
     });

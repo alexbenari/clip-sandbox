@@ -25,7 +25,7 @@ export interface IClipContextMenu {
 
 type GridContextMenuDependencies = Readonly<{
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'resolveClip' | 'activeCollectionFilename'>;
-  openFolder: Pick<AppSessionState, 'currentFolderSession'>;
+  openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   refinementAvailability: Pick<ICollectionClipRefinementService, 'inspect'> | null;
   grid: IEventSource<{ contextMenuRequested: Readonly<{ point: MenuPoint; clipId: string | null }> }>
     & { getSelectedClipIds(): string[] };
@@ -58,16 +58,16 @@ export class GridContextMenuWorkflow {
     const revision = ++this.revision;
     const clip = pipelineWorkingCopy.resolveClip(clipId);
     const collectionFilename = pipelineWorkingCopy.activeCollectionFilename();
-    const folderSession = openFolder.currentFolderSession;
-    const request = clip && folderSession
-      ? { folderPath: folderSession.folderPath, filename: clip.name } : null;
+    const folderAccess = openFolder.currentFolderAccess;
+    const request = clip && folderAccess
+      ? { folderPath: folderAccess.folderPath, filename: clip.name } : null;
     let canRefine = false;
     if (request && this.menu.refinementAvailability) {
       try { canRefine = await this.menu.refinementAvailability.inspect(request); }
       catch { canRefine = false; }
     }
     if (revision !== this.revision || collectionFilename !== pipelineWorkingCopy.activeCollectionFilename()
-      || openFolder.currentFolderSession !== folderSession
+      || openFolder.currentFolderAccess !== folderAccess
       || this.menu.navigation.activeScreen.id !== this.menu.collectionScreenId
       || (clipId && pipelineWorkingCopy.resolveClip(clipId) !== clip)) return;
     this.menu.menu.open({

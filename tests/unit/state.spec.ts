@@ -5,14 +5,14 @@ import { AppSessionState } from '../../src/app/app-session-state.js';
 describe('app state', () => {
   test('starts without an open folder', () => {
     const state = new AppSessionState();
-    expect(state.currentFolderSession).toBeNull();
+    expect(state.currentFolderAccess).toBeNull();
   });
 
-  test('records the open folder session', () => {
+  test('records access to the open folder', () => {
     const state = new AppSessionState();
 
-    state.setCurrentFolderSession({ folderPath: 'C:/clips' });
+    state.setCurrentFolderAccess({ folderPath: 'C:/clips' });
 
-    expect(state.currentFolderSession).toEqual({ folderPath: 'C:/clips' });
+    expect(state.currentFolderAccess).toEqual({ folderPath: 'C:/clips' });
   });
 });

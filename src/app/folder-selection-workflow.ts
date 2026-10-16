@@ -22,7 +22,7 @@ export type PendingSelectionAction =
 
 export interface IFolderSource {
   pickFolder(): Promise<FolderContents>;
-  refreshFolder(folderSession: FolderAccess): Promise<FolderContents>;
+  refreshFolder(folderAccess: FolderAccess): Promise<FolderContents>;
 }
 
 export interface IPipelineCatalogOpener {
@@ -45,7 +45,7 @@ export interface IUnsavedChangesPrompt {
 type FolderSelectionDependencies = Readonly<{
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'activeCollection' | 'activeCollectionFilename'
     | 'hasDirtyClipSequenceChanges' | 'materializeSelection' | 'loadPipeline'>;
-  openFolder: Pick<AppSessionState, 'currentFolderSession'>;
+  openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   folders: IFolderSource;
   pipelineCatalog: IPipelineCatalogOpener;
   pipelineFactory: Pick<PipelineFactory, 'buildPipeline'>;
@@ -117,22 +117,22 @@ export class FolderSelectionWorkflow {
 
   async refreshActiveFolder(): Promise<void> {
     const { openFolder, folders, pipelineWorkingCopy } = this.folder;
-    const folderSession = openFolder.currentFolderSession;
-    if (!folderSession) return;
+    const folderAccess = openFolder.currentFolderAccess;
+    if (!folderAccess) return;
     const activeCollectionFilename = pipelineWorkingCopy.activeCollectionFilename();
-    const selection = await folders.refreshFolder(folderSession);
-    if (openFolder.currentFolderSession !== folderSession || pipelineWorkingCopy.hasDirtyClipSequenceChanges) return;
+    const selection = await folders.refreshFolder(folderAccess);
+    if (openFolder.currentFolderAccess !== folderAccess || pipelineWorkingCopy.hasDirtyClipSequenceChanges) return;
     await this.loadPipeline({ ...selection, preserveCollectionFilename: activeCollectionFilename, reportInitialLoad: false });
   }
 
   async reloadSelection({
     pipeline = this.folder.pipelineWorkingCopy.pipeline,
     collection = this.folder.pipelineWorkingCopy.activeCollection,
-    folderSession = this.folder.openFolder.currentFolderSession,
+    folderAccess = this.folder.openFolder.currentFolderAccess,
   }: {
     pipeline?: Pipeline | null;
     collection?: Collection | null;
-    folderSession?: FolderAccess | null;
+    folderAccess?: FolderAccess | null;
   } = {}): Promise<void> {
     const { pipelineWorkingCopy, collectionView, appText } = this.folder;
     if (!pipeline) return;
@@ -150,7 +150,7 @@ export class FolderSelectionWorkflow {
           this.folder.grid.invalidateView(collectionView.cacheKeyFor(collection));
           collectionView.applySelection(result.partialSequence, {
             collection,
-            folderSession,
+            folderAccess,
             statusText: appText.collectionPartiallyLoadedText(result.existingNamesInOrder.length, result.missingCount),
             timeout: 4000,
           });
@@ -163,7 +163,7 @@ export class FolderSelectionWorkflow {
     }
     collectionView.applySelection(result.sequence, {
       collection: selection instanceof Collection ? selection : null,
-      folderSession,
+      folderAccess,
     });
     this.folder.reporter.success(this.loadStatusText.selectionLoaded(selection === pipeline, result.sequence.orderedClips().length));
   }
@@ -241,7 +241,7 @@ export class FolderSelectionWorkflow {
       await this.loadPipeline(selection);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      await diagnostics.logRuntimeError('Failed to browse for a folder.', err, this.folder.openFolder.currentFolderSession);
+      await diagnostics.logRuntimeError('Failed to browse for a folder.', err, this.folder.openFolder.currentFolderAccess);
       this.reportFolderReadFailure(err);
     }
   }
@@ -251,7 +251,7 @@ export class FolderSelectionWorkflow {
       const selection = await this.folder.pipelineCatalog.openPipelineCatalogEntry(entry);
       if (await this.loadPipeline(selection)) this.folder.navigation.activate(this.folder.collectionScreenId);
     } catch (err) {
-      await this.folder.diagnostics.logRuntimeError(`Failed to open pipeline ${entry.name}.`, err, this.folder.openFolder.currentFolderSession);
+      await this.folder.diagnostics.logRuntimeError(`Failed to open pipeline ${entry.name}.`, err, this.folder.openFolder.currentFolderAccess);
       this.folder.reporter.failure(`Could not open ${entry.name}.`, {
         affected: 'Open pipeline',
         recovery: 'Check that the pipeline folder is still accessible, then refresh Pipelines.',
@@ -261,7 +261,7 @@ export class FolderSelectionWorkflow {
   }
 
   private async loadPipeline({
-    folderSession,
+    folderAccess,
     files,
     folderName,
     preserveCollectionFilename = '',
@@ -274,7 +274,7 @@ export class FolderSelectionWorkflow {
         folderName,
         files,
         collectionFormat: this.folder.collectionFormat,
-        logInvalidDescription: result => diagnostics.logInvalidDescription(result, folderSession),
+        logInvalidDescription: result => diagnostics.logInvalidDescription(result, folderAccess),
       });
       const result = pipelineWorkingCopy.loadPipeline(pipeline);
       if (!result) return false;
@@ -282,16 +282,16 @@ export class FolderSelectionWorkflow {
       grid.retagActiveView(null);
       const preservedCollection = preserveCollectionFilename ? pipeline.getCollectionByFilename(preserveCollectionFilename) : null;
       if (preservedCollection) {
-        await this.reloadSelection({ pipeline, collection: preservedCollection, folderSession });
+        await this.reloadSelection({ pipeline, collection: preservedCollection, folderAccess });
         return true;
       }
-      collectionView.applySelection(result.sequence, { collection: null, folderSession });
+      collectionView.applySelection(result.sequence, { collection: null, folderAccess });
       if (reportInitialLoad) {
         this.folder.reporter.success(this.loadStatusText.folderLoaded(pipeline, result.sequence.orderedClips().length));
       }
       return true;
     } catch (err) {
-      await diagnostics.logRuntimeError('Failed to load the selected folder.', err, folderSession);
+      await diagnostics.logRuntimeError('Failed to load the selected folder.', err, folderAccess);
       this.reportFolderReadFailure(err);
       return false;
     }
@@ -300,26 +300,26 @@ export class FolderSelectionWorkflow {
   private async switchSelectionFromDisk(collectionFilename: string | null): Promise<void> {
     const { pipelineWorkingCopy, openFolder, folders, diagnostics } = this.folder;
     const revision = ++this.selectionRevision;
-    const folderSession = openFolder.currentFolderSession;
+    const folderAccess = openFolder.currentFolderAccess;
     const pipeline = pipelineWorkingCopy.pipeline;
     if (!pipeline) return;
-    if (!folderSession) {
+    if (!folderAccess) {
       await this.reloadSelection({
         pipeline,
         collection: collectionFilename ? pipeline.getCollectionByFilename(collectionFilename) : null,
       });
       return;
     }
-    const isStale = () => revision !== this.selectionRevision || openFolder.currentFolderSession !== folderSession
+    const isStale = () => revision !== this.selectionRevision || openFolder.currentFolderAccess !== folderAccess
       || pipelineWorkingCopy.pipeline !== pipeline || pipelineWorkingCopy.hasDirtyClipSequenceChanges;
     try {
-      const selection = await folders.refreshFolder(folderSession);
+      const selection = await folders.refreshFolder(folderAccess);
       if (isStale()) return;
       const refreshed = await this.folder.pipelineFactory.buildPipeline({
         folderName: selection.folderName,
         files: selection.files,
         collectionFormat: this.folder.collectionFormat,
-        logInvalidDescription: result => diagnostics.logInvalidDescription(result, selection.folderSession),
+        logInvalidDescription: result => diagnostics.logInvalidDescription(result, selection.folderAccess),
       });
       if (isStale()) return;
       pipeline.setVideoFiles(refreshed.pipeline.videoFiles());
@@ -327,10 +327,10 @@ export class FolderSelectionWorkflow {
       await this.reloadSelection({
         pipeline,
         collection: collectionFilename ? pipeline.getCollectionByFilename(collectionFilename) : null,
-        folderSession: selection.folderSession,
+        folderAccess: selection.folderAccess,
       });
     } catch (error) {
-      if (revision !== this.selectionRevision || openFolder.currentFolderSession !== folderSession) return;
+      if (revision !== this.selectionRevision || openFolder.currentFolderAccess !== folderAccess) return;
       this.folder.reporter.failure('The folder could not be refreshed.', {
         affected: collectionFilename || 'Folder view',
         recovery: 'Check that the folder is accessible, then switch views again.',

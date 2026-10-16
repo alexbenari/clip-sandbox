@@ -50,7 +50,7 @@ export interface ISelectionChangeSurfaces {
 type CollectionViewDependencies = Readonly<{
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'activeCollection' | 'currentClipSequence' | 'isPipelineMode'
     | 'activateSelection' | 'replaceCurrentOrder' | 'removeFromCurrentSequence' | 'reset'>;
-  openFolder: Pick<AppSessionState, 'currentFolderSession' | 'setCurrentFolderSession'>;
+  openFolder: Pick<AppSessionState, 'currentFolderAccess' | 'setCurrentFolderAccess'>;
   grid: ICollectionGridView;
   toolbar: ICollectionToolbarView;
   selector: ICollectionSelectorView;
@@ -103,12 +103,12 @@ export class CollectionViewWorkflow {
 
   applySelection(clipSequence: ClipSequence, {
     collection = this.view.pipelineWorkingCopy.activeCollection,
-    folderSession = this.view.openFolder.currentFolderSession,
+    folderAccess = this.view.openFolder.currentFolderAccess,
     statusText = '',
     timeout = 2500,
   }: {
     collection?: Collection | null;
-    folderSession?: FolderAccess | null;
+    folderAccess?: FolderAccess | null;
     statusText?: string;
     timeout?: number;
   } = {}): void {
@@ -116,7 +116,7 @@ export class CollectionViewWorkflow {
     surfaces.collectionConflict.hide();
     surfaces.contextMenu.close({ restoreFocus: false });
     surfaces.addToCollectionDialog.close();
-    this.view.openFolder.setCurrentFolderSession(folderSession || null);
+    this.view.openFolder.setCurrentFolderAccess(folderAccess || null);
     this.view.pipelineWorkingCopy.activateSelection({ collection, sequence: clipSequence });
     this.view.grid.renderCollection(clipSequence, { cacheKey: this.cacheKeyFor(collection) });
     this.refreshSelector();
@@ -131,7 +131,7 @@ export class CollectionViewWorkflow {
   clearLoadedView(): void {
     this.view.grid.clear();
     this.view.pipelineWorkingCopy.reset();
-    this.view.openFolder.setCurrentFolderSession(null);
+    this.view.openFolder.setCurrentFolderAccess(null);
     this.refreshSelector();
     this.refreshToolbar();
   }

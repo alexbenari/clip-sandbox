@@ -3,12 +3,12 @@ import { OpenFolderRefresher } from '../../src/app/open-folder-refresher.js';
 
 function refreshSession({ activeFolderPath = 'C:/pipelines/extraction-tmp', dirty = false, refreshActiveFolder = vi.fn(async () => undefined) } = {}) {
   const pipelineWorkingCopy = { hasDirtyClipSequenceChanges: dirty };
-  const folderSession = { folderPath: activeFolderPath };
+  const folderAccess = { folderPath: activeFolderPath };
   const reporter = { failure: vi.fn(), technicalDetailsOf: (error: unknown) => String(error) };
   const diagnostics = { logRuntimeError: vi.fn(async () => undefined) };
   const session = new OpenFolderRefresher({
-    folders: { isActiveFolder: (current: { folderPath: string } | null, folderPath: string) => current === folderSession && folderPath === activeFolderPath },
-    openFolder: { currentFolderSession: folderSession },
+    folders: { isActiveFolder: (current: { folderPath: string } | null, folderPath: string) => current === folderAccess && folderPath === activeFolderPath },
+    openFolder: { currentFolderAccess: folderAccess },
     pipelineWorkingCopy,
     refreshActiveFolder,
     reporter,

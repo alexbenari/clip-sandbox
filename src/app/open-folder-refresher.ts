@@ -5,8 +5,8 @@ import type { FolderAccess } from './folder-access.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 type OpenFolderRefresherOptions = Readonly<{
-  folders: { isActiveFolder(folderSession: FolderAccess | null, folderPath: string): boolean };
-  openFolder: Pick<AppSessionState, 'currentFolderSession'>;
+  folders: { isActiveFolder(folderAccess: FolderAccess | null, folderPath: string): boolean };
+  openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'hasDirtyClipSequenceChanges'>;
   // Refreshing goes through folder selection, which itself saves first; the composition root closes that loop.
   refreshActiveFolder: () => Promise<void>;
@@ -40,7 +40,7 @@ export class OpenFolderRefresher {
   }
 
   private isActiveFolder(folderPath: string): boolean {
-    return this.options.folders.isActiveFolder(this.options.openFolder.currentFolderSession, folderPath);
+    return this.options.folders.isActiveFolder(this.options.openFolder.currentFolderAccess, folderPath);
   }
 
   private async refreshActiveFolder(): Promise<void> {
@@ -59,6 +59,6 @@ export class OpenFolderRefresher {
       recovery: 'Open the folder again to refresh its clips.',
       technicalDetails: reporter.technicalDetailsOf(error),
     });
-    void diagnostics.logRuntimeError(message, error, openFolder.currentFolderSession);
+    void diagnostics.logRuntimeError(message, error, openFolder.currentFolderAccess);
   }
 }

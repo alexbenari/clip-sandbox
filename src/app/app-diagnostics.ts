@@ -2,7 +2,7 @@ import type { InvalidCollectionDescription } from '../domain/collection-descript
 import type { FolderAccess } from './folder-access.js';
 
 type ErrorLogFiles = {
-  appendTextFile(request: { folderSession: FolderAccess | null; filename: string; text: string }): Promise<{ mode?: string }>;
+  appendTextFile(request: { folderAccess: FolderAccess | null; filename: string; text: string }): Promise<{ mode?: string }>;
 };
 
 type DeleteFailureSummary = {
@@ -13,27 +13,27 @@ type DeleteFailureSummary = {
 export class AppDiagnostics {
   folderFiles: ErrorLogFiles;
   errorLogFilename: string;
-  getCurrentFolderSession: () => FolderAccess | null;
+  getCurrentFolderAccess: () => FolderAccess | null;
 
   constructor({
     folderFiles,
     errorLogFilename = 'err.log',
-    getCurrentFolderSession = () => null,
+    getCurrentFolderAccess = () => null,
   }: {
     folderFiles: ErrorLogFiles;
     errorLogFilename?: string;
-    getCurrentFolderSession?: () => FolderAccess | null;
+    getCurrentFolderAccess?: () => FolderAccess | null;
   }) {
     this.folderFiles = folderFiles;
     this.errorLogFilename = errorLogFilename;
-    this.getCurrentFolderSession = getCurrentFolderSession;
+    this.getCurrentFolderAccess = getCurrentFolderAccess;
   }
 
-  async appendErrorLog(text: string, folderSession: FolderAccess | null = this.getCurrentFolderSession()): Promise<boolean> {
+  async appendErrorLog(text: string, folderAccess: FolderAccess | null = this.getCurrentFolderAccess()): Promise<boolean> {
     if (!text) return false;
     try {
       const { mode } = await this.folderFiles.appendTextFile({
-        folderSession,
+        folderAccess,
         filename: this.errorLogFilename,
         text,
       });
@@ -45,35 +45,35 @@ export class AppDiagnostics {
     return false;
   }
 
-  async logInvalidDescription(result: InvalidCollectionDescription, folderSession: FolderAccess | null): Promise<void> {
+  async logInvalidDescription(result: InvalidCollectionDescription, folderAccess: FolderAccess | null): Promise<void> {
     const file = result.filename ? `File: ${result.filename}\n` : '';
-    await this.appendErrorLog(`Collection enumeration\n${file}Problem: ${result.code}\nDetails: ${result.message}\n\n`, folderSession);
+    await this.appendErrorLog(`Collection enumeration\n${file}Problem: ${result.code}\nDetails: ${result.message}\n\n`, folderAccess);
   }
 
-  async logRuntimeError(problem: string, err: unknown, folderSession: FolderAccess | null = this.getCurrentFolderSession()): Promise<void> {
+  async logRuntimeError(problem: string, err: unknown, folderAccess: FolderAccess | null = this.getCurrentFolderAccess()): Promise<void> {
     const detail = `Runtime error\nProblem: ${problem}\nDetails: ${this.errorDetail(err)}\n\n`;
-    await this.appendErrorLog(detail, folderSession);
+    await this.appendErrorLog(detail, folderAccess);
   }
 
-  async logVideoMetadataFailure({ filename = '', error }: { filename?: string; error?: unknown } = {}, folderSession: FolderAccess | null = this.getCurrentFolderSession()): Promise<void> {
+  async logVideoMetadataFailure({ filename = '', error }: { filename?: string; error?: unknown } = {}, folderAccess: FolderAccess | null = this.getCurrentFolderAccess()): Promise<void> {
     const problem = filename
       ? `Failed to load video metadata: ${filename}`
       : 'Failed to load video metadata';
     const detail = `Video metadata error\nProblem: ${problem}\nDetails: ${this.errorDetail(error) || 'Unknown metadata load failure'}\nFallback: using default layout aspect ratio for this clip.\n\n`;
-    await this.appendErrorLog(detail, folderSession);
+    await this.appendErrorLog(detail, folderAccess);
   }
 
-  async logDeleteFailures(result: DeleteFailureSummary, folderSession: FolderAccess | null = this.getCurrentFolderSession()): Promise<void> {
+  async logDeleteFailures(result: DeleteFailureSummary, folderAccess: FolderAccess | null = this.getCurrentFolderAccess()): Promise<void> {
     for (const failedDelete of Array.from(result?.failedDeletes || [])) {
       await this.appendErrorLog(
         `Disk delete error\nFile: ${failedDelete.filename}\nDetails: ${this.errorDetail(failedDelete.error) || failedDelete.code}\n\n`,
-        folderSession,
+        folderAccess,
       );
     }
     for (const failedRewrite of Array.from(result?.failedCollectionRewrites || [])) {
       await this.appendErrorLog(
         `Collection rewrite error\nFile: ${failedRewrite.filename}\nCollection: ${failedRewrite.collectionName}\nDetails: ${this.errorDetail(failedRewrite.error)}\n\n`,
-        folderSession,
+        folderAccess,
       );
     }
   }

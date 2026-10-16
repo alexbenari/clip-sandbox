@@ -29,9 +29,9 @@ function refinementWorkflow({ dirty = false, lookup = async (): Promise<Collecti
     abandonRefinement: vi.fn(() => null),
     beginRefinement: vi.fn(async () => ({ kind: 'rejected' as const, message: 'Wait for the movie to finish opening.' })),
   };
-  const folderSession = { folderPath: 'C:/clips' };
+  const folderAccess = { folderPath: 'C:/clips' };
   const openFolder = new AppSessionState();
-  openFolder.setCurrentFolderSession(folderSession);
+  openFolder.setCurrentFolderAccess(folderAccess);
   const refineScreen = new FakeRefineScreen();
   const refinedClipList = new EventSource<{ refineRequested: CapturedRangeId }>();
   const reporter = { failure: vi.fn() };

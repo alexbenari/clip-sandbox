@@ -47,7 +47,7 @@ export interface IZoomFolderFiles {
 type ZoomDependencies = Readonly<{
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'isPipelineMode' | 'resolveClip'
     | 'insertCreatedClipInPipeline' | 'insertCreatedClipAfter'>;
-  openFolder: Pick<AppSessionState, 'currentFolderSession'>;
+  openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   folderFiles: IZoomFolderFiles;
   zoom: IZoomView;
   grid: IZoomGrid;
@@ -163,7 +163,7 @@ export class ZoomWorkflow {
       await this.videoEdits.run({
         edit,
         sourceClip,
-        folderSession: this.zoom.openFolder.currentFolderSession,
+        folderAccess: this.zoom.openFolder.currentFolderAccess,
       });
     } catch (error) {
       const problem = error instanceof VideoEditNotificationError
@@ -207,7 +207,7 @@ export class ZoomWorkflow {
     this.zoom.grid.invalidateView('pipeline');
     this.zoom.collectionView.applySelection(result.sequence, {
       collection: null,
-      folderSession: this.zoom.openFolder.currentFolderSession,
+      folderAccess: this.zoom.openFolder.currentFolderAccess,
     });
     this.zoom.grid.setSelectedClipId(result.clip.id);
     return result.clip;

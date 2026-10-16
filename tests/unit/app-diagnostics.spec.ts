@@ -13,7 +13,7 @@ describe('AppDiagnostics', () => {
     await diagnostics.logInvalidDescription(invalid, { folderPath: 'C:/clips' });
 
     expect(folderFiles.appendTextFile).toHaveBeenCalledWith({
-      folderSession: { folderPath: 'C:/clips' },
+      folderAccess: { folderPath: 'C:/clips' },
       filename: 'err.log',
       text: 'Collection enumeration\nFile: subset.txt\nProblem: invalid-duplicates\nDetails: Duplicate entries were found: alpha.mp4 (x2).\n\n',
     });

@@ -28,15 +28,15 @@ describe('zoom video edit workflow', () => {
     });
     const edit = { id: 'loopify', label: 'Loopify' };
     const clip = sourceClip();
-    const folderSession = { folderPath: 'C:/clips' };
+    const folderAccess = { folderPath: 'C:/clips' };
 
-    const result = await workflow.run({ edit, sourceClip: clip, folderSession });
+    const result = await workflow.run({ edit, sourceClip: clip, folderAccess });
 
     expect(result.ok).toBe(true);
     expect(clipEditor.createVideoEdit).toHaveBeenCalledWith({
       clip,
       editId: 'loopify',
-      folderSession,
+      folderAccess,
     });
     expect(events).toEqual([
       ['started', 'loopify', 'clip_1'],
@@ -60,7 +60,7 @@ describe('zoom video edit workflow', () => {
     const result = await workflow.run({
       edit: { id: 'loopify', label: 'Loopify' },
       sourceClip: sourceClip(),
-      folderSession: { folderPath: 'C:/clips' },
+      folderAccess: { folderPath: 'C:/clips' },
     });
 
     expect(result).toEqual({ ok: false, code: 'missing-source-path' });
@@ -81,7 +81,7 @@ describe('zoom video edit workflow', () => {
     const request = {
       edit: { id: 'loopify', label: 'Loopify' },
       sourceClip: sourceClip(),
-      folderSession: { folderPath: 'C:/clips' },
+      folderAccess: { folderPath: 'C:/clips' },
     };
 
     const first = workflow.run(request);
@@ -102,7 +102,7 @@ test.each(['onStarted', 'onCreated', 'onFailed', 'onFinished'])('cleans up and p
   const finished = callback === 'onFinished' ? callbackFn : vi.fn();
   const editor = { createVideoEdit: vi.fn(async () => result) };
   const workflow = new ZoomVideoEditWorkflow({ clipEditor: editor, [callback]: callbackFn, onFinished: finished });
-  const request = { edit: { id: 'loopify', label: 'Loopify' }, sourceClip: sourceClip(), folderSession: { folderPath: 'C:/clips' } };
+  const request = { edit: { id: 'loopify', label: 'Loopify' }, sourceClip: sourceClip(), folderAccess: { folderPath: 'C:/clips' } };
   await expect(workflow.run(request)).rejects.toThrow();
   expect(workflow.isRunning()).toBe(false);
   expect(finished).toHaveBeenCalledOnce();
@@ -118,7 +118,7 @@ test('preserves successful output and both callback failures when finishing also
     onCreated: () => { throw createdFailure; },
     onFinished: () => { throw finishFailure; },
   });
-  const request = { edit: { id: 'loopify', label: 'Loopify' }, sourceClip: sourceClip(), folderSession: { folderPath: 'C:/clips' } };
+  const request = { edit: { id: 'loopify', label: 'Loopify' }, sourceClip: sourceClip(), folderAccess: { folderPath: 'C:/clips' } };
   await expect(workflow.run(request)).rejects.toMatchObject({ result: output, errors: [createdFailure, finishFailure] });
   expect(workflow.isRunning()).toBe(false);
 });

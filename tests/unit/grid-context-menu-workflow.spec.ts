@@ -12,9 +12,9 @@ function contextMenu({ canRefine = true, inspect }: { canRefine?: boolean; inspe
   const pipelineWorkingCopy = new PipelineWorkingCopy();
   pipelineWorkingCopy.loadPipeline(new Pipeline({ folderName: 'clips', videoFiles: [new File(['a'], 'alpha.mp4')] }));
   const [alpha] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
-  const folderSession = { folderPath: 'C:/clips' };
+  const folderAccess = { folderPath: 'C:/clips' };
   const openFolder = new AppSessionState();
-  openFolder.setCurrentFolderSession(folderSession);
+  openFolder.setCurrentFolderAccess(folderAccess);
   const grid = Object.assign(new EventSource<{ contextMenuRequested: { point: { x: number; y: number }; clipId: string | null } }>(), {
     getSelectedClipIds: () => [alpha.id],
   });

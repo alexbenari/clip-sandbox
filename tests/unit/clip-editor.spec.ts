@@ -28,7 +28,7 @@ describe('clip editor', () => {
     const result = await editor.createVideoEdit({
       clip,
       editId: 'loopify',
-      folderSession: { folderPath: 'C:/clips' },
+      folderAccess: { folderPath: 'C:/clips' },
     });
 
     expect(result).toMatchObject({
@@ -51,7 +51,7 @@ describe('clip editor', () => {
     await expect(editor.createVideoEdit({
       clip: null,
       editId: 'loopify',
-      folderSession: { folderPath: 'C:/clips' },
+      folderAccess: { folderPath: 'C:/clips' },
     })).resolves.toMatchObject({ ok: false, code: 'missing-source-path' });
 
     await expect(editor.createVideoEdit({
@@ -60,7 +60,7 @@ describe('clip editor', () => {
         file: new File(['x'], 'alpha.mov', { type: 'video/quicktime' }),
       }),
       editId: 'missing',
-      folderSession: { folderPath: 'C:/clips' },
+      folderAccess: { folderPath: 'C:/clips' },
     })).resolves.toMatchObject({ ok: false, code: 'unsupported-edit' });
 
     expect(runtimeEditingService.createVideoEdit).not.toHaveBeenCalled();

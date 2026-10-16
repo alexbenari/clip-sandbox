@@ -26,7 +26,7 @@ type CollectionRefinementDependencies = Readonly<{
   navigation: IScreenNavigation;
   collectionScreenId: string;
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'hasDirtyClipSequenceChanges' | 'activeCollectionFilename'>;
-  openFolder: Pick<AppSessionState, 'currentFolderSession'>;
+  openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   diagnostics: Pick<AppDiagnostics, 'logRuntimeError'>;
   reporter: Pick<ActivityReporter, 'failure'>;
 }>;
@@ -112,6 +112,6 @@ export class CollectionRefinementWorkflow {
   }
 
   private openFolderPath(): string | null {
-    return this.refinement.openFolder.currentFolderSession?.folderPath ?? null;
+    return this.refinement.openFolder.currentFolderAccess?.folderPath ?? null;
   }
 }

@@ -7,4 +7,4 @@ import type { ClipFile } from '../domain/clip.js';
 export type FolderAccess = Readonly<{ folderPath: string }>;
 
 /** What opening or refreshing a folder yields: access to it and its files as they are now. */
-export type FolderContents = Readonly<{ folderSession: FolderAccess; files: ClipFile[]; folderName: string }>;
+export type FolderContents = Readonly<{ folderAccess: FolderAccess; files: ClipFile[]; folderName: string }>;

@@ -44,17 +44,17 @@ export class ElectronFolderService {
     return this.contentsOf(result);
   }
 
-  async refreshFolder(folderSession: FolderAccess): Promise<FolderContents> {
-    const result = await this.requireApi().refreshFolder({ folderPath: folderSession.folderPath });
+  async refreshFolder(folderAccess: FolderAccess): Promise<FolderContents> {
+    const result = await this.requireApi().refreshFolder({ folderPath: folderAccess.folderPath });
     if (!result || result.canceled) {
       throw new Error('The current folder could not be refreshed.');
     }
     return this.contentsOf(result);
   }
 
-  isActiveFolder(folderSession: FolderAccess | null, folderPath: string): boolean {
-    return !!folderSession
-      && this.normalizedFolderPath(folderSession.folderPath) === this.normalizedFolderPath(folderPath);
+  isActiveFolder(folderAccess: FolderAccess | null, folderPath: string): boolean {
+    return !!folderAccess
+      && this.normalizedFolderPath(folderAccess.folderPath) === this.normalizedFolderPath(folderPath);
   }
 
   // The desktop API is the only source of folder access, so its folder path is checked here, once.
@@ -63,7 +63,7 @@ export class ElectronFolderService {
       throw new Error('The desktop API returned a folder without a path.');
     }
     return {
-      folderSession: Object.freeze({ folderPath: result.folderPath }),
+      folderAccess: Object.freeze({ folderPath: result.folderPath }),
       files: Array.from(result.files || []).map((entry) => this.toRendererFile(entry)),
       folderName: result.folderName || '',
     };

@@ -27,8 +27,8 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
   pipelineWorkingCopy.loadPipeline(pipeline);
   const [alpha, bravo] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
   const openFolder = new AppSessionState();
-  const folderSession = { folderPath: 'C:/clips' };
-  openFolder.setCurrentFolderSession(folderSession);
+  const folderAccess = { folderPath: 'C:/clips' };
+  openFolder.setCurrentFolderAccess(folderAccess);
   const zoomView = new FakeZoomView();
   const grid = Object.assign(new EventSource<{ openClipRequested: string }>(), {
     getClipMediaSource: (clipId: string) => `file:///C:/clips/${clipId}.mp4`,

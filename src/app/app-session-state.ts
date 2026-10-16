@@ -1,9 +1,9 @@
 import type { FolderAccess } from './folder-access.js';
 
 export class AppSessionState {
-  currentFolderSession: FolderAccess | null = null;
+  currentFolderAccess: FolderAccess | null = null;
 
-  setCurrentFolderSession(folderSession: FolderAccess | null): void {
-    this.currentFolderSession = folderSession || null;
+  setCurrentFolderAccess(folderAccess: FolderAccess | null): void {
+    this.currentFolderAccess = folderAccess || null;
   }
 }

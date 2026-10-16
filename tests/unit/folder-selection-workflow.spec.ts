@@ -21,14 +21,14 @@ function folderFile(name: string, text = ''): File {
 }
 
 function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
-  const folderSession = { folderPath: 'C:/clips' };
+  const folderAccess = { folderPath: 'C:/clips' };
   const files = [folderFile('alpha.mp4'), folderFile('bravo.mp4'), folderFile('subset.txt', 'bravo.mp4\n')];
   const folders = {
-    pickFolder: vi.fn(async () => ({ folderSession, files, folderName: 'clips' })),
-    refreshFolder: vi.fn(async () => ({ folderSession, files, folderName: 'clips' })),
+    pickFolder: vi.fn(async () => ({ folderAccess, files, folderName: 'clips' })),
+    refreshFolder: vi.fn(async () => ({ folderAccess, files, folderName: 'clips' })),
   };
   const pipelineCatalog = {
-    openPipelineCatalogEntry: vi.fn(async () => ({ folderSession, files: [folderFile('charlie.mp4')], folderName: 'archive' })),
+    openPipelineCatalogEntry: vi.fn(async () => ({ folderAccess, files: [folderFile('charlie.mp4')], folderName: 'archive' })),
   };
   const pipelineWorkingCopy = new PipelineWorkingCopy();
   const openFolder = new AppSessionState();
@@ -36,8 +36,8 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   const unsavedChangesPrompt = { open: vi.fn((request: UnsavedPromptRequest) => { unsavedPrompts.push(request); }), close: vi.fn() };
   const collectionSave = { saveActive: vi.fn(async () => saveOutcome) };
   const collectionView = {
-    applySelection: vi.fn((sequence, { collection = null, folderSession: session }: { collection?: unknown; folderSession?: { folderPath: string } | null } = {}) => {
-      openFolder.setCurrentFolderSession(session);
+    applySelection: vi.fn((sequence, { collection = null, folderAccess: session }: { collection?: unknown; folderAccess?: { folderPath: string } | null } = {}) => {
+      openFolder.setCurrentFolderAccess(session);
       pipelineWorkingCopy.activateSelection({ collection: collection as never, sequence });
     }),
     refreshSelector: vi.fn(),
