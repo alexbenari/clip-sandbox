@@ -1,12 +1,12 @@
-import { expect, test } from 'vitest';
-
+// Compile-time contract: `npm run typecheck` fails if a rejected request below starts to type-check.
+// This file is checked by tsc only; it contains no runtime test.
 import type {
   FrameReviewCapturePoint,
   FrameReviewSourceHandle,
   IFrameReviewOpenRequest,
-} from '../../../src/frame-review/frame-review-api.js';
+} from '../../src/frame-review/frame-review-api.js';
 
-function rejectedFrameReviewContracts(sourceHandle: FrameReviewSourceHandle): void {
+export function rejectedFrameReviewContracts(sourceHandle: FrameReviewSourceHandle): void {
   // @ts-expect-error Renderer open requests use an opaque source handle, never a host path.
   const hostPathRequest: IFrameReviewOpenRequest = { sourcePath: 'C:/movie.mp4', previewBounds: { maxWidth: 1, maxHeight: 1 } };
   void hostPathRequest;
@@ -18,7 +18,3 @@ function rejectedFrameReviewContracts(sourceHandle: FrameReviewSourceHandle): vo
   const accepted: IFrameReviewOpenRequest = { sourceHandle, previewBounds: { maxWidth: 960, maxHeight: 540 } };
   void accepted;
 }
-
-test('frame-review renderer contracts are checked by TypeScript', () => {
-  expect(typeof rejectedFrameReviewContracts).toBe('function');
-});

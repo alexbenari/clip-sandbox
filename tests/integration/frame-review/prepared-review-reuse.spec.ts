@@ -1,125 +1,133 @@
-import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { FrameReviewHost, type IFrameReviewRuntimeConfiguration } from '../../../src/frame-review/host/frame-review-host.js';
 import { NativeCommandProcess } from '../../../src/frame-review/host/native-process-client.js';
 import type { HostFrameReviewEvent } from '../../../src/frame-review/host/review-session.js';
+import {
+  nativeBinaryFolder, nativeFrameReviewUnavailableReason, readFrameReviewDependencies, toolEnvironment, type FrameReviewDependencies,
+} from '../../support/frame-review-dependencies.js';
 
-const project = path.resolve('.');
-const dependenciesPath = path.join(project, 'tools', 'frame-review', '.deps', 'resolved-dependencies.json');
-const nativeBin = path.join(project, 'native-build', 'frame-review', 'bin');
-const available = process.platform === 'win32'
-  && existsSync(dependenciesPath)
-  && existsSync(path.join(nativeBin, 'bestsource_media_service.exe'));
+const unavailable = nativeFrameReviewUnavailableReason(path.join(nativeBinaryFolder, 'bestsource_media_service.exe'));
 
-describe.runIf(available)('prepared review production integration', () => {
+describe.skipIf(unavailable !== null)('prepared review production integration', () => {
   it('builds once, reuses in-process, and reuses after a host restart without touching cache mtimes', async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-ms3-'));
-    const dependencyManifest = JSON.parse(await readFile(dependenciesPath, 'utf8'));
-    const environment = {
-      ...process.env,
-      PATH: [
-        dependencyManifest.ffmpeg.runtimeDllRoot,
-        dependencyManifest.compiler.runtimeDllRoot,
-        path.join(dependencyManifest.bestsource.root, 'bin'),
-        process.env.PATH ?? '',
-      ].join(path.delimiter),
-      VLC_PLUGIN_PATH: dependencyManifest.libvlc.plugins,
-    };
-    const movie = path.join(root, 'source.mp4');
-    const videoBytes = Buffer.alloc(64 * 48 * 3 * 5);
-    for (let frame = 0; frame < 5; frame += 1) {
-      videoBytes.fill(frame * 40, frame * 64 * 48 * 3, (frame + 1) * 64 * 48 * 3);
+    const dependencies = readFrameReviewDependencies();
+    const root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-prepared-review-'));
+    const hosts: FrameReviewHost[] = [];
+    const startHost = () => { const host = new FrameReviewHost(runtimeConfiguration(root, dependencies)); hosts.push(host); return host; };
+    try {
+      const movie = await createFiveFrameMovie(root, dependencies);
+
+      const first = await openPrepared(startHost(), movie);
+      expect(first.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: false } });
+      expectPhasesInOrder(first.phases, ['proxy-encoding', 'proxy-ready', 'indexing', 'exact-ready']);
+      const exactFrame = await first.session.enterFrameScrub();
+      expect(exactFrame.identity.frameIndex).toBe(0);
+      await expect(first.session.captureCurrentPoint()).resolves.toMatchObject({
+        kind: 'exact-frame', identity: { frameIndex: 0 },
+      });
+      const manifestPath = path.join(root, 'exact-review-proxy-cache', first.session.state().preparedReview!.cacheKey, 'manifest.json');
+      const timelinePath = path.join(path.dirname(manifestPath), 'loop-timeline-v1.json');
+      const timeline = JSON.parse(await readFile(timelinePath, 'utf8'));
+      expect(timeline).toMatchObject({
+        schemaVersion: 1, frameCount: 5, timebaseNumerator: '1', timebaseDenominator: '1000',
+        pts: ['0', '200', '400', '600', '800'],
+      });
+
+      // The loop covers frames 0-3 of a five-frame movie, so a pause must land inside it, never on frame 4.
+      await first.session.startExactPreview({ startFrameIndex: 0, endFrameIndex: 3 });
+      const framesBeforePlayback = first.playbackFrames();
+      await vi.waitFor(() => expect(first.playbackFrames()).toBeGreaterThan(framesBeforePlayback + 2), { timeout: 10_000 });
+      const paused = await first.session.pauseExactPreview();
+      expect(paused.identity.frameIndex).toBeGreaterThanOrEqual(0);
+      expect(paused.identity.frameIndex).toBeLessThanOrEqual(3);
+      await first.session.resumeExactPreview(paused.identity.frameIndex);
+      await first.session.stopExactPreview();
+      const firstMtime = (await stat(manifestPath)).mtimeMs;
+
+      const second = await openPrepared(first.host, movie);
+      expect(second.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: true } });
+      expect(second.phases).not.toContain('proxy-encoding');
+      expect(second.phases).not.toContain('proxy-ready');
+
+      // A command that arrives while a session is being disposed must not reach it.
+      const closing = first.host.closeSession(second.session.id);
+      expect(() => first.host.session(second.session.id)).toThrow('Frame-review session is unknown.');
+      await closing;
+      await first.host.dispose();
+
+      const restarted = await openPrepared(startHost(), movie);
+      expect(restarted.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: true } });
+      expect(restarted.phases).not.toContain('indexing');
+      expect((await stat(manifestPath)).mtimeMs).toBe(firstMtime);
+      await writeFile(timelinePath, '{broken');
+      await restarted.host.closeSession(restarted.session.id);
+      const repaired = await openPrepared(restarted.host, movie);
+      expect(repaired.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: true } });
+      expect(JSON.parse(await readFile(timelinePath, 'utf8')).pts).toEqual(timeline.pts);
+    } finally {
+      await Promise.allSettled(hosts.map(host => host.dispose()));
+      await rm(root, { recursive: true, force: true });
     }
-    const rawVideo = path.join(root, 'source.rgb');
-    const rawAudio = path.join(root, 'source.pcm');
-    await Promise.all([
-      writeFile(rawVideo, videoBytes),
-      writeFile(rawAudio, Buffer.alloc(48_000 * 2 * 2)),
-    ]);
-    await new NativeCommandProcess(environment).run(dependencyManifest.ffmpeg.path, [
-      '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-      '-f', 'rawvideo', '-pixel_format', 'rgb24', '-video_size', '64x48', '-framerate', '5', '-i', rawVideo,
-      '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', rawAudio,
-      '-c:v', 'mpeg4', '-q:v', '2', '-c:a', 'aac', '-shortest', movie,
-    ], { timeoutMs: 60_000 });
-
-    const configuration: IFrameReviewRuntimeConfiguration = {
-      applicationFolder: root,
-      nativeBinaryFolder: nativeBin,
-      ffmpegExecutable: dependencyManifest.ffmpeg.path,
-      ffprobeExecutable: dependencyManifest.ffprobe.path,
-      libVlcDll: dependencyManifest.libvlc.dll,
-      libVlcPluginFolder: dependencyManifest.libvlc.plugins,
-      bestSourceVersion: dependencyManifest.sources.bestsource.commit,
-      ffmpegVersion: dependencyManifest.manifestSha256,
-      runtimePathEntries: [
-        dependencyManifest.ffmpeg.runtimeDllRoot,
-        dependencyManifest.compiler.runtimeDllRoot,
-        path.join(dependencyManifest.bestsource.root, 'bin'),
-      ],
-    };
-
-    const first = await openPrepared(new FrameReviewHost(configuration), movie);
-    expect(first.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: false } });
-    expect(first.phases).toContain('proxy-encoding');
-    expect(first.phases.indexOf('proxy-ready')).toBeLessThan(first.phases.indexOf('indexing'));
-    const exactFrame = await first.session.enterFrameScrub();
-    expect(exactFrame.identity.frameIndex).toBe(0);
-    await expect(first.session.captureCurrentPoint()).resolves.toMatchObject({
-      kind: 'exact-frame', identity: { frameIndex: 0 },
-    });
-    const manifestPath = path.join(root, 'exact-review-proxy-cache', first.session.state().preparedReview!.cacheKey, 'manifest.json');
-    const timelinePath = path.join(path.dirname(manifestPath), 'loop-timeline-v1.json');
-    const timeline = JSON.parse(await readFile(timelinePath, 'utf8'));
-    expect(timeline).toMatchObject({
-      schemaVersion: 1, frameCount: 5, timebaseNumerator: '1', timebaseDenominator: '1000',
-      pts: ['0', '200', '400', '600', '800'],
-    });
-    await first.session.startExactPreview({ startFrameIndex: 0, endFrameIndex: 3 });
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const paused = await first.session.pauseExactPreview();
-    expect(paused.identity.frameIndex).toBeGreaterThanOrEqual(0);
-    expect(paused.identity.frameIndex).toBeLessThanOrEqual(3);
-    await first.session.resumeExactPreview(paused.identity.frameIndex);
-    await first.session.stopExactPreview();
-    const firstMtime = (await stat(manifestPath)).mtimeMs;
-
-    const second = await openPrepared(first.host, movie);
-    expect(second.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: true } });
-    expect(second.phases).not.toContain('proxy-encoding');
-    expect(second.phases).not.toContain('proxy-ready');
-    await first.session.dispose();
-    await second.session.dispose();
-    await first.host.dispose();
-
-    const restarted = await openPrepared(new FrameReviewHost(configuration), movie);
-    expect(restarted.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: true } });
-    expect(restarted.phases).not.toContain('indexing');
-    expect((await stat(manifestPath)).mtimeMs).toBe(firstMtime);
-    await writeFile(timelinePath, '{broken');
-    await restarted.session.dispose();
-    const repaired = await openPrepared(restarted.host, movie);
-    expect(repaired.session.state()).toMatchObject({ phase: 'exact-ready', preparedReview: { cacheHit: true } });
-    expect(JSON.parse(await readFile(timelinePath, 'utf8')).pts).toEqual(timeline.pts);
-    await repaired.session.dispose();
-    await restarted.host.dispose();
   }, 180_000);
 });
 
+function expectPhasesInOrder(phases: readonly string[], expected: readonly string[]): void {
+  const firstSeen = expected.map(phase => phases.indexOf(phase));
+  expect(firstSeen, `phases seen: ${phases.join(', ')}`).not.toContain(-1);
+  expect(firstSeen).toEqual([...firstSeen].sort((a, b) => a - b));
+}
+
+function runtimeConfiguration(root: string, dependencies: FrameReviewDependencies): IFrameReviewRuntimeConfiguration {
+  return {
+    applicationFolder: root,
+    nativeBinaryFolder,
+    ffmpegExecutable: dependencies.ffmpeg.path,
+    ffprobeExecutable: dependencies.ffprobe.path,
+    libVlcDll: dependencies.libvlc.dll,
+    libVlcPluginFolder: dependencies.libvlc.plugins,
+    bestSourceVersion: dependencies.sources.bestsource.commit,
+    ffmpegVersion: dependencies.manifestSha256,
+    runtimePathEntries: [
+      dependencies.ffmpeg.runtimeDllRoot,
+      dependencies.compiler.runtimeDllRoot,
+      path.join(dependencies.bestsource.root, 'bin'),
+    ],
+  };
+}
+
+async function createFiveFrameMovie(root: string, dependencies: FrameReviewDependencies): Promise<string> {
+  const movie = path.join(root, 'source.mp4');
+  const videoBytes = Buffer.alloc(64 * 48 * 3 * 5);
+  for (let frame = 0; frame < 5; frame += 1) {
+    videoBytes.fill(frame * 40, frame * 64 * 48 * 3, (frame + 1) * 64 * 48 * 3);
+  }
+  const rawVideo = path.join(root, 'source.rgb');
+  const rawAudio = path.join(root, 'source.pcm');
+  await Promise.all([writeFile(rawVideo, videoBytes), writeFile(rawAudio, Buffer.alloc(48_000 * 2 * 2))]);
+  await new NativeCommandProcess(toolEnvironment(dependencies)).run(dependencies.ffmpeg.path, [
+    '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
+    '-f', 'rawvideo', '-pixel_format', 'rgb24', '-video_size', '64x48', '-framerate', '5', '-i', rawVideo,
+    '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', rawAudio,
+    '-c:v', 'mpeg4', '-q:v', '2', '-c:a', 'aac', '-shortest', movie,
+  ], { timeoutMs: 60_000 });
+  return movie;
+}
+
 async function openPrepared(host: FrameReviewHost, movie: string) {
   const phases: string[] = [];
-  const sourceHandle = host.registerSource(movie);
+  let playbackFrames = 0;
   const session = await host.open({
-    sourceHandle,
+    sourceHandle: host.registerSource(movie),
     previewBounds: { maxWidth: 320, maxHeight: 240 },
     emit: (event: HostFrameReviewEvent) => {
       if (event.type === 'state') phases.push(event.state.phase);
+      if (event.type === 'display-frame' && event.frame.kind === 'playback-frame') playbackFrames += 1;
     },
   });
   await session.whenPrepared();
-  return { host, session, phases };
+  return { host, session, phases, playbackFrames: () => playbackFrames };
 }

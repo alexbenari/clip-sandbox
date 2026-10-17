@@ -72,6 +72,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Typecheck, including the compile-time contracts in tests/type-contracts
+        run: npm run typecheck
+
       - name: Run unit tests
         run: npm run unit
 

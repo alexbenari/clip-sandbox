@@ -81,13 +81,27 @@ describe('GifWorkflowKeyboard', () => {
     expect(transport.togglePlayback).toHaveBeenCalledOnce();
   });
 
-  it('ignores E when the active capture target cannot extract the current range', () => {
-    const commands = capture(false);
+  it('ignores E while the active capture target says the current range cannot be extracted', () => {
+    const commands = capture(true);
+    commands.canExtractCurrent!.mockReturnValue(false);
     const controller = new GifWorkflowKeyboard();
     controller.activate({ player: player(), capture: commands });
 
-    controller.handleKeyDown(event('e'));
-    expect(commands).not.toHaveProperty('extractCurrent');
+    const extractKey = event('e');
+    controller.handleKeyDown(extractKey);
+
+    expect(commands.extractCurrent).not.toHaveBeenCalled();
+    expect(extractKey.defaultPrevented).toBe(false);
+  });
+
+  it('leaves E unhandled for a capture target that has no extract command', () => {
+    const controller = new GifWorkflowKeyboard();
+    controller.activate({ player: player(), capture: capture(false) });
+    const extractKey = event('e');
+
+    controller.handleKeyDown(extractKey);
+
+    expect(extractKey.defaultPrevented).toBe(false);
   });
 
   it('starts each held arrow once, ignores browser repeat, and releases each direction independently', () => {

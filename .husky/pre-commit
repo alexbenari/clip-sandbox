@@ -11,4 +11,5 @@ then
   exit 0
 fi
 
+npm run typecheck
 npm run unit

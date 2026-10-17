@@ -129,7 +129,7 @@ describe('ClipExtractionWorkflow', () => {
     await run;
     expect(workflow.revisionBlock('range-2')).toBeNull();
   });
-  it('snapshots exact eligible ranges at batch start and processes them sequentially', async () => {
+  it('extracts only the ranges eligible when the batch started', async () => {
     const fakesForWorkflow = fakes();
     const eligible = [range('range-1', 10), range('range-2', 20)];
     const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
@@ -143,11 +143,28 @@ describe('ClipExtractionWorkflow', () => {
     eligible.push(range('range-added-after-start', 30));
     await run;
 
-    expect(fakesForWorkflow.extractor.extract).toHaveBeenCalledTimes(2);
-    expect(fakesForWorkflow.extractor.extract.mock.invocationCallOrder[0]).toBeLessThan(fakesForWorkflow.extractor.extract.mock.invocationCallOrder[1]!);
     expect(workflow.state('range-1')).toMatchObject({ kind: 'completed' });
     expect(workflow.state('range-2')).toMatchObject({ kind: 'completed' });
     expect(workflow.state('range-added-after-start')).toMatchObject({ kind: 'pending' });
+  });
+
+  it('starts the next range only after the current extraction finishes', async () => {
+    const fakesForWorkflow = fakes();
+    let finishFirst!: () => void;
+    fakesForWorkflow.extractor.extract.mockImplementationOnce(() => new Promise(resolve => {
+      finishFirst = () => resolve({ kind: 'created-media', mediaHandle: 'media-range-1', filename: 'range-1.mp4' });
+    }));
+    const workflow = new ClipExtractionWorkflow(fakesForWorkflow.extractor, fakesForWorkflow.destination);
+
+    const run = workflow.extractAll({ sourceHandle: 'source_opaque_0001', sourceGeneration: 1,
+      ranges: [range('range-1', 10), range('range-2', 20)], movieName: 'Sample Movie.mp4' });
+    await vi.waitFor(() => expect(fakesForWorkflow.extractor.extract).toHaveBeenCalledOnce());
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(fakesForWorkflow.extractor.extract).toHaveBeenCalledOnce();
+    finishFirst();
+    await run;
+    expect(fakesForWorkflow.extractor.extract).toHaveBeenCalledTimes(2);
   });
 
   it('continues after one extraction failure while preserving successful entries and exposing the failed entry', async () => {

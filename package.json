@@ -13,7 +13,7 @@
     "unit": "vitest --run",
     "typecheck": "tsc -p tsconfig.json && npm run typecheck:strict-src",
     "typecheck:strict-src": "tsc -p tsconfig.strict-src.json",
-    "test:all": "npm run unit && npm run e2e",
+    "test:all": "npm run typecheck && npm run unit && npm run e2e",
     "frame-review:bootstrap": "powershell -ExecutionPolicy Bypass -File ./tools/frame-review/bootstrap-native.ps1",
     "frame-review:build": "powershell -ExecutionPolicy Bypass -File ./tools/frame-review/build-native.ps1",
     "frame-review:test": "powershell -ExecutionPolicy Bypass -File ./tools/frame-review/test-native.ps1",

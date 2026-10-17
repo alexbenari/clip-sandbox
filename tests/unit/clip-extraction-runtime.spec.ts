@@ -196,7 +196,7 @@ describe('clip extraction runtime', () => {
     expect(fs.copyFile).toHaveBeenCalledOnce();
   });
 
-  it('aborts active media work and removes its temporary workspace during disposal', async () => {
+  it('aborts active media work and finishes disposal only after its temporary workspace is removed', async () => {
     const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     let commandSignal: AbortSignal | undefined;
     const runCommand = vi.fn(async (_command: string, _args: string[], options: { signal?: AbortSignal }) => {
@@ -205,11 +205,16 @@ describe('clip extraction runtime', () => {
         options.signal?.addEventListener('abort', () => resolve({ ok: false, code: 'cancelled' }), { once: true });
       });
     });
+    const removedPaths: string[] = [];
     const fs = {
       mkdir: vi.fn(async () => undefined),
       readdir: vi.fn(async () => []),
       mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
-      rm: vi.fn(async () => undefined),
+      // Removing a real folder takes time; app shutdown must not finish before it does.
+      rm: vi.fn(async (target: string) => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        removedPaths.push(target);
+      }),
     };
     const runtime = createClipExtractionRuntime({
       fs,
@@ -236,12 +241,9 @@ describe('clip extraction runtime', () => {
 
     await runtime.dispose();
 
-    await expect(extraction).resolves.toMatchObject({ ok: false, code: 'cancelled' });
     expect(commandSignal?.aborted).toBe(true);
-    expect(fs.rm).toHaveBeenCalledWith('D:\\pipelines\\extraction-tmp\\.clip-extraction-op', {
-      recursive: true,
-      force: true,
-    });
+    expect(removedPaths).toContain('D:\\pipelines\\extraction-tmp\\.clip-extraction-op');
+    await expect(extraction).resolves.toMatchObject({ ok: false, code: 'cancelled' });
   });
 
   it('publishes to the first unoccupied sequence without overwriting an external collision', async () => {

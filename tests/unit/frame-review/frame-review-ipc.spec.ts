@@ -21,12 +21,11 @@ describe('frame review IPC', () => {
     expect(host.session).not.toHaveBeenCalled();
   });
 
-  it('removes the session before awaiting disposal so late commands cannot enter it', async () => {
+  it('closes the session through its host and reports success to the renderer', async () => {
     const handlers = new Map<string, Function>();
     const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
-    let known = true;
-    const closeSession = vi.fn(async () => { known = false; });
-    const host = { closeSession, session: vi.fn(() => { if (!known) throw new Error('unknown'); }) };
+    const closeSession = vi.fn(async () => undefined);
+    const host = { closeSession };
     const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
     registerFrameReviewIpc({ ipcMain, hostForEvent: () => host, chooseSourcePath: vi.fn(async () => null) });
 

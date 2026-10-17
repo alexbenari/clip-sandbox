@@ -402,7 +402,7 @@ describe('clip collection grid controller', () => {
     ]);
   });
 
-  test('does not reapply an unchanged cached grid layout when switching back', () => {
+  test('switches back to an unchanged cached view without rewriting its card layout', () => {
     const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
@@ -414,14 +414,17 @@ describe('clip collection grid controller', () => {
       name: 'subset',
       clips: [pipeline.orderedClips()[0]],
     });
-
     controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
-
+    const pipelineCards = [...document.querySelectorAll('#grid .thumb')];
     controller.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
+    const cardStyleWrites = new MutationObserver(() => undefined);
+    for (const card of pipelineCards) cardStyleWrites.observe(card, { attributes: true, attributeFilter: ['style'] });
 
     controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+
+    expect(cardStyleWrites.takeRecords()).toEqual([]);
     expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(3, 1fr)');
-    expect(document.querySelector('#grid .thumb').style.height).toBe('120px');
+    cardStyleWrites.disconnect();
   });
 
   test('owns title visibility on the grid surface', () => {
