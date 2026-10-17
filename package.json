@@ -19,7 +19,7 @@
     "frame-review:build": "powershell -ExecutionPolicy Bypass -File ./tools/frame-review/build-native.ps1",
     "frame-review:test": "powershell -ExecutionPolicy Bypass -File ./tools/frame-review/test-native.ps1",
     "frame-review:verify": "node ./tools/frame-review/verify-dependencies.mjs && node ./tools/frame-review/verify-native-products.mjs",
-    "prepare": "husky"
+    "prepare": "husky && node tools/agent-skills/link-claude-skills.mjs"
   },
   "keywords": [],
   "author": "",

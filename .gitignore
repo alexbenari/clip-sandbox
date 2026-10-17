@@ -14,3 +14,5 @@ review-proxy-cache/
 exact-review-proxy-cache/
 playback-proxy-cache/
 .impeccable/review/
+# A link to .agents/skills that npm install creates; see tools/agent-skills/link-claude-skills.mjs.
+/.claude/skills
