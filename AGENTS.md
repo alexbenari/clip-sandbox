@@ -54,8 +54,6 @@ After each non-trivial code change, run the project-local `code-quality-review` 
 
 ## Skill use during planning and execution
 
-Project skills live in `.agents/skills/`, which Codex reads. `npm install` links `.claude/skills` to that folder so Claude Code finds the same skills (`tools/agent-skills/link-claude-skills.mjs`). Add and edit skills only in `.agents/skills/`.
-
 When the agent environment provides workflow, design, implementation, testing, or documentation skills, use them according to their triggers. Do not treat an execution plan as an exemption from skill use because the user asked to "execute the plan" rather than explicitly asking to write code. Similarly, do not treat writing a spec as an exemption from skill use because the user did not explicitly ask to design or refactor.
 
 Writing a spec or execution plan requires applicable design skills when the document makes or records design decisions.
