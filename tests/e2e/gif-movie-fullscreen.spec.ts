@@ -147,7 +147,8 @@ test('F and Escape review the same movie at display size and restore the workspa
     await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await expect(player).toBeFocused();
     await expect(player.locator('.frame-review-identity')).toHaveText('Frame 10');
-    expect(await hostHeight()).toBeCloseTo(beforeHeight, 0);
+    // The window can still be resizing back from full screen when the element leaves it.
+    await expect.poll(hostHeight).toBeCloseTo(beforeHeight, 0);
     await expect(page.locator('#clipsPanel')).toHaveClass(/folded/);
     await expect(page.locator('#foldClips')).toHaveAttribute('aria-expanded', 'false');
     await page.screenshot({ path: path.join(evidence, 'flow', 'normal-after-exit.png') });

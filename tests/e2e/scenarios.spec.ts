@@ -148,11 +148,10 @@ test.describe('Electron runtime migration', () => {
     await fsp.writeFile(path.join(folderPath, 'subset.txt'), 'solo.mp4\nextra.mp4\n', 'utf8');
     await page.locator('#activeCollectionName').selectOption('subset.txt');
 
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-    await expect(allClipNames(page)).resolves.toEqual(['solo.mp4', 'extra.mp4']);
+    // The previous view also shows two clips, so wait on the names, not the count.
+    await expect.poll(() => allClipNames(page)).toEqual(['solo.mp4', 'extra.mp4']);
     await page.locator('#activeCollectionName').selectOption('__pipeline__');
-    await expect(page.locator('#grid .thumb')).toHaveCount(3);
-    await expect(allClipNames(page)).resolves.toEqual(['duo.webm', 'extra.mp4', 'solo.mp4']);
+    await expect.poll(() => allClipNames(page)).toEqual(['duo.webm', 'extra.mp4', 'solo.mp4']);
   });
 
   test('switches between saved collections in Electron', async () => {
