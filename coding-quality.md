@@ -3,7 +3,7 @@
 ## Purpose and scope
 - This document applies primarily to long-lived application code in layered systems.
 - It treats class ownership as the default for long-lived production behavior in this object-oriented codebase. Any free-function exception should be deliberate and reviewable.
-- Adapt these guidelines rather than applying them literally to one-off scripts, tests, migrations, data pipelines, framework glue, or codebases built around functional or data-oriented patterns.
+- Adapt these guidelines rather than applying them literally to one-off scripts, tests (except § Test reliability, which is written for them), migrations, data pipelines, framework glue, or codebases built around functional or data-oriented patterns.
 - Optimize first for clarity, correctness, cohesion, and changeability.
 
 ## Terms
@@ -70,9 +70,40 @@
 
 ## Test reliability
 
+`npm run lint` enforces the mechanical parts of these rules for tests. The rest are checked in review. Disable a lint rule only for one line, with a comment saying why.
+
+What to assert:
+
 - Keep tests reflecting the intended behavior, and match unit, integration, and end-to-end coverage to the risk of the code.
-- Do not assert private DOM structure, incidental call counts, exact pixel measurements, animation frames, or timestamps unless the requirement guarantees them. Assert observable behavior and relationships; use a justified tolerance for approximate values.
-- Do not use fixed sleeps or assume a background operation finishes within a particular interval. Wait for an observable completion condition with a bounded timeout; control clocks, animations, and external responses in tests that need exact timing.
-- Do not let tests depend on execution order, shared user data, random input, live services, or machine-specific state. Give each test explicit fixtures and isolated state, and clean up what it creates.
-- Do not combine several slow or failure-prone operations in one end-to-end test under a single timeout. Keep each scenario focused; cover detailed rules in unit or integration tests and reserve end-to-end tests for essential user workflows.
-- Do not weaken assertions or only raise timeouts to make a flaky test pass. Check whether the failure reveals a product bug, then make the setup and observation deterministic. If real hardware or media timing is essential, run that check separately; if it cannot be made reliable, remove it and record the coverage gap.
+- Each test protects one requirement that a user or caller relies on. Its name states the scenario and the expected outcome in domain terms, and every clause in the name has an action and an assertion in the body.
+- Do not assert private DOM structure, incidental call counts or call order, exact pixel measurements, animation frames, timestamps, durations, retry counts, size limits, or encoder settings unless the requirement guarantees them. Assert observable behavior and relationships; use a justified tolerance for approximate values. When a value does matter, take it from the production constant or the spec, and never use it to find other things.
+- Assert on what the code under test produced or changed, never on the fixture. Assert a mock interaction only when the interaction is the contract, such as "never sends a path to the service".
+- Use exact expected values for concrete inputs. A range that admits every possible result, a substring match on an argument list, or `toThrow()` without the expected message is not an assertion.
+- Before freezing a recorded string or behavior as the expected value, confirm it is the requirement, or fix the bug it shows.
+
+Proving a test can fail:
+
+- See every new or changed test fail for the right reason before relying on it: write it first, or break the behavior it names and confirm it fails with a readable message. Failing only because the code does not exist yet is not enough. For an end-to-end test, also confirm the scenario reaches the state its name describes; if the fixture cannot reach it, prove the property at a lower level and name the end-to-end test for what it covers.
+- A negative test ("X does not happen") first creates the conditions in which X would happen, then waits until X would have been observable. Writing it first does not prove it: with no code, nothing happens.
+- An ordering test holds the first step open, for example with a deferred promise, so that an implementation that does not wait fails.
+- Assert an effect right after the awaited call that promises it, before awaiting other work that could complete the effect and hide an ordering bug.
+
+Timing:
+
+- Do not use fixed sleeps, size a wait to a private constant, or assume a background operation finishes within a particular interval. Wait for an observable completion condition with a bounded timeout; control clocks, animations, and external responses in tests that need exact timing.
+- After a resize, navigation, or mode change, wait for evidence that it took effect before measuring. A setup call can silently do nothing; a maximized window ignores a resize. In Playwright, prefer the retrying `expect(locator)` matchers over asserting on a value read once.
+- Do not poll a value that keeps changing on its own; make the system still, or compare against a value captured at the action. Do not count microtasks; flush fully or wait on a condition.
+
+Isolation and environment:
+
+- Do not let tests depend on execution order, shared user data, random input, live services, or machine-specific state. Give each test explicit fixtures and isolated state, and clean up what it creates. Temporary folders, profiles, and caches live under the test's own root and are removed in `finally` or `afterEach`; when the app itself writes elsewhere, give it a test-mode location instead of cleaning up after it. Restore global patches the same way, saving the original before replacing it.
+- Optional native dependencies use the shared skip guard in `tests/support/frame-review-dependencies.ts`, evaluated before anything that can throw. Never resolve tools at module load.
+- Never assume a display size. Derive pointer targets from element boxes, and do not rely on layout that a smaller display changes: CI's display is smaller than a desktop one.
+- Integration tests build the DOM from the shipped page (`tests/support/page-markup.ts`) or the control's own factory, never from a hand-copied skeleton. A stub honors the inputs that matter to the behavior under test, or the test uses the real collaborator.
+
+Structure and gates:
+
+- Do not combine several slow or failure-prone operations in one end-to-end test under a single timeout. Keep each scenario focused; cover detailed rules in unit or integration tests and reserve end-to-end tests for essential user workflows. An end-to-end test drives real controls and reaches only states a user can reach: no injected DOM nodes, synthetic events, or clicks through something that covers the target.
+- Name a test file after the unit or workflow it tests. When a production class is renamed or split, rename its tests in the same change. Search for an existing test before adding one, and keep shared builders in `tests/support/` or `tests/e2e/support/`.
+- Every kind of check a test relies on, such as `tsc`, a native build, or a fixture generator, runs in pre-commit or CI; otherwise the test is not coverage.
+- Do not weaken assertions or only raise timeouts to make a flaky test pass. Check whether the failure reveals a product bug, then take one of three outcomes and say which in the commit message: make it deterministic; move the timing-sensitive part to a level where timing can be controlled; or remove the test and record the coverage gap. Never keep a test's name over a body that no longer does what the name says.

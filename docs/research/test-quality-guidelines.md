@@ -1,9 +1,20 @@
-# Test quality guidelines (draft)
+# Test quality guidelines
 
-Status: draft for review. Derived from the 2026-10-17 test-quality review of
-master (15 findings) and revised while fixing them. Where these rules end up
-(a test-writing skill, `coding-quality.md`, the code-quality review) is still
-to be decided.
+Status: adopted on 2026-10-17. This document records why the rules exist; it is
+not where they are maintained. Derived from the 2026-10-17 test-quality review
+of master (15 findings) and revised while fixing them. The rules now live in:
+
+- `coding-quality.md` § Test reliability: the rules themselves;
+- the `testing-discipline` skill, "In this repository": the steps for writing or
+  repairing a test;
+- the `code-quality-review` skill and its reviewer brief: tests are reviewed,
+  and the reviewer names a bug each test would catch;
+- `PLANS.md`: each milestone records how its new tests were seen failing;
+- `AGENTS.md` § Goal-based verification: a test is evidence only once seen
+  failing;
+- `eslint.config.mjs`, run by `npm run lint` in pre-commit and CI: the
+  mechanical checks (in e2e tests: `waitForTimeout`, retrying Playwright
+  assertions, skips and conditionals; in all tests: `Math.random` and `.only`).
 
 ## Why the problems happened
 
@@ -162,7 +173,8 @@ made anyone show they were followed.
 
 ## Revisions made while fixing
 
-Fixing the 15 findings turned up the following. Each item says which
+Fixing the 15 findings, and the CI failure that followed, turned up the
+following. Each item says which
 guideline it changes or adds.
 
 1. **An e2e test can pass a mutation because it never reaches its state**
@@ -202,6 +214,14 @@ guideline it changes or adds.
    wrong. A reviewer should check a test's fixture before calling an
    assertion vacuous.
 
-Not fixed, outside test scope: `electron/main.cjs` parses
-`resolved-dependencies.json` without stripping a BOM, which AGENTS.md
-requires of readers of generated JSON (`NativeProductLocator` does strip it).
+9. **A smaller display changes what a user can reach** (extends 17 and 22).
+   After the full-screen test was split, CI failed on a click on the player's
+   Full screen button while Activity was open: on CI's smaller display the
+   Activity panel covered the button. Before the split, an earlier step had
+   folded the clips panel and moved the button out from under it. No user can
+   take that step either, because any click outside Activity closes it, so
+   the property moved to the unit test that already proved it.
+
+The BOM finding noted here earlier was fixed separately:
+`NativeProductLocator.dependencyManifest()` is now the only reader of the
+dependency manifests.
