@@ -1,194 +1,150 @@
-// @ts-nocheck
-import { existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
-import { test, expect, _electron as electron } from '@playwright/test';
-import { spawn } from 'node:child_process';
+import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
 
-const project = path.resolve('.');
-const dependenciesPath = path.join(project, 'tools', 'frame-review', '.deps', 'resolved-dependencies.json');
-const nativeService = path.join(project, 'native-build', 'frame-review', 'bin', 'bestsource_media_service.exe');
+import {
+  nativeBinaryFolder, nativeFrameReviewUnavailableReason, readFrameReviewDependencies, toolEnvironment,
+} from '../support/frame-review-dependencies.js';
+import { closeAppWithin, launchApp } from './support/app.js';
 
-test.skip(process.platform !== 'win32' || !existsSync(dependenciesPath) || !existsSync(nativeService),
-  'The explicit frame-review native build is not available.');
+const unavailable = nativeFrameReviewUnavailableReason(path.join(nativeBinaryFolder, 'bestsource_media_service.exe'));
+
+test.skip(unavailable !== null, unavailable ?? '');
+
+type FrameReviewBridge = {
+  __testSetNextMoviePath(path: string): Promise<void>;
+  frameReview: {
+    chooseSource(): Promise<{ ok: boolean; result: { sourceHandle: string }; error?: { message: string } }>;
+    open(request: unknown): Promise<{ ok: boolean; result: { sessionId: string }; error?: { message: string } }>;
+    command(sessionId: string, name: string): Promise<{ ok: boolean; result: any; error?: { message: string } }>;
+    close(sessionId: string): Promise<unknown>;
+  };
+};
+
+async function withMovie(prefix: string, run: (movie: string, profile: string) => Promise<void>): Promise<void> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  try {
+    const movie = path.join(root, 'source.mp4');
+    await createFiveFrameMovie(movie, root);
+    await run(movie, path.join(root, 'profile'));
+  } finally {
+    await fs.rm(root, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+function collectStderr(app: ElectronApplication): () => string {
+  const chunks: string[] = [];
+  app.process().stderr?.on('data', chunk => chunks.push(chunk.toString('utf8')));
+  return () => chunks.join('');
+}
 
 test('Electron reuses prepared review in-session and after restart', async () => {
   test.setTimeout(180_000);
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-frame-review-e2e-'));
-  const clips = path.join(root, 'clips');
-  const profile = path.join(root, 'profile');
-  await fs.mkdir(clips);
-  const dependencies = JSON.parse(await fs.readFile(dependenciesPath, 'utf8'));
-  const movie = path.join(clips, 'source.mp4');
-  await createMovie(movie, root, dependencies.ffmpeg.path, dependencies);
+  await withMovie('clip-sandbox-frame-review-e2e-', async (movie, profile) => {
+    let app = await launchApp(profile);
+    try {
+      const firstStderr = collectStderr(app);
+      const page = await app.firstWindow();
+      const first = await openPrepared(page, movie);
+      expect(first.state.phase).toBe('exact-ready');
+      expect(first.state.preparedReview.cacheHit).toBe(false);
+      const manifestPath = path.join(profile, 'exact-review-proxy-cache', first.state.preparedReview.cacheKey, 'manifest.json');
+      const mtime = (await fs.stat(manifestPath)).mtimeMs;
 
-  let app = await launch(profile);
-  const firstMainStderr = [];
-  app.process().stderr?.on('data', (chunk) => firstMainStderr.push(chunk.toString('utf8')));
-  try {
-    const page = await app.firstWindow();
-    const first = await openPrepared(page, movie);
-    expect(first.state.phase).toBe('exact-ready');
-    expect(first.state.preparedReview.cacheHit).toBe(false);
-    const cacheKey = first.state.preparedReview.cacheKey;
-    const manifestPath = path.join(project, 'exact-review-proxy-cache', cacheKey, 'manifest.json');
-    const mtime = (await fs.stat(manifestPath)).mtimeMs;
+      const exact = await page.evaluate(async sessionId => {
+        const api = (window as unknown as { clipSandboxDesktop: FrameReviewBridge }).clipSandboxDesktop.frameReview;
+        return { entered: await api.command(sessionId, 'enter-scrub'), capture: await api.command(sessionId, 'capture-current-point') };
+      }, first.sessionId);
+      expect(exact.entered).toMatchObject({ ok: true, result: { kind: 'exact-frame' } });
+      expect(exact.capture).toMatchObject({ ok: true, result: { kind: 'exact-frame' } });
 
-    const exact = await page.evaluate(async ({ sessionId }) => {
-      const api = window.clipSandboxDesktop.frameReview;
-      const entered = await api.command(sessionId, 'enter-scrub');
-      const capture = await api.command(sessionId, 'capture-current-point');
-      return { entered, capture };
-    }, { sessionId: first.sessionId });
-    expect(exact.entered).toMatchObject({ ok: true, result: { kind: 'exact-frame' } });
-    expect(exact.capture).toMatchObject({ ok: true, result: { kind: 'exact-frame' } });
+      const second = await openPrepared(page, movie);
+      expect(second.state.preparedReview.cacheHit).toBe(true);
+      expect((await fs.stat(manifestPath)).mtimeMs).toBe(mtime);
+      await page.evaluate(async ids => {
+        const api = (window as unknown as { clipSandboxDesktop: FrameReviewBridge }).clipSandboxDesktop.frameReview;
+        await Promise.all(ids.map(id => api.close(id)));
+      }, [first.sessionId, second.sessionId]);
 
-    const second = await openPrepared(page, movie);
-    expect(second.state.preparedReview.cacheHit).toBe(true);
-    expect((await fs.stat(manifestPath)).mtimeMs).toBe(mtime);
-    await page.evaluate(async (ids) => {
-      await Promise.all(ids.map((id) => window.clipSandboxDesktop.frameReview.close(id)));
-    }, [first.sessionId, second.sessionId]);
-
-    await closeAppWithin(app, 10_000);
-    expect(firstMainStderr.join('')).not.toContain('Object has been destroyed');
-    app = await launch(profile);
-    const restartedPage = await app.firstWindow();
-    const restarted = await openPrepared(restartedPage, movie);
-    expect(restarted.state.preparedReview.cacheHit).toBe(true);
-    expect((await fs.stat(manifestPath)).mtimeMs).toBe(mtime);
-    await restartedPage.evaluate((sessionId) => window.clipSandboxDesktop.frameReview.close(sessionId), restarted.sessionId);
-  } finally {
-    await closeAppWithin(app, 10_000).catch(() => undefined);
-    await fs.rm(root, { recursive: true, force: true }).catch(() => undefined);
-  }
-});
-
-test('Electron closes cleanly after opening a prepared review', async () => {
-  test.setTimeout(120_000);
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-frame-review-close-'));
-  const clips = path.join(root, 'clips');
-  const profile = path.join(root, 'profile');
-  await fs.mkdir(clips);
-  const dependencies = JSON.parse(await fs.readFile(dependenciesPath, 'utf8'));
-  const movie = path.join(clips, 'source.mp4');
-  await createMovie(movie, root, dependencies.ffmpeg.path, dependencies);
-
-  const app = await launch(profile);
-  const mainStderr = [];
-  app.process().stderr?.on('data', chunk => mainStderr.push(chunk.toString('utf8')));
-  try {
-    const page = await app.firstWindow();
-    const opened = await page.evaluate(async moviePath => {
-      const desktop = window.clipSandboxDesktop;
-      await desktop.__testSetNextMoviePath(moviePath);
-      const source = await desktop.frameReview.chooseSource();
-      if (!source.ok) throw new Error(source.error.message);
-      return desktop.frameReview.open({
-        sourceHandle: source.result.sourceHandle,
-        previewBounds: { maxWidth: 320, maxHeight: 240 },
-      });
-    }, movie);
-    expect(opened).toMatchObject({ ok: true });
-
-    await closeAppWithin(app, 10_000);
-
-    expect(mainStderr.join('')).not.toContain('Object has been destroyed');
-  } finally {
-    await closeAppWithin(app, 10_000).catch(() => undefined);
-    await fs.rm(root, { recursive: true, force: true }).catch(() => undefined);
-  }
-});
-
-async function launch(profile) {
-  const env = { ...process.env, CLIP_SANDBOX_E2E: '1' };
-  delete env.ELECTRON_RUN_AS_NODE;
-  return electron.launch({
-    args: ['.', `--user-data-dir=${profile}`],
-    cwd: project,
-    env,
-  });
-}
-
-async function closeAppWithin(app, milliseconds) {
-  let timer;
-  try {
-    await Promise.race([
-      app.close(),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => {
-          app.process().kill();
-          reject(new Error(`Electron shutdown exceeded ${milliseconds}ms.`));
-        }, milliseconds);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function openPrepared(page, movie) {
-  return page.evaluate(async (moviePath) => {
-    const withTimeout = (promise, label, milliseconds = 20_000) => Promise.race([
-      promise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out.`)), milliseconds)),
-    ]);
-    const desktop = window.clipSandboxDesktop;
-    await withTimeout(desktop.__testSetNextMoviePath(moviePath), 'test movie selection');
-    const source = await withTimeout(desktop.frameReview.chooseSource(), 'movie selection');
-    if (!source.ok) throw new Error(source.error.message);
-    const opened = await withTimeout(desktop.frameReview.open({
-      sourceHandle: source.result.sourceHandle,
-      previewBounds: { maxWidth: 320, maxHeight: 240 },
-    }), 'frame-review open', 70_000);
-    if (!opened.ok) throw new Error(opened.error.message);
-    const sessionId = opened.result.sessionId;
-    for (let attempt = 0; attempt < 1800; attempt += 1) {
-      const state = await desktop.frameReview.command(sessionId, 'state');
-      if (!state.ok) throw new Error(state.error.message);
-      if (state.result.phase === 'exact-ready') return { sessionId, state: state.result };
-      if (state.result.phase === 'failed') throw new Error(state.result.message);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await closeAppWithin(app, 10_000);
+      expect(firstStderr()).not.toContain('Object has been destroyed');
+      app = await launchApp(profile);
+      const restartedPage = await app.firstWindow();
+      const restarted = await openPrepared(restartedPage, movie);
+      expect(restarted.state.preparedReview.cacheHit).toBe(true);
+      expect((await fs.stat(manifestPath)).mtimeMs).toBe(mtime);
+    } finally {
+      await closeAppWithin(app, 10_000).catch(() => undefined);
     }
-    throw new Error('Prepared review did not become ready.');
+  });
+});
+
+test('Electron closes cleanly while a newly opened review is still preparing', async () => {
+  test.setTimeout(120_000);
+  await withMovie('clip-sandbox-frame-review-close-', async (movie, profile) => {
+    const app = await launchApp(profile);
+    const stderr = collectStderr(app);
+    try {
+      const page = await app.firstWindow();
+      await openReview(page, movie);
+
+      await closeAppWithin(app, 10_000);
+
+      expect(stderr()).not.toContain('Object has been destroyed');
+    } finally {
+      await closeAppWithin(app, 10_000).catch(() => undefined);
+    }
+  });
+});
+
+async function openPrepared(page: Page, movie: string) {
+  const opened = await openReview(page, movie);
+  const readState = () => page.evaluate(async sessionId => {
+    const state = await (window as unknown as { clipSandboxDesktop: FrameReviewBridge }).clipSandboxDesktop.frameReview.command(sessionId, 'state');
+    if (!state.ok) throw new Error(state.error?.message);
+    return state.result;
+  }, opened);
+  await expect.poll(async () => (await readState()).phase, { timeout: 90_000 }).toBe('exact-ready');
+  return { sessionId: opened, state: await readState() };
+}
+
+async function openReview(page: Page, movie: string): Promise<string> {
+  return page.evaluate(async moviePath => {
+    const desktop = (window as unknown as { clipSandboxDesktop: FrameReviewBridge }).clipSandboxDesktop;
+    await desktop.__testSetNextMoviePath(moviePath);
+    const source = await desktop.frameReview.chooseSource();
+    if (!source.ok) throw new Error(source.error?.message);
+    const session = await desktop.frameReview.open({ sourceHandle: source.result.sourceHandle, previewBounds: { maxWidth: 320, maxHeight: 240 } });
+    if (!session.ok) throw new Error(session.error?.message);
+    return session.result.sessionId;
   }, movie);
 }
 
-async function createMovie(movie, root, ffmpeg, dependencies) {
+/** A deterministic five-frame movie: each frame is one flat colour. */
+async function createFiveFrameMovie(movie: string, root: string): Promise<void> {
+  const dependencies = readFrameReviewDependencies();
+  const frameBytes = 64 * 48 * 3;
+  const bytes = Buffer.alloc(frameBytes * 5);
+  for (let frame = 0; frame < 5; frame += 1) bytes.fill(40 + frame * 40, frame * frameBytes, (frame + 1) * frameBytes);
   const rawVideo = path.join(root, 'source.rgb');
   const rawAudio = path.join(root, 'source.pcm');
-  const bytes = Buffer.alloc(64 * 48 * 3 * 5);
-  const colors = randomBytes(5 * 3);
-  for (let frame = 0; frame < 5; frame += 1) {
-    const start = frame * 64 * 48 * 3;
-    const end = (frame + 1) * 64 * 48 * 3;
-    for (let offset = start; offset < end; offset += 3) {
-      colors.copy(bytes, offset, frame * 3, frame * 3 + 3);
-    }
-  }
-  await Promise.all([
-    fs.writeFile(rawVideo, bytes),
-    fs.writeFile(rawAudio, Buffer.alloc(48_000 * 2 * 2)),
-  ]);
-  await run(ffmpeg, [
+  await Promise.all([fs.writeFile(rawVideo, bytes), fs.writeFile(rawAudio, Buffer.alloc(48_000 * 2 * 2))]);
+  await run(dependencies.ffmpeg.path, [
     '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
     '-f', 'rawvideo', '-pixel_format', 'rgb24', '-video_size', '64x48', '-framerate', '5', '-i', rawVideo,
     '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', rawAudio,
     '-c:v', 'mpeg4', '-q:v', '2', '-c:a', 'aac', '-shortest', movie,
-  ], {
-    ...process.env,
-    PATH: [dependencies.ffmpeg.runtimeDllRoot, dependencies.compiler.runtimeDllRoot, process.env.PATH ?? ''].join(path.delimiter),
-  });
+  ], toolEnvironment(dependencies));
 }
 
-function run(executable, args, env) {
+function run(executable: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { env, windowsHide: true, shell: false });
     let stderr = '';
-    child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
     child.on('error', reject);
-    child.on('close', (code) => code === 0 ? resolve() : reject(new Error(stderr)));
+    child.on('close', code => code === 0 ? resolve() : reject(new Error(stderr)));
   });
 }

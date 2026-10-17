@@ -40,6 +40,21 @@ export async function closeAppWithin(app: ElectronApplication, milliseconds: num
   }
 }
 
+/**
+ * Sets the window's content size and waits until the page has that size and has laid out once.
+ * The native resize reaches the page asynchronously, so layout read before that belongs to the old size.
+ */
+export async function resizeContent(app: ElectronApplication, page: Page, width: number, height: number): Promise<void> {
+  await app.evaluate(({ BrowserWindow }, size) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    // A maximized window ignores setContentSize.
+    if (window.isMaximized()) window.unmaximize();
+    window.setContentSize(size.width, size.height);
+  }, { width, height });
+  await expect.poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight }))).toEqual({ width, height });
+  await page.evaluate(() => new Promise(requestAnimationFrame));
+}
+
 export async function chooseNextFolder(page: Page, folderPath: string): Promise<void> {
   await page.evaluate(next => (window as unknown as DesktopTestHooks).clipSandboxDesktop.__testSetNextFolderPath(next), folderPath);
 }

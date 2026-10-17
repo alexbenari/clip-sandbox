@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test, expect, _electron as electron } from '@playwright/test';
 
+import { seekToFrame } from './support/app.js';
+
 const project = path.resolve('.');
 const movie = path.join(project, 'tests', 'fixtures', 'gif-extraction', 'generated', 'cfr-audio.mkv');
 const nativeService = path.join(project, 'native-build', 'frame-review', 'bin', 'libvlc_media_service.exe');
@@ -68,12 +70,9 @@ test('exact draft jumps, loops, pauses to scrub, resumes, and locks with X', asy
     await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), movie);
     await page.getByRole('button', { name: 'Open movie...' }).click();
     await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
-    const progress = page.locator('.frame-review-progress-row input');
-    await setFrame(progress, 5);
-    await expect(page.locator('.frame-review-identity')).toHaveText('Frame 5');
+    await seekToFrame(page, 5);
     await page.keyboard.press('q');
-    await setFrame(progress, 30);
-    await expect(page.locator('.frame-review-identity')).toHaveText('Frame 30');
+    await seekToFrame(page, 30);
     await page.keyboard.press('w');
 
     const jumpStart = page.locator('#gifExtractionScreen [data-command="jump-start"]');
@@ -102,7 +101,7 @@ test('exact draft jumps, loops, pauses to scrub, resumes, and locks with X', asy
     await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await expect(page.locator('.frame-review-player [data-command="play-pause"]')).toHaveAttribute('data-playing', 'true');
     await page.keyboard.press('Space');
-    await expect(page.locator('.frame-review-identity')).toContainText('Frame ');
+    await expect(page.locator('.frame-review-identity')).toHaveText(/^Frame \d+$/);
     await expect(page.locator('.frame-review-player [data-command="play-pause"]')).toHaveAttribute('data-playing', 'false');
     await page.keyboard.press('Space');
     await expect(page.locator('.frame-review-player [data-command="play-pause"]')).toHaveAttribute('data-playing', 'true');
@@ -119,18 +118,25 @@ test('exact draft jumps, loops, pauses to scrub, resumes, and locks with X', asy
     await expect(page.locator('#gifExtractionScreen [data-command="lock-range"]')).toBeDisabled();
     await expect(locked.locator('[data-extract-range]')).toBeDisabled();
     await page.keyboard.press('Space');
+    const playerBeforeRefine = await page.locator('.frame-review-player').elementHandle();
     await locked.locator('[data-refine-range]').click();
     await expect(page.locator('#refineGifScreen')).toBeVisible();
+    // With a movie open, Refine Gif puts keyboard focus on the player so capture keys work at once.
+    await expect(page.locator('.frame-review-player')).toBeFocused();
+    await expect(page.locator('#appScreenSelector option:checked')).toHaveText('Refine Gif');
+    await expect(page.locator('#clipsPanel')).not.toHaveClass(/folded/);
+    await expect(page.locator('#pipelinesPanel')).toHaveClass(/folded/);
+    // Refine Gif shows the same movie player rather than a second one.
+    await expect(page.locator('#mainScreenHost input[type="range"]')).toHaveCount(1);
+    expect(await playerBeforeRefine!.evaluate(player => document.querySelector('.frame-review-player') === player)).toBe(true);
     await page.keyboard.press('f');
     await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('frame-review-player'))).toBe(true);
     await page.keyboard.press('f');
     await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await expect(page.locator('#refineGifScreen')).toBeVisible();
-    await setFrame(progress, 7);
-    await expect(page.locator('.frame-review-identity')).toHaveText('Frame 7');
+    await seekToFrame(page, 7);
     await page.keyboard.press('q');
-    await setFrame(progress, 29);
-    await expect(page.locator('.frame-review-identity')).toHaveText('Frame 29');
+    await seekToFrame(page, 29);
     await page.keyboard.press('w');
     await expect(page.locator('#refineGifScreen [data-command="loop-range"]')).toBeEnabled();
     await page.keyboard.press('z');
@@ -138,6 +144,7 @@ test('exact draft jumps, loops, pauses to scrub, resumes, and locks with X', asy
     await page.keyboard.press('x');
     await expect(page.locator('#refineGifScreen')).toContainText('Exact range locked');
     await page.getByRole('button', { name: 'Back to GIF Extraction' }).click();
+    await expect(page.locator('#appScreenSelector option', { hasText: 'Refine Gif' })).toHaveCount(0);
     await expect(locked).toContainText('frame 7');
     await expect(locked).toContainText('frame 29');
     await page.keyboard.press('z');
@@ -151,10 +158,3 @@ test('exact draft jumps, loops, pauses to scrub, resumes, and locks with X', asy
   }
 });
 
-async function setFrame(progress, frameIndex) {
-  await progress.evaluate((input, index) => {
-    input.value = String(index);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  }, frameIndex);
-}

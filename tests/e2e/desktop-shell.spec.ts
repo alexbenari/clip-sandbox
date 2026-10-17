@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { resizeContent } from './support/app.js';
+
 for (const nativeFrame of [false, true]) {
   test(`desktop shell keeps native controls clear, restores fullscreen and settles rapid navigation (${nativeFrame ? 'default frame' : 'overlay'})`, async () => {
     const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-desktop-shell-'));
@@ -28,10 +30,7 @@ for (const nativeFrame of [false, true]) {
       await expect(page.locator('#activityIndicatorBtn')).toHaveAccessibleName('Activity and Errors: Ready');
       expect((await readOverlay()).visible).toBe(process.platform === 'win32' && !nativeFrame);
       for (const width of [1440, 800]) {
-        await app.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, width === 1440 ? 900 : 650), width);
-        // The native resize reaches the page asynchronously; measure only after the page has the new width and laid out once.
-        await expect.poll(() => page.evaluate(() => innerWidth)).toBe(width);
-        await page.evaluate(() => new Promise(requestAnimationFrame));
+        await resizeContent(app, page, width, width === 1440 ? 900 : 650);
         await expect(page.locator('#activityIndicatorBtn')).toBeInViewport();
         const target = await page.locator('#activityIndicatorBtn').boundingBox();
         expect(target!.height).toBeGreaterThanOrEqual(32);
@@ -66,7 +65,8 @@ for (const nativeFrame of [false, true]) {
         }
         return samples;
       });
-      expect(samples.every(sample => sample.visibleScreens === 1 && sample.focused && sample.commandsHidden === (sample.screen === 'settings'))).toBe(true);
+      const unsettled = samples.filter(sample => sample.visibleScreens !== 1 || !sample.focused || sample.commandsHidden !== (sample.screen === 'settings'));
+      expect(unsettled, 'screens that did not settle after a rapid switch').toEqual([]);
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.locator('#foldPipelines').click();
       await page.locator('#foldClips').click();
@@ -88,7 +88,7 @@ for (const nativeFrame of [false, true]) {
         await page.locator(panelsOpen ? '#revealPipelines' : '#foldPipelines').click();
         await page.locator(panelsOpen ? '#revealClips' : '#foldClips').click();
         for (const width of [1440, 1200, 1000, 800]) {
-          await app.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 900), width);
+          await resizeContent(app, page, width, 900);
           const dropdown = await page.locator('#activeCollectionName').boundingBox();
           for (const id of ['pickBtn', 'orderMenuBtn', 'toggleTitlesBtn', 'fsBtn']) {
             await expect(page.locator(`#${id} span`)).toBeVisible();

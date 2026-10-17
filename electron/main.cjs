@@ -322,7 +322,9 @@ async function createFrameReviewRuntime(nativeProducts) {
     const ffmpegRoot = path.join(dependencyRoot, 'vcpkg-installed', 'x64-mingw-release');
     const libVlcRoot = path.join(dependencyRoot, 'libvlc');
     configuration = {
-      applicationFolder: projectFolder,
+      // End-to-end tests keep prepared-review caches in their own profile, so each test starts cold and
+      // removes its caches with the profile instead of sharing the project folder's caches.
+      applicationFolder: process.env.CLIP_SANDBOX_E2E === '1' ? app.getPath('userData') : projectFolder,
       nativeBinaryFolder: path.join(projectFolder, 'native-build', 'frame-review', 'bin'),
       ffmpegExecutable: nativeProducts.ffmpeg(),
       ffprobeExecutable: nativeProducts.ffprobe(),
