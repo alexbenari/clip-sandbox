@@ -371,8 +371,7 @@ describe('GifExtractionSession', () => {
   });
 });
 
-// Characterization tests: they record today's behavior before the session is split (split plan, M1).
-describe('GifExtractionSession behavior before the split', () => {
+describe('GifExtractionSession saved captures, refinement and extraction outcomes', () => {
   const hash = (frameIndex: number) => frameIndex.toString(16).padStart(16, '0');
   const fingerprint = Object.freeze({
     fingerprintVersion: 1 as const, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '100',

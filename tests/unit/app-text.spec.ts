@@ -1,9 +1,13 @@
 // @ts-nocheck
 import { describe, expect, test } from 'vitest';
-import { AppText } from '../../../src/app/app-text.js';
+import { AppText } from '../../src/app/app-text.js';
 
 describe('AppText', () => {
   const appText = new AppText(value => String(value));
+
+  test('formats counts with thousands separators by default', () => {
+    expect(new AppText().niceNum(1234)).toBe('1,234');
+  });
 
   test('formats count text', () => {
     expect(appText.countText(1)).toBe('1 clip');

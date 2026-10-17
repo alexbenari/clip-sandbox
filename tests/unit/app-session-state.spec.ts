@@ -2,7 +2,7 @@
 import { describe, expect, test } from 'vitest';
 import { AppSessionState } from '../../src/app/app-session-state.js';
 
-describe('app state', () => {
+describe('AppSessionState', () => {
   test('starts without an open folder', () => {
     const state = new AppSessionState();
     expect(state.currentFolderAccess).toBeNull();

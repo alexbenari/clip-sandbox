@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { AddToCollectionDialogControl } from '../../../src/ui/add-to-collection-dialog-control.js';
+import { Collection } from '../../../src/domain/collection.js';
+import { Pipeline } from '../../../src/domain/pipeline.js';
 
 function setup() {
   document.body.innerHTML = `
@@ -133,6 +135,18 @@ describe('add-to-collection dialog controller', () => {
 
     dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  test('offers every saved collection except the one being viewed as a destination', () => {
+    const pipeline = new Pipeline({
+      folderName: 'clips',
+      collections: ['subset.txt', 'picks.txt', 'archive.txt'].map(filename => Collection.fromFilename({ filename })),
+    });
+
+    expect(AddToCollectionDialogControl.buildChoices({ pipeline, activeCollectionFilename: 'subset.txt' })).toEqual([
+      { label: 'archive', value: 'archive.txt', collectionFilename: 'archive.txt' },
+      { label: 'picks', value: 'picks.txt', collectionFilename: 'picks.txt' },
+    ]);
   });
 });
 

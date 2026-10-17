@@ -5,7 +5,7 @@ import { Collection } from '../../src/domain/collection.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 import { ClipSequence } from '../../src/domain/clip-sequence.js';
 import { Clip } from '../../src/domain/clip.js';
-import { testClip, clipSource } from '../support/clip-source-fixtures.js';
+import { clipSource } from '../support/clip-source-fixtures.js';
 
 describe('pipeline selections', () => {
   test('hasCollectionWithFilename matches saved collections regardless of letter case', () => {
@@ -54,25 +54,26 @@ describe('pipeline selections', () => {
     expect(nextClipId).toHaveBeenCalledTimes(1);
   });
 
-  test('materializeCollection preserves missing-entry conflicts', () => {
+  test('materializeCollection reports missing entries and keeps the existing clips in collection order', () => {
     const pipeline = new Pipeline({
       folderName: 'clips',
       videoSources: [
+        clipSource('alpha.mp4'),
         clipSource('bravo.webm'),
       ],
     });
     const collection = Collection.fromFilename({
       filename: 'subset.txt',
-      orderedClipNames: ['bravo.webm', 'missing.mp4'],
+      orderedClipNames: ['bravo.webm', 'missing.mp4', 'alpha.mp4'],
     });
+    let nextId = 0;
 
-    const result = pipeline.materializeCollection(collection, {
-      nextClipId: vi.fn().mockReturnValueOnce('clip_1'),
-    });
+    const result = pipeline.materializeCollection(collection, { nextClipId: () => `clip_${++nextId}` });
 
     expect(result.kind).toBe('has-missing');
     expect(result.missingNames).toEqual(['missing.mp4']);
-    expect(result.partialSequence.clipNamesInOrder()).toEqual(['bravo.webm']);
+    expect(result.existingNamesInOrder).toEqual(['bravo.webm', 'alpha.mp4']);
+    expect(result.partialSequence.clipNamesInOrder()).toEqual(['bravo.webm', 'alpha.mp4']);
   });
 
   test('materializeCollection references canonical pipeline clips', () => {
@@ -96,22 +97,5 @@ describe('pipeline selections', () => {
     expect(result.sequence.orderedClips()[0]).toBe(pipelineClip);
     expect(result.sequence.orderedClips()[0].videoHeight).toBe(390);
     expect(nextClipId).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe('clip sequence to collection conversion', () => {
-  test('converts runtime order back into a durable collection payload', () => {
-    const sequence = new ClipSequence({
-      name: 'highlights',
-      clips: [
-        testClip('clip_1', 'alpha.mp4'),
-        testClip('clip_2', 'bravo.webm'),
-      ],
-    });
-
-    const collection = sequence.toCollection({ filename: 'highlights.txt' });
-    expect(collection).toBeInstanceOf(Collection);
-    expect(collection.collectionName).toBe('highlights');
-    expect(collection.orderedClipNames).toEqual(['alpha.mp4', 'bravo.webm']);
   });
 });

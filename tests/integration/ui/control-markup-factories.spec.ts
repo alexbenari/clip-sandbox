@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ActivityLogger } from '../../../src/app/activity-logger.js';
@@ -22,10 +20,10 @@ import { DeleteFromDiskDialogControl } from '../../../src/ui/delete-from-disk-di
 import { MainToolbarControl } from '../../../src/ui/main-toolbar-control.js';
 import { SaveAsNewDialogControl } from '../../../src/ui/save-as-new-dialog-control.js';
 import { UnsavedChangesDialogControl } from '../../../src/ui/unsaved-changes-dialog-control.js';
+import { shippedPageBody } from '../../support/page-markup.js';
 
 // Each control finds its own parts; these tests run the factories against the shipped page markup.
-const indexHtml = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
-const pageBody = indexHtml.slice(indexHtml.indexOf('<body>') + '<body>'.length, indexHtml.indexOf('<script type="module">'));
+const pageBody = shippedPageBody();
 const click = (id: string): void => { document.getElementById(id)!.click(); };
 const text = (id: string): string => document.getElementById(id)!.textContent ?? '';
 

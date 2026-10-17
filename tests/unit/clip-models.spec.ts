@@ -9,7 +9,7 @@ import { Pipeline } from '../../src/domain/pipeline.js';
 import { CollectionTextFormat } from '../../src/business-logic/collection-text-format.js';
 import { testClip, clipSource } from '../support/clip-source-fixtures.js';
 
-describe('clip and sequence models', () => {
+describe('domain models: clips, sequences, collections and pipelines', () => {
   test('creates clips with stable identity and mutable metadata', () => {
     const clip = new Clip({
       id: 'clip_1',

@@ -9,7 +9,7 @@ function videoFile(name) {
   return clipSource(name);
 }
 
-describe('pipeline session', () => {
+describe('PipelineWorkingCopy', () => {
   test('loads a pipeline selection and resolves clips from the active sequence', () => {
     const session = new PipelineWorkingCopy();
     const pipeline = new Pipeline({

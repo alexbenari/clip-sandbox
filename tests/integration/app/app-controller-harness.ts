@@ -1,92 +1,7 @@
 // @ts-nocheck
 import { expect, vi } from 'vitest';
 
-export const APP_SHELL_DOM = `
-  <div id="appShell">
-    <header id="globalAppBar">
-      <label id="appScreenSwitcher">
-        <select id="appScreenSelector" aria-label="Workspace" hidden>
-          <option value="collection" selected>Collection</option>
-        </select>
-      </label>
-      <div id="activityIndicatorRoot">
-        <button id="activityIndicatorBtn" aria-expanded="false" aria-controls="activityIndicatorPanel"></button>
-        <section id="activityIndicatorPanel" hidden>
-          <ul id="activityIndicatorList"></ul>
-        </section>
-      </div>
-    </header>
-    <div id="workspaceRow">
-      <div id="screenCommandHost">
-        <header class="toolbar" id="toolbar">
-    <button id="pickBtn">Browse Folder…</button>
-    <div id="orderMenu" data-open="false">
-      <button id="orderMenuBtn" aria-expanded="false">Actions</button>
-      <div id="orderMenuPanel" role="menu">
-        <button id="saveBtn" disabled>Save</button>
-        <button id="saveAsNewBtn" disabled>Save as Collection</button>
-        <button id="addToCollectionBtn" disabled>Add Selected to Collection...</button>
-        <button id="deleteFromDiskBtn" disabled>Delete Selected from Disk...</button>
-      </div>
-    </div>
-    <button id="toggleTitlesBtn">Hide Titles</button>
-    <button id="fsBtn">Full Screen</button>
-    <select id="activeCollectionName" disabled>
-      <option value="">Local Video Grid Reviewer</option>
-    </select>
-        <div class="toolbar-status">
-          <span class="count" id="count"></span>
-        </div>
-      </header>
-    </div>
-    <div id="mainScreenHost">
-      <section id="collectionScreen">
-        <section id="collectionConflict" hidden>
-          <p id="collectionConflictSummary"></p>
-          <pre id="collectionConflictList"></pre>
-          <button id="applyCollectionConflictBtn">Apply</button>
-          <button id="cancelCollectionConflictBtn">Cancel</button>
-        </section>
-        <section id="saveAsNewDialog" hidden>
-          <input id="saveAsNewNameInput" />
-          <div id="saveAsNewError"></div>
-          <button id="confirmSaveAsNewBtn">Confirm</button>
-          <button id="cancelSaveAsNewBtn">Cancel</button>
-        </section>
-        <dialog id="addToCollectionDialog">
-          <select id="addToCollectionSelect"></select>
-          <label id="addToCollectionNameLabel" hidden>
-            <input id="addToCollectionNameInput" />
-          </label>
-          <div id="addToCollectionError"></div>
-          <button id="confirmAddToCollectionBtn">Confirm</button>
-          <button id="cancelAddToCollectionBtn">Cancel</button>
-        </dialog>
-        <dialog id="unsavedChangesDialog">
-          <p id="unsavedChangesText"></p>
-          <button id="confirmUnsavedChangesBtn">Save</button>
-          <button id="discardUnsavedChangesBtn">Discard</button>
-          <button id="cancelUnsavedChangesBtn">Cancel</button>
-        </dialog>
-        <dialog id="deletePreflightDialog">
-          <p id="deletePreflightText"></p>
-          <button id="confirmDeletePreflightBtn">Save and Continue</button>
-          <button id="discardDeletePreflightBtn">Continue Without Saving</button>
-          <button id="cancelDeletePreflightBtn">Cancel</button>
-        </dialog>
-        <dialog id="deleteFromDiskDialog">
-          <p id="deleteFromDiskSummary"></p>
-          <pre id="deleteFromDiskPreview"></pre>
-          <button id="confirmDeleteFromDiskBtn">Delete</button>
-          <button id="cancelDeleteFromDiskBtn">Cancel</button>
-        </dialog>
-        <div id="gridWrap"><div id="grid" style="gap:10px"></div></div>
-      </section>
-    </div>
-    <div id="clipContextMenu" hidden><div id="clipContextMenuPanel"></div></div>
-    <div id="zoomLayerRoot"></div>
-  </div>
-`;
+import { shippedPageBody } from '../../support/page-markup.js';
 
 export function waitFor(assertion, { timeout = 250, interval = 10 } = {}) {
   const start = Date.now();
@@ -142,11 +57,12 @@ export class DesktopAppTestEnvironment {
 
   setUp() {
     vi.resetModules();
+    const originalResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = class {
       observe() {}
       disconnect() {}
     };
-    document.body.innerHTML = APP_SHELL_DOM;
+    document.body.innerHTML = shippedPageBody();
     document.title = '';
     window.clipSandboxDesktop = {
       loadAppSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: false, startupScreenId: 'gif-extraction' } })),
@@ -169,8 +85,10 @@ export class DesktopAppTestEnvironment {
       appendTextFile: vi.fn(async () => ({ mode: 'saved' })),
       createVideoEdit: vi.fn(async () => ({ ok: false, code: 'missing-binary' })),
       deleteFiles: vi.fn(async () => ({ ok: true, code: 'deleted', results: [] })),
+      listPipelineCatalog: vi.fn(async () => ({ kind: 'unconfigured' })),
     };
     this.#originals = {
+      ResizeObserver: originalResizeObserver,
       createObjectURL: URL.createObjectURL,
       revokeObjectURL: URL.revokeObjectURL,
       play: HTMLMediaElement.prototype.play,
@@ -224,6 +142,7 @@ export class DesktopAppTestEnvironment {
     }
     for (const spy of this.#listenerSpies) spy.mockRestore();
     this.#listenerSpies = [];
+    globalThis.ResizeObserver = this.#originals.ResizeObserver;
     URL.createObjectURL = this.#originals.createObjectURL;
     URL.revokeObjectURL = this.#originals.revokeObjectURL;
     HTMLMediaElement.prototype.play = this.#originals.play;

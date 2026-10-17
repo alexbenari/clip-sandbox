@@ -198,7 +198,6 @@ describe('AppController characterization', () => {
         entries: [{ id: 'catalog_archive_0001', name: 'archive' }],
         openEntry: () => archive.listing(),
       });
-      document.getElementById('appShell').insertAdjacentHTML('beforeend', '<div id="pipelinesPanelHost"></div>');
     });
 
     async function requestCatalogLoadFromGifScreen() {

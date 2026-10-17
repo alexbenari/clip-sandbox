@@ -5,12 +5,17 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+import { nativeFrameReviewUnavailableReason } from '../support/frame-review-dependencies.js';
+
 const require = createRequire(import.meta.url);
 const { NativeProductLocator } = require('../../electron/native-product-locator.cjs');
-const products = new NativeProductLocator({ projectFolder: path.resolve('.'), packaged: false });
-const ffmpeg = products.ffmpeg();
+const unavailable = nativeFrameReviewUnavailableReason();
+
+test.skip(unavailable !== null, unavailable ?? '');
 
 test('natural fullscreen rotation preserves source identity through exit and Zoom', async () => {
+  const products = new NativeProductLocator({ projectFolder: path.resolve('.'), packaged: false });
+  const ffmpeg = products.ffmpeg();
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-identity-'));
   const clips = path.join(directory, 'clips');
   await fs.mkdir(clips);
@@ -39,7 +44,7 @@ test('natural fullscreen rotation preserves source identity through exit and Zoo
   }
   const env: NodeJS.ProcessEnv = { ...process.env, CLIP_SANDBOX_E2E: '1' };
   delete env.ELECTRON_RUN_AS_NODE;
-    const app = await electron.launch({ args: ['.', `--user-data-dir=${path.join(directory, 'profile')}`], env });
+  const app = await electron.launch({ args: ['.', `--user-data-dir=${path.join(directory, 'profile')}`], env });
   try {
     const page = await app.firstWindow();
     await page.locator('#appScreenSelector').selectOption('collection');
@@ -67,7 +72,6 @@ test('natural fullscreen rotation preserves source identity through exit and Zoo
     await expect.poll(visibleNames, { timeout: 12000 }).not.toEqual(initial);
     expect(await readCards()).toEqual(before);
     const rotatedName = (await visibleNames()).find(name => !initial.includes(name))!;
-    await page.screenshot({ path: 'test-results/encapsulation-fullscreen.png' });
     await page.keyboard.press('f');
     await expect(page.locator('#grid .thumb:visible')).toHaveCount(4);
     await expect.poll(readCards).toEqual(before);
@@ -83,7 +87,6 @@ test('natural fullscreen rotation preserves source identity through exit and Zoo
     });
     const expected = before.find(item => item.name === rotatedName)!;
     expect(zoom).toEqual({ source: expected.source, duration: expected.duration, width: expected.width, height: expected.height });
-    await page.screenshot({ path: 'test-results/encapsulation-zoom.png' });
   } finally {
     await app.close();
     await fs.rm(directory, { recursive: true, force: true });

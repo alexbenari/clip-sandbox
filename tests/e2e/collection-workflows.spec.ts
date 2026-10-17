@@ -4,7 +4,8 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { test, expect } from '@playwright/test';
-import { _electron as electron } from 'playwright';
+
+import { launchApp as launchElectronApp } from './support/app.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesRoot = path.join(__dirname, 'fixtures');
@@ -31,14 +32,7 @@ async function createScenarioFolder(name) {
 }
 
 async function launchApp(profilePath) {
-  const electronApp = await electron.launch({
-    args: ['.', `--user-data-dir=${profilePath}`],
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      CLIP_SANDBOX_E2E: '1',
-    },
-  });
+  const electronApp = await launchElectronApp(profilePath);
   const page = await electronApp.firstWindow();
   await page.locator('#appScreenSelector').selectOption('collection');
   await page.waitForSelector('#pickBtn');
@@ -97,7 +91,7 @@ async function openActivityPanel(page) {
   await expect(panel).toBeVisible();
 }
 
-test.describe('Electron runtime migration', () => {
+test.describe('Collection workflows', () => {
   let electronApp;
   let page;
   let tempRoot;

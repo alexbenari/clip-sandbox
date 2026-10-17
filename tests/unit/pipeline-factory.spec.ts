@@ -12,6 +12,27 @@ describe('pipeline factory', () => {
     return folderEntry(name, { type, text: content });
   }
 
+  test('recognises videos by MIME type or extension, and collections by .txt', () => {
+    const pipelineFactory = new PipelineFactory();
+
+    expect(pipelineFactory.isVideoEntry(folderEntry('a.mp4', { type: 'video/mp4' }))).toBe(true);
+    expect(pipelineFactory.isVideoEntry(folderEntry('clip.WEBM', { type: '' }))).toBe(true);
+    expect(pipelineFactory.isVideoEntry(folderEntry('doc.txt'))).toBe(false);
+    expect(pipelineFactory.isCollectionEntry(folderEntry('set-a.txt'))).toBe(true);
+    expect(pipelineFactory.isCollectionEntry(folderEntry('set-a.md', { type: '' }))).toBe(false);
+  });
+
+  test('splits videos and collection files, each in natural name order', () => {
+    const { videoEntries, collectionEntries } = new PipelineFactory().classifyEntries([
+      folderEntry('clip10.mp4'),
+      folderEntry('subset.txt', { text: 'clip2.mp4\n' }),
+      folderEntry('clip2.mp4'),
+    ]);
+
+    expect(videoEntries.map((entry) => entry.name)).toEqual(['clip2.mp4', 'clip10.mp4']);
+    expect(collectionEntries.map((entry) => entry.name)).toEqual(['subset.txt']);
+  });
+
   test('buildPipeline builds a pipeline from top-level videos and collections', async () => {
     const pipelineFactory = new PipelineFactory();
     const collectionFormat = new CollectionTextFormat();
@@ -83,6 +104,6 @@ describe('pipeline selection loading', () => {
 
     expect(result.kind).toBe('has-missing');
     expect(result.missingNames).toEqual(['missing.mp4']);
-    expect(result.partialSequence.orderedClips().map((clip) => clip.id)).toEqual(['clip_2']);
+    expect(result.partialSequence.clipNamesInOrder()).toEqual(['bravo.mp4']);
   });
 });

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { DesktopAppTestEnvironment, desktopFile, openActivityPanel, waitFor } from './app-controller-harness.js';
 import { installGifDesktopApiFakes } from './desktop-api-fakes.js';
 
-describe('app controller context menu wiring', () => {
+describe('AppController Collection and Zoom workflows', () => {
   const environment = new DesktopAppTestEnvironment();
 
   beforeEach(() => environment.setUp());
@@ -237,7 +237,7 @@ describe('app controller context menu wiring', () => {
     expect(window.clipSandboxDesktop.saveTextFile).toHaveBeenCalledTimes(1);
   });
 
-  test('Loopify failures auto-open the activity panel and keep the indicator in error state', async () => {
+  test('a Loopify failure in Zoom records the error without opening Activity over Zoom', async () => {
     window.clipSandboxDesktop.createVideoEdit = vi.fn(async () => ({
       ok: false,
       code: 'process-failed',
@@ -265,15 +265,14 @@ describe('app controller context menu wiring', () => {
     document.querySelector('[data-item-id="zoom-edit-loopify"]').click();
 
     await waitFor(() => {
-      expect(document.getElementById('activityIndicatorPanel').hidden).toBe(false);
-      expect(document.getElementById('activityIndicatorBtn').dataset.state).toBe('error');
+      expect(document.getElementById('activityIndicatorBtn').getAttribute('aria-label')).toBe('Activity and Errors: 1 unresolved error');
       expect(document.querySelector('#activityIndicatorList li').textContent).toContain('Loopify failed while generating the output clip.');
     });
+    expect(document.getElementById('zoomOverlay')).not.toBeNull();
+    expect(document.getElementById('activityIndicatorPanel').hidden).toBe(true);
   });
 
   test('an error during any full screen element remains in Activity without opening its panel or moving focus', async () => {
-    document.getElementById('globalAppBar').insertAdjacentHTML('beforeend', '<button id="keyboardMapBtn"></button>');
-    document.body.insertAdjacentHTML('beforeend', '<div id="globalUtilityHost" hidden><section id="keyboardMapPanel" hidden></section></div>');
     window.clipSandboxDesktop.pickFolder = vi.fn(async () => { throw new Error('Folder unavailable'); });
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
