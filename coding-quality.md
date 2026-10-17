@@ -80,7 +80,7 @@ What to assert:
 - Every assertion reads something the code under test produced or changed. Avoid assertions on data the test set up itself, since it passes whatever the code does.
 - Assert a mock interaction only when the interaction is the contract, such as "never sends a path to the service".
 - Use exact expected values for concrete inputs. A range that admits every possible result, a substring match on an argument list, or `toThrow()` without the expected message is not an assertion.
-- Write expected values from the requirement, never by copying what the code currently outputs: a copied value locks in whatever the code does, bugs included. The exception is a characterization test that records current behavior before a restructuring, as `ui-coding-quality.md` asks; name it as one, and check each recorded value, because a wrong one is a bug to fix, not to preserve.
+- Write expected values from the requirement, never by copying what the code currently outputs: a copied value locks in whatever the code does, bugs included. The exception is a characterization test that records current behavior before a restructuring; name it as one, and check each recorded value, because a wrong one is a bug to fix, not to preserve.
 
 Proving a test can fail:
 
