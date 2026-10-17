@@ -19,7 +19,7 @@ export type FrameReviewDependencies = {
 
 // The manifest is written by the PowerShell bootstrap, so it may start with a UTF-8 BOM.
 export function readFrameReviewDependencies(): FrameReviewDependencies {
-  return JSON.parse(readFileSync(dependencyManifestPath, 'utf8').replace(/^﻿/, '')) as FrameReviewDependencies;
+  return JSON.parse(readFileSync(dependencyManifestPath, 'utf8').replace(/^\uFEFF/, '')) as FrameReviewDependencies;
 }
 
 /** Why the native frame-review stack cannot run here, or null when it can. */

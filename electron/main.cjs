@@ -289,13 +289,7 @@ async function createFrameReviewRuntime(nativeProducts) {
   let configuration;
   if (app.isPackaged) {
     const frameReviewFolder = path.join(process.resourcesPath, 'frame-review');
-    let packagedManifest = null;
-    try {
-      packagedManifest = JSON.parse(await fs.readFile(
-        path.join(frameReviewFolder, 'dependency-manifest.json'), 'utf8'));
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error;
-    }
+    const packagedManifest = nativeProducts.dependencyManifest();
     const packagedVersion = app.getVersion();
     configuration = {
       applicationFolder: path.dirname(app.getPath('exe')),
@@ -311,13 +305,7 @@ async function createFrameReviewRuntime(nativeProducts) {
       runtimePathEntries: [path.join(frameReviewFolder, 'bin')],
     };
   } else {
-    let dependencyManifest = null;
-    try {
-      dependencyManifest = JSON.parse(await fs.readFile(
-        path.join(projectFolder, 'tools', 'frame-review', '.deps', 'resolved-dependencies.json'), 'utf8'));
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error;
-    }
+    const dependencyManifest = nativeProducts.dependencyManifest();
     const dependencyRoot = path.join(projectFolder, 'tools', 'frame-review', '.deps');
     const ffmpegRoot = path.join(dependencyRoot, 'vcpkg-installed', 'x64-mingw-release');
     const libVlcRoot = path.join(dependencyRoot, 'libvlc');

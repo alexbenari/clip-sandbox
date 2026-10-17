@@ -61,19 +61,41 @@ class NativeProductLocator {
     return configured;
   }
 
+  // null until the bootstrap (or packaging) has written the manifest.
+  dependencyManifest() {
+    return this.#readManifest(this.packaged
+      ? path.join(this.resourcesPath, 'frame-review', 'dependency-manifest.json')
+      : this.#developmentManifestPath());
+  }
+
   #developmentManifest() {
     if (this.#manifest) return this.#manifest;
-    const manifestPath = path.join(
-      this.projectFolder, 'tools', 'frame-review', '.deps', 'resolved-dependencies.json');
     try {
-      const text = this.readFileSync(manifestPath, 'utf8').replace(/^\uFEFF/, '');
-      this.#manifest = JSON.parse(text);
-      return this.#manifest;
+      this.#manifest = this.#readManifest(this.#developmentManifestPath());
     } catch (cause) {
-      const error = new Error(`The staged native-product manifest is unavailable. ${RECOVERY_MESSAGE}`, { cause });
-      error.code = 'missing-binary';
-      throw error;
+      throw this.#unavailableManifest(cause);
     }
+    if (!this.#manifest) throw this.#unavailableManifest();
+    return this.#manifest;
+  }
+
+  #developmentManifestPath() {
+    return path.join(this.projectFolder, 'tools', 'frame-review', '.deps', 'resolved-dependencies.json');
+  }
+
+  #readManifest(manifestPath) {
+    if (this.existsSync(manifestPath)) {
+      // Windows PowerShell 5 tools may write the manifest with a UTF-8 byte-order mark.
+      const text = this.readFileSync(manifestPath, 'utf8').replace(/^\uFEFF/, '');
+      return JSON.parse(text);
+    }
+    return null;
+  }
+
+  #unavailableManifest(cause) {
+    const error = new Error(`The staged native-product manifest is unavailable. ${RECOVERY_MESSAGE}`, cause ? { cause } : undefined);
+    error.code = 'missing-binary';
+    return error;
   }
 }
 

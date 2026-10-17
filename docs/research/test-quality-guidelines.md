@@ -59,16 +59,21 @@ made anyone show they were followed.
 
 ### B. Proving the test can fail
 
-6. **Break the code once.** For every new test, deliberately break the
-   behavior it names and confirm the test fails with a readable message. Say
-   which mutation you tried in the commit message when the test guards a subtle
-   property (ordering, caching, concurrency, cleanup). For an e2e test, also
+6. **Watch it fail for the right reason.** Where you can, write the test first
+   and see it fail. That is not enough when it fails only because the code
+   does not exist yet, and it is impossible for tests of existing code
+   (characterization, e2e of shipped behavior, repairs to a test). In those
+   cases break the specific behavior the test names and confirm it fails with a
+   readable message. Say which mutation you tried in the commit message when
+   the test guards a subtle property (ordering, caching, concurrency, cleanup).
+   For an e2e test, also
    confirm the scenario actually reaches the state its name describes; if the
    fixture cannot, prove the property at a lower level and name the e2e for
    what it reaches.
 7. **Make negative tests force the opportunity.** "X does not happen" must
    first create the conditions where X would happen and must wait until X would
-   have been observable. Checking immediately proves nothing.
+   have been observable. Checking immediately proves nothing. Writing the test
+   first does not help here: with no code, nothing happens, so the test passes.
 8. **Make ordering tests hold the first step.** Use a deferred promise so the
    second step can only start after the first finishes if the code really is
    sequential.

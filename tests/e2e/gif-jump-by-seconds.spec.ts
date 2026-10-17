@@ -112,7 +112,7 @@ test('variable-frame-rate scrub jumps resolve by time and clamp to indexed endpo
 /** Reads the variable-frame-rate fixture's known frame times from the fixture manifest. */
 function vfrFixture(): { startFrame: number; startFrameSeconds: number; lastFrame: number } {
   const manifest = JSON.parse(readFileSync(path.join(projectFolder, 'tests', 'fixtures', 'gif-extraction', 'manifest.json'), 'utf8')
-    .replace(/^﻿/, ''));
+    .replace(/^\uFEFF/, ''));
   const vfr = manifest.fixtures.find((fixture: { id: string }) => fixture.id === 'vfr-audio');
   return {
     startFrame: vfr.selectedRange.startFrame,
