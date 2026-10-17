@@ -325,6 +325,8 @@ Flow:
 
 If a change crosses multiple subsystems, the end-to-end suite is usually the safest final check.
 
+Test rules live in [`coding-quality.md`](../../coding-quality.md) § Test reliability. `npm run lint` ([`eslint.config.mjs`](../../eslint.config.mjs)) lints `tests/` only, enforcing the mechanical ones (in e2e tests: no `waitForTimeout`, retrying Playwright assertions, no conditionals or unconditional skips; in all tests: no `Math.random` or `.only`); it runs in pre-commit and CI.
+
 Electron e2e tests launch the app from the emitted `build/src/...` output, so a bare `npx playwright test` after source edits exercises stale code. Run subsets with `npm run e2e -- <spec files> [--grep ...]`, which rebuilds before passing the arguments to Playwright. Playwright deletes `test-results/` at the start of every run; keep evidence that must outlive a run under the ignored `test-evidence/<feature-name>/` folder.
 
 ## Knowledge Base Rules

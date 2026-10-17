@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { openActivity } from './support/app.js';
+
 test('Zoom reports damaged media once while rapid healthy close/reopen stays quiet', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-playback-errors-'));
   const clips = path.join(directory, 'clips');
@@ -29,7 +31,9 @@ test('Zoom reports damaged media once while rapid healthy close/reopen stays qui
     await expect(page.locator('#activityIndicatorBtn')).toHaveAttribute('data-state', 'error');
     await expect(page.locator('#activityIndicatorList [data-state="error"]')).toHaveCount(1);
     await page.keyboard.press('Escape');
-    if (await page.locator('#activityIndicatorPanel').isHidden()) await page.locator('#activityIndicatorBtn').click();
+    // Activity does not open by itself over Zoom, so Escape closes Zoom and Activity stays closed.
+    await expect(page.locator('#zoomVideo')).toHaveCount(0);
+    await openActivity(page);
     await expect(page.locator('#activityIndicatorList')).toContainText('Could not play damaged.mp4 in Zoom.');
     await expect(page.locator('#activityIndicatorList')).toContainText('Close and reopen the clip');
     await expect.poll(async () => (await fs.readFile(path.join(clips, 'err.log'), 'utf8')).includes('Could not play damaged.mp4 in Zoom.')).toBe(true);

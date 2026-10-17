@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { openActivity } from './support/app.js';
+
 test('created edit survives a UI callback failure and editing becomes available again', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-edit-recovery-'));
   const clips = path.join(directory, 'clips');
@@ -36,7 +38,9 @@ test('created edit survives a UI callback failure and editing becomes available 
     await page.locator('[data-item-id="zoom-edit-loopify"]').click();
     await expect(page.locator('#activityIndicatorBtn')).toHaveAttribute('data-state', 'error');
     await page.keyboard.press('Escape');
-    if (await page.locator('#activityIndicatorPanel').isHidden()) await page.locator('#activityIndicatorBtn').click();
+    // Activity does not open by itself over Zoom, so Escape closes Zoom and Activity stays closed.
+    await expect(page.locator('#zoomVideo')).toHaveCount(0);
+    await openActivity(page);
     await expect(page.locator('#activityIndicatorList')).toContainText('output clip was created');
     const files = await fs.readdir(clips);
     expect(files.filter(name => name.endsWith('.mp4'))).toHaveLength(2);

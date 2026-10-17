@@ -35,7 +35,7 @@ async function launchApp(profilePath) {
   const electronApp = await launchElectronApp(profilePath);
   const page = await electronApp.firstWindow();
   await page.locator('#appScreenSelector').selectOption('collection');
-  await page.waitForSelector('#pickBtn');
+  await expect(page.locator('#pickBtn')).toBeVisible();
   return { electronApp, page };
 }
 
@@ -57,7 +57,7 @@ async function setNextFolder(page, folderPath) {
 
 async function loadFolder(page, folderPath) {
   await setNextFolder(page, folderPath);
-  await page.click('#pickBtn');
+  await page.locator('#pickBtn').click();
 }
 
 async function allClipNames(page) {
@@ -69,7 +69,7 @@ function collectionFileLines(text) {
 }
 
 async function openOrderMenu(page) {
-  await page.click('#orderMenuBtn');
+  await page.locator('#orderMenuBtn').click();
   await expect(page.locator('#orderMenu')).toHaveAttribute('data-open', 'true');
 }
 
@@ -86,7 +86,7 @@ async function openGridContextMenu(page, locator = page.locator('#gridWrap')) {
 async function openActivityPanel(page) {
   const panel = page.locator('#activityIndicatorPanel');
   if (await panel.isHidden()) {
-    await page.click('#activityIndicatorBtn');
+    await page.locator('#activityIndicatorBtn').click();
   }
   await expect(panel).toBeVisible();
 }
@@ -160,7 +160,7 @@ test.describe('Collection workflows', () => {
       'minus-2',
     ]);
 
-    await page.selectOption('#activeCollectionName', 'minus-1.txt');
+    await page.locator('#activeCollectionName').selectOption('minus-1.txt');
     await expect.poll(async () => (await allClipNames(page)).join('|')).toBe('two.webm|one.mp4');
     await expect(page).toHaveTitle('minus-1');
   });
@@ -177,9 +177,9 @@ test.describe('Collection workflows', () => {
 
     await openOrderMenu(page);
     await expect(page.locator('#saveBtn')).toBeDisabled();
-    await page.click('#saveAsNewBtn');
-    await page.fill('#saveAsNewNameInput', 'pipeline-order');
-    await page.click('#confirmSaveAsNewBtn');
+    await page.locator('#saveAsNewBtn').click();
+    await page.locator('#saveAsNewNameInput').fill('pipeline-order');
+    await page.locator('#confirmSaveAsNewBtn').click();
     await openActivityPanel(page);
     await expect(page.locator('#activityIndicatorList li').first()).toHaveText('Saved pipeline-order.txt to the current pipeline folder.');
 
@@ -194,10 +194,10 @@ test.describe('Collection workflows', () => {
     await page.locator('#grid .thumb').nth(2).click();
 
     await openOrderMenu(page);
-    await page.click('#addToCollectionBtn');
+    await page.locator('#addToCollectionBtn').click();
     await expect(page.locator('#addToCollectionDialog')).toHaveAttribute('open', '');
-    await page.selectOption('#addToCollectionSelect', 'subset.txt');
-    await page.click('#confirmAddToCollectionBtn');
+    await page.locator('#addToCollectionSelect').selectOption('subset.txt');
+    await page.locator('#confirmAddToCollectionBtn').click();
 
     await openActivityPanel(page);
     await expect(page.locator('#activityIndicatorList li').first()).toContainText('Added');
@@ -221,9 +221,9 @@ test.describe('Collection workflows', () => {
       'Delete from Disk...',
     ]);
 
-    await page.click('#clipContextMenu [data-item-id="delete-from-disk"]');
+    await page.locator('#clipContextMenu [data-item-id="delete-from-disk"]').click();
     await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
-    await page.click('#confirmDeleteFromDiskBtn');
+    await page.locator('#confirmDeleteFromDiskBtn').click();
 
     await openActivityPanel(page);
     await expect(page.locator('#activityIndicatorList li').first()).toContainText('Deleted 1 clip from disk.');
@@ -261,7 +261,7 @@ test.describe('Collection workflows', () => {
     ({ tempRoot, folderPath } = await createScenarioFolder('video-edit'));
 
     await loadFolder(page, folderPath);
-    await page.selectOption('#activeCollectionName', 'focus.txt');
+    await page.locator('#activeCollectionName').selectOption('focus.txt');
     await expect.poll(async () => (await allClipNames(page)).join('|')).toBe('source.mp4|alt.mp4');
 
     await page.locator('#grid .thumb').first().dblclick();
@@ -273,7 +273,7 @@ test.describe('Collection workflows', () => {
       clientY: 72,
     });
     await expect(page.locator('#clipContextMenu [data-item-id="zoom-edit-loopify"]')).toBeVisible();
-    await page.click('#clipContextMenu [data-item-id="zoom-edit-loopify"]');
+    await page.locator('#clipContextMenu [data-item-id="zoom-edit-loopify"]').click();
 
     await expect.poll(async () => (await allClipNames(page)).join('|'), { timeout: 20000 }).toBe('source.mp4|source-looped.mp4|alt.mp4');
     await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', 'source-looped.mp4');

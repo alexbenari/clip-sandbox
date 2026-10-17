@@ -75,6 +75,9 @@ jobs:
       - name: Typecheck, including the compile-time contracts in tests/type-contracts
         run: npm run typecheck
 
+      - name: Lint tests
+        run: npm run lint
+
       - name: Run unit tests
         run: npm run unit
 

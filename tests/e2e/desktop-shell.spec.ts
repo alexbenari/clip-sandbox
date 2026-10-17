@@ -1,9 +1,25 @@
-import { test, expect, _electron as electron } from '@playwright/test';
+import { test, expect, _electron as electron, type Page } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { resizeContent } from './support/app.js';
+
+type Box = { x: number; y: number; width: number; height: number };
+
+function overlaps(a: Box, b: Box): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function centerX(box: Box): number {
+  return box.x + box.width / 2;
+}
+
+async function visibleBox(page: Page, selector: string): Promise<Box> {
+  const box = await page.locator(selector).boundingBox();
+  if (!box) throw new Error(`${selector} is not visible, so it has no box to measure.`);
+  return box;
+}
 
 for (const nativeFrame of [false, true]) {
   test(`desktop shell keeps native controls clear, restores fullscreen and settles rapid navigation (${nativeFrame ? 'default frame' : 'overlay'})`, async () => {
@@ -15,11 +31,29 @@ for (const nativeFrame of [false, true]) {
       const page = await app.firstWindow();
       expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(true);
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].unmaximize());
+      // `right` is where the app's own controls must end: the native window controls' left edge, or the window edge.
       const readOverlay = () => page.evaluate(() => {
         const overlay = (navigator as Navigator & { windowControlsOverlay?: { visible: boolean; getTitlebarAreaRect(): DOMRect } }).windowControlsOverlay;
-        const rect = overlay?.getTitlebarAreaRect();
+        const rect = overlay?.visible ? overlay.getTitlebarAreaRect() : null;
         return { visible: overlay?.visible ?? false, right: rect ? rect.x + rect.width : innerWidth };
       });
+      const boxOf = (selector: string) => visibleBox(page, selector);
+      const expectAppBarFits = async (width: number, height: number) => {
+        await resizeContent(app, page, width, height);
+        await expect(page.locator('#activityIndicatorBtn')).toBeInViewport();
+        const target = await boxOf('#activityIndicatorBtn');
+        // WCAG 2.2 target size (minimum): at least 24 by 24 CSS pixels.
+        expect(target.height).toBeGreaterThanOrEqual(24);
+        expect(target.width).toBeGreaterThanOrEqual(24);
+        const { right } = await readOverlay();
+        for (const id of ['appScreenSelector', 'keyboardMapBtn', 'settingsBtn', 'activityIndicatorBtn']) {
+          const box = await boxOf(`#${id}`);
+          expect(box.x + box.width).toBeLessThanOrEqual(right);
+          expect(await page.locator(`#${id}`).evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region'))).toBe('no-drag');
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: `test-results/desktop-${nativeFrame ? 'frame' : 'overlay'}-${width}.png` });
+      };
       await expect(page.locator('#appScreenSelector')).toBeVisible();
       await expect.poll(() => page.locator('#appScreenSelector').inputValue()).toBe('gif-extraction');
       await expect(page.locator('#appScreenSelector')).toHaveAccessibleName('Workspace');
@@ -29,30 +63,10 @@ for (const nativeFrame of [false, true]) {
       expect(await page.locator('#globalAppBar button:visible').evaluateAll(nodes => nodes.map(node => node.id))).toEqual(['activityIndicatorBtn', 'keyboardMapBtn', 'settingsBtn']);
       await expect(page.locator('#activityIndicatorBtn')).toHaveAccessibleName('Activity and Errors: Ready');
       expect((await readOverlay()).visible).toBe(process.platform === 'win32' && !nativeFrame);
-      for (const width of [1440, 800]) {
-        await resizeContent(app, page, width, width === 1440 ? 900 : 650);
-        await expect(page.locator('#activityIndicatorBtn')).toBeInViewport();
-        const target = await page.locator('#activityIndicatorBtn').boundingBox();
-        // WCAG 2.2 target size (minimum): at least 24 by 24 CSS pixels.
-        expect(target!.height).toBeGreaterThanOrEqual(24);
-        expect(target!.width).toBeGreaterThanOrEqual(24);
-        const overlay = await readOverlay();
-        const right = overlay.visible ? overlay.right : width;
-        for (const id of ['appScreenSelector', 'keyboardMapBtn', 'settingsBtn', 'activityIndicatorBtn']) {
-          const box = await page.locator(`#${id}`).boundingBox();
-          expect(box!.x + box!.width).toBeLessThanOrEqual(right);
-          expect(await page.locator(`#${id}`).evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region'))).toBe('no-drag');
-        }
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        const commands = await page.locator('#toolbar').boundingBox();
-        const collection = await page.locator('#activeCollectionName').boundingBox();
-        if (width === 1440) {
-          expect(Math.abs(collection!.x + collection!.width / 2 - commands!.x - commands!.width / 2)).toBeLessThanOrEqual(5);
-        } else {
-          expect(commands!.height).toBeLessThanOrEqual(160);
-        }
-        await page.screenshot({ path: `test-results/desktop-${nativeFrame ? 'frame' : 'overlay'}-${width}.png` });
-      }
+      await expectAppBarFits(1440, 900);
+      expect(Math.abs(centerX(await boxOf('#activeCollectionName')) - centerX(await boxOf('#toolbar')))).toBeLessThanOrEqual(5);
+      await expectAppBarFits(800, 650);
+      expect((await boxOf('#toolbar')).height).toBeLessThanOrEqual(160);
       const samples = await page.evaluate(async () => {
         const selector = document.querySelector<HTMLSelectElement>('#appScreenSelector')!;
         const samples: { screen: string; commandsHidden: boolean; visibleScreens: number; focused: boolean }[] = [];
@@ -90,13 +104,10 @@ for (const nativeFrame of [false, true]) {
         await page.locator(panelsOpen ? '#revealClips' : '#foldClips').click();
         for (const width of [1440, 1200, 1000, 800]) {
           await resizeContent(app, page, width, 900);
-          const dropdown = await page.locator('#activeCollectionName').boundingBox();
+          const dropdown = await boxOf('#activeCollectionName');
           for (const id of ['pickBtn', 'orderMenuBtn', 'toggleTitlesBtn', 'fsBtn']) {
             await expect(page.locator(`#${id} span`)).toBeVisible();
-            const button = await page.locator(`#${id}`).boundingBox();
-            const overlaps = button!.x < dropdown!.x + dropdown!.width && button!.x + button!.width > dropdown!.x
-              && button!.y < dropdown!.y + dropdown!.height && button!.y + button!.height > dropdown!.y;
-            expect(overlaps, `${id} must not be covered by the collection selector at ${width}px`).toBe(false);
+            expect(overlaps(await boxOf(`#${id}`), dropdown), `${id} must not be covered by the collection selector at ${width}px`).toBe(false);
           }
         }
       }

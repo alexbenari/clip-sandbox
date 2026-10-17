@@ -13,7 +13,8 @@
     "unit": "vitest --run",
     "typecheck": "tsc -p tsconfig.json && npm run typecheck:strict-src",
     "typecheck:strict-src": "tsc -p tsconfig.strict-src.json",
-    "test:all": "npm run typecheck && npm run unit && npm run e2e",
+    "lint": "eslint --max-warnings=0 tests",
+    "test:all": "npm run typecheck && npm run lint && npm run unit && npm run e2e",
     "frame-review:bootstrap": "powershell -ExecutionPolicy Bypass -File ./tools/frame-review/bootstrap-native.ps1",
     "frame-review:build": "powershell -ExecutionPolicy Bypass -File ./tools/frame-review/build-native.ps1",
     "frame-review:test": "powershell -ExecutionPolicy Bypass -File ./tools/frame-review/test-native.ps1",
@@ -27,9 +28,12 @@
     "@playwright/test": "^1.57.0",
     "@types/node": "^24.8.1",
     "electron": "^37.2.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-playwright": "^2.12.0",
     "husky": "^9.1.7",
     "jsdom": "22.1.0",
     "typescript": "^6.0.2",
+    "typescript-eslint": "^8.71.0",
     "vitest": "0.34.6"
   }
 }

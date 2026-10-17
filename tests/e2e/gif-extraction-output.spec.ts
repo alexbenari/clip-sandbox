@@ -21,6 +21,11 @@ async function extractionWorkspace(prefix: string) {
   return { directory, profile, destination: path.join(pipelines, 'extraction-tmp') };
 }
 
+// The app may close before it creates the folder or the collection file; then there is nothing to check.
+function ifMissing<T>(fallback: T): (error: NodeJS.ErrnoException) => T | Promise<never> {
+  return error => error?.code === 'ENOENT' ? fallback : Promise.reject(error);
+}
+
 test('extracts a movie with a space before its extension into a valid collection', async () => {
   test.setTimeout(120_000);
   const { directory, profile, destination } = await extractionWorkspace('clip-spaced-movie-');
@@ -107,11 +112,10 @@ test('closing right after an extraction starts leaves no temporary files or brok
     await closeAppWithin(app, 10_000);
 
     expect(mainStderr.join('')).not.toContain('Object has been destroyed');
-    const entries = await fs.readdir(destination).catch(error => error?.code === 'ENOENT' ? [] : Promise.reject(error));    expect(entries.filter(name => !/\.(mp4|txt)$/i.test(name)), 'leftover temporary files').toEqual([]);
-    const collectionFile = path.join(destination, 'Close Test.txt');
-    const listedClips = existsSync(collectionFile)
-      ? (await fs.readFile(collectionFile, 'utf8')).split(/\r?\n/).filter(Boolean)
-      : [];
+    const entries = await fs.readdir(destination).catch(ifMissing<string[]>([]));
+    expect(entries.filter(name => !/\.(mp4|txt)$/i.test(name)), 'leftover temporary files').toEqual([]);
+    const collection = await fs.readFile(path.join(destination, 'Close Test.txt'), 'utf8').catch(ifMissing(''));
+    const listedClips = collection.split(/\r?\n/).filter(Boolean);
     expect(listedClips.filter(name => !existsSync(path.join(destination, name))), 'collection entries without a clip').toEqual([]);
   } finally {
     await closeAppWithin(app, 10_000).catch(() => undefined);

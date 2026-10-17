@@ -22,6 +22,13 @@ export async function writeAppSettings(profile: string, settings: Record<string,
   await fs.writeFile(path.join(profile, 'app-settings.json'), `${JSON.stringify(settings)}\n`, 'utf8');
 }
 
+export async function openActivity(page: Page): Promise<void> {
+  const panel = page.locator('#activityIndicatorPanel');
+  await expect(panel).toBeHidden();
+  await page.locator('#activityIndicatorBtn').click();
+  await expect(panel).toBeVisible();
+}
+
 /** Closes the app, killing it and failing when shutdown takes longer than `milliseconds`. */
 export async function closeAppWithin(app: ElectronApplication, milliseconds: number): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;

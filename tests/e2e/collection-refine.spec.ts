@@ -60,7 +60,7 @@ test('refines an extracted collection clip from its original movie and adds a ne
     const collectionFolder = path.join(pipelines, 'extraction-tmp');
     await page.locator('#appScreenSelector').selectOption('collection');
     await chooseNextFolder(page, collectionFolder);
-    await page.click('#pickBtn');
+    await page.locator('#pickBtn').click();
     await refineFromContextMenu(page, 'source-001.mp4');
     await enterMovieFullScreen(page, () => page.keyboard.press('f'));
     await leaveMovieFullScreen(page, () => page.keyboard.press('f'));
@@ -72,7 +72,7 @@ test('refines an extracted collection clip from its original movie and adds a ne
     expect(await fs.readFile(path.join(collectionFolder, 'source.txt'), 'utf8')).toBe('source-001.mp4\n');
 
     // Refining from a collection view adds the revised clip to that collection, and the movie's captures stay as they were.
-    await page.selectOption('#activeCollectionName', 'source.txt');
+    await page.locator('#activeCollectionName').selectOption('source.txt');
     await refineFromContextMenu(page, 'source-001.mp4');
     await expect(page.locator('[aria-label="Refined collection clip"] [data-extract-range]')).toBeDisabled();
     await seekToFrame(page, 6);
