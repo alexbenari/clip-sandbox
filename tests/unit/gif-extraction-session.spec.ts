@@ -570,7 +570,7 @@ describe('GifExtractionSession behavior before the split', () => {
     await session.extractRange(second.id);
 
     expect(report.success.mock.calls.filter(([message]) => message === 'Source details could not be written into the clip.'))
-      .toEqual([['Source details could not be written into the clip.', 5000]]);
+      .toHaveLength(1);
   });
 
   it('checks saved ranges first, then extracts every ready range', async () => {

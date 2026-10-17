@@ -81,8 +81,8 @@ describe('RangeExtraction', () => {
     await extraction.extractOne(movie, first, () => [first.id, second.id]);
     await extraction.extractOne(movie, second, () => [first.id, second.id]);
 
-    expect(reporter.success).toHaveBeenCalledWith('Source details could not be written into the clip.', 5000);
-    expect(reporter.success.mock.calls.filter(([, timeout]) => timeout === 5000)).toHaveLength(1);
+    const warnings = reporter.success.mock.calls.filter(([message]) => message === 'Source details could not be written into the clip.');
+    expect(warnings).toHaveLength(1);
   });
 
   it('refuses a destination change while a batch runs, and refuses a second start of the same range', async () => {

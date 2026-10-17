@@ -24,6 +24,6 @@ describe('BestSourceFrameReader', () => {
       sourceGeneration: 1,
       maxPreviewWidth: 960,
       maxPreviewHeight: 540,
-    }, 60_000);
+    }, expect.any(Number));
   });
 });

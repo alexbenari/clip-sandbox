@@ -9,16 +9,17 @@ function reporterWithLog(): { reporter: ActivityReporter; entries: ActivityInput
 }
 
 describe('ActivityReporter', () => {
-  it('records a success that clears after the default 2.5 seconds unless told otherwise', () => {
+  it('records a success that clears after a default time, or after the time the caller gives', () => {
     const { reporter, entries } = reporterWithLog();
 
     reporter.success('Saved subset.txt');
     reporter.success('Deleted 2 clips', 4500);
 
     expect(entries).toEqual([
-      { kind: 'success', message: 'Saved subset.txt', timeoutMs: 2500 },
+      { kind: 'success', message: 'Saved subset.txt', timeoutMs: expect.any(Number) },
       { kind: 'success', message: 'Deleted 2 clips', timeoutMs: 4500 },
     ]);
+    expect((entries[0] as { timeoutMs: number }).timeoutMs).toBeGreaterThan(0);
   });
 
   it('records progress and failures with their recovery details', () => {

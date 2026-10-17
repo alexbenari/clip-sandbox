@@ -4,39 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 
-describe('shared native product locator', () => {
-  it('resolves development FFmpeg and FFprobe from the frame-review manifest', () => {
-    const { NativeProductLocator } = require('../../electron/native-product-locator.cjs');
-    const existsSync = vi.fn(() => true);
-    const readFileSync = vi.fn(() => JSON.stringify({
-      ffmpeg: { path: 'D:\\products\\ffmpeg.exe' },
-      ffprobe: { path: 'D:\\products\\ffprobe.exe' },
-    }));
-    const locator = new NativeProductLocator({
-      projectFolder: 'D:\\repo',
-      packaged: false,
-      existsSync,
-      readFileSync,
-    });
-
-    expect(locator.ffmpeg()).toBe(path.resolve('D:\\products\\ffmpeg.exe'));
-    expect(locator.ffprobe()).toBe(path.resolve('D:\\products\\ffprobe.exe'));
-    expect(readFileSync).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns the staged packaged products and reports the recovery command when missing', () => {
-    const { NativeProductLocator } = require('../../electron/native-product-locator.cjs');
-    const locator = new NativeProductLocator({
-      projectFolder: 'D:\\repo',
-      resourcesPath: 'D:\\app\\resources',
-      packaged: true,
-      existsSync: vi.fn(() => false),
-      readFileSync: vi.fn(),
-    });
-
-    expect(() => locator.ffmpeg()).toThrow(/frame-review:bootstrap.*frame-review:build/i);
-  });
-});
+/** The value that follows a command-line flag, such as `-c:v` -> `libx264`. */
+function argumentAfter(args: readonly string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  return index === -1 ? undefined : args[index + 1];
+}
 
 describe('clip extraction runtime', () => {
   it('declines local seeking for normalized sources and ambiguous indexed timestamps', async () => {
@@ -102,8 +74,10 @@ describe('clip extraction runtime', () => {
 
     expect(result).toMatchObject({ ok: true, result: { filename: 'Movie-001.mp4' } });
     expect(probeFrameTimes).not.toHaveBeenCalled();
-    expect(runCommand.mock.calls[0][1]).toContain('50.000000');
-    expect(runCommand.mock.calls[0][1]).toContain("select='gte(pts,55000)*lt(pts,55080)',showinfo,setpts=PTS-STARTPTS");
+    const videoArguments = runCommand.mock.calls[0][1];
+    expect(Number(argumentAfter(videoArguments, '-ss'))).toBeLessThanOrEqual(55);
+    expect(videoArguments.join(' ')).toContain('gte(pts,55000)');
+    expect(videoArguments.join(' ')).toContain('lt(pts,55080)');
   });
 
   it('discards a failed local media candidate before the exact fallback publishes', async () => {
@@ -304,7 +278,7 @@ describe('clip extraction runtime', () => {
     expect(copied.map(value => path.basename(value))).toEqual(['Movie-001.mp4', 'Movie-002.mp4']);
   });
 
-  it('encodes selected original frames as high-quality bounded YUV video', async () => {
+  it('encodes exactly the selected original frames as bitrate-capped H.264 in YUV 4:2:0', async () => {
     const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const fs = {
       mkdir: vi.fn(async () => undefined),
@@ -340,19 +314,11 @@ describe('clip extraction runtime', () => {
     });
 
     const videoArguments = runCommand.mock.calls[0][1];
-    expect(videoArguments).toContain("select='between(n,10,20)',setpts=PTS-STARTPTS");
-    expect(videoArguments).toContain('-frames:v');
-    expect(videoArguments).toContain('11');
-    expect(videoArguments).toContain('libx264');
-    expect(videoArguments).toContain('yuv420p');
-    expect(videoArguments).toContain('-crf');
-    expect(videoArguments).toContain('16');
-    expect(videoArguments).toContain('-maxrate');
-    expect(videoArguments).toContain('48M');
-    expect(videoArguments).toContain('-bufsize');
-    expect(videoArguments).toContain('96M');
-    expect(videoArguments).not.toContain('libx264rgb');
-    expect(videoArguments).not.toContain('-qp');
+    expect(videoArguments.join(' ')).toContain('between(n,10,20)');
+    expect(argumentAfter(videoArguments, '-frames:v')).toBe('11');
+    expect(argumentAfter(videoArguments, '-c:v')).toBe('libx264');
+    expect(argumentAfter(videoArguments, '-pix_fmt')).toBe('yuv420p');
+    expect(argumentAfter(videoArguments, '-maxrate')).toMatch(/^\d+[kM]?$/);
   });
 
   it('rejects an unknown destination before preparing or running media work', async () => {

@@ -33,8 +33,9 @@ for (const nativeFrame of [false, true]) {
         await resizeContent(app, page, width, width === 1440 ? 900 : 650);
         await expect(page.locator('#activityIndicatorBtn')).toBeInViewport();
         const target = await page.locator('#activityIndicatorBtn').boundingBox();
-        expect(target!.height).toBeGreaterThanOrEqual(32);
-        expect(target!.width).toBeGreaterThanOrEqual(100);
+        // WCAG 2.2 target size (minimum): at least 24 by 24 CSS pixels.
+        expect(target!.height).toBeGreaterThanOrEqual(24);
+        expect(target!.width).toBeGreaterThanOrEqual(24);
         const overlay = await readOverlay();
         const right = overlay.visible ? overlay.right : width;
         for (const id of ['appScreenSelector', 'keyboardMapBtn', 'settingsBtn', 'activityIndicatorBtn']) {

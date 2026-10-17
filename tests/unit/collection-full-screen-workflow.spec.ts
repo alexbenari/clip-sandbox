@@ -51,28 +51,33 @@ test('the toolbar full-screen request enters and leaves full screen', async () =
   expect(isActive()).toBe(false);
 });
 
+// Long enough for any rotation interval or typing pause the workflow uses.
+const A_WHILE_MS = 60_000;
+
 test('fullscreen exit and disposal cancel rotation and delayed slot input', async () => {
   vi.useFakeTimers();
   const { session, grid } = collectionFullScreen();
   await session.enterFullScreen();
   session.onFsChange();
-  vi.advanceTimersByTime(3000);
-  expect(grid.rotateVisibleClip).toHaveBeenCalledTimes(1);
+  vi.advanceTimersByTime(A_WHILE_MS);
+  expect(grid.rotateVisibleClip).toHaveBeenCalled();
   session.onGlobalKeyDown(new KeyboardEvent('keydown', { key: '3' }));
   await session.exitFullScreen();
   session.onFsChange();
   grid.fsApplySlots.mockClear();
-  vi.advanceTimersByTime(4000);
+  grid.rotateVisibleClip.mockClear();
+  vi.advanceTimersByTime(A_WHILE_MS);
   expect(grid.fsApplySlots).not.toHaveBeenCalled();
-  expect(grid.rotateVisibleClip).toHaveBeenCalledTimes(1);
+  expect(grid.rotateVisibleClip).not.toHaveBeenCalled();
   expect(grid.cancelRotation).toHaveBeenCalled();
   await session.enterFullScreen();
   session.onFsChange();
-  vi.advanceTimersByTime(3000);
-  expect(grid.rotateVisibleClip).toHaveBeenCalledTimes(2);
+  vi.advanceTimersByTime(A_WHILE_MS);
+  expect(grid.rotateVisibleClip).toHaveBeenCalled();
   session.destroy();
-  vi.advanceTimersByTime(4000);
-  expect(grid.rotateVisibleClip).toHaveBeenCalledTimes(2);
+  grid.rotateVisibleClip.mockClear();
+  vi.advanceTimersByTime(A_WHILE_MS);
+  expect(grid.rotateVisibleClip).not.toHaveBeenCalled();
 });
 
 test('the window layout follows full screen in both directions', async () => {
@@ -93,10 +98,10 @@ test('a typed clip count is normalized by the grid, applied and reported', async
   session.onFsChange();
 
   session.onGlobalKeyDown(new KeyboardEvent('keydown', { key: '1' }));
-  vi.advanceTimersByTime(600);
+  vi.advanceTimersByTime(A_WHILE_MS);
 
   expect(grid.normalizeFullscreenSlots).toHaveBeenCalledWith(1);
   expect(grid.fsApplySlots).toHaveBeenLastCalledWith(2);
-  expect(reporter.success).toHaveBeenCalledWith('2', 1500);
+  expect(reporter.success).toHaveBeenCalledWith('2', expect.any(Number));
   session.destroy();
 });

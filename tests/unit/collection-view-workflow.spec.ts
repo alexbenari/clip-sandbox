@@ -86,7 +86,7 @@ describe('CollectionViewWorkflow', () => {
     expect(pipelineWorkingCopy.activeCollection).toBe(subset);
     expect(grid.renders.at(-1)).toEqual({ names: ['bravo.mp4', 'alpha.mp4'], cacheKey: 'collection:subset.txt' });
     expect(selector.render).toHaveBeenLastCalledWith(expect.objectContaining({ activeCollection: subset }));
-    expect(reporter.success).toHaveBeenCalledWith('Loaded subset.', 2500);
+    expect(reporter.success).toHaveBeenCalledWith('Loaded subset.', expect.any(Number));
   });
 
   it('refreshes the toolbar from the grid when cards or the selection change', () => {

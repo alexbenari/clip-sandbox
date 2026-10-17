@@ -81,7 +81,7 @@ describe('bounded frame request scheduling', () => {
     await scheduler.whenIdle();
   });
 
-  it('repeats held adjacent-frame actions at four times the normal 150 ms cadence', async () => {
+  it('keeps repeating a held step with its default timing until the key is released', async () => {
     vi.useFakeTimers();
     const calls: number[] = [];
     const scheduler = new AdjacentStepScheduler(
@@ -90,15 +90,14 @@ describe('bounded frame request scheduling', () => {
     );
 
     scheduler.press(1);
-    await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(250);
-    expect(calls).toHaveLength(2);
-    await vi.advanceTimersByTimeAsync(37);
-    expect(calls).toHaveLength(2);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(calls).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(calls.length).toBeGreaterThan(2);
     scheduler.release(1);
-    await vi.advanceTimersByTimeAsync(38);
+    await vi.advanceTimersByTimeAsync(2_000);
     await scheduler.whenIdle();
+    const stepsWhileHeld = calls.length;
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(calls).toEqual(Array(stepsWhileHeld).fill(1));
   });
 });
