@@ -113,7 +113,10 @@ test('dragging the seek row in movie full screen moves to the frame and returns 
   });
 });
 
-test('F works from the Jump-by selector, entering full screen closes Activity, and Escape exits', async () => {
+// That entering full screen closes Activity is proven in full-screen-change-workflow.spec.ts: here any
+// click or focus that could start full screen already closes Activity, and on a small display the
+// open panel covers the Full screen button.
+test('F works from the Jump-by selector, the keyboard map lists the full-screen keys, and Escape exits', async () => {
   await withApp('clip-movie-fs-keys-', async page => {
     const player = page.locator('.frame-review-player');
     await player.getByRole('combobox', { name: 'Jump by seconds' }).focus();
@@ -126,11 +129,9 @@ test('F works from the Jump-by selector, entering full screen closes Activity, a
     await expect(page.locator('#keyboardMapPanel')).toContainText('Enter or exit movie full screen');
     await expect(page.locator('#keyboardMapPanel')).toContainText('Exit movie full screen');
     await page.keyboard.press('Escape');
+    await expect(page.locator('#keyboardMapPanel')).toBeHidden();
 
-    await page.locator('#activityIndicatorBtn').click();
-    await expect(page.locator('#activityIndicatorPanel')).toBeVisible();
     await enterMovieFullScreen(page, () => player.getByRole('button', { name: 'Full screen' }).click());
-    await expect(page.locator('#activityIndicatorPanel')).toBeHidden();
     await expect(player).toBeFocused();
 
     await leaveMovieFullScreen(page, () => page.keyboard.press('Escape'));
