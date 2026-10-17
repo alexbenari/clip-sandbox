@@ -62,7 +62,10 @@ made anyone show they were followed.
 6. **Break the code once.** For every new test, deliberately break the
    behavior it names and confirm the test fails with a readable message. Say
    which mutation you tried in the commit message when the test guards a subtle
-   property (ordering, caching, concurrency, cleanup).
+   property (ordering, caching, concurrency, cleanup). For an e2e test, also
+   confirm the scenario actually reaches the state its name describes; if the
+   fixture cannot, prove the property at a lower level and name the e2e for
+   what it reaches.
 7. **Make negative tests force the opportunity.** "X does not happen" must
    first create the conditions where X would happen and must wait until X would
    have been observable. Checking immediately proves nothing.
@@ -72,59 +75,70 @@ made anyone show they were followed.
 9. **Make the name and body agree.** Every clause in a test name needs an
    action and an assertion in the body. If the body changes, fix the name or
    split the test.
+10. **Assert at the moment the API promises the effect.** Check right after
+    the awaited call that promises it (for example `await dispose()`), before
+    awaiting other work that could complete the effect and hide an ordering
+    bug.
 
 ### C. Async and timing
 
-10. **No fixed sleeps, and no waits sized to private constants.** Use fake
+11. **No fixed sleeps, and no waits sized to private constants.** Use fake
     timers for timer logic; use an observable completion signal for real async
     work.
-11. **Wait for the precondition before measuring.** After a resize, navigation
-    or mode change, wait for evidence it took effect before reading layout.
-    Prefer Playwright's retrying `expect(locator)` matchers over
-    `expect(await locator.x())`.
-12. **Do not poll a moving clock.** Make the system still, make the
+12. **Wait for the precondition, and confirm setup took effect.** After a
+    resize, navigation or mode change, wait for evidence it took effect before
+    reading layout; a setup call can silently do nothing (a maximized window
+    ignores a resize). Prefer Playwright's retrying `expect(locator)` matchers
+    over `expect(await locator.x())`.
+13. **Do not poll a moving clock.** Make the system still, make the
     expectation relative to a value captured at the action, or record the event
     through a test hook.
-13. **Do not count microtasks.** Flush fully or wait on a condition instead of
+14. **Do not count microtasks.** Flush fully or wait on a condition instead of
     `await Promise.resolve()` repeated N times.
 
 ### D. Isolation and environment
 
-14. **Every test owns its state.** Temp folders, profiles and caches live under
+15. **Every test owns its state.** Temp folders, profiles and caches live under
     the test's own root, are removed in `finally`/`afterEach`, and never land in
-    the repository. Global patches (`Math.random`, prototypes, `URL`,
-    `ResizeObserver`) are restored in `finally`/`afterEach`.
-15. **No randomness to dodge state.** If a test needs a fresh environment, give
+    the repository. When the app itself writes elsewhere, give it a test-mode
+    location under the test's root rather than cleaning up after it. Global
+    patches (`Math.random`, prototypes, `URL`, `ResizeObserver`) are restored in
+    `finally`/`afterEach`, saving the original before replacing it.
+16. **No randomness to dodge state.** If a test needs a fresh environment, give
     it one.
-16. **Handle a missing environment the same way everywhere.** Optional native
-    dependencies use one shared skip guard, evaluated before anything that can
-    throw. Never resolve tools at module load.
-17. **Use the real markup.** Integration tests build the DOM from `index.html`
-    or the control's own factory, never from a hand-copied page skeleton.
+17. **Handle a missing environment the same way everywhere, and assume no
+    machine.** Optional native dependencies use one shared skip guard,
+    evaluated before anything that can throw. Never resolve tools at module
+    load. Never assume a display size: derive pointer targets from element
+    boxes.
+18. **Use the real markup and honest stubs.** Integration tests build the DOM
+    from `index.html` or the control's own factory, never from a hand-copied
+    page skeleton. A stub must honour the inputs that matter to the behavior
+    under test, or the test should use the real collaborator.
 
 ### E. Flaky tests and gates
 
-18. **A flaky-test fix has three allowed outcomes:** make it deterministic; move
+19. **A flaky-test fix has three allowed outcomes:** make it deterministic; move
     the timing-sensitive part to a level where timing can be controlled; or delete
     the test and record the coverage gap. Never weaken the scenario, widen a
     tolerance just to pass, or keep the name over a hollowed body. The commit
     message says which outcome was taken.
-19. **Every kind of check must run in a gate.** If a test relies on `tsc`, a
+20. **Every kind of check must run in a gate.** If a test relies on `tsc`, a
     native build or a fixture generator, that tool runs in pre-commit or CI, or
     the test does not count as coverage.
-20. **Review recorded expectations before freezing them.** For each recorded
+21. **Review recorded expectations before freezing them.** For each recorded
     string or behavior, either confirm it is the requirement or fix the bug.
 
 ### F. Structure and naming
 
-21. **One behavior per test; e2e only for essential workflows.** An e2e test
+22. **One behavior per test; e2e only for essential workflows.** An e2e test
     follows one user workflow through real controls. Do not inject DOM nodes or
     dispatch synthetic events to reach a state the user cannot reach. Detailed
     rules belong in unit or integration tests.
-22. **Names describe behavior.** A file is named after the unit it tests; a test
+23. **Names describe behavior.** A file is named after the unit it tests; a test
     after the scenario and its expected outcome. No project-history names. When a
     production class is renamed or split, rename its tests in the same change.
-23. **One home per behavior.** Search for an existing test before adding one.
+24. **One home per behavior.** Search for an existing test before adding one.
     Shared builders live in `tests/support/`, not copy-pasted per file.
 
 ### G. Questions for code review
@@ -138,7 +152,51 @@ made anyone show they were followed.
 - If this commit fixes a flaky test, does the scenario still match the name, and
   which of the three outcomes was taken?
 - Does each test run in a gate that actually executes it?
+- Before calling an assertion vacuous or a value incidental, did you check the
+  fixture and the spec?
 
 ## Revisions made while fixing
 
-(Filled in during the fixes.)
+Fixing the 15 findings turned up the following. Each item says which
+guideline it changes or adds.
+
+1. **An e2e test can pass a mutation because it never reaches its state**
+   (extends 6). The restored close-during-extraction test still passed with
+   workspace cleanup broken: the 3-second fixture finishes encoding before the
+   close lands, so the workspace never existed. New rule: when you break the
+   code for an e2e test, confirm the scenario reaches the state its name
+   describes; if the fixture cannot, prove the property at a lower level and
+   name the e2e for what it does reach.
+2. **Assert at the moment the API promises the effect** (new rule 10). The
+   disposal unit test awaited the extraction before checking that the
+   workspace was removed, so it could not tell whether `dispose()` itself
+   waited for cleanup. Check right after the awaited call that promises the
+   effect, before awaiting anything else.
+3. **Confirm setup took effect** (extends 12). `setContentSize` on the
+   maximized window did nothing, and the shell test ran at full size for its
+   whole life. Assert the precondition (window size, cache state, fixture
+   contents) instead of assuming the setup call worked.
+4. **Synthetic paths test a different branch than users reach** (evidence for 22). With a fake Refine option and no movie open, Back took focus; through
+   the real Refine button the player takes focus. The test had pinned the
+   fallback branch as if it were the behavior.
+5. **Copied fixtures hide real behavior** (evidence for 18, extends it).
+   Building the app from the real `index.html` showed a test that only passed
+   because the copy lacked the global utility host: Activity does not open
+   over Zoom. A stub that ignores its inputs has the same effect (the
+   collection-choice stub ignored the active collection). New rule: stubs must
+   honour the inputs that matter, or use the real collaborator.
+6. **Never assume a display size** (extends 17). Pointer moves to fixed
+   screen coordinates made a full-screen test fail intermittently on this
+   machine. Derive pointer targets from element boxes.
+7. **Give the app a test location instead of cleaning up after it** (extends 15). Every native e2e test shared prepared-review caches in the repository
+   folder, so cold and warm behavior depended on the machine's history. The
+   app now keeps those caches in the test profile in e2e mode.
+8. **Verify review claims against the fixture** (new review question in G). One
+   finding said a range assertion "accepts every possible value"; the movie
+   has five frames, so it excluded one. The fix stood, but the claim was
+   wrong. A reviewer should check a test's fixture before calling an
+   assertion vacuous.
+
+Not fixed, outside test scope: `electron/main.cjs` parses
+`resolved-dependencies.json` without stripping a BOM, which AGENTS.md
+requires of readers of generated JSON (`NativeProductLocator` does strip it).
