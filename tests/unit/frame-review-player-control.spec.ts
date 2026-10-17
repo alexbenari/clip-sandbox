@@ -258,6 +258,38 @@ describe('FrameReviewPlayerControl', () => {
     }
   });
 
+  it('keeps the seek row visible in movie full screen while its position is being dragged', async () => {
+    vi.useFakeTimers();
+    try {
+      let active = false;
+      const fullScreen: IPlayerFullScreen = {
+        enterElementFullScreen: vi.fn(async () => { active = true; }),
+        exitFullScreen: vi.fn(async () => { active = false; }),
+        isElementFullScreen: () => active,
+      };
+      const control = new FrameReviewPlayerControl({ document, fullScreen,
+        frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+      control.mount(document.body);
+      control.attachSession(session().value);
+      control.toggleMovieFullScreen();
+      await vi.advanceTimersByTimeAsync(0);
+      control.onFullScreenChange();
+      const bar = control.root.querySelector<HTMLInputElement>('input[type="range"]')!;
+
+      bar.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(control.root.classList.contains('movie-overlay-visible')).toBe(true);
+
+      bar.value = '20';
+      bar.dispatchEvent(new Event('change', { bubbles: true }));
+      bar.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(control.root.classList.contains('movie-overlay-visible')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('shows the first frame when an already prepared movie attaches without a playback frame event', async () => {
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const review = session();

@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test, expect, _electron as electron } from '@playwright/test';
 
+import { expectNoFullScreenRequest } from './support/app.js';
+
 test('settings survive restart without replacing the working collection and govern new Zoom audio', async () => {
   const profile = await fsp.mkdtemp(path.join(os.tmpdir(), 'clip-settings-e2e-'));
   const clips = path.resolve('tests/e2e/fixtures/video-edit/clips');
@@ -52,8 +54,7 @@ test('settings survive restart without replacing the working collection and gove
     await expect(page.locator('#zoomOverlay')).toHaveCount(0);
     await expect(page.locator('#settingsScreen')).toBeVisible();
     await page.locator('#choosePipelinesRoot').focus();
-    await page.keyboard.press('f');
-    expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
+    await expectNoFullScreenRequest(page, () => page.keyboard.press('f'));
     await app.close();
     app = await launch();
     page = await app.firstWindow();

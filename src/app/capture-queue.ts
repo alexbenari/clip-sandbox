@@ -336,7 +336,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
       const hasDraft = savedDraft.kind === 'draft' && (savedDraft.start !== null || savedDraft.end !== null);
       const count = restored.snapshot.ranges.length;
       status.show(count > 0
-        ? `Restored ${count} saved ranges${hasDraft ? ' and a draft' : ''}.`
+        ? `Restored ${count} saved ${count === 1 ? 'range' : 'ranges'}${hasDraft ? ' and a draft' : ''}.`
         : hasDraft ? 'Restored saved range draft.' : 'Exact capture ready');
       storage.endRestore();
       status.changed();

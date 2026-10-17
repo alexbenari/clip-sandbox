@@ -68,6 +68,48 @@ export async function seekToFrame(page: Page, frameIndex: number): Promise<void>
   await expect(page.locator('.frame-review-identity')).toHaveText(`Frame ${frameIndex}`);
 }
 
+/**
+ * Runs `action` and waits until movie full screen has fully settled: the review player is the full-screen
+ * element and the page has grown to the display size. Layout read earlier belongs to a window still resizing.
+ */
+export async function enterMovieFullScreen(page: Page, action: () => Promise<void>): Promise<void> {
+  await action();
+  await expect.poll(() => page.evaluate(() => ({
+    player: document.fullscreenElement?.classList.contains('frame-review-player') ?? false,
+    displaySized: innerWidth === screen.width && innerHeight === screen.height,
+  }))).toEqual({ player: true, displaySized: true });
+}
+
+export async function leaveMovieFullScreen(page: Page, action: () => Promise<void>): Promise<void> {
+  await action();
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+}
+
+/**
+ * Asserts that `action` neither requests full screen nor leaves anything in full screen. Requests are
+ * counted where the app makes them, then a frame and a task are allowed to pass so a request queued
+ * behind the key handler would also be counted.
+ */
+export async function expectNoFullScreenRequest(page: Page, action: () => Promise<void>): Promise<void> {
+  await page.evaluate(() => {
+    const counter = window as unknown as { __fullScreenRequests?: number };
+    if (counter.__fullScreenRequests === undefined) {
+      const request = Element.prototype.requestFullscreen;
+      Element.prototype.requestFullscreen = function countedRequest(this: Element, options?: FullscreenOptions) {
+        counter.__fullScreenRequests = (counter.__fullScreenRequests ?? 0) + 1;
+        return request.call(this, options);
+      };
+    }
+    counter.__fullScreenRequests = 0;
+  });
+  await action();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0))));
+  expect(await page.evaluate(() => ({
+    requests: (window as unknown as { __fullScreenRequests?: number }).__fullScreenRequests,
+    fullScreen: document.fullscreenElement !== null,
+  }))).toEqual({ requests: 0, fullScreen: false });
+}
+
 /** Marks a start and end frame with Q and W, then locks the range with X. */
 export async function lockExactRange(page: Page, startFrame: number, endFrame: number): Promise<void> {
   await seekToFrame(page, startFrame);

@@ -206,7 +206,7 @@ describe('CaptureQueue', () => {
 
     expect(queue.ranges).toHaveLength(1);
     expect(capturePositioning.showFrameAfterCapture).toHaveBeenCalledWith(movie.review, expect.objectContaining({ kind: 'exact-frame' }));
-    expect(status.message).toBe('Restored 1 saved ranges.');
+    expect(status.message).toBe('Restored 1 saved range.');
     expect(storage.restoring).toBe(false);
   });
 });
