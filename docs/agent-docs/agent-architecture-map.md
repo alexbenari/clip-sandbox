@@ -327,6 +327,8 @@ If a change crosses multiple subsystems, the end-to-end suite is usually the saf
 
 Test rules live in [`coding-quality.md`](../../coding-quality.md) § Test reliability. `npm run lint` ([`eslint.config.mjs`](../../eslint.config.mjs)) lints `tests/` only, enforcing the mechanical ones (in e2e tests: no `waitForTimeout`, retrying Playwright assertions, no conditionals or unconditional skips; in all tests: no `Math.random` or `.only`); it runs in pre-commit and CI.
 
+Shared test helpers: [`tests/e2e/support/app.ts`](../../tests/e2e/support/app.ts) launches and drives the app in e2e tests; [`tests/support/page-markup.ts`](../../tests/support/page-markup.ts) builds the shipped page for integration tests; [`tests/support/frame-review-dependencies.ts`](../../tests/support/frame-review-dependencies.ts) holds the skip guard for tests that need the native frame-review tools. Before committing new or changed e2e specs, run them repeatedly with `npm run e2e -- --only-changed --repeat-each=3`.
+
 Electron e2e tests launch the app from the emitted `build/src/...` output, so a bare `npx playwright test` after source edits exercises stale code. Run subsets with `npm run e2e -- <spec files> [--grep ...]`, which rebuilds before passing the arguments to Playwright. Playwright deletes `test-results/` at the start of every run; keep evidence that must outlive a run under the ignored `test-evidence/<feature-name>/` folder.
 
 ## Knowledge Base Rules

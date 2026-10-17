@@ -5,7 +5,7 @@ not where they are maintained. Derived from the 2026-10-17 test-quality review
 of master (15 findings) and revised while fixing them. The rules now live in:
 
 - `coding-quality.md` § Test reliability: the rules themselves;
-- the `testing-discipline` skill, "In this repository": the steps for writing or
+- the `testing-discipline` skill, "Writing or repairing a test: the steps": the steps for writing or
   repairing a test;
 - the `code-quality-review` skill and its reviewer brief: tests are reviewed,
   and the reviewer names a bug each test would catch;
