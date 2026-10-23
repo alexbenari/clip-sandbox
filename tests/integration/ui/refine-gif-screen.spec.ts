@@ -64,7 +64,74 @@ function extractionSnapshot(refinement: IRangeRefinementDraftSnapshot): IGifExtr
   });
 }
 
+function activeRefineScreen(refinement: IRangeRefinementDraftSnapshot) {
+  let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
+  const session = {
+    reviewSession: {} as never,
+    get snapshot() { return extractionSnapshot(refinement); },
+    refinementDraft: null,
+    subscribe: (listener: (snapshot: IGifExtractionSessionSnapshot) => void) => {
+      publish = listener;
+      listener(extractionSnapshot(refinement));
+      return vi.fn();
+    },
+    abandonRefinement: vi.fn(),
+    canExtractRange: () => false,
+  };
+  const player = new FrameReviewPlayerControl({ document,
+    frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+  vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
+  vi.spyOn(player, 'enterExactScrubAt').mockResolvedValue({} as never);
+  const screen = RefineGifScreen.forGifExtraction({
+    player, keyboard: new GifWorkflowKeyboard(), session: session as never, document });
+  document.body.replaceChildren(screen.commands, screen.root);
+  screen.onActivate();
+  const hint = () => screen.root.querySelector('.gif-refinement-workbench [role="status"]')?.textContent;
+  return { screen, player, hint, publish: (snapshot: IGifExtractionSessionSnapshot) => publish(snapshot) };
+}
+
 describe('RefineGifScreen', () => {
+  it('states the next step once, in the workbench and not in the command bar', () => {
+    const { screen, hint } = activeRefineScreen(refinementSnapshot());
+
+    expect(hint()).toBe('Scrub to the exact start frame, then set it with Q.');
+    expect(screen.commands.textContent).not.toContain('start');
+    expect(screen.commands.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('says in the workbench that the staged range is looping while the loop runs', () => {
+    const { player, hint, publish } = activeRefineScreen(refinementSnapshot());
+    vi.spyOn(player, 'exactPreviewPhase').mockReturnValue('running');
+
+    publish(extractionSnapshot(refinementSnapshot()));
+
+    expect(hint()).toBe('Looping the staged range. Press Space to pause and scrub.');
+  });
+
+  it('shows extraction progress in the workbench while the locked range is extracted', () => {
+    const committed = refinementSnapshot('committed');
+    const { hint, publish } = activeRefineScreen(committed);
+
+    publish(Object.freeze({ ...extractionSnapshot(committed), extractionBatch: Object.freeze({
+      currentRangeId: 'range-1', currentPosition: 1, total: 2, completed: 0, cancelling: false,
+      usingExactFallback: false, progress: {} as never,
+    }) }));
+
+    expect(hint()).toBe('Extracting clip 1 of 2');
+  });
+
+  it('shows in the workbench that extraction is being cancelled', () => {
+    const committed = refinementSnapshot('committed');
+    const { hint, publish } = activeRefineScreen(committed);
+
+    publish(Object.freeze({ ...extractionSnapshot(committed), extractionBatch: Object.freeze({
+      currentRangeId: 'range-1', currentPosition: 1, total: 2, completed: 0, cancelling: true,
+      usingExactFallback: false, progress: {} as never,
+    }) }));
+
+    expect(hint()).toBe('Cancelling extraction…');
+  });
+
   it('shows its own wording for each use', () => {
     const player = new FrameReviewPlayerControl({ document,
       frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
@@ -99,10 +166,10 @@ describe('RefineGifScreen', () => {
     screen.showPreparation('Finding the original movie…');
     screen.onActivate();
     expect(attach).toHaveBeenCalledWith(null);
-    expect(screen.commands.textContent).toContain('Finding the original movie');
+    expect(screen.commands.querySelector('.gif-workflow-source span')?.textContent).toBe('Original movie');
     expect(screen.root.textContent).toContain('Finding the original movie');
     screen.showPreparation('Preparing exact frames…');
-    expect(screen.commands.textContent).toContain('Preparing exact frames');
+    expect(screen.root.textContent).toContain('Preparing exact frames');
     screen.showPreparation(null);
     expect(attach).toHaveBeenLastCalledWith(session.reviewSession);
   });

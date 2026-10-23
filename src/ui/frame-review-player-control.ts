@@ -106,10 +106,12 @@ export class FrameReviewPlayerControl {
     this.root.tabIndex = -1;
     this.root.setAttribute('aria-label', 'Movie review player');
     this.root.innerHTML = `
-      <div class="frame-review-viewport">
-        <canvas class="frame-review-canvas" aria-label="Movie frame"></canvas>
-        <div class="frame-review-empty">Open a movie to begin</div>
-        <div class="frame-review-busy" role="status" aria-live="polite" hidden></div>
+      <div class="frame-review-stage">
+        <div class="frame-review-viewport">
+          <canvas class="frame-review-canvas" aria-label="Movie frame"></canvas>
+          <div class="frame-review-empty">Open a movie to begin</div>
+          <div class="frame-review-busy" role="status" aria-live="polite" hidden></div>
+        </div>
       </div>
       <div class="frame-review-readiness" role="status" aria-live="polite">
         <span data-readiness-text>No movie open</span>
@@ -131,7 +133,7 @@ export class FrameReviewPlayerControl {
         <button type="button" data-command="step-right" aria-label="Step forward one frame" title="Step forward one frame" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 5v14M6 6l8 6-8 6V6Z"/></svg>
         </button>
-        <label class="frame-review-jump">Jump by
+        <label class="frame-review-jump"><span class="frame-review-jump-label">Jump by</span>
           <select aria-label="Jump by seconds">
             <option value="1">1 second</option><option value="2" selected>2 seconds</option>
             <option value="5">5 seconds</option><option value="7">7 seconds</option>
@@ -694,6 +696,9 @@ export class FrameReviewPlayerControl {
   private bind(): void {
     this.playPause.addEventListener('click', () => { void this.togglePlayback(); });
     this.fullScreenButton.addEventListener('click', () => this.toggleMovieFullScreen());
+    // The browser keeps a keyboard focus ring through later clicks, so a press hides it until the next key.
+    this.root.addEventListener('pointerdown', () => this.root.classList.add('pointer-focus'));
+    this.root.addEventListener('keydown', () => this.root.classList.remove('pointer-focus'));
     this.root.addEventListener('pointermove', event => {
       if (!this.isMovieFullScreen()) return;
       if (this.lastPointer?.x === event.clientX && this.lastPointer.y === event.clientY) return;

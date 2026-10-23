@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { resizeContent } from './support/app.js';
+import { launchApp, resizeContent } from './support/app.js';
 
 test('GIF Extraction starts empty with one movie player and keeps per-screen panel states', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-gif-shell-'));
@@ -56,6 +56,32 @@ test('GIF Extraction starts empty with one movie player and keeps per-screen pan
     await expect(page.locator('#clipsPanel')).not.toHaveClass(/folded/);
     await expect(page.locator('#pipelinesPanel')).toHaveClass(/folded/);
     await expect(page.locator('.frame-review-player input[type="range"]')).toHaveCount(1);
+  } finally {
+    await app.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('the movie player shows its focus ring after a key press and hides it after a click on the picture', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-gif-player-focus-'));
+  const app = await launchApp(path.join(directory, 'profile'));
+  try {
+    const page = await app.firstWindow();
+    const player = page.locator('.frame-review-player');
+    const picture = player.locator('.frame-review-viewport');
+    await expect(page.locator('#gifExtractionScreen')).toBeVisible();
+
+    await picture.click();
+    await expect(player).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(player).toHaveCSS('outline-style', 'solid');
+
+    await picture.click();
+    await expect(player).toBeFocused();
+    await expect(player).toHaveCSS('outline-style', 'none');
+
+    await page.keyboard.press('ArrowRight');
+    await expect(player).toHaveCSS('outline-style', 'solid');
   } finally {
     await app.close();
     await fs.rm(directory, { recursive: true, force: true });

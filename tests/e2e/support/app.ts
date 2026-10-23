@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import { expect, _electron as electron, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
 import { projectFolder } from '../../support/frame-review-dependencies.js';
 
@@ -60,6 +60,14 @@ export async function resizeContent(app: ElectronApplication, page: Page, width:
   }, { width, height });
   await expect.poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight }))).toEqual({ width, height });
   await page.evaluate(() => new Promise(requestAnimationFrame));
+}
+
+export type Box = { x: number; y: number; width: number; height: number };
+
+export async function visibleBox(locator: Locator): Promise<Box> {
+  const box = await locator.boundingBox();
+  if (!box) throw new Error(`${locator} is not visible, so it has no box to measure.`);
+  return box;
 }
 
 export async function chooseNextFolder(page: Page, folderPath: string): Promise<void> {

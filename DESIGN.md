@@ -106,7 +106,7 @@ The palette evokes a dark screening booth: nearly black room surfaces, cool navy
 
 ### Status
 
-- **Ready Green** (`#22c55e`): progress and success state on the compact activity indicator.
+- **Ready Green** (`#22c55e`): progress and success state on the compact activity indicator, and the lock icon of a locked capture range.
 - **Warning Red** (`#ef4444`): destructive actions, errors, and missing-entry conflicts.
 
 ### Named Rules
@@ -202,6 +202,14 @@ Context menus are compact floating utilities with `12px` outer corners, `8px` pa
 ### Activity Indicator
 
 Activity is a compact, labeled status control with a 34px pointer target and stable minimum width. The dot and text communicate Ready, Working, or the unresolved-error count; the accessible name and tooltip carry the same meaning. Only the progress dot pulses. Errors take precedence and remain discoverable when auto-opening would interrupt protected focus.
+
+### Movie Review Player
+
+GIF Extraction and Refine Gif share one player. Its picture is a true-black `16:9` frame, capped at `1100px` wide, that shrinks to the height left over after the transport, the capture row and, on Refine Gif, the whole two-endpoint workbench, so these stay in the first viewport down to a `900 × 700` window with the Clips panel open. The capture row and workbench actions wrap rather than clip. The player's Projector Blue focus ring appears only for keyboard focus and hides after a click on the picture until the next key. Refine Gif states its next step once, in the workbench; its command bar carries only Back, the range identity and its movie, and Cancel extraction while a batch runs. In the Clips panel, exact ranges have no colored border; a locked range shows only a Ready Green lock icon, and extraction results read in Quiet Slate.
+
+### Scrollbars
+
+Where a surface can still overflow, such as the GIF screens in a small window or the keyboard map, the scrollbar stays visible: thin, Quiet Slate at low opacity on a transparent track.
 
 ### Zoom Frame
 

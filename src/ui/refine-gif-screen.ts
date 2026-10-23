@@ -105,7 +105,6 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
   private readonly back: HTMLButtonElement;
   private readonly sourceName: HTMLElement;
   private readonly commandTitle: HTMLElement;
-  private readonly commandStatus: HTMLElement;
   private readonly cancelExtraction: HTMLButtonElement;
   private readonly workbench: HTMLElement;
   private readonly emptyCopy: HTMLElement;
@@ -158,7 +157,6 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
         <strong data-refine-command-title>${variant.label}</strong>
         <span>No range selected</span>
       </div>
-      <span class="gif-workflow-command-status" role="status">Waiting for a captured range</span>
       <button type="button" data-command="cancel-extraction" hidden>Cancel extraction</button>`;
 
     this.root = doc.createElement('section');
@@ -201,7 +199,6 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     this.back = this.required(this.commands.querySelector('[data-command="back"]'), HTMLButtonElement, 'back command');
     this.commandTitle = this.required(this.commands.querySelector('[data-refine-command-title]'), HTMLElement, 'command title');
     this.sourceName = this.required(this.commands.querySelector('.gif-workflow-source span'), HTMLElement, 'source name');
-    this.commandStatus = this.required(this.commands.querySelector('.gif-workflow-command-status'), HTMLElement, 'command status');
     this.cancelExtraction = this.required(this.commands.querySelector('[data-command="cancel-extraction"]'), HTMLButtonElement, 'cancel extraction command');
     this.playerHost = this.required(this.root.querySelector('.gif-workflow-player-host'), HTMLElement, 'player host');
     this.workbench = this.required(this.root.querySelector('.gif-refinement-workbench'), HTMLElement, 'refinement workbench');
@@ -425,7 +422,6 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
       this.seekGeneration += 1;
       this.lastSeekKey = null;
       this.commandTitle.textContent = this.label;
-      this.commandStatus.textContent = this.preparationMessage ?? 'Waiting for a captured range';
       const explanation = this.emptyCopy.querySelector('p');
       if (explanation && this.preparationMessage !== null) explanation.textContent = this.preparationMessage;
       const progress = this.emptyCopy.querySelector('progress');
@@ -436,15 +432,6 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     if (progress) progress.hidden = true;
     if (this.active) this.requestExactPosition(refinement);
     this.commandTitle.textContent = `${this.label} · Range ${this.rangeNumber(refinement.rangeId)}`;
-    this.commandStatus.textContent = snapshot.extractionBatch
-      ? snapshot.extractionBatch.cancelling ? 'Cancelling extraction…'
-        : `Extracting clip ${snapshot.extractionBatch.currentPosition} of ${snapshot.extractionBatch.total}`
-      : refinement.status === 'committed'
-      ? 'Exact range locked'
-      : refinement.status === 'invalidated' ? 'Refinement unavailable'
-        : this.options.player.exactPreviewPhase() === 'running' ? 'Looping staged range'
-          : this.options.player.exactPreviewPhase() === 'paused' ? 'Paused staged range'
-            : `Resolving ${refinement.focusedEndpoint}`;
     this.rangeTitle.textContent = `Range ${this.rangeNumber(refinement.rangeId)}`;
     this.renderEndpoint('start', refinement);
     this.renderEndpoint('end', refinement);
@@ -461,7 +448,16 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
       ? refinement.status === 'committed' ? 'This range is already complete or extraction is unavailable.' : 'Lock an exact range before extracting.'
       : 'Extract this exact range';
     this.next.disabled = refinement.status !== 'committed' || refinement.nextInexactRangeId === null;
-    this.localStatus.textContent = refinement.message ?? this.instruction(refinement);
+    this.localStatus.textContent = this.statusText(snapshot, refinement);
+  }
+
+  private statusText(snapshot: IGifExtractionSessionSnapshot, refinement: IRangeRefinementDraftSnapshot): string {
+    const batch = snapshot.extractionBatch;
+    if (batch) return batch.cancelling ? 'Cancelling extraction…' : `Extracting clip ${batch.currentPosition} of ${batch.total}`;
+    if (refinement.status === 'editing' && this.options.player.exactPreviewPhase() === 'running') {
+      return 'Looping the staged range. Press Space to pause and scrub.';
+    }
+    return refinement.message ?? this.instruction(refinement);
   }
 
   private renderEndpoint(endpoint: RefineGifEndpoint, refinement: IRangeRefinementDraftSnapshot): void {

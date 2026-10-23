@@ -1,11 +1,9 @@
-import { test, expect, _electron as electron, type Page } from '@playwright/test';
+import { test, expect, _electron as electron } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { resizeContent } from './support/app.js';
-
-type Box = { x: number; y: number; width: number; height: number };
+import { resizeContent, visibleBox, type Box } from './support/app.js';
 
 function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -13,12 +11,6 @@ function overlaps(a: Box, b: Box): boolean {
 
 function centerX(box: Box): number {
   return box.x + box.width / 2;
-}
-
-async function visibleBox(page: Page, selector: string): Promise<Box> {
-  const box = await page.locator(selector).boundingBox();
-  if (!box) throw new Error(`${selector} is not visible, so it has no box to measure.`);
-  return box;
 }
 
 for (const nativeFrame of [false, true]) {
@@ -37,7 +29,7 @@ for (const nativeFrame of [false, true]) {
         const rect = overlay?.visible ? overlay.getTitlebarAreaRect() : null;
         return { visible: overlay?.visible ?? false, right: rect ? rect.x + rect.width : innerWidth };
       });
-      const boxOf = (selector: string) => visibleBox(page, selector);
+      const boxOf = (selector: string) => visibleBox(page.locator(selector));
       const expectAppBarFits = async (width: number, height: number) => {
         await resizeContent(app, page, width, height);
         await expect(page.locator('#activityIndicatorBtn')).toBeInViewport();
