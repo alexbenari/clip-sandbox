@@ -1,3 +1,27 @@
 {
-  "buildPath": "comp"
+  "buildPath": "comp",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "src/ui/clip-collection-grid-control.ts"
+        ],
+        "createdAt": "2026-10-23T09:20:27.747Z",
+        "reason": "Agent: card size/position interpolation during panel resize is the documented workspace-resize mechanism (agent-architecture-map, Application Shell); duration defaults to 0ms"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-10-23T09:30:18.545Z",
+        "reason": "User confirmed: side-panel width animation reflows grid and player by design; Actions menu max-height reveal is a small menu, kept intentionally"
+      }
+    ]
+  }
 }
