@@ -21,6 +21,12 @@
         ],
         "createdAt": "2026-10-23T09:30:18.545Z",
         "reason": "User confirmed: side-panel width animation reflows grid and player by design; Actions menu max-height reveal is a small menu, kept intentionally"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "sfmono-regular",
+        "createdAt": "2026-10-23T10:04:50.565Z",
+        "reason": "Agent: part of the monospace stack DESIGN.md documents as Machine Detail typography for exact filenames"
       }
     ]
   }
