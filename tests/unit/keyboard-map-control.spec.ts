@@ -62,8 +62,14 @@ describe('KeyboardMapControl', () => {
       'Global',
     ]);
     expect(Array.from(root.querySelectorAll('dt')).map((description) => description.textContent)).toEqual([
-      'Open selected clip in Zoom',
-      'Remove selection; in the pipeline view, move to Recycle Bin',
+      'Move focus between clips',
+      'Select the focused clip',
+      'Add or remove the focused clip from the selection',
+      'Open the focused or selected clip in Zoom',
+      'Move the focused clip in the order',
+      'Open the clip menu',
+      'Save the collection; in the folder view, save as a new collection',
+      'Remove selected clips from the collection; in the folder view, move them to the Recycle Bin after confirming',
       'Toggle audio',
       'Previous clip',
       'Next clip',
@@ -73,7 +79,13 @@ describe('KeyboardMapControl', () => {
       'Close the open app-bar utility',
     ]);
     expect(Array.from(root.querySelectorAll('.keyboard-keys')).map((keys) => keys.textContent)).toEqual([
-      'Z',
+      'Arrow keys',
+      'Space',
+      'Ctrl+Space',
+      'Enter or Z',
+      'Alt+Arrow keys',
+      'Shift+F10 or Menu',
+      'Ctrl+S',
       'Delete or Backspace',
       'A',
       'Left',

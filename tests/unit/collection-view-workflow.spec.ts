@@ -98,6 +98,7 @@ describe('CollectionViewWorkflow', () => {
 
     expect(toolbar.render).toHaveBeenLastCalledWith({
       clipCount: 2, hasPipeline: true, hasSequence: true, hasSelection: true, isPipelineMode: false, titlesHidden: false,
+      hasUnsavedChanges: false,
     });
     toolbar.render.mockClear();
     grid.emit('cardCountChanged');
@@ -114,6 +115,29 @@ describe('CollectionViewWorkflow', () => {
     expect(pipelineWorkingCopy.currentClipSequence!.clipNamesInOrder()).toEqual(['alpha.mp4', 'bravo.mp4']);
     expect(pipelineWorkingCopy.hasDirtyClipSequenceChanges).toBe(true);
     expect(selector.render).toHaveBeenCalled();
+  });
+
+  it('shows unsaved changes on the toolbar and selector as soon as the order changes', () => {
+    const { grid, pipelineWorkingCopy, toolbar, selector, showSubset } = collectionView();
+    showSubset();
+    const ids = pipelineWorkingCopy.currentClipSequence!.orderedClips().map(clip => clip.id);
+
+    grid.emit('orderChanged', [...ids].reverse());
+
+    expect(toolbar.render).toHaveBeenLastCalledWith(expect.objectContaining({ hasUnsavedChanges: true }));
+    expect(selector.render).toHaveBeenLastCalledWith(expect.objectContaining({ hasUnsavedChanges: true }));
+  });
+
+  it('stops showing unsaved changes when the saved order is restored', () => {
+    const { grid, pipelineWorkingCopy, toolbar, selector, showSubset } = collectionView();
+    showSubset();
+    const ids = pipelineWorkingCopy.currentClipSequence!.orderedClips().map(clip => clip.id);
+    grid.emit('orderChanged', [...ids].reverse());
+
+    grid.emit('orderChanged', ids);
+
+    expect(toolbar.render).toHaveBeenLastCalledWith(expect.objectContaining({ hasUnsavedChanges: false }));
+    expect(selector.render).toHaveBeenLastCalledWith(expect.objectContaining({ hasUnsavedChanges: false }));
   });
 
   it('removes selected clips from a collection view and reports how many', () => {

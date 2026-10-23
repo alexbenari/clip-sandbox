@@ -771,7 +771,7 @@ describe('clip collection grid controller', () => {
     rightClick(cards[1]);
 
     expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
-    expect(contextMenuRequests[0]).toMatchObject({ clipId: 'clip_2', selectedClipIds: ['clip_2'] });
+    expect(contextMenuRequests[0]).toMatchObject({ clipId: 'clip_2', selectedClipIds: ['clip_2'], fromKeyboard: false });
   });
 
   test('right-clicking a clip inside a multi-selection keeps the selection', () => {
@@ -782,6 +782,131 @@ describe('clip collection grid controller', () => {
     rightClick(cards[1]);
 
     expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+  });
+
+  // Five cards laid out in two columns: rows [alpha, bravo], [charlie, delta], [echo].
+  function keyboardGrid() {
+    const requests = { orders: [], menus: [] };
+    const controller = createClipCollectionGridControl({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      layoutRules: { computeBestGrid: () => ({ cols: 2, cellH: 100 }) },
+    });
+    controller.on('orderChanged', (ids) => requests.orders.push(ids));
+    controller.on('contextMenuRequested', (payload) => requests.menus.push(payload));
+    controller.renderCollection(new ClipSequence({
+      name: 'demo',
+      clips: ['alpha', 'bravo', 'charlie', 'delta', 'echo'].map((name, index) => testClip(`clip_${index + 1}`, `${name}.mp4`)),
+    }));
+    const card = (name) => document.querySelector(`#grid .thumb[data-name="${name}.mp4"]`);
+    const focusedName = () => document.activeElement?.dataset.name?.replace('.mp4', '');
+    const press = (key, modifiers = {}) => {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers });
+      Object.defineProperty(event, 'target', { value: document.activeElement });
+      controller.handleCardKey(event);
+      return event;
+    };
+    return { controller, requests, card, focusedName, press };
+  }
+
+  test('arrow keys move focus to the neighbouring card and one row up or down', () => {
+    const { card, focusedName, press } = keyboardGrid();
+    card('alpha').focus();
+
+    press('ArrowRight');
+    expect(focusedName()).toBe('bravo');
+    press('ArrowDown');
+    expect(focusedName()).toBe('delta');
+    press('ArrowDown');
+    expect(focusedName()).toBe('echo');
+    press('ArrowUp');
+    expect(focusedName()).toBe('charlie');
+    press('ArrowLeft');
+    expect(focusedName()).toBe('bravo');
+  });
+
+  test('an arrow key at the edge of the grid keeps focus and does not scroll', () => {
+    const { card, focusedName, press } = keyboardGrid();
+    card('alpha').focus();
+
+    const event = press('ArrowUp');
+
+    expect(focusedName()).toBe('alpha');
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  test('only the focused card is a Tab stop, so Tab enters and leaves the grid once', () => {
+    const { card, press } = keyboardGrid();
+    const tabStops = () => [...document.querySelectorAll('#grid .thumb')].filter(el => el.tabIndex === 0).map(el => el.dataset.name);
+    card('charlie').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(tabStops()).toEqual(['charlie.mp4']);
+
+    card('charlie').focus();
+    press('ArrowRight');
+
+    expect(tabStops()).toEqual(['delta.mp4']);
+  });
+
+  test('Space selects only the focused card and Ctrl+Space adds or removes it', () => {
+    const { controller, card, press } = keyboardGrid();
+    card('alpha').focus();
+
+    press(' ');
+    press('ArrowRight');
+    press(' ', { ctrlKey: true });
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+    press(' ', { ctrlKey: true });
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
+    press(' ');
+    expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
+  });
+
+  test('Alt+Arrow moves the focused clip one place or one row and reports the new order', () => {
+    const { card, focusedName, press, requests } = keyboardGrid();
+    card('alpha').focus();
+
+    press('ArrowRight', { altKey: true });
+    press('ArrowDown', { altKey: true });
+
+    expect(requests.orders).toEqual([
+      ['clip_2', 'clip_1', 'clip_3', 'clip_4', 'clip_5'],
+      ['clip_2', 'clip_3', 'clip_4', 'clip_1', 'clip_5'],
+    ]);
+    expect(focusedName()).toBe('alpha');
+  });
+
+  test.each([
+    ['Shift+F10', 'F10', { shiftKey: true }],
+    ['the Menu key', 'ContextMenu', {}],
+  ])('%s requests the clip menu at the focused card and selects that card', (_name, key, modifiers) => {
+    const { controller, card, press, requests } = keyboardGrid();
+    card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    vi.spyOn(card('delta'), 'getBoundingClientRect').mockReturnValue({ left: 200, top: 100, width: 300, height: 160 });
+    card('delta').focus();
+
+    press(key, modifiers);
+
+    expect(controller.getSelectedClipIds()).toEqual(['clip_4']);
+    expect(requests.menus).toEqual([{
+      point: expect.anything(),
+      selectedClipId: 'clip_4',
+      selectedClipIds: ['clip_4'],
+      clipId: 'clip_4',
+      fromKeyboard: true,
+    }]);
+    const { x, y } = requests.menus[0].point;
+    expect({ insideCardHorizontally: x > 200 && x < 500, insideCardVertically: y > 100 && y < 260 })
+      .toEqual({ insideCardHorizontally: true, insideCardVertically: true });
+  });
+
+  test('the browser contextmenu event that follows the Menu key opens no second menu', () => {
+    const { card, requests } = keyboardGrid();
+    card('alpha').focus();
+
+    card('alpha').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: -1 }));
+
+    expect(requests.menus).toEqual([]);
   });
 
   test('injects default styles only once per document', () => {
@@ -814,11 +939,10 @@ describe('clip collection grid controller', () => {
 test('focuses selected cards through the grid API without relying on selection CSS', () => {
   const root = document.createElement('div');
   const grid = document.createElement('div');
-  const card = document.createElement('article');
-  card.className = 'thumb';
-  card.dataset.clipId = 'selected-clip';
-  grid.append(card); root.append(grid); document.body.append(root);
+  root.append(grid); document.body.append(root);
   const controller = createClipCollectionGridControl({ grid, gridRoot: root });
+  controller.renderCollection(new ClipSequence({ name: 'demo', clips: [testClip('other-clip', 'alpha.mp4'), testClip('selected-clip', 'bravo.mp4')] }));
+  const card = grid.querySelector('[data-clip-id="selected-clip"]');
   expect(controller.focusSelectedClip()).toBe(false);
   controller.setSelectedClipId('selected-clip');
   card.classList.remove('selected');

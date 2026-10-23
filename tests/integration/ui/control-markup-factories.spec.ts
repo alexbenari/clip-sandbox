@@ -141,6 +141,32 @@ describe('controls built from the page markup', () => {
     toolbar.destroy();
   });
 
+  it('the main toolbar shows its Save command only while there are unsaved changes, and it saves', () => {
+    const toolbar = MainToolbarControl.fromDocument(document, { appText: new AppText() });
+    const saveRequested = vi.fn();
+    toolbar.on('saveRequested', saveRequested);
+    const saveChanges = document.getElementById('saveChangesBtn')!;
+
+    toolbar.render({ clipCount: 2, hasPipeline: true, hasSequence: true, isPipelineMode: false, hasUnsavedChanges: false });
+    expect(saveChanges.hidden).toBe(true);
+    toolbar.render({ clipCount: 2, hasPipeline: true, hasSequence: true, isPipelineMode: false, hasUnsavedChanges: true });
+    expect(saveChanges.hidden).toBe(false);
+    expect(saveChanges.textContent).toBe('Save');
+    click('saveChangesBtn');
+
+    expect(saveRequested).toHaveBeenCalledOnce();
+    toolbar.destroy();
+  });
+
+  it('the main toolbar labels its Save command "Save…" in the folder view, where saving asks for a name', () => {
+    const toolbar = MainToolbarControl.fromDocument(document, { appText: new AppText() });
+
+    toolbar.render({ clipCount: 2, hasPipeline: true, hasSequence: true, isPipelineMode: true, hasUnsavedChanges: true });
+
+    expect(text('saveChangesBtn')).toBe('Save…');
+    toolbar.destroy();
+  });
+
   it('the application shell mounts its screens and reports the Settings button', () => {
     const screen = (id: string): IAppScreen => ({
       id, label: id, selectorStatus: 'fixed', root: document.createElement('section'), commands: null, shortcuts: [],
@@ -216,6 +242,20 @@ describe('controls built from the page markup', () => {
     select.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(selectionRequested).toHaveBeenCalledWith('picks.txt');
+    selector.destroy();
+  });
+
+  it('the collection selector marks unsaved changes beside the active collection name', () => {
+    const selector = CollectionSelectorControl.fromDocument(document, { appText: new AppText() });
+    const marker = document.getElementById('unsavedChangesMarker')!;
+
+    expect(marker.hidden).toBe(true);
+    selector.render({ hasUnsavedChanges: true });
+    expect(marker.hidden).toBe(false);
+    expect(marker.textContent).toBe('Unsaved');
+    selector.render({ hasUnsavedChanges: false });
+
+    expect(marker.hidden).toBe(true);
     selector.destroy();
   });
 

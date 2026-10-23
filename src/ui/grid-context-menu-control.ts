@@ -25,6 +25,7 @@ type GridContextMenuOptions = {
 
 type GridContextMenuRequest = {
   point?: ContextMenuPoint;
+  focusFirstItem?: boolean;
   hasSelection?: boolean;
   hasPipeline?: boolean;
   targetCollections?: TargetCollectionChoice[];
@@ -90,8 +91,8 @@ export class GridContextMenuControl {
     return items;
   }
 
-  open({ point = {}, ...request }: GridContextMenuRequest = {}): void {
-    this.contextMenu?.open({ point, items: this.buildItems(request) });
+  open({ point = {}, focusFirstItem = false, ...request }: GridContextMenuRequest = {}): void {
+    this.contextMenu?.open({ point, items: this.buildItems(request), focusFirst: focusFirstItem });
   }
 
   close(options?: { restoreFocus?: boolean }): void {

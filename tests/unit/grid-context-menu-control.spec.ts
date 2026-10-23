@@ -80,6 +80,15 @@ describe('grid context menu control', () => {
     ]);
   });
 
+  test('asks the context menu to focus its first item for a keyboard request', () => {
+    const contextMenu = { open: vi.fn() };
+    const control = new GridContextMenuControl({ contextMenu });
+
+    control.open({ point: { x: 12, y: 24 }, hasSelection: true, hasPipeline: true, focusFirstItem: true });
+
+    expect(contextMenu.open.mock.calls[0][0].focusFirst).toBe(true);
+  });
+
   test('offers Refine for a collection clip the source movie is known for', () => {
     const control = new GridContextMenuControl();
     const onRefine = vi.fn();

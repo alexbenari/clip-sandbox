@@ -13,6 +13,7 @@ export type ClipRefineAvailability = 'available' | 'no-source-info' | 'source-in
 export interface IClipContextMenu {
   open(request: {
     point: MenuPoint;
+    focusFirstItem: boolean;
     hasSelection: boolean;
     hasPipeline: boolean;
     hasClip: boolean;
@@ -29,7 +30,7 @@ type GridContextMenuDependencies = Readonly<{
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'resolveClip' | 'activeCollectionFilename'>;
   openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   refinementAvailability: Pick<ICollectionClipRefinementService, 'inspect'> | null;
-  grid: IEventSource<{ contextMenuRequested: Readonly<{ point: MenuPoint; clipId: string | null }> }>
+  grid: IEventSource<{ contextMenuRequested: Readonly<{ point: MenuPoint; clipId: string | null; fromKeyboard: boolean }> }>
     & { getSelectedClipIds(): string[] };
   menu: IClipContextMenu;
   navigation: Pick<IScreenNavigation, 'activeScreen'>;
@@ -47,15 +48,15 @@ export class GridContextMenuWorkflow {
 
   constructor(private readonly menu: GridContextMenuDependencies) {
     this.unsubscribes = [
-      menu.grid.on('contextMenuRequested', ({ point, clipId }) => {
+      menu.grid.on('contextMenuRequested', ({ point, clipId, fromKeyboard }) => {
         if (menu.zoom.isOpen() || menu.fullScreen.isDocumentFullScreen()) return;
-        void this.open(point, clipId);
+        void this.open(point, clipId, { focusFirstItem: fromKeyboard });
       }),
     ];
   }
 
   // Checking whether a clip can be refined is asynchronous, so a newer request or a changed view cancels this one.
-  async open(point: MenuPoint, clipId: string | null): Promise<void> {
+  async open(point: MenuPoint, clipId: string | null, { focusFirstItem = false }: { focusFirstItem?: boolean } = {}): Promise<void> {
     const { pipelineWorkingCopy, openFolder } = this.menu;
     const revision = ++this.revision;
     const clip = pipelineWorkingCopy.resolveClip(clipId);
@@ -70,6 +71,7 @@ export class GridContextMenuWorkflow {
       || (clipId && pipelineWorkingCopy.resolveClip(clipId) !== clip)) return;
     this.menu.menu.open({
       point,
+      focusFirstItem,
       hasSelection: this.menu.grid.getSelectedClipIds().length > 0,
       hasPipeline: !!pipelineWorkingCopy.pipeline,
       hasClip: request !== null,

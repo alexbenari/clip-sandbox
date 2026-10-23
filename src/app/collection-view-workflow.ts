@@ -33,11 +33,17 @@ export interface ICollectionToolbarView extends IEventSource<{ toggleTitlesReque
     hasSelection: boolean;
     isPipelineMode: boolean;
     titlesHidden: boolean;
+    hasUnsavedChanges: boolean;
   }): void;
 }
 
 export interface ICollectionSelectorView {
-  render(state: { pipeline: Pipeline | null; activeCollection: Collection | null; currentClipSequence: ClipSequence | null }): void;
+  render(state: {
+    pipeline: Pipeline | null;
+    activeCollection: Collection | null;
+    currentClipSequence: ClipSequence | null;
+    hasUnsavedChanges: boolean;
+  }): void;
 }
 
 export interface ISelectionChangeSurfaces {
@@ -49,7 +55,7 @@ export interface ISelectionChangeSurfaces {
 
 type CollectionViewDependencies = Readonly<{
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'pipeline' | 'activeCollection' | 'currentClipSequence' | 'isPipelineMode'
-    | 'activateSelection' | 'replaceCurrentOrder' | 'removeFromCurrentSequence' | 'reset'>;
+    | 'hasDirtyClipSequenceChanges' | 'activateSelection' | 'replaceCurrentOrder' | 'removeFromCurrentSequence' | 'reset'>;
   openFolder: Pick<AppSessionState, 'currentFolderAccess' | 'setCurrentFolderAccess'>;
   grid: ICollectionGridView;
   toolbar: ICollectionToolbarView;
@@ -86,6 +92,7 @@ export class CollectionViewWorkflow {
       pipeline: pipelineWorkingCopy.pipeline,
       activeCollection: pipelineWorkingCopy.activeCollection,
       currentClipSequence: pipelineWorkingCopy.currentClipSequence,
+      hasUnsavedChanges: pipelineWorkingCopy.hasDirtyClipSequenceChanges,
     });
   }
 
@@ -98,6 +105,7 @@ export class CollectionViewWorkflow {
       hasSelection: grid.getSelectedClipIds().length > 0,
       isPipelineMode: pipelineWorkingCopy.isPipelineMode(),
       titlesHidden: grid.areTitlesHidden(),
+      hasUnsavedChanges: pipelineWorkingCopy.hasDirtyClipSequenceChanges,
     });
   }
 

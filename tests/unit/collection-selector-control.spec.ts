@@ -93,4 +93,17 @@ describe('collection selector control', () => {
     expect(onSelectionRequested).toHaveBeenNthCalledWith(1, 'subset.txt');
     expect(onSelectionRequested).toHaveBeenNthCalledWith(2, null);
   });
+
+  test('starts with the unsaved-changes marker hidden', () => {
+    document.body.innerHTML = '<select id="select"></select><span id="marker"></span>';
+
+    new CollectionSelectorControl({
+      appText,
+      selectEl: document.getElementById('select'),
+      unsavedChangesMarker: document.getElementById('marker'),
+      doc: document,
+    });
+
+    expect(document.getElementById('marker').hidden).toBe(true);
+  });
 });

@@ -2,8 +2,18 @@ import type { IShortcutDescriptor } from './shortcut-descriptor.js';
 import type { IEventSource } from './event-source.js';
 
 export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
-  { description: 'Open selected clip in Zoom', group: 'Grid', sequences: [['Z']] },
-  { description: 'Remove selection; in the pipeline view, move to Recycle Bin', group: 'Grid', sequences: [['Delete'], ['Backspace']] },
+  { description: 'Move focus between clips', group: 'Grid', sequences: [['Arrow keys']] },
+  { description: 'Select the focused clip', group: 'Grid', sequences: [['Space']] },
+  { description: 'Add or remove the focused clip from the selection', group: 'Grid', sequences: [['Ctrl', 'Space']] },
+  { description: 'Open the focused or selected clip in Zoom', group: 'Grid', sequences: [['Enter'], ['Z']] },
+  { description: 'Move the focused clip in the order', group: 'Grid', sequences: [['Alt', 'Arrow keys']] },
+  { description: 'Open the clip menu', group: 'Grid', sequences: [['Shift', 'F10'], ['Menu']] },
+  { description: 'Save the collection; in the folder view, save as a new collection', group: 'Grid', sequences: [['Ctrl', 'S']] },
+  {
+    description: 'Remove selected clips from the collection; in the folder view, move them to the Recycle Bin after confirming',
+    group: 'Grid',
+    sequences: [['Delete'], ['Backspace']],
+  },
   { description: 'Toggle audio', group: 'Zoom', sequences: [['A']] },
   { description: 'Previous clip', group: 'Zoom', sequences: [['Left']] },
   { description: 'Next clip', group: 'Zoom', sequences: [['Right']] },
@@ -30,8 +40,11 @@ export type AppKeyDownContext = {
   };
   grid: {
     handleKeyDown(event: KeyboardEvent): unknown;
+    handleCardKey(event: KeyboardEvent): boolean;
     getSelectedClipId(): string | null;
+    focusedClipId(): string | null;
   };
+  collectionSave: { saveActive(): unknown };
   fullScreen: { isDocumentFullScreen(): boolean };
   keys: IEventSource<{ keyPressed: KeyboardEvent }>;
   utilities: { readonly isOpen: boolean } | null;
@@ -109,18 +122,36 @@ export class AppKeyDownHandler {
       event.preventDefault();
       return true;
     }
-    if (
-      this.isPlainKeyPress(event)
-      && this.isKey(event, 'z')
-      && !context.zoom.isOpen()
-      && !context.fullScreen.isDocumentFullScreen()
-      && context.grid.getSelectedClipId()
-    ) {
-      context.zoom.openClipById(context.grid.getSelectedClipId());
+    if (context.zoom.isOpen() || context.fullScreen.isDocumentFullScreen()) return false;
+    if (context.grid.handleCardKey(event)) return true;
+    if (this.isSaveKey(event)) {
+      void context.collectionSave.saveActive();
+      event.preventDefault();
+      return true;
+    }
+    const clipToOpen = this.isPlainKeyPress(event) ? this.clipToOpen(event) : null;
+    if (clipToOpen) {
+      context.zoom.openClipById(clipToOpen);
       event.preventDefault();
       return true;
     }
     return false;
+  }
+
+  // Enter belongs to a focused button or link, so it opens the selected clip only when nothing else has focus.
+  private clipToOpen(event: KeyboardEvent): string | null {
+    const { grid } = this.context;
+    if (this.isKey(event, 'z')) return grid.focusedClipId() ?? grid.getSelectedClipId();
+    if (event.key !== 'Enter') return null;
+    return grid.focusedClipId() ?? (this.isPageBody(event.target) ? grid.getSelectedClipId() : null);
+  }
+
+  private isPageBody(target: EventTarget | null): boolean {
+    return target instanceof Element && target === target.ownerDocument.body;
+  }
+
+  private isSaveKey(event: KeyboardEvent): boolean {
+    return (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && this.isKey(event, 's');
   }
 
   private anyDialogOpen(): boolean {

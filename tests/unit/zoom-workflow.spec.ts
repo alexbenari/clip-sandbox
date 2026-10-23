@@ -37,6 +37,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
     getNextClip: (clipId: string | null) => (clipId === alpha.id ? bravo : null),
     getPrevClip: (clipId: string | null) => (clipId === bravo.id ? alpha : null),
     setSelectedClipId: vi.fn(),
+    focusClip: vi.fn(() => true),
     invalidateView: vi.fn(),
     renderCollection: vi.fn(),
   });
@@ -77,6 +78,16 @@ describe('ZoomWorkflow', () => {
 
     expect(workflow.isOpen()).toBe(false);
     expect(zoomView.close).toHaveBeenCalledOnce();
+  });
+
+  it('returns focus to the clip shown last when Zoom closes', () => {
+    const { workflow, grid, alpha, bravo } = zoomWorkflow();
+    workflow.openClip(alpha);
+    workflow.browseByOffset(1);
+
+    workflow.close();
+
+    expect(grid.focusClip).toHaveBeenCalledWith(bravo.id);
   });
 
   it('opens the clip the grid asks for and selects it', () => {

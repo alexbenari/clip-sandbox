@@ -415,6 +415,7 @@ export class AppController {
       unsavedChangesDialog,
       zoom,
       grid,
+      collectionSave,
       fullScreen: fullscreenAdapter,
       keys: collectionScreen,
       utilities,

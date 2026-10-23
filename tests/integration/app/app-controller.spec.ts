@@ -609,5 +609,112 @@ describe('AppController Collection and Zoom workflows', () => {
       ]);
     });
   });
+
+  describe('operating the clip grid from the keyboard', () => {
+    const clipNames = () => Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name);
+    const card = (name) => document.querySelector(`#grid .thumb[data-name="${name}"]`);
+    const press = (key, modifiers = {}) => {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers });
+      (document.activeElement ?? document.body).dispatchEvent(event);
+      return event;
+    };
+    const isShown = (id) => !document.getElementById(id).hidden;
+
+    async function openFolder({ collection = null } = {}) {
+      const folder = {
+        canceled: false,
+        folderPath: 'C:/clips',
+        folderName: 'clips',
+        files: [
+          desktopFile({ name: 'alpha.mp4' }),
+          desktopFile({ name: 'bravo.mp4' }),
+          desktopFile({ name: 'charlie.mp4' }),
+          desktopFile({ name: 'picks.txt', text: 'alpha.mp4\nbravo.mp4\ncharlie.mp4\n' }),
+        ],
+      };
+      window.clipSandboxDesktop.pickFolder = vi.fn(async () => folder);
+      window.clipSandboxDesktop.refreshFolder = vi.fn(async () => folder);
+      const { AppController } = await import('../../../src/app/app-controller.js');
+      new AppController().init();
+      document.querySelector('#appScreenSelector').value = 'collection';
+      document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
+      document.getElementById('pickBtn').click();
+      await waitFor(() => expect(clipNames()).toEqual(['alpha.mp4', 'bravo.mp4', 'charlie.mp4']));
+      if (!collection) return;
+      document.getElementById('activeCollectionName').value = collection;
+      document.getElementById('activeCollectionName').dispatchEvent(new Event('change', { bubbles: true }));
+      await waitFor(() => expect(document.title).toBe('picks'));
+    }
+
+    test('moving a clip with Alt+Arrow marks the collection unsaved and offers Save', async () => {
+      await openFolder({ collection: 'picks.txt' });
+      expect(isShown('unsavedChangesMarker')).toBe(false);
+      expect(isShown('saveChangesBtn')).toBe(false);
+      card('alpha.mp4').focus();
+
+      press('ArrowRight');
+      press('ArrowLeft', { altKey: true });
+
+      expect(clipNames()).toEqual(['bravo.mp4', 'alpha.mp4', 'charlie.mp4']);
+      expect(document.activeElement).toBe(card('bravo.mp4'));
+      expect(isShown('unsavedChangesMarker')).toBe(true);
+      expect(isShown('saveChangesBtn')).toBe(true);
+    });
+
+    test('Ctrl+S saves the reordered collection and clears the unsaved marker', async () => {
+      await openFolder({ collection: 'picks.txt' });
+      card('alpha.mp4').focus();
+      press('ArrowRight', { altKey: true });
+
+      const save = press('s', { ctrlKey: true });
+
+      expect(save.defaultPrevented).toBe(true);
+      await waitFor(() => {
+        expect(window.clipSandboxDesktop.saveTextFile).toHaveBeenCalledWith({
+          folderPath: 'C:/clips', filename: 'picks.txt', text: 'bravo.mp4\nalpha.mp4\ncharlie.mp4\n',
+        });
+        expect(isShown('unsavedChangesMarker')).toBe(false);
+        expect(isShown('saveChangesBtn')).toBe(false);
+      });
+    });
+
+    test('in the folder view the toolbar Save button opens Save as collection', async () => {
+      await openFolder();
+      card('charlie.mp4').focus();
+      press('ArrowLeft', { altKey: true });
+      press('ArrowLeft', { altKey: true });
+      await waitFor(() => expect(clipNames()).toEqual(['charlie.mp4', 'alpha.mp4', 'bravo.mp4']));
+
+      document.getElementById('saveChangesBtn').click();
+
+      await waitFor(() => expect(document.getElementById('saveAsNewDialog').hidden).toBe(false));
+    });
+
+    test('Shift+F10 opens the menu of the focused clip with its first item focused, and Escape returns to the clip', async () => {
+      await openFolder();
+      card('alpha.mp4').focus();
+      press('ArrowRight');
+
+      press('F10', { shiftKey: true });
+
+      await waitFor(() => expect(document.activeElement?.closest('#clipContextMenu')).not.toBeNull());
+      expect(document.querySelector('#grid .thumb.selected')).toBe(card('bravo.mp4'));
+      press('Escape');
+      expect(document.activeElement).toBe(card('bravo.mp4'));
+    });
+
+    test('Enter opens the focused clip in Zoom and Escape returns focus to it', async () => {
+      await openFolder();
+      card('alpha.mp4').focus();
+      press('ArrowRight');
+
+      press('Enter');
+
+      expect(document.querySelector('#zoomOverlay video')?.getAttribute('src')).toBe('file:///C:/clips/bravo.mp4');
+      press('Escape');
+      expect(document.querySelector('#zoomOverlay')).toBeNull();
+      expect(document.activeElement).toBe(card('bravo.mp4'));
+    });
+  });
 });
 

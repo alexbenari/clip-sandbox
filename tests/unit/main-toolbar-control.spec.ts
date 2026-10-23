@@ -134,6 +134,14 @@ describe('main toolbar control', () => {
 });
 
 
+test('starts with the Save changes button hidden', () => {
+  const saveChangesButton = document.createElement('button');
+
+  new MainToolbarControl({ appText, saveChangesButton });
+
+  expect(saveChangesButton.hidden).toBe(true);
+});
+
 test('focuses Browse and preserves fullscreen button content when updating its label', () => {
   const browseButton = document.createElement('button');
   const fullscreenButton = document.createElement('button');

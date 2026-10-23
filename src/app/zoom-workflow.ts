@@ -31,6 +31,7 @@ export interface IZoomGrid extends IEventSource<{ openClipRequested: string }> {
   getNextClip(clipId: string | null): Clip | null;
   getPrevClip(clipId: string | null): Clip | null;
   setSelectedClipId(clipId: string): void;
+  focusClip(clipId: string): boolean;
   invalidateView(cacheKey: string): void;
   renderCollection(sequence: ClipSequence, options: { cacheKey: string }): void;
 }
@@ -107,8 +108,10 @@ export class ZoomWorkflow {
   }
 
   close(): void {
+    const shownClipId = this.zoom.zoom.getCurrentClipId();
     this.zoom.contextMenu.close({ restoreFocus: false });
     this.zoom.zoom.close();
+    if (shownClipId) this.zoom.grid.focusClip(shownClipId);
   }
 
   toggleMuted(): void {

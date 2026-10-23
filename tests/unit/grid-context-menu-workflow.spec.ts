@@ -16,7 +16,9 @@ function contextMenu({ canRefine = true, inspect }: { canRefine?: boolean; inspe
   const folderAccess = { folderPath: 'C:/clips' };
   const openFolder = new AppSessionState();
   openFolder.setCurrentFolderAccess(folderAccess);
-  const grid = Object.assign(new EventSource<{ contextMenuRequested: { point: { x: number; y: number }; clipId: string | null } }>(), {
+  const grid = Object.assign(new EventSource<{
+    contextMenuRequested: { point: { x: number; y: number }; clipId: string | null; fromKeyboard: boolean };
+  }>(), {
     getSelectedClipIds: () => [alpha.id],
   });
   const menuRequests: MenuRequest[] = [];
@@ -45,12 +47,24 @@ describe('GridContextMenuWorkflow', () => {
   it('offers Refine for a clip the original movie can be found for, and starts refinement from it', async () => {
     const { grid, menuRequests, alpha, collectionRefinement } = contextMenu();
 
-    grid.emit('contextMenuRequested', { point: { x: 5, y: 6 }, clipId: alpha.id });
+    grid.emit('contextMenuRequested', { point: { x: 5, y: 6 }, clipId: alpha.id, fromKeyboard: false });
 
     await vi.waitFor(() => expect(menuRequests).toHaveLength(1));
     expect(menuRequests[0]).toMatchObject({ point: { x: 5, y: 6 }, hasClip: true, refineAvailability: 'available', hasSelection: true });
     menuRequests[0].onRefine();
     expect(collectionRefinement.start).toHaveBeenCalledWith({ folderPath: 'C:/clips', filename: 'alpha.mp4' }, '');
+  });
+
+  it.each([
+    ['from the keyboard', true],
+    ['with the pointer', false],
+  ])('a menu opened %s puts focus on its first item only for keyboard use', async (_source, fromKeyboard) => {
+    const { grid, menuRequests, alpha } = contextMenu();
+
+    grid.emit('contextMenuRequested', { point: { x: 5, y: 6 }, clipId: alpha.id, fromKeyboard });
+
+    await vi.waitFor(() => expect(menuRequests).toHaveLength(1));
+    expect(menuRequests[0].focusFirstItem).toBe(fromKeyboard);
   });
 
   it('marks Refine as lacking source movie info for a clip without provenance', async () => {
@@ -73,7 +87,7 @@ describe('GridContextMenuWorkflow', () => {
     const { grid, menuRequests, alpha, zoom } = contextMenu();
     zoom.isOpen.mockReturnValue(true);
 
-    grid.emit('contextMenuRequested', { point: { x: 0, y: 0 }, clipId: alpha.id });
+    grid.emit('contextMenuRequested', { point: { x: 0, y: 0 }, clipId: alpha.id, fromKeyboard: false });
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(menuRequests).toEqual([]);

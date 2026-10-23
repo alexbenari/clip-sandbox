@@ -185,11 +185,11 @@ The toolbar is the application's workbench rail: a translucent Rail Navy layer w
 
 ### Collection Selector
 
-The active collection is the calm focal control. It uses Projector Blue text, a low-opacity blue border, bold `15px` type, a restrained text glow, and a compact custom chevron. On narrow layouts it expands to the rail width rather than truncating the action groups further.
+The active collection is the calm focal control. It uses Projector Blue text, a low-opacity blue border, bold `15px` type, a restrained text glow, and a compact custom chevron. On narrow layouts it expands to the rail width rather than truncating the action groups further. While the view has unsaved changes, a quiet `12px` Quiet Slate "Unsaved" label with a small Projector Blue dot sits inside the selector before the chevron, and a primary Save command appears last in the Collection command row.
 
 ### Clip Cards
 
-Clip cards are practical inset viewing frames. They use a navy vertical gradient, a faint cool border, `14px` corners, and ambient shadow. The video remains contained on black. Filenames sit over a bottom fade in small Screen Silver text; hiding titles removes only that overlay. Selection is communicated by a `3px` Projector Blue ring, while drag targeting uses a dashed blue inset border.
+Clip cards are practical inset viewing frames. They use a navy vertical gradient, a faint cool border, `14px` corners, and ambient shadow. The video remains contained on black. Filenames sit over a bottom fade in small Screen Silver text; hiding titles removes only that overlay. Selection is communicated by a `3px` Projector Blue ring, while drag targeting uses a dashed blue inset border. Keyboard focus is a separate `2px` Projector Blue outline set `5px` outside the card, shown only for keyboard focus, so it reads apart from the selection ring.
 
 ### Dialogs and Fields
 

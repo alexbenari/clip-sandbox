@@ -19,6 +19,7 @@ export class CollectionSelectorControl implements IEventSource<ICollectionSelect
   private readonly appText: Pick<AppText, 'activeCollectionText' | 'activeCollectionTabText'>;
   private readonly events = new EventSource<ICollectionSelectorEvents>();
   selectEl: HTMLSelectElement | null;
+  private readonly unsavedChangesMarker: HTMLElement | null;
   doc: Document;
   pipelineSelectionValue: string;
   defaultTitle: string;
@@ -28,9 +29,11 @@ export class CollectionSelectorControl implements IEventSource<ICollectionSelect
     appText: Pick<AppText, 'activeCollectionText' | 'activeCollectionTabText'>;
     defaultTitle?: string;
   }): CollectionSelectorControl {
+    const elements = new DocumentElements(doc);
     return new CollectionSelectorControl({
       appText,
-      selectEl: new DocumentElements(doc).required<HTMLSelectElement>('activeCollectionName'),
+      selectEl: elements.required<HTMLSelectElement>('activeCollectionName'),
+      unsavedChangesMarker: elements.required('unsavedChangesMarker'),
       doc,
       defaultTitle,
     });
@@ -39,18 +42,25 @@ export class CollectionSelectorControl implements IEventSource<ICollectionSelect
   constructor({
     appText,
     selectEl,
+    unsavedChangesMarker = null,
     doc = document,
     pipelineSelectionValue = '__pipeline__',
     defaultTitle = '',
   }: {
     appText: Pick<AppText, 'activeCollectionText' | 'activeCollectionTabText'>;
     selectEl?: HTMLSelectElement | null;
+    unsavedChangesMarker?: HTMLElement | null;
     doc?: Document;
     pipelineSelectionValue?: string;
     defaultTitle?: string;
   }) {
     this.appText = appText;
     this.selectEl = selectEl || null;
+    this.unsavedChangesMarker = unsavedChangesMarker;
+    if (this.unsavedChangesMarker) {
+      this.unsavedChangesMarker.textContent = 'Unsaved';
+      this.unsavedChangesMarker.hidden = true;
+    }
     this.doc = doc;
     this.pipelineSelectionValue = pipelineSelectionValue;
     this.defaultTitle = defaultTitle;
@@ -73,12 +83,15 @@ export class CollectionSelectorControl implements IEventSource<ICollectionSelect
     pipeline = null,
     activeCollection = null,
     currentClipSequence = null,
+    hasUnsavedChanges = false,
   }: {
     pipeline?: Pipeline | null;
     activeCollection?: Collection | null;
     currentClipSequence?: ClipSequence | null;
+    hasUnsavedChanges?: boolean;
   } = {}): void {
     if (!(this.selectEl instanceof HTMLSelectElement)) return;
+    this.renderUnsavedChanges(hasUnsavedChanges);
 
     const sequenceName = this.currentSequenceName({ currentClipSequence, activeCollection, pipeline });
     const label = this.appText.activeCollectionText(sequenceName);
@@ -111,6 +124,13 @@ export class CollectionSelectorControl implements IEventSource<ICollectionSelect
     this.selectEl.disabled = false;
     this.selectEl.value = selectedValue;
     this.selectEl.title = label || this.defaultTitle;
+  }
+
+  private renderUnsavedChanges(hasUnsavedChanges: boolean): void {
+    if (!this.unsavedChangesMarker) return;
+    this.unsavedChangesMarker.hidden = !hasUnsavedChanges;
+    if (hasUnsavedChanges) this.selectEl?.setAttribute('aria-describedby', this.unsavedChangesMarker.id);
+    else this.selectEl?.removeAttribute('aria-describedby');
   }
 
   destroy(): void {

@@ -5,6 +5,7 @@ import { DisplayLayoutRules } from './display-layout-rules.js';
 import { ClipLabelFormatter } from './clip-label-formatter.js';
 import { DocumentElements } from './document-elements.js';
 import { GridPreviewPlaybackScheduler } from './grid-preview-playback-scheduler.js';
+import { GridNavigationRules } from './grid-navigation-rules.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 
 export interface IClipGridEvents {
@@ -18,11 +19,13 @@ export interface IClipGridEvents {
     selectedClipId: string | null;
     selectedClipIds: string[];
     clipId: string | null;
+    fromKeyboard: boolean;
   }>;
   metadataFailed: Readonly<{ clip: Clip; error: unknown }>;
 }
 
 const CLIP_COLLECTION_GRID_STYLE_ID = 'clipCollectionGridStyles';
+const KEYBOARD_CONTEXT_MENU_BUTTON = -1;
 const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
 .clip-collection-grid-root{
   height: calc(100vh - 60px);
@@ -50,6 +53,8 @@ const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
   transition: height 140ms ease;
 }
 .clip-collection-grid .thumb.selected{ box-shadow: 0 0 0 3px rgba(122,162,247,.65), var(--shadow); }
+.clip-collection-grid .thumb:focus{ outline:none; }
+.clip-collection-grid .thumb:focus-visible{ outline:2px solid var(--accent); outline-offset:5px; }
 .clip-collection-grid .thumb.dragging{ opacity:.65; }
 .clip-collection-grid .thumb.drag-over::after{ content:""; position:absolute; inset:0; border:2px dashed var(--accent); border-radius:var(--radius); pointer-events:none; }
 .clip-collection-grid .thumb > video{ max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; background:black; display:block; border-radius:10px; }
@@ -191,6 +196,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   mediaSource,
   formatLabel,
   onSelect,
+  onFocus,
   onDoubleClick,
   onDragStart,
   onDragEnd,
@@ -206,6 +212,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   mediaSource: string;
   formatLabel: ClipLabelFormatterFn;
   onSelect: (card: ClipCard, event: MouseEvent) => void;
+  onFocus: (card: ClipCard) => void;
   onDoubleClick?: (card: ClipCard) => void;
   onDragStart: (card: ClipCard, event: DragEvent) => void;
   onDragEnd: (card: ClipCard) => void;
@@ -218,7 +225,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
 }): ClipCard {
   const card = doc.createElement('div');
   card.className = 'thumb';
-  card.tabIndex = 0;
+  card.tabIndex = -1;
   card.draggable = true;
   card.dataset.clipId = clip.id;
   card.dataset.name = clip.name;
@@ -254,6 +261,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   });
   vid.addEventListener('error', () => onMetadataError(card, vid, clip, metadataToken));
   card.addEventListener('click', (event) => onSelect(card, event));
+  card.addEventListener('focus', () => onFocus(card));
   card.addEventListener('dblclick', () => onDoubleClick?.(card));
   card.addEventListener('dragstart', (e) => onDragStart(card, e));
   card.addEventListener('dragend', () => onDragEnd(card));
@@ -277,6 +285,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private doc: Document;
   private currentCollection: ClipSequence | null;
   private selectedClipIds: Set<string>;
+  private focusAnchorClipId: string | null = null;
   private dragSourceCard: ClipCard | null;
   private hiddenCards: ClipCard[];
   private currentAppliedCols: number | null;
@@ -286,6 +295,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private metadataTracker: GridVideoMetadataTracker;
   private readonly coordinateWorkspaceLayout: boolean;
   private readonly previewPlayback = new GridPreviewPlaybackScheduler();
+  private readonly navigationRules = new GridNavigationRules();
   private workspaceBounds: { width: number; height: number } | null = null;
 
   constructor(options: ClipCollectionGridControlOptions = {}) {
@@ -491,9 +501,19 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   focusSelectedClip(): boolean {
     const card = this.getCardByClipId(this.getSelectedClipIds()[0]);
     if (!card) return false;
-    card.tabIndex = -1;
     card.focus({ preventScroll: true });
     return true;
+  }
+
+  focusClip(clipId: string): boolean {
+    const card = this.getCardByClipId(clipId);
+    if (!card) return false;
+    card.focus();
+    return true;
+  }
+
+  focusedClipId(): string | null {
+    return this.activeGridCard(this.doc.activeElement)?.dataset.clipId || null;
   }
 
   private allocatedHeight(): number | undefined {
@@ -789,6 +809,27 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     for (const card of this.gridCards(this.grid)) {
       card.classList.toggle('selected', this.selectedClipIds.has(card.dataset.clipId || ''));
     }
+    this.updateTabStop();
+  }
+
+  // Only one card is a Tab stop, so Tab enters and leaves the grid in one step.
+  private updateTabStop(): void {
+    const cards = this.gridCards(this.grid);
+    const stop = cards.find((card) => card.dataset.clipId === this.focusAnchorClipId)
+      ?? cards.find((card) => this.selectedClipIds.has(card.dataset.clipId || ''))
+      ?? cards[0];
+    for (const card of cards) card.tabIndex = card === stop ? 0 : -1;
+  }
+
+  private onCardFocus(card: ClipCard): void {
+    if (card.parentElement !== this.grid) return;
+    this.focusAnchorClipId = card.dataset.clipId || null;
+    this.updateTabStop();
+  }
+
+  private activeGridCard(target: EventTarget | null): ClipCard | null {
+    const card = target instanceof Element ? this.asClipCard(target) : null;
+    return card && card.parentElement === this.grid && card.classList.contains('thumb') ? card : null;
   }
 
   clearSelection(): void {
@@ -844,15 +885,22 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private onGridContextMenu(event: MouseEvent): void {
     if (!this.events.hasSubscribers('contextMenuRequested')) return;
     event.preventDefault();
+    // Chromium follows the Menu key with its own contextmenu event; the key itself already opened the menu.
+    if (event.button === KEYBOARD_CONTEXT_MENU_BUTTON) return;
     const card = event.target instanceof Element ? this.asClipCard(event.target.closest('.thumb')) : null;
+    this.requestContextMenu(card, { x: event.clientX, y: event.clientY }, false);
+  }
+
+  private requestContextMenu(card: ClipCard | null, point: { x: number; y: number }, fromKeyboard: boolean): void {
     const clipId = card?.dataset.clipId || null;
-    // So the menu acts on the clip that was right-clicked.
+    // So the menu acts on the clip it was opened for.
     if (clipId && !this.selectedClipIds.has(clipId)) this.selectOnlyCard(card);
     this.events.emit('contextMenuRequested', {
-      point: { x: event.clientX, y: event.clientY },
+      point,
       selectedClipId: this.getSelectedClipId(),
       selectedClipIds: this.getSelectedClipIds(),
       clipId,
+      fromKeyboard,
     });
   }
 
@@ -869,6 +917,39 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     this.events.emit('removeSelectedRequested', orderedSelectedClipIds);
     event.preventDefault();
     return true;
+  }
+
+  handleCardKey(event: KeyboardEvent): boolean {
+    const card = this.activeGridCard(event.target);
+    if (!card) return false;
+    if (this.navigationRules.isArrowKey(event.key) && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      const cards = this.gridCards(this.grid);
+      const index = cards.indexOf(card);
+      const target = this.navigationRules.targetIndex({
+        key: event.key, index, columns: this.currentAppliedCols ?? 1, count: cards.length,
+      });
+      if (target !== null && event.altKey) this.moveCardTo(card, target > index ? cards[target].nextSibling : cards[target]);
+      else if (target !== null) cards[target].focus();
+    } else if (event.key === ' ' && !event.altKey && !event.shiftKey) {
+      if (event.ctrlKey || event.metaKey) this.toggleCardSelection(card);
+      else this.selectOnlyCard(card);
+    } else if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+      const rect = card.getBoundingClientRect();
+      this.requestContextMenu(card, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, true);
+    } else {
+      return false;
+    }
+    event.preventDefault();
+    return true;
+  }
+
+  // Keyboard and drag-and-drop reordering share this path. Moving a card in the page takes focus from it.
+  private moveCardTo(card: ClipCard, nextSibling: Node | null): void {
+    const hadFocus = this.doc.activeElement === card;
+    this.grid.insertBefore(card, nextSibling);
+    this.events.emit('orderChanged', this.getOrderedClipIds());
+    this.recomputeLayout();
+    if (hadFocus) card.focus();
   }
 
   private onDragStart(card: ClipCard, event: DragEvent): void {
@@ -907,10 +988,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     if (!srcEl || srcEl === card || srcEl.parentElement !== this.grid) return;
     const rect = card.getBoundingClientRect();
     const before = event.clientY - rect.top < rect.height / 2;
-    if (before) this.grid.insertBefore(srcEl, card);
-    else this.grid.insertBefore(srcEl, card.nextSibling);
-    this.events.emit('orderChanged', this.getOrderedClipIds());
-    this.recomputeLayout();
+    this.moveCardTo(srcEl, before ? card : card.nextSibling);
   }
 
   private onLoadedMetadata(
@@ -983,6 +1061,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
         onMetadataError: (element, video, nextClip, token) => this.onMetadataError(element, video, nextClip, token),
         metadataToken,
         onSelect: (element, event) => this.onSelect(element, event),
+        onFocus: (element) => this.onCardFocus(element),
         onDoubleClick: (element) => this.onDoubleClick(element),
         onDragStart: (element, event) => this.onDragStart(element, event),
         onDragEnd: (element) => this.onDragEnd(element),
@@ -1019,6 +1098,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     this.invalidateAllViews();
     this.selectedClipIds = new Set();
     this.dragSourceCard = null;
+    this.focusAnchorClipId = null;
     this.activeCacheKey = null;
     this.setTitlesHidden(false);
     this.metadataTracker.reset();
