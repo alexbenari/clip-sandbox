@@ -152,7 +152,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     if (!workspace || !center) return;
     this.motionPending = true;
     workspace.dataset.moving = 'true';
-    const panelWidth = [...this.panels.values()].reduce((sum, panel) => sum + (panel.shell.root.hidden ? 0 : panel.controller.targetWidth), 0);
+    const panelWidth = [...this.panels.values()].reduce((sum, panel) => sum + panel.controller.targetWidth, 0);
     const width = Math.max(0, workspace.clientWidth - panelWidth);
     const currentCommandHeight = commandHost.getBoundingClientRect().height;
     // Measure the destination once, including command wrapping, before animating both allocations.
@@ -203,12 +203,10 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     this.elements.commandHost.replaceChildren(...(incoming.commands ? [incoming.commands] : []));
     this.elements.commandHost.hidden = incoming.commands === null;
     this.current = incoming;
-    this.mountPanelContributions(incoming);
+    this.presentPanelsFor(incoming);
     this.applyingPanelState = true;
     try {
       for (const [panelId, panel] of this.panels) {
-        // A hidden panel is not folded or opened, so it starts no animation or workspace resize.
-        if (panel.shell.root.hidden) continue;
         const folded = incoming.openPanelIdsOnEntry?.includes(panelId)
           ? false
           : this.panelStates.get(incoming.id)?.get(panelId)
@@ -261,14 +259,13 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     }
   }
 
-  // A panel with neither a contribution from the screen nor fallback content is hidden.
-  private mountPanelContributions(screen: IAppScreen): void {
+  private presentPanelsFor(screen: IAppScreen): void {
     const contributions = new Map(screen.panelContributions.map(contribution => [contribution.panelId, contribution]));
     for (const [panelId, panel] of this.panels) {
       const contribution = contributions.get(panelId);
       if (contribution) contribution.content.mount(panel.shell.contributionHost);
       else panel.shell.contributionHost.replaceChildren(...(panel.shell.fallbackContent ? [panel.shell.fallbackContent] : []));
-      panel.shell.root.hidden = !contribution && !panel.shell.fallbackContent;
+      panel.controller.setShown(contribution !== undefined || panel.shell.fallbackContent !== undefined);
     }
   }
 

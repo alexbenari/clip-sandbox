@@ -92,7 +92,7 @@ class AppSettingsStore {
       const ignoredFields = Object.keys(document).filter((field) => !SETTINGS_FIELDS.has(field));
       return ignoredFields.length === 0
         ? { ok: true, settings }
-        : { ok: true, settings, warning: this.#ignoredFieldsWarning(ignoredFields), warningKind: 'ignored-fields' };
+        : { ok: true, settings, warningKind: 'ignored-fields', ignoredFields };
     } catch (error) {
       return this.#loadWarning(`Could not load settings: ${this.#errorMessage(error)}`);
     }
@@ -142,10 +142,6 @@ class AppSettingsStore {
 
   #loadWarning(message) {
     return { ok: true, settings: cloneSettings(DEFAULT_SETTINGS), warning: message, warningKind: 'recovered-defaults' };
-  }
-
-  #ignoredFieldsWarning(fields) {
-    return `Ignored unknown settings: ${fields.join(', ')}`;
   }
 
   #errorMessage(error) {

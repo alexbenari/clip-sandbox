@@ -65,10 +65,10 @@ export class SettingsWorkflow {
       this.reportProblem(UNREADABLE_SETTINGS, {
         affected: 'Load settings', recovery: UNREADABLE_SETTINGS_RECOVERY, technicalDetails: result.error,
       });
-    } else if ('warning' in result && result.warningKind === 'ignored-fields') {
+    } else if ('warningKind' in result && result.warningKind === 'ignored-fields') {
       // Every known preference still loaded, so this is a note rather than a problem.
-      this.deps.reporter.information(result.warning);
-    } else if ('warning' in result) {
+      this.deps.reporter.information(`Ignored unknown settings: ${result.ignoredFields.join(', ')}`);
+    } else if ('warningKind' in result && result.warningKind === 'recovered-defaults') {
       this.reportProblem(UNREADABLE_SETTINGS, {
         affected: 'Load settings', recovery: UNREADABLE_SETTINGS_RECOVERY, technicalDetails: result.warning,
       });

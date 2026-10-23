@@ -21,6 +21,7 @@ export class FoldablePanelControl {
   private readonly onSettled: () => void;
   private readonly mediaQuery: MediaQueryList | null;
   private foldedState = false;
+  private shownState = true;
   private movingState = false;
   private generation = 0;
   private destroyed = false;
@@ -48,12 +49,14 @@ export class FoldablePanelControl {
     this.foldButton.addEventListener('click', this.onFoldClick);
     this.revealButton.addEventListener('click', this.onRevealClick);
     this.mediaQuery?.addEventListener('change', this.onReducedMotionChange);
+    this.setShown(true);
     this.applyPresentation(false);
   }
 
   get folded(): boolean { return this.foldedState; }
 
   get targetWidth(): number {
+    if (!this.shownState) return 0;
     const style = getComputedStyle(this.root);
     return parseFloat(style.getPropertyValue(this.foldedState ? '--panel-folded-width' : '--panel-open-width'));
   }
@@ -64,8 +67,15 @@ export class FoldablePanelControl {
     this.setFolded(false);
   }
 
+  // Hiding takes the panel and its rail out of the layout; its fold state is kept for when it is shown again.
+  setShown(shown: boolean): void {
+    this.shownState = shown;
+    this.root.hidden = !shown;
+  }
+
+  // A hidden panel is not folded or opened, so it starts no animation or workspace resize.
   setFolded(folded: boolean): void {
-    if (this.destroyed || folded === this.foldedState) return;
+    if (this.destroyed || !this.shownState || folded === this.foldedState) return;
 
     const activeInsidePanel = this.root.contains(this.root.ownerDocument.activeElement);
     this.foldedState = folded;

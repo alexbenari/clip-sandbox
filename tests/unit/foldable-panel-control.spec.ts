@@ -72,6 +72,33 @@ describe('FoldablePanelControl', () => {
     expect(f.change).toHaveBeenCalledWith(280);
   });
 
+  it('takes no width while hidden and its open width once shown again', () => {
+    const f = fixture();
+    f.root.style.setProperty('--panel-open-width', '240px');
+    f.root.style.setProperty('--panel-folded-width', '36px');
+    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
+
+    controller.setShown(false);
+    expect(f.root.hidden).toBe(true);
+    expect(controller.targetWidth).toBe(0);
+
+    controller.setShown(true);
+    expect(f.root.hidden).toBe(false);
+    expect(controller.targetWidth).toBe(240);
+  });
+
+  it('keeps its fold state and starts no workspace resize while hidden', () => {
+    const f = fixture();
+    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
+    controller.setShown(false);
+
+    controller.setFolded(true);
+
+    expect(controller.folded).toBe(false);
+    expect(f.root.classList.contains('folded')).toBe(false);
+    expect(f.change).not.toHaveBeenCalled();
+  });
+
   it('lets the latest reversal settle while ignoring stale finished animations', async () => {
     const f = fixture(); const media = mediaQuery(); vi.spyOn(window, 'matchMedia').mockReturnValue(media);
     const first = deferred(); const second = deferred();

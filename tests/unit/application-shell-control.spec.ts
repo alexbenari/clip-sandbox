@@ -297,6 +297,25 @@ describe('application shell screen ownership', () => {
     shell.destroy();
   });
 
+  it('switches to a screen that hides a folded panel without starting a workspace resize', () => {
+    const f = fixture();
+    const clips = { ...panelFixture('clips'), fallbackContent: undefined };
+    const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);
+    const boundsChanging = vi.fn();
+    const boundsSettled = vi.fn();
+    const collection = { ...f.collection, onBoundsChanging: boundsChanging, onBoundsSettled: boundsSettled } satisfies IAppScreen;
+    const extraction = { ...f.extraction, panelContributions: [{ panelId: 'clips', content: panelContentFixture() }] } satisfies IAppScreen;
+    const shell = new ApplicationShellControl({ ...f, ...workspace, panels: [clips], screens: [extraction, collection] });
+    shell.start();
+    clips.foldButton.click();
+
+    shell.activate(collection.id);
+
+    expect(boundsSettled).toHaveBeenCalledOnce();
+    expect(boundsChanging).not.toHaveBeenCalled();
+    shell.destroy();
+  });
+
   it('shows a hidden panel again, folded as its screen left it, when that screen returns', () => {
     const f = fixture();
     const clips = { ...panelFixture('clips'), fallbackContent: undefined };

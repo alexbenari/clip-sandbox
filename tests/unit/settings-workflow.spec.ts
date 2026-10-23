@@ -62,13 +62,13 @@ describe('Settings workflow and screen', () => {
     expect(port.save).toHaveBeenCalledWith(expect.objectContaining({ pipelinesRootPath: 'C:/pipelines' }));
   });
 
-  it('notes ignored saved fields in Activity without reporting an error', async () => {
+  it('notes the ignored saved field names in Activity without reporting an error', async () => {
     const { screen, workflow, port, reporter } = setup();
-    port.load.mockResolvedValueOnce({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: true, startupScreenId: 'collection' }, warning: 'Ignored unknown settings: version', warningKind: 'ignored-fields' });
+    port.load.mockResolvedValueOnce({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: true, startupScreenId: 'collection' }, warningKind: 'ignored-fields', ignoredFields: ['version', 'theme'] });
 
     await workflow.loadAtStartup();
 
-    expect(reporter.information).toHaveBeenCalledWith('Ignored unknown settings: version');
+    expect(reporter.information).toHaveBeenCalledWith('Ignored unknown settings: version, theme');
     expect(reporter.failure).not.toHaveBeenCalled();
     expect(screen.root.querySelector('#settingsStatus')?.textContent).toBe('');
   });

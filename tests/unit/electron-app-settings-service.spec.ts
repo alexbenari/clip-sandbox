@@ -15,6 +15,21 @@ describe('Electron settings boundary', () => {
     await expect(adapter.save(DEFAULT_APP_SETTINGS)).resolves.toEqual({ ok: false, error: 'Disk full' });
     expect(api.saveAppSettings).toHaveBeenCalledWith(DEFAULT_APP_SETTINGS);
   });
+  it('passes ignored saved field names through as data', async () => {
+    const { api, adapter } = setup();
+    api.loadAppSettings.mockResolvedValue({ ok: true, settings: DEFAULT_APP_SETTINGS, warningKind: 'ignored-fields', ignoredFields: ['version', 'theme'] });
+    await expect(adapter.load()).resolves.toEqual({ ok: true, settings: DEFAULT_APP_SETTINGS, warningKind: 'ignored-fields', ignoredFields: ['version', 'theme'] });
+  });
+  it.each([
+    ['missing', undefined],
+    ['plain text', 'version'],
+    ['empty', []],
+    ['not all text', ['version', 7]],
+  ])('rejects an ignored-field report whose field names are %s', async (_case, ignoredFields) => {
+    const { api, adapter } = setup();
+    api.loadAppSettings.mockResolvedValue({ ok: true, settings: DEFAULT_APP_SETTINGS, warningKind: 'ignored-fields', ignoredFields });
+    await expect(adapter.load()).resolves.toEqual({ ok: false, error: 'Invalid settings response.' });
+  });
   it('turns malformed payloads and rejected IPC into explicit failures', async () => {
     const { api, adapter } = setup();
     api.loadAppSettings.mockResolvedValue({ ok: true, settings: { singleClipAudioDefault: 'yes' } });

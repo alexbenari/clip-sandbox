@@ -51,15 +51,15 @@ describe('AppSettingsStore', () => {
     });
   });
 
-  it('derives known settings, ignores unknown fields, and reports the ignored fields', async () => {
+  it('derives known settings, ignores unknown fields, and reports the ignored field names', async () => {
     const directory = await createDirectory();
     await realFs.writeFile(path.join(directory, 'app-settings.json'), '{"pipelinesRootPath":null,"singleClipAudioDefault":true,"startupScreenId":"collection","obsoletePreference":true,"futureSettings":{"theme":"night"}}', 'utf8');
 
     await expect(new AppSettingsStore(directory).load()).resolves.toEqual({
       ok: true,
       settings: { pipelinesRootPath: null, singleClipAudioDefault: true, startupScreenId: 'collection' },
-      warning: 'Ignored unknown settings: obsoletePreference, futureSettings',
       warningKind: 'ignored-fields',
+      ignoredFields: ['obsoletePreference', 'futureSettings'],
     });
   });
 

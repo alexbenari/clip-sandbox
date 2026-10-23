@@ -21,14 +21,19 @@ export class ElectronAppSettingsService implements IAppSettingsPersistence {
       const result = raw as Record<string, unknown>;
       if (result.ok === true) {
         const settings = this.parser.parse(result.settings);
-        if (settings && result.warning === undefined) return { ok: true, settings };
-        if (settings && typeof result.warning === 'string'
-          && (result.warningKind === 'ignored-fields' || result.warningKind === 'recovered-defaults')) {
-          return { ok: true, settings, warning: result.warning, warningKind: result.warningKind };
+        if (settings && result.warningKind === undefined && result.warning === undefined) return { ok: true, settings };
+        if (settings && result.warningKind === 'ignored-fields' && this.isFieldNameList(result.ignoredFields)) {
+          return { ok: true, settings, warningKind: 'ignored-fields', ignoredFields: [...result.ignoredFields] };
+        }
+        if (settings && result.warningKind === 'recovered-defaults' && typeof result.warning === 'string') {
+          return { ok: true, settings, warningKind: 'recovered-defaults', warning: result.warning };
         }
       }
       return { ok: false, error: typeof result.error === 'string' ? result.error : 'Invalid settings response.' };
     } catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Settings are unavailable.' }; }
+  }
+  private isFieldNameList(value: unknown): value is [string, ...string[]] {
+    return Array.isArray(value) && value.length > 0 && value.every(field => typeof field === 'string');
   }
   load(): Promise<SettingsResult> { return this.readResult(() => this.api.loadAppSettings()); }
   save(settings: IAppSettings): Promise<SettingsResult> { return this.readResult(() => this.api.saveAppSettings(settings)); }
