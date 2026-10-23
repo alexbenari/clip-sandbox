@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ActivityReporter } from '../../src/app/activity-reporter.js';
+import { recordedActivityLog } from '../support/recorded-activity-log.js';
 import { AppSessionState } from '../../src/app/app-session-state.js';
 import { AppText } from '../../src/app/app-text.js';
 import { EventSource } from '../../src/app/event-source.js';
@@ -43,7 +44,8 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
   });
   const editMenu = { open: vi.fn() };
   const boundaryFeedback = { playBoundaryClank: vi.fn() };
-  const entries: { kind: string; message: string }[] = [];
+  const activityLog = recordedActivityLog();
+  const { entries } = activityLog;
   const collectionView = { applySelection: vi.fn(), activeCacheKey: () => 'pipeline', refreshSelector: vi.fn(), refreshToolbar: vi.fn() };
   const screens = new EventSource<{ screenChanged: { id: string } }>();
   const workflow = new ZoomWorkflow({
@@ -61,7 +63,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
     boundaryFeedback,
     collectionView,
     diagnostics: { logRuntimeError: vi.fn(async () => undefined) },
-    reporter: new ActivityReporter({ log: entry => { entries.push(entry); } }),
+    reporter: new ActivityReporter(activityLog),
     appText: new AppText(),
   });
   return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineWorkingCopy };

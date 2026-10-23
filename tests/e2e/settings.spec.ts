@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test, expect, _electron as electron } from '@playwright/test';
 
-import { expectNoFullScreenRequest } from './support/app.js';
+import { expectNoFullScreenRequest, openActivity } from './support/app.js';
 
 test('settings survive restart without replacing the working collection and govern new Zoom audio', async () => {
   const profile = await fsp.mkdtemp(path.join(os.tmpdir(), 'clip-settings-e2e-'));
@@ -115,7 +115,7 @@ test('unreadable settings report defaults and a failed save can be retried', asy
   }
 });
 
-test('unknown saved settings are ignored and reported in the Activity status', async () => {
+test('unknown saved settings are ignored and noted in Activity without an error', async () => {
   const profile = await fsp.mkdtemp(path.join(os.tmpdir(), 'clip-settings-unknown-'));
   await fsp.writeFile(path.join(profile, 'app-settings.json'), JSON.stringify({
     pipelinesRootPath: null,
@@ -129,10 +129,13 @@ test('unknown saved settings are ignored and reported in the Activity status', a
   try {
     const page = await app.firstWindow();
     await expect(page.locator('#appScreenSelector')).toHaveValue('collection');
+    await expect(page.locator('#activityIndicatorBtn')).toHaveAccessibleName('Activity and errors: Ready');
+    await expect(page.locator('#activityIndicatorPanel')).toBeHidden();
     await page.locator('#settingsBtn').click();
-    await expect(page.locator('#settingsStatus')).toHaveText('Some saved settings were ignored.');
     await expect(page.locator('#singleClipAudioDefault')).toBeChecked();
-    await expect(page.locator('#activityIndicatorList')).toContainText('Some saved settings were ignored.');
+    await expect(page.locator('#settingsStatus')).toHaveText('');
+    await openActivity(page);
+    await expect(page.locator('#activityIndicatorList')).toContainText('Ignored unknown settings: obsoletePreference');
   } finally {
     await app.close();
     await fsp.rm(profile, { recursive: true, force: true });

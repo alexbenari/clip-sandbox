@@ -30,7 +30,7 @@ const text = (id: string): string => document.getElementById(id)!.textContent ??
 describe('controls built from the page markup', () => {
   beforeEach(() => { document.body.innerHTML = pageBody; });
 
-  it('Save as Collection reports the entered name', () => {
+  it('Save as collection reports the entered name', () => {
     const dialog = SaveAsNewDialogControl.fromDocument(document, { nameCheck: { problemText: () => '' } });
     const confirmed = vi.fn();
     dialog.on('confirmed', confirmed);
@@ -117,7 +117,7 @@ describe('controls built from the page markup', () => {
     const activity = ActivityIndicatorControl.fromDocument(document, { logger: new ActivityLogger() });
 
     expect(activity.utilitySurface()).toMatchObject({
-      label: 'Activity and Errors',
+      label: 'Activity and errors',
       trigger: document.getElementById('activityIndicatorBtn'),
       panel: document.getElementById('activityIndicatorPanel'),
     });

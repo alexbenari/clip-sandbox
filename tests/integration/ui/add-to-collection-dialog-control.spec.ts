@@ -84,7 +84,7 @@ describe('add-to-collection dialog controller', () => {
 
     expect(dialog.showModal).toHaveBeenCalledOnce();
     expect(destinationSelect.value).toBe('__new_collection__');
-    expect(destinationSelect.options).toHaveLength(2);
+    expect([...destinationSelect.options].map(option => option.textContent)).toEqual(['subset', 'New collection…']);
     expect(nameLabel.hasAttribute('hidden')).toBe(false);
     expect(confirmBtn.disabled).toBe(true);
     expect(nameInput).toBe(document.activeElement);

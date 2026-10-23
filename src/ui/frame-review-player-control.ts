@@ -1082,7 +1082,7 @@ export class FrameReviewPlayerControl {
       ? `Frame ${this.displayedFrame.identity.frameIndex.toLocaleString()}`
       : attached ? 'Playback time' : 'Frame unavailable';
     this.emptyState.hidden = this.displayedFrame !== null;
-    if (attached) this.emptyState.textContent = 'Preparing Movie...';
+    if (attached) this.emptyState.textContent = 'Preparing movie…';
     this.busyState.hidden = !this.busy;
     this.busyState.textContent = this.busy ? this.busyMessage : '';
   }

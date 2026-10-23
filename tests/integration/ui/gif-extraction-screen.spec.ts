@@ -35,6 +35,17 @@ function snapshot(ready: boolean): IGifExtractionSessionSnapshot {
 }
 
 describe('GifExtractionScreen', () => {
+  it('labels its movie and capture commands in sentence case', () => {
+    const player = new FrameReviewPlayerControl({ document,
+      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const screen = new GifExtractionScreen({ player, keyboard: new GifWorkflowKeyboard(), document });
+    const label = (command: string, root: ParentNode = screen.root) =>
+      root.querySelector(`[data-command="${command}"]`)?.firstChild?.textContent;
+
+    expect([label('open-movie', screen.commands), label('jump-start'), label('jump-end')])
+      .toEqual(['Open movie…', 'Jump to start', 'Jump to end']);
+  });
+
   it('explains when playback will become available during saved movie reopening', () => {
     let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
     const session = {

@@ -85,7 +85,7 @@ describe('AppController Collection and Zoom workflows', () => {
     }));
   });
 
-  test('a failed move to the Recycle Bin shows the file and operating system error in More Details', async () => {
+  test('a failed move to the Recycle Bin shows the file and operating system error in More details', async () => {
     window.clipSandboxDesktop.trashFiles = vi.fn(async () => ({
       ok: false,
       code: 'partial',
@@ -110,7 +110,7 @@ describe('AppController Collection and Zoom workflows', () => {
 
     await waitFor(() => expect(document.querySelector('#activityIndicatorList li')?.textContent).toContain('Could not move the selected clips to the Recycle Bin.'));
     const details = document.querySelector('#activityIndicatorList li details');
-    expect(details?.querySelector('summary')?.textContent).toBe('More Details');
+    expect(details?.querySelector('summary')?.textContent).toBe('More details');
     expect(details?.textContent).toContain('alpha.mp4');
     expect(details?.textContent).toContain('EBUSY: resource busy or locked');
   });
@@ -296,7 +296,7 @@ describe('AppController Collection and Zoom workflows', () => {
     document.querySelector('[data-item-id="zoom-edit-loopify"]').click();
 
     await waitFor(() => {
-      expect(document.getElementById('activityIndicatorBtn').getAttribute('aria-label')).toBe('Activity and Errors: 1 unresolved error');
+      expect(document.getElementById('activityIndicatorBtn').getAttribute('aria-label')).toBe('Activity and errors: 1 unresolved error');
       expect(document.querySelector('#activityIndicatorList li').textContent).toContain('Loopify failed while generating the output clip.');
     });
     expect(document.getElementById('zoomOverlay')).not.toBeNull();

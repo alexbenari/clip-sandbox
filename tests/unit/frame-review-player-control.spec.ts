@@ -350,7 +350,7 @@ describe('FrameReviewPlayerControl', () => {
 
     expect(control.root.querySelector<HTMLInputElement>('input[type="range"]')?.value).toBe('0');
     expect(control.root.querySelector('[data-time="current"]')?.textContent).toBe('00:00:00.000');
-    expect(control.root.querySelector('.frame-review-empty')?.textContent).toBe('Preparing Movie...');
+    expect(control.root.querySelector('.frame-review-empty')?.textContent).toBe('Preparing movie…');
   });
 
   it('keeps ordinary transport usable before exact readiness while disabling exact stepping and capture', async () => {

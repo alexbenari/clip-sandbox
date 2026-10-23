@@ -31,7 +31,7 @@ test('movie scrollbar paints the chosen position while the mouse is still down',
       };
     });
     await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), movie);
-    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await page.getByRole('button', { name: 'Open movie…' }).click();
     await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
     const progress = page.locator('.frame-review-progress-row input');
     await page.getByRole('button', { name: 'Play', exact: true }).click();
@@ -68,7 +68,7 @@ test('exact draft jumps, loops, pauses to scrub, resumes, and locks with X', asy
   try {
     const page = await app.firstWindow();
     await page.evaluate(sourcePath => window.clipSandboxDesktop.__testSetNextMoviePath(sourcePath), movie);
-    await page.getByRole('button', { name: 'Open movie...' }).click();
+    await page.getByRole('button', { name: 'Open movie…' }).click();
     await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
     await seekToFrame(page, 5);
     await page.keyboard.press('q');

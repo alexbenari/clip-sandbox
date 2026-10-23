@@ -23,7 +23,6 @@ export class CollectionScreen implements IAppScreen, IEventSource<ICollectionScr
   readonly label = 'Collection';
   readonly selectorStatus = 'fixed' as const;
   readonly panelContributions: readonly IAppScreenPanelContribution[] = Object.freeze([]);
-  readonly initiallyFoldedPanelIds = ['clips'] as const;
   readonly shortcuts: readonly IShortcutDescriptor[] = [
     ...COLLECTION_SHORTCUTS,
     ...FULLSCREEN_SHORTCUTS,

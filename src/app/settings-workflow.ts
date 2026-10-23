@@ -24,7 +24,7 @@ type SettingsDependencies = Readonly<{
   view: ISettingsView;
   catalog: IPipelineCatalogReload | null;
   navigation: IScreenNavigation;
-  reporter: Pick<ActivityReporter, 'progress' | 'success' | 'failure'>;
+  reporter: Pick<ActivityReporter, 'progress' | 'success' | 'information' | 'failure'>;
 }>;
 
 const UNREADABLE_SETTINGS = 'Could not read settings. Defaults are in use.';
@@ -65,12 +65,12 @@ export class SettingsWorkflow {
       this.reportProblem(UNREADABLE_SETTINGS, {
         affected: 'Load settings', recovery: UNREADABLE_SETTINGS_RECOVERY, technicalDetails: result.error,
       });
+    } else if ('warning' in result && result.warningKind === 'ignored-fields') {
+      // Every known preference still loaded, so this is a note rather than a problem.
+      this.deps.reporter.information(result.warning);
     } else if ('warning' in result) {
-      const ignoredFields = result.warningKind === 'ignored-fields';
-      this.reportProblem(ignoredFields ? 'Some saved settings were ignored.' : UNREADABLE_SETTINGS, {
-        affected: 'Load settings',
-        recovery: ignoredFields ? 'Review your preferences and save them again.' : UNREADABLE_SETTINGS_RECOVERY,
-        technicalDetails: result.warning,
+      this.reportProblem(UNREADABLE_SETTINGS, {
+        affected: 'Load settings', recovery: UNREADABLE_SETTINGS_RECOVERY, technicalDetails: result.warning,
       });
     }
   }

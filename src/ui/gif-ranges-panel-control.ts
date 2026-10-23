@@ -164,7 +164,7 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
     const extract = this.document.createElement('button');
     extract.type = 'button';
     extract.dataset.extractAll = 'true';
-    extract.textContent = extractableCount > 0 ? `Extract All (${extractableCount})` : 'Extract All';
+    extract.textContent = extractableCount > 0 ? `Extract all (${extractableCount})` : 'Extract all';
     extract.disabled = !available || extractableCount === 0 || this.loopRunning() || batch !== null;
     extract.title = !available
       ? loading ? 'Wait for the movie and saved captures to open.' : 'Extraction is unavailable in this host.'

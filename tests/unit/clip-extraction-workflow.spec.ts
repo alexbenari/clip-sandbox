@@ -27,7 +27,7 @@ function fakes() {
 }
 
 describe('ClipExtractionWorkflow', () => {
-  it('reports Extract All boundaries and each successful clip with elapsed extraction time', async () => {
+  it('reports Extract all boundaries and each successful clip with elapsed extraction time', async () => {
     const ports = fakes();
     const activity: unknown[] = [];
     const workflow = new ClipExtractionWorkflow(ports.extractor, ports.destination,
@@ -49,7 +49,7 @@ describe('ClipExtractionWorkflow', () => {
     }
   });
 
-  it('reports a single extraction without Extract All boundaries', async () => {
+  it('reports a single extraction without Extract all boundaries', async () => {
     const ports = fakes();
     const activity: unknown[] = [];
     const workflow = new ClipExtractionWorkflow(ports.extractor, ports.destination,

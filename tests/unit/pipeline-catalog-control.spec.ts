@@ -34,4 +34,24 @@ describe('PipelineCatalogControl', () => {
     host.querySelector<HTMLButtonElement>('[aria-label="Load Sample"]')!.click();
     await vi.waitFor(() => expect(onLoadPipeline).toHaveBeenCalledWith({ id: 'pipeline_1', name: 'Sample' }));
   });
+
+  it('reports a failed load, then a later load that succeeds', async () => {
+    const host = document.createElement('div');
+    const missingRoot = new Error('ENOENT: no such folder');
+    const catalog = {
+      listPipelineCatalog: vi.fn()
+        .mockRejectedValueOnce(missingRoot)
+        .mockResolvedValueOnce({ kind: 'available' as const, entries: [] }),
+      describePipelineCatalogEntry: vi.fn(),
+    };
+    const control = new PipelineCatalogControl({ host, catalog });
+    const outcomes: string[] = [];
+    control.on('failed', () => outcomes.push('failed'));
+    control.on('loaded', () => outcomes.push('loaded'));
+
+    await control.load();
+    await control.load();
+
+    expect(outcomes).toEqual(['failed', 'loaded']);
+  });
 });

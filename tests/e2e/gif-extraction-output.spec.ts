@@ -37,7 +37,7 @@ test('extracts a movie with a space before its extension into a valid collection
     await openMovieForExactReview(page, source);
     await lockExactRange(page, 3, 5);
 
-    await page.getByRole('button', { name: 'Extract All (1)' }).click();
+    await page.getByRole('button', { name: 'Extract all (1)' }).click();
 
     await expect(page.locator('[data-range-id="range-1"]')).toContainText('Extracted as Sample Movie-001.mp4', { timeout: 90_000 });
     expect(await fs.readFile(path.join(destination, 'Sample Movie.txt'), 'utf8')).toBe('Sample Movie-001.mp4\n');
@@ -80,7 +80,7 @@ test('extracts a movie whose timestamps needed repair into a valid collection', 
     await openMovieForExactReview(page, source);
     await lockExactRange(page, 5, 15);
 
-    await page.getByRole('button', { name: 'Extract All (1)' }).click();
+    await page.getByRole('button', { name: 'Extract all (1)' }).click();
 
     await expect(page.locator('[data-range-id="range-1"]'))
       .toContainText('Extracted as timestamp-repair-source-001.mp4', { timeout: 90_000 });
@@ -107,7 +107,7 @@ test('closing right after an extraction starts leaves no temporary files or brok
     await openMovieForExactReview(page, source);
     // The whole movie gives the longest encode this fixture allows.
     await lockExactRange(page, 0, 71);
-    await page.getByRole('button', { name: 'Extract All (1)' }).click();
+    await page.getByRole('button', { name: 'Extract all (1)' }).click();
     await expect(page.locator('[data-range-id="range-1"] .gif-range-extraction')).toContainText('Encoding from the original movie');
     await closeAppWithin(app, 10_000);
 

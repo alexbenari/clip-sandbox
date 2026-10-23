@@ -1,7 +1,8 @@
 import type { ActivityErrorOptions, ActivityInput } from './activity-logger.js';
 
 export interface IActivityLog {
-  log(entry: ActivityInput): void;
+  log(entry: ActivityInput): string;
+  resolveError(id: string): void;
 }
 
 export class ActivityReporter {
@@ -15,8 +16,16 @@ export class ActivityReporter {
     this.activityLog.log({ kind: 'progress', message });
   }
 
-  failure(message: string, options?: ActivityErrorOptions): void {
-    this.activityLog.log({ kind: 'error', message, ...options });
+  information(message: string): void {
+    this.activityLog.log({ kind: 'information', message });
+  }
+
+  failure(message: string, options?: ActivityErrorOptions): string {
+    return this.activityLog.log({ kind: 'error', message, ...options });
+  }
+
+  resolveFailure(failureId: string): void {
+    this.activityLog.resolveError(failureId);
   }
 
   technicalDetailsOf(error: unknown): string {

@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { test, expect } from '@playwright/test';
 
-import { launchApp as launchElectronApp } from './support/app.js';
+import { launchApp as launchElectronApp, resizeContent } from './support/app.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesRoot = path.join(__dirname, 'fixtures');
@@ -71,6 +71,27 @@ function collectionFileLines(text) {
 async function openOrderMenu(page) {
   await page.locator('#orderMenuBtn').click();
   await expect(page.locator('#orderMenu')).toHaveAttribute('data-open', 'true');
+}
+
+const PICTURE_FILLS_CARD_ON_BLACK = { scaledUp: true, touchesCardEdges: true, keepsProportions: true, background: 'rgb(0, 0, 0)' };
+
+// The picture a contained video draws is its intrinsic size scaled to fit the element's box.
+async function firstCardPictureFit(page) {
+  return page.locator('#grid .thumb').first().evaluate(card => {
+    const video = card.querySelector('video');
+    if (!video?.videoWidth) return null;
+    const box = video.getBoundingClientRect();
+    const scale = Math.min(box.width / video.videoWidth, box.height / video.videoHeight);
+    const pictureWidth = video.videoWidth * scale;
+    const pictureHeight = video.videoHeight * scale;
+    const style = getComputedStyle(video);
+    return {
+      scaledUp: scale > 1,
+      touchesCardEdges: Math.min(card.clientWidth - pictureWidth, card.clientHeight - pictureHeight) <= 1,
+      keepsProportions: style.objectFit === 'contain',
+      background: style.backgroundColor,
+    };
+  });
 }
 
 async function openActivityPanel(page) {
@@ -243,6 +264,27 @@ test.describe('Collection workflows', () => {
     await expect(page.locator('body')).not.toHaveClass(/fs-active/);
     await expect(page.locator('#globalAppBar')).toBeVisible();
     await expect(page.locator('#screenCommandHost')).toBeVisible();
+  });
+
+  test('scales a clip smaller than its card up to fill the card on black', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('video-edit'));
+    await resizeContent(electronApp, page, 1280, 800);
+
+    await loadFolder(page, folderPath);
+
+    await expect.poll(() => firstCardPictureFit(page)).toEqual(PICTURE_FILLS_CARD_ON_BLACK);
+  });
+
+  test('scales a clip smaller than its full-screen cell up to fill the cell on black', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('video-edit'));
+    await resizeContent(electronApp, page, 1280, 800);
+    await loadFolder(page, folderPath);
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+
+    await page.keyboard.press('F');
+    await expect(page.locator('body')).toHaveClass(/fs-active/);
+
+    await expect.poll(() => firstCardPictureFit(page)).toEqual(PICTURE_FILLS_CARD_ON_BLACK);
   });
 
   test('runs Loopify end to end from zoom mode and keeps collection changes unsaved', async () => {

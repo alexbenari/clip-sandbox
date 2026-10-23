@@ -9,8 +9,8 @@ function setupDom() {
       <div id="orderMenuPanel" role="menu">
         <button id="loadOrderBtn" role="menuitem">Load</button>
         <button id="saveBtn" role="menuitem">Save</button>
-        <button id="saveAsNewBtn" role="menuitem">Save as Collection</button>
-        <button id="addToCollectionBtn" role="menuitem">Add Selected to Collection...</button>
+        <button id="saveAsNewBtn" role="menuitem">Save as collection…</button>
+        <button id="addToCollectionBtn" role="menuitem">Add selected to collection…</button>
         <div role="separator"></div>
         <button id="trashSelectedBtn" role="menuitem">Move selected to Recycle Bin…</button>
       </div>

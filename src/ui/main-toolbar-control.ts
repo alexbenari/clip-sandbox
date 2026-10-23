@@ -101,7 +101,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
   }
   setFullscreenButtonState(active: boolean): void {
     if (!this.fullscreenButton) return;
-    const label = active ? 'Exit Full Screen' : 'Full Screen';
+    const label = active ? 'Exit full screen' : 'Full screen';
     (this.fullscreenButton.querySelector('.command-label') ?? this.fullscreenButton).textContent = label;
     this.fullscreenButton.setAttribute('aria-label', label);
   }
@@ -137,7 +137,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
 
     if (this.saveAsNewBtn) {
       this.saveAsNewBtn.disabled = !hasSequence || normalizedClipCount === 0;
-      this.saveAsNewBtn.textContent = isPipelineMode ? 'Save as Collection' : 'Save Collection As...';
+      this.saveAsNewBtn.textContent = isPipelineMode ? 'Save as collection…' : 'Save collection as…';
       this.saveAsNewBtn.title = isPipelineMode
         ? 'Save the current pipeline view as a new collection file'
         : 'Save the current collection as another collection file';
@@ -153,8 +153,8 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
 
     if (this.toggleTitlesBtn) {
       const label = this.toggleTitlesBtn.querySelector('.command-label') ?? this.toggleTitlesBtn;
-      label.textContent = titlesHidden ? 'Show Titles' : 'Hide Titles';
-      this.toggleTitlesBtn.setAttribute('aria-label', titlesHidden ? 'Show Titles' : 'Hide Titles');
+      label.textContent = titlesHidden ? 'Show titles' : 'Hide titles';
+      this.toggleTitlesBtn.setAttribute('aria-label', titlesHidden ? 'Show titles' : 'Hide titles');
       this.toggleTitlesBtn.setAttribute('aria-pressed', String(titlesHidden));
     }
 

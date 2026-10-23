@@ -89,8 +89,8 @@ export class KeyboardMapControl {
   private createCloseButton(): HTMLButtonElement {
     const button = this.document.createElement('button');
     button.type = 'button';
-    button.title = 'Close Keyboard shortcuts';
-    button.setAttribute('aria-label', 'Close Keyboard shortcuts');
+    button.title = 'Close keyboard shortcuts';
+    button.setAttribute('aria-label', 'Close keyboard shortcuts');
     button.addEventListener('click', this.requestClose);
 
     const icon = this.document.createElementNS(SVG_NAMESPACE, 'svg');

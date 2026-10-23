@@ -119,13 +119,13 @@ export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEven
     if (isPipelineMode) {
       if (this.titleEl) this.titleEl.textContent = 'Save current pipeline view as a collection';
       if (this.textEl) this.textEl.textContent = 'Enter a collection name. The app will add .txt automatically.';
-      if (this.confirmBtn) this.confirmBtn.textContent = 'Save Collection';
+      if (this.confirmBtn) this.confirmBtn.textContent = 'Save collection';
       return;
     }
 
     if (this.titleEl) this.titleEl.textContent = 'Save current collection as another collection';
     if (this.textEl) this.textEl.textContent = 'Enter a collection name. The app will add .txt automatically.';
-    if (this.confirmBtn) this.confirmBtn.textContent = 'Save Collection';
+    if (this.confirmBtn) this.confirmBtn.textContent = 'Save collection';
   }
 
   open({ isPipelineMode = true }: { isPipelineMode?: boolean } = {}): void {

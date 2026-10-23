@@ -46,7 +46,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   const selector = new EventSource<{ selectionRequested: string | null }>();
   const catalog = new EventSource<{ loadRequested: IPipelineCatalogEntry }>();
   const navigation = { activate: vi.fn() };
-  const activityLog = { log: vi.fn() };
+  const activityLog = { log: vi.fn(), resolveError: vi.fn() };
   const workflow = new FolderSelectionWorkflow({
     pipelineWorkingCopy,
     openFolder,
@@ -149,7 +149,7 @@ describe('FolderSelectionWorkflow', () => {
     expect(context.folders.pickFolder).toHaveBeenCalledOnce();
   });
 
-  it('drops the waiting action when Save as Collection is cancelled', async () => {
+  it('drops the waiting action when Save as collection is cancelled', async () => {
     const context = folderWorkflow({ saveOutcome: 'cancelled' });
     await openFolder(context);
     context.makeViewDirty();

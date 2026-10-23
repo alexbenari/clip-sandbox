@@ -16,14 +16,14 @@ test('Activity retains unresolved errors, copies details, retries a real save fa
     const page = await app.firstWindow();
     await page.locator('#settingsBtn').click();
     const pill = page.locator('#activityIndicatorBtn');
-    await expect(pill).toHaveAccessibleName('Activity and Errors: 1 unresolved error');
+    await expect(pill).toHaveAccessibleName('Activity and errors: 1 unresolved error');
     const before = await page.locator('#keyboardMapBtn').boundingBox();
     // Put a real dialog in front while the filesystem save is pending.
     await page.evaluate(() => {
       document.querySelector<HTMLInputElement>('#singleClipAudioDefault')!.click();
       document.querySelector<HTMLDialogElement>('#unsavedChangesDialog')!.showModal();
     });
-    await expect(pill).toHaveAccessibleName('Activity and Errors: 2 unresolved errors');
+    await expect(pill).toHaveAccessibleName('Activity and errors: 2 unresolved errors');
     await expect(pill).toHaveText('2 errors');
     await expect(page.locator('#globalUtilityHost')).toBeHidden();
     const after = await page.locator('#keyboardMapBtn').boundingBox();
@@ -36,11 +36,11 @@ test('Activity retains unresolved errors, copies details, retries a real save fa
     const panel = page.locator('#activityIndicatorPanel');
     const history = page.getByRole('region', { name: 'Activity history' });
     await expect(panel).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'More Details', exact: true })).toHaveCount(2);
+    await expect(panel.getByRole('button', { name: 'More details', exact: true })).toHaveCount(2);
     const failedSave = page.locator('#activityIndicatorList > li').filter({ hasText: 'Settings were not saved' });
-    await failedSave.getByRole('button', { name: 'More Details', exact: true }).focus();
+    await failedSave.getByRole('button', { name: 'More details', exact: true }).focus();
     await page.keyboard.press('Space');
-    await expect(failedSave.getByRole('button', { name: 'More Details', exact: true })).toHaveAttribute('aria-expanded', 'true');
+    await expect(failedSave.getByRole('button', { name: 'More details', exact: true })).toHaveAttribute('aria-expanded', 'true');
     await expect(failedSave.locator('pre')).toBeVisible();
     await page.keyboard.press('ArrowDown');
     await expect(failedSave.locator('summary')).toBeFocused();
@@ -55,7 +55,7 @@ test('Activity retains unresolved errors, copies details, retries a real save fa
     await fs.rmdir(settingsPath);
     await failedSave.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect(failedSave).toContainText('Resolved');
-    await expect(pill).toHaveAccessibleName('Activity and Errors: 1 unresolved error');
+    await expect(pill).toHaveAccessibleName('Activity and errors: 1 unresolved error');
     await expect(page.locator('#singleClipAudioDefault')).toBeChecked();
     await page.getByRole('button', { name: 'Clear history', exact: true }).click();
     await expect(page.locator('#activityIndicatorList > li')).toHaveCount(1);
@@ -101,7 +101,7 @@ test('Activity retains unresolved errors, copies details, retries a real save fa
     await expect(rows).toHaveCount(1);
     await rows.getByRole('button', { name: 'Clear error', exact: true }).click();
     await expect(rows).toHaveCount(0);
-    await expect(pill).toHaveAccessibleName('Activity and Errors: Ready');
+    await expect(pill).toHaveAccessibleName('Activity and errors: Ready');
     await page.keyboard.press('Escape');
     await expect(page.locator('#activityIndicatorBtn')).toBeFocused();
   } finally {

@@ -47,7 +47,7 @@ test('refines an extracted collection clip from its original movie and adds a ne
     const page = await app.firstWindow();
     await openMovieForExactReview(page, source);
     await lockExactRange(page, 3, 5);
-    await page.getByRole('button', { name: 'Extract All (1)' }).click();
+    await page.getByRole('button', { name: 'Extract all (1)' }).click();
     await expect(page.locator('[data-range-id="range-1"]')).toContainText('Extracted as source-001.mp4', { timeout: 90_000 });
     const captureDirectory = path.join(profile, 'clip-captures');
     const captureFilename = (await fs.readdir(captureDirectory)).find(name => name.endsWith('.json'));

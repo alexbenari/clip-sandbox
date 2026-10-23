@@ -8,6 +8,7 @@ colors:
   quiet-slate: "#94a3b8"
   projector-blue: "#7aa2f7"
   warning-red: "#ef4444"
+  warning-red-text: "#f87171"
   ready-green: "#22c55e"
 typography:
   body:
@@ -107,7 +108,8 @@ The palette evokes a dark screening booth: nearly black room surfaces, cool navy
 ### Status
 
 - **Ready Green** (`#22c55e`): progress and success state on the compact activity indicator, and the lock icon of a locked capture range.
-- **Warning Red** (`#ef4444`): destructive actions, errors, and missing-entry conflicts.
+- **Warning Red** (`#ef4444`): destructive actions, errors, and missing-entry conflicts, as fills and borders.
+- **Warning Red text** (`#f87171`): the destructive-text variant for red words on dark surfaces, such as destructive menu commands and failed-extraction lines; it reaches at least 4.5:1 on the lightest menu-row surface where Warning Red does not.
 
 ### Named Rules
 
@@ -189,23 +191,23 @@ The active collection is the calm focal control. It uses Projector Blue text, a 
 
 ### Clip Cards
 
-Clip cards are practical inset viewing frames. They use a navy vertical gradient, a faint cool border, `14px` corners, and ambient shadow. The video remains contained on black. Filenames sit over a bottom fade in small Screen Silver text; hiding titles removes only that overlay. Selection is communicated by a `3px` Projector Blue ring, while drag targeting uses a dashed blue inset border. Keyboard focus is a separate `2px` Projector Blue outline set `5px` outside the card, shown only for keyboard focus, so it reads apart from the selection ring.
+Clip cards are practical inset viewing frames. They use a navy vertical gradient, a faint cool border, `14px` corners, and ambient shadow. The video scales up or down to fill the card, contained on true black, so a source smaller than its card letterboxes in black instead of floating inside the navy frame; the same holds in Collection full screen. Filenames sit over a bottom fade in small Screen Silver text; hiding titles removes only that overlay. Selection is communicated by a `3px` Projector Blue ring, while drag targeting uses a dashed blue inset border. Keyboard focus is a separate `2px` Projector Blue outline set `5px` outside the card, shown only for keyboard focus, so it reads apart from the selection ring.
 
 ### Dialogs and Fields
 
-Dialogs use near-opaque Rail Navy, `16px` corners, a low-opacity blue or red border according to intent, and a dimmed blurred backdrop. Text fields and selects use a darker inset surface, `10px` corners, a subtle slate border, inherited type, and full available width. Destructive dialogs preserve the same shape language and change semantic color rather than adopting a separate visual style.
+Dialogs use near-opaque Rail Navy, `16px` corners, a low-opacity blue or red border according to intent, and a dimmed blurred backdrop. Text fields and selects use a darker inset surface, `10px` corners, a subtle slate border, inherited type, and full available width. Placeholder text is Quiet Slate at full strength. Destructive dialogs preserve the same shape language and change semantic color rather than adopting a separate visual style.
 
 ### Context Menus
 
-Context menus are compact floating utilities with `12px` outer corners, `8px` padding, a near-opaque booth-dark surface, and the Floating Utility shadow. Menu rows have `8px` corners, left-aligned text, optional `16px` inline SVG icons, and the standard secondary-button gradient without their own shadow. A destructive command sits last, below a one-pixel slate divider, in Warning Red text with a 1.6px-stroke trash icon; the same rule applies to the toolbar Actions menu. A disabled row that has a reason shows it as a second line in `12px` Quiet Slate at full strength, so it reads without hovering while the label stays dimmed.
+Context menus are compact floating utilities with `12px` outer corners, `8px` padding, a near-opaque booth-dark surface, and the Floating Utility shadow. Menu rows have `8px` corners, left-aligned text, optional `16px` inline SVG icons, and the standard secondary-button gradient without their own shadow. A destructive command sits last, below a one-pixel slate divider, in Warning Red text (`#f87171`) with a 1.6px-stroke trash icon; the same rule applies to the toolbar Actions menu. A disabled row that has a reason shows it as a second line in `12px` Quiet Slate at full strength, so it reads without hovering while the label stays dimmed.
 
 ### Activity Indicator
 
-Activity is a compact, labeled status control with a 34px pointer target and stable minimum width. The dot and text communicate Ready, Working, or the unresolved-error count; the accessible name and tooltip carry the same meaning. Only the progress dot pulses. Errors take precedence and remain discoverable when auto-opening would interrupt protected focus.
+Activity is a compact, labeled status control with a 34px pointer target and stable minimum width. The dot and text communicate Ready, Working, or the unresolved-error count; the accessible name and tooltip carry the same meaning. Only the progress dot pulses. Errors take precedence and remain discoverable when auto-opening would interrupt protected focus. Notes, such as ignored unknown settings, appear only in the history: they neither count as errors nor open the panel.
 
 ### Movie Review Player
 
-GIF Extraction and Refine Gif share one player. Its picture is a true-black `16:9` frame, capped at `1100px` wide, that shrinks to the height left over after the transport, the capture row and, on Refine Gif, the whole two-endpoint workbench, so these stay in the first viewport down to a `900 × 700` window with the Clips panel open. The capture row and workbench actions wrap rather than clip. The player's Projector Blue focus ring appears only for keyboard focus and hides after a click on the picture until the next key. Refine Gif states its next step once, in the workbench; its command bar carries only Back, the range identity and its movie, and Cancel extraction while a batch runs. In the Clips panel, exact ranges have no colored border; a locked range shows only a Ready Green lock icon, and extraction results read in Quiet Slate.
+GIF Extraction and Refine Gif share one player. Its picture is a true-black `16:9` frame, capped at `1100px` wide, that shrinks to the height left over after the transport, the capture row and, on Refine Gif, the whole two-endpoint workbench, so these stay in the first viewport down to a `900 × 700` window with the Clips panel open. The capture row and workbench actions wrap rather than clip. The player's Projector Blue focus ring appears only for keyboard focus and hides after a click on the picture until the next key. Refine Gif states its next step once, in the workbench; its command bar carries only Back, the range identity and its movie, and Cancel extraction while a batch runs. In the Clips panel, Projector Blue marks only the selected range: exact ranges have no colored border, inexact ranges a dashed Quiet Slate border beside their inexact label, a locked range a Ready Green lock icon and an unlocked one a Quiet Slate lock, and extraction results read in Quiet Slate.
 
 ### Scrollbars
 
@@ -236,4 +238,4 @@ Zoom is a centered, media-only viewing surface constrained to roughly two-thirds
 
 ### Application shell refinement
 
-The global bar orders Activity, a separator, then the adjacent keyboard and Settings icon controls, followed by native-caption separation. Local 1.6px-stroke SVG icons use currentColor. Handled surfaces use `#141f30` and inset surfaces `#0c131f` as restrained Rail Navy tonal layers, with `rgba(148,163,184,.2)` borders. Utility headers include explicit Close controls. Keyboard group headings distinguish Grid, Zoom, Fullscreen and Global; keycaps remain static. The Settings surface contains only the two implemented preferences, with a 22px local title and left-to-right filesystem field. Small keycaps use a 6px radius within the 14px utility surface.
+The global bar orders Activity, a separator, then the adjacent keyboard and Settings icon controls, followed by native-caption separation. Local 1.6px-stroke SVG icons use currentColor. Handled surfaces use `#141f30` and inset surfaces `#0c131f` as restrained Rail Navy tonal layers, with `rgba(148,163,184,.2)` borders. Utility headers include explicit Close controls. A side panel with nothing for the active screen is removed together with its rail, and the workspace takes its width: the Clips panel appears only on the GIF screens. Pipelines tree group headings use the Supporting Label style in Quiet Slate. Keyboard group headings distinguish Grid, Zoom, Fullscreen and Global; keycaps remain static. The Settings surface contains only the two implemented preferences, with a 22px local title and left-to-right filesystem field. Small keycaps use a 6px radius within the 14px utility surface.

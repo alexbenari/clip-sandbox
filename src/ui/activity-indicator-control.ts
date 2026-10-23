@@ -132,7 +132,7 @@ export class ActivityIndicatorControl {
 
   utilitySurface(): Omit<GlobalUtility, 'id'> | null {
     if (!this.button || !this.panel) return null;
-    return { label: 'Activity and Errors', trigger: this.button, panel: this.panel, focusInitial: () => this.focusInitial() };
+    return { label: 'Activity and errors', trigger: this.button, panel: this.panel, focusInitial: () => this.focusInitial() };
   }
 
   destroy(): void {
@@ -198,7 +198,7 @@ export class ActivityIndicatorControl {
     const accessibleStatus = unresolvedErrorCount > 0
       ? `${unresolvedErrorCount} unresolved error${unresolvedErrorCount === 1 ? '' : 's'}`
       : state === 'progress' ? 'Working' : 'Ready';
-    const semanticName = `Activity and Errors: ${accessibleStatus}`;
+    const semanticName = `Activity and errors: ${accessibleStatus}`;
 
     this.button.dataset.state = renderedState;
     this.button.setAttribute('aria-label', semanticName);
@@ -270,7 +270,7 @@ export class ActivityIndicatorControl {
     const details = this.doc.createElement('details');
     details.className = 'activity-indicator-details';
     const summary = this.doc.createElement('summary');
-    summary.textContent = 'More Details';
+    summary.textContent = 'More details';
     summary.setAttribute('role', 'button');
     summary.setAttribute('aria-expanded', 'false');
     details.append(summary);

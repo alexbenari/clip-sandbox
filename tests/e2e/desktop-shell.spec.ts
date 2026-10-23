@@ -50,10 +50,9 @@ for (const nativeFrame of [false, true]) {
       await expect.poll(() => page.locator('#appScreenSelector').inputValue()).toBe('gif-extraction');
       await expect(page.locator('#appScreenSelector')).toHaveAccessibleName('Workspace');
       await page.locator('#appScreenSelector').selectOption('collection');
-      await page.locator('#revealClips').click();
-      await expect(page.locator('#workspaceRow')).toHaveAttribute('data-moving', 'false');
+      await expect(page.locator('#clipsPanel')).toBeHidden();
       expect(await page.locator('#globalAppBar button:visible').evaluateAll(nodes => nodes.map(node => node.id))).toEqual(['activityIndicatorBtn', 'keyboardMapBtn', 'settingsBtn']);
-      await expect(page.locator('#activityIndicatorBtn')).toHaveAccessibleName('Activity and Errors: Ready');
+      await expect(page.locator('#activityIndicatorBtn')).toHaveAccessibleName('Activity and errors: Ready');
       expect((await readOverlay()).visible).toBe(process.platform === 'win32' && !nativeFrame);
       await expectAppBarFits(1440, 900);
       expect(Math.abs(centerX(await boxOf('#activeCollectionName')) - centerX(await boxOf('#toolbar')))).toBeLessThanOrEqual(5);
@@ -76,7 +75,6 @@ for (const nativeFrame of [false, true]) {
       expect(unsettled, 'screens that did not settle after a rapid switch').toEqual([]);
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.locator('#foldPipelines').click();
-      await page.locator('#foldClips').click();
       await expect(page.locator('#workspaceRow')).toHaveAttribute('data-moving', 'false');
       expect(await page.locator('.side-panel').evaluateAll(nodes => nodes.every(node => node.getAnimations().length === 0))).toBe(true);
       await page.locator('#keyboardMapBtn').click();
@@ -93,7 +91,6 @@ for (const nativeFrame of [false, true]) {
       await expect(page.locator('#fsBtn svg')).toHaveCount(1);
       for (const panelsOpen of [true, false]) {
         await page.locator(panelsOpen ? '#revealPipelines' : '#foldPipelines').click();
-        await page.locator(panelsOpen ? '#revealClips' : '#foldClips').click();
         for (const width of [1440, 1200, 1000, 800]) {
           await resizeContent(app, page, width, 900);
           const dropdown = await boxOf('#activeCollectionName');
@@ -104,7 +101,7 @@ for (const nativeFrame of [false, true]) {
         }
       }
       await expect(page.locator('#revealPipelines')).toBeVisible();
-      await expect(page.locator('#revealClips')).toBeVisible();
+      await expect(page.locator('#clipsPanel')).toBeHidden();
       await expect(page.locator('#globalUtilityHost')).toBeHidden();
       await expect(page.locator('#activityIndicatorBtn')).toHaveAttribute('aria-expanded', 'false');
       await page.locator('#keyboardMapBtn').click();

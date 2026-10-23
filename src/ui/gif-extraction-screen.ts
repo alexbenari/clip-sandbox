@@ -71,7 +71,7 @@ export class GifExtractionScreen implements IAppScreen {
     this.commands.className = 'gif-workflow-command-bar';
     this.commands.setAttribute('aria-label', 'GIF Extraction commands');
     this.commands.innerHTML = `
-      <button type="button" class="btn-primary" data-command="open-movie">Open movie...</button>
+      <button type="button" class="btn-primary" data-command="open-movie">Open movie…</button>
       <div class="gif-workflow-source">
         <strong>GIF Extraction</strong>
         <span>No movie open</span>
@@ -87,8 +87,8 @@ export class GifExtractionScreen implements IAppScreen {
       <div class="gif-capture-controls" aria-label="Range capture controls">
         <button type="button" data-command="mark-start" disabled><span>Start</span><kbd>Q</kbd></button>
         <button type="button" data-command="mark-end" disabled><span>End</span><kbd>W</kbd></button>
-        <button type="button" data-command="jump-start" disabled><span>Jump to Start</span><kbd>A</kbd></button>
-        <button type="button" data-command="jump-end" disabled><span>Jump to End</span><kbd>S</kbd></button>
+        <button type="button" data-command="jump-start" disabled><span>Jump to start</span><kbd>A</kbd></button>
+        <button type="button" data-command="jump-end" disabled><span>Jump to end</span><kbd>S</kbd></button>
         <button type="button" data-command="loop-range" disabled><span>Loop preview</span><kbd>Z</kbd></button>
         <button type="button" class="gif-lock-range" data-command="lock-range" disabled><span>Lock range</span><kbd>X</kbd></button>
       </div>

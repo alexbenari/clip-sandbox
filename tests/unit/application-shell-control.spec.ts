@@ -273,6 +273,48 @@ describe('application shell screen ownership', () => {
     shell.destroy();
   });
 
+  it('hides a panel with nothing to show on the active screen and gives its width to the workspace', () => {
+    const f = fixture();
+    const clips = { ...panelFixture('clips'), fallbackContent: undefined };
+    const pipelines = panelFixture('pipelines');
+    const workspace = workspaceFixture(f.commandHost, f.screenHost, pipelines);
+    workspace.workspace.append(clips.root);
+    const boundsChanging = vi.fn();
+    const collection = { ...f.collection, onBoundsChanging: boundsChanging } satisfies IAppScreen;
+    const extraction = { ...f.extraction, panelContributions: [{ panelId: 'clips', content: panelContentFixture() }] } satisfies IAppScreen;
+    const shell = new ApplicationShellControl({ ...f, ...workspace, panels: [pipelines, clips], screens: [extraction, collection] });
+    shell.start();
+    expect(clips.root.hidden).toBe(false);
+
+    shell.activate(collection.id);
+    expect(clips.root.hidden).toBe(true);
+    expect(pipelines.root.hidden).toBe(false);
+    pipelines.foldButton.click();
+    expect(boundsChanging).toHaveBeenLastCalledWith(1200 - 36, 240);
+
+    shell.activate(extraction.id);
+    expect(clips.root.hidden).toBe(false);
+    shell.destroy();
+  });
+
+  it('restores a hidden panel as its screen left it when that screen returns', () => {
+    const f = fixture();
+    const clips = { ...panelFixture('clips'), fallbackContent: undefined };
+    const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);
+    const extraction = { ...f.extraction, panelContributions: [{ panelId: 'clips', content: panelContentFixture() }] } satisfies IAppScreen;
+    const shell = new ApplicationShellControl({ ...f, ...workspace, panels: [clips], screens: [extraction, f.collection, f.settings] });
+    shell.start();
+    clips.foldButton.click();
+
+    shell.activate(f.collection.id);
+    shell.activate(f.settings.id);
+    shell.activate(extraction.id);
+
+    expect(clips.root.hidden).toBe(false);
+    expect(clips.root.classList.contains('folded')).toBe(true);
+    shell.destroy();
+  });
+
   it('supports contextual Refine Gif with deterministic lifecycle and a temporary label', () => {
     const f = fixture();
     const clips = panelFixture('clips');

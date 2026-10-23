@@ -12,6 +12,7 @@
       --muted:#94a3b8;
       --accent:#7aa2f7;
       --danger:#ef4444;
+      --danger-text:#f87171;
       --gap:10px;
       --radius:14px;
       --shadow: 0 8px 24px rgba(0,0,0,.35);
@@ -135,7 +136,7 @@
     .order-menu-panel button:disabled{ opacity:.5; }
     .order-menu-panel button{ white-space:nowrap; }
     .order-menu-separator{ flex:none; height:1px; margin:2px 4px; background:var(--line); }
-    .order-menu-panel .menu-item-destructive{ display:flex; align-items:center; gap:8px; color:var(--danger); }
+    .order-menu-panel .menu-item-destructive{ display:flex; align-items:center; gap:8px; color:var(--danger-text); }
     .menu-item-icon{ width:16px; height:16px; flex:none; pointer-events:none; }
     .order-menu[data-open="true"] .order-menu-panel{
       max-height:260px;
@@ -358,7 +359,7 @@
     .keyboard-shortcuts dt{ font-size:13px; line-height:1.4; }
     .keyboard-shortcuts dd{ margin:0; }
     .keyboard-keys{ display:flex; align-items:center; gap:4px; flex-shrink:0; }
-    .keyboard-keys kbd{ display:inline-block; min-width:25px; padding:3px 6px; border:1px solid #475569; border-radius:5px; background:#172238; color:#e5e7eb; font:12px ui-monospace, monospace; text-align:center; }
+    .keyboard-keys kbd{ display:inline-block; min-width:25px; padding:3px 6px; border:1px solid var(--line); border-radius:6px; background:var(--surface-inset); color:#e5e7eb; font:12px ui-monospace, monospace; text-align:center; }
     #appScreenSwitcher{ display:flex; align-items:center; gap:8px; margin-inline:auto; }
     #globalAppBar > .spacer{ display:none; }
     #appScreenSwitcher > span{ color:var(--muted); font-size:12px; font-weight:600; white-space:nowrap; }
@@ -390,7 +391,7 @@
     .pipeline-tree-expand[aria-expanded="true"] .pipeline-tree-disclosure::before,.pipeline-tree-collection[aria-expanded="true"] .pipeline-tree-disclosure::before{ transform:rotate(45deg); top:2px; }
     .pipeline-tree-details{ padding:6px 0 2px 19px; }
     .pipeline-tree-content{ display:grid; gap:10px; }
-    .pipeline-tree-group h3{ margin:0 0 4px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+    .pipeline-tree-group h3{ margin:0 0 4px; color:var(--muted); font-size:12px; font-weight:400; }
     .pipeline-tree-group ul{ margin:0; padding:0; list-style:none; }
     .pipeline-tree-collection{ width:100%; display:flex; align-items:center; gap:7px; color:#dbeafe; font-size:13px; font-weight:600; }
     .pipeline-tree-clip-list{ display:grid; gap:2px; padding-left:19px !important; }
@@ -405,11 +406,11 @@
     #screenCommandHost{ flex-shrink:0; container-type:inline-size; }
     #mainScreenHost{ flex:1; min-height:0; }
     #settingsScreen{ height:100%; overflow:auto; padding:24px; }
-    #settingsScreen h1{ font-size:24px; margin:0 0 8px; }
     #settingsScreen p{ color:var(--muted); line-height:1.5; }
     .settings-field{ max-width:780px; margin-top:28px; }
     .settings-field > label{ display:block; font-weight:600; margin-bottom:10px; }
     .settings-folder{ display:flex; gap:10px; flex-wrap:wrap; }
+    input::placeholder{ color:var(--muted); opacity:1; }
     .settings-folder input{ min-width:180px; flex:1; padding:10px 12px; border:1px solid #334155; border-radius:8px; background:var(--panel); color:var(--fg); font:inherit; }
     .settings-field > .settings-switch{ display:flex; align-items:center; gap:12px; cursor:pointer; }
     .settings-switch input{ appearance:none; position:relative; width:38px; height:22px; margin:0; flex:none; border:1px solid #64748b; border-radius:12px; background:#334155; cursor:pointer; }
@@ -530,7 +531,7 @@
     .gif-range-list{ display:flex; flex-direction:column; gap:9px; margin-top:11px; }
     .gif-range-card{ position:relative; display:flex; flex-direction:column; gap:7px; padding:6px; border:1px solid transparent; border-radius:10px; background:var(--surface-inset); cursor:pointer; }
     .gif-range-card.is-draft{ cursor:default; opacity:.82; }
-    .gif-range-card.is-inexact{ border-style:dashed; border-color:var(--accent); }
+    .gif-range-card.is-inexact{ border-style:dashed; border-color:rgba(148,163,184,.45); }
     .gif-range-card.is-selected{ outline:2px solid var(--accent); outline-offset:1px; }
     .gif-range-thumbnail{ position:relative; aspect-ratio:16/9; align-self:stretch; display:grid; place-items:center; overflow:hidden; border-radius:8px; background:#03060a; color:var(--muted); font-size:12px; text-align:center; }
     .gif-range-thumbnail img{ width:100%; height:100%; object-fit:cover; }
@@ -538,7 +539,7 @@
     .gif-range-thumbnail button{ width:100%; height:100%; padding:4px; border:0; border-radius:0; background:transparent; color:var(--muted); font-size:12px; box-shadow:none; }
     .gif-range-lock{ position:absolute; top:12px; left:12px; width:28px; height:28px; display:grid; place-items:center; border:1px solid rgba(148,163,184,.3); border-radius:8px; background:rgba(3,6,10,.82); box-shadow:0 3px 10px rgba(0,0,0,.28); }
     .gif-range-lock.is-locked{ color:var(--ready); }
-    .gif-range-lock.is-unlocked{ color:var(--accent); }
+    .gif-range-lock.is-unlocked{ color:var(--muted); }
     .gif-range-lock svg{ width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
     .gif-range-remove{ position:absolute; top:12px; right:12px; width:28px; height:28px; min-height:0; padding:0; display:grid; place-items:center; border:1px solid rgba(148,163,184,.3); border-radius:8px; background:rgba(3,6,10,.82); color:var(--muted); box-shadow:0 3px 10px rgba(0,0,0,.28); }
     .gif-range-remove:hover:not(:disabled),.gif-range-remove:focus-visible{ color:var(--fg); border-color:var(--fg); }
@@ -549,7 +550,7 @@
     .gif-range-actions{ display:flex; justify-content:flex-end; gap:4px; }
     .gif-range-actions button{ min-height:28px; padding:5px 8px; font-size:12px; box-shadow:none; }
     .gif-range-extraction{ grid-column:1 / -1; margin:0; color:var(--muted); font-size:12px; line-height:1.35; }
-    .gif-range-extraction.is-failed,.gif-range-extraction.is-publication-failed{ color:var(--danger); }
+    .gif-range-extraction.is-failed,.gif-range-extraction.is-publication-failed{ color:var(--danger-text); }
     .gif-ranges-empty{ margin:18px 2px; color:var(--muted); font-size:13px; line-height:1.55; }
     .gif-ranges-loading{ margin:18px 2px; color:var(--fg); font-size:13px; line-height:1.55; }
     .fs-active #globalAppBar, .fs-active #screenCommandHost, .fs-active .side-panel, .fs-active #globalUtilityHost{ display:none; }
@@ -620,7 +621,6 @@
     .keyboard-context{ font-size:14px; border-color:var(--line); }
     .keyboard-shortcuts > div{ gap:12px; padding:7px 0; }
     .keyboard-keys{ flex-wrap:wrap; justify-content:flex-end; }
-    .keyboard-keys kbd{ background:var(--surface-inset); border-color:var(--line); border-radius:6px; }
     #activityIndicatorPanel .activity-indicator-entry{ padding:12px; background:var(--surface-inset); line-height:1.5; }
     #activityIndicatorPanel .activity-indicator-entry button{ border:1px solid var(--line); background:var(--surface-raised); box-shadow:none; }
     #settingsScreen{ padding:24px; }
@@ -669,9 +669,9 @@
     </label>
     <div class="spacer"></div>
     <div id="activityIndicatorRoot">
-      <button id="activityIndicatorBtn" type="button" title="Activity and Errors: Ready" aria-label="Activity and Errors: Ready" aria-expanded="false" aria-controls="activityIndicatorPanel"><span class="activity-status-dot" aria-hidden="true"></span><span class="activity-status-label">Ready</span></button>
-      <section id="activityIndicatorPanel" tabindex="-1" aria-label="Activity and Errors" hidden>
-        <div class="utility-header"><h2>Activity and Errors</h2><button type="button" data-utility-close aria-label="Close Activity and Errors" title="Close Activity and Errors"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+      <button id="activityIndicatorBtn" type="button" title="Activity and errors: Ready" aria-label="Activity and errors: Ready" aria-expanded="false" aria-controls="activityIndicatorPanel"><span class="activity-status-dot" aria-hidden="true"></span><span class="activity-status-label">Ready</span></button>
+      <section id="activityIndicatorPanel" tabindex="-1" aria-label="Activity and errors" hidden>
+        <div class="utility-header"><h2>Activity and errors</h2><button type="button" data-utility-close aria-label="Close Activity and errors" title="Close Activity and errors"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
         <ul id="activityIndicatorList"></ul>
       </section>
     </div>
@@ -686,26 +686,26 @@
     <aside id="pipelinesPanel" class="side-panel" aria-label="Pipelines" data-shell-panel="pipelines">
       <div id="pipelinesPanelContent" class="panel-content" data-shell-panel-content>
         <header class="panel-heading"><h2>Pipelines</h2><button id="foldPipelines" data-shell-panel-fold type="button" aria-label="Fold Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button></header>
-        <div id="pipelinesPanelMount" data-shell-panel-contributions><div id="pipelinesPanelHost" data-shell-panel-fallback><p id="pipelinesPanelFallback" class="panel-empty">Pipeline browsing will appear here. Use Browse Folder to open a pipeline.</p></div></div>
+        <div id="pipelinesPanelMount" data-shell-panel-contributions><div id="pipelinesPanelHost" data-shell-panel-fallback><p id="pipelinesPanelFallback" class="panel-empty">Pipeline browsing will appear here. Use Browse folder to open a pipeline.</p></div></div>
       </div>
       <button id="revealPipelines" class="panel-reveal" data-shell-panel-reveal type="button" aria-label="Show Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5h7l2 3h9v12H3V7Z"/></svg><span class="rail-label">Pipelines</span><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button>
     </aside>
     <div id="centralWorkspace">
     <div id="screenCommandHost">
   <header class="toolbar" id="toolbar">
-    <button id="pickBtn" class="btn-primary"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5h7l2 3h9v12H3V7Z"/></svg><span>Browse Folder…</span></button>
+    <button id="pickBtn" class="btn-primary"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5h7l2 3h9v12H3V7Z"/></svg><span>Browse folder…</span></button>
     <div class="order-menu" id="orderMenu" data-open="false">
       <button id="orderMenuBtn" aria-label="Actions" title="Actions" aria-haspopup="menu" aria-expanded="false" aria-controls="orderMenuPanel"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Actions</span></button>
       <div class="order-menu-panel" id="orderMenuPanel" role="menu" aria-label="View actions">
         <button id="saveBtn" role="menuitem" title="Save the active collection file in the current pipeline folder" disabled>Save</button>
-        <button id="saveAsNewBtn" role="menuitem" title="Save the current sequence as a collection file" disabled>Save as Collection</button>
-        <button id="addToCollectionBtn" role="menuitem" title="Add the current selected clips to another collection" disabled>Add Selected to Collection...</button>
+        <button id="saveAsNewBtn" role="menuitem" title="Save the current sequence as a collection file" disabled>Save as collection…</button>
+        <button id="addToCollectionBtn" role="menuitem" title="Add the current selected clips to another collection" disabled>Add selected to collection…</button>
         <div class="order-menu-separator" role="separator"></div>
         <button id="trashSelectedBtn" class="menu-item-destructive" role="menuitem" title="Move the selected clips to the Recycle Bin" disabled><svg class="menu-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span>Move selected to Recycle Bin…</span></button>
       </div>
     </div>
-    <button id="toggleTitlesBtn" title="Hide or show clip titles"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16M12 5v14M8 19h8"/></svg><span class="command-label">Hide Titles</span></button>
-    <button id="fsBtn" aria-label="Full Screen" title="Full screen (hides titles)"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span class="command-label">Full Screen</span></button>
+    <button id="toggleTitlesBtn" title="Hide or show clip titles"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16M12 5v14M8 19h8"/></svg><span class="command-label">Hide titles</span></button>
+    <button id="fsBtn" aria-label="Full screen" title="Full screen (hides titles)"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span class="command-label">Full screen</span></button>
     <button id="saveChangesBtn" class="btn-primary" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5V4Z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg><span class="command-label">Save</span></button>
     <div class="active-collection">
       <select class="active-collection-name" id="activeCollectionName" aria-label="Active pipeline view or collection" disabled>
@@ -726,7 +726,7 @@
     <p id="collectionConflictSummary"></p>
     <pre id="collectionConflictList"></pre>
     <div class="collection-conflict-actions">
-      <button id="applyCollectionConflictBtn" type="button">Display Existing Clips Only</button>
+      <button id="applyCollectionConflictBtn" type="button">Display existing clips only</button>
       <button id="cancelCollectionConflictBtn" type="button">Cancel</button>
     </div>
   </section>
@@ -740,7 +740,7 @@
     </label>
     <div class="save-as-new-error" id="saveAsNewError"></div>
     <div class="save-as-new-actions">
-      <button id="confirmSaveAsNewBtn" type="button">Save Collection</button>
+      <button id="confirmSaveAsNewBtn" type="button">Save collection</button>
       <button id="cancelSaveAsNewBtn" type="button">Cancel</button>
     </div>
   </section>
@@ -750,13 +750,13 @@
     <p id="unsavedChangesText">The current view has unsaved changes.</p>
     <div class="unsaved-changes-actions">
       <button id="cancelUnsavedChangesBtn" type="button">Cancel</button>
-      <button id="discardUnsavedChangesBtn" type="button">Don't Save</button>
+      <button id="discardUnsavedChangesBtn" type="button">Don't save</button>
       <button id="confirmUnsavedChangesBtn" type="button" class="btn-primary">Save</button>
     </div>
   </dialog>
 
   <dialog class="add-to-collection-dialog" id="addToCollectionDialog">
-    <h2>Add Selected to Collection</h2>
+    <h2>Add selected to collection</h2>
     <p>Choose another collection in this pipeline, or create a new one from the current selected clips.</p>
     <label for="addToCollectionSelect">
       Destination
@@ -778,8 +778,8 @@
     <p id="trashPreflightText">The current view has unsaved changes.</p>
     <div class="unsaved-changes-actions">
       <button id="cancelTrashPreflightBtn" type="button">Cancel</button>
-      <button id="discardTrashPreflightBtn" type="button">Continue Without Saving</button>
-      <button id="confirmTrashPreflightBtn" type="button" class="btn-primary">Save and Continue</button>
+      <button id="discardTrashPreflightBtn" type="button">Continue without saving</button>
+      <button id="confirmTrashPreflightBtn" type="button" class="btn-primary">Save and continue</button>
     </div>
   </dialog>
 
@@ -804,7 +804,6 @@
       <div id="clipsPanelContent" class="panel-content" data-shell-panel-content>
         <header class="panel-heading"><h2>Clips</h2><button id="foldClips" data-shell-panel-fold type="button" aria-label="Fold Clips" aria-controls="clipsPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button></header>
         <div id="clipsPanelHost" data-shell-panel-contributions>
-          <p id="clipsPanelFallback" class="panel-empty" data-shell-panel-fallback>No Clips tools for this screen.</p>
           <section id="gifRangesPanel" aria-label="Captured ranges"><p class="gif-ranges-empty">No captured ranges yet. Open a movie and lock a range to add it here.</p></section>
         </div>
       </div>

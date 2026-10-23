@@ -61,7 +61,7 @@ describe('save-as-new dialog controller', () => {
     expect(dialog.hidden).toBe(false);
     expect(title.textContent).toBe('Save current pipeline view as a collection');
     expect(text.textContent).toBe('Enter a collection name. The app will add .txt automatically.');
-    expect(confirmBtn.textContent).toBe('Save Collection');
+    expect(confirmBtn.textContent).toBe('Save collection');
     expect(error.textContent).toBe('Name is required.');
     expect(confirmBtn.disabled).toBe(true);
 

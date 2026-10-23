@@ -28,7 +28,7 @@ describe('ActivityPanelAutoOpenPolicy', () => {
   it.each([
     ['any element is full screen', { fullScreen: true }],
     ['Zoom is open', { zoom: true }],
-    ['Save as Collection is open', { saveAsNewDialog: true }],
+    ['Save as collection is open', { saveAsNewDialog: true }],
     ['the collection conflict is showing', { collectionConflict: true }],
     ['a dialog is open', { openDialog: true }],
   ])('keeps the Activity panel closed while %s', (_situation, states) => {

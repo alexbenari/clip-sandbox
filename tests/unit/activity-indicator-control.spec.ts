@@ -61,19 +61,19 @@ describe('activity indicator control', () => {
   test('keeps a newest-first history and returns to idle after success', async () => {
     vi.useFakeTimers();
     const control = createControl();
-    expectActivityStatus('idle', 'Ready', 'Activity and Errors: Ready');
+    expectActivityStatus('idle', 'Ready', 'Activity and errors: Ready');
 
     control.show('Loaded pipeline.', 25);
     control.show('Saved collection.', 25);
 
-    expectActivityStatus('success', 'Ready', 'Activity and Errors: Ready');
+    expectActivityStatus('success', 'Ready', 'Activity and errors: Ready');
     expect(Array.from(document.querySelectorAll('#list li')).map((el) => el.textContent)).toEqual([
       'Saved collection.',
       'Loaded pipeline.',
     ]);
 
     await vi.advanceTimersByTimeAsync(25);
-    expectActivityStatus('idle', 'Ready', 'Activity and Errors: Ready');
+    expectActivityStatus('idle', 'Ready', 'Activity and errors: Ready');
   });
 
   test('auto-opens on error and keeps the red state after dismissing the panel', () => {
@@ -93,7 +93,7 @@ describe('activity indicator control', () => {
 
     control.showProgress('Loopify started.');
 
-    expectActivityStatus('progress', 'Working…', 'Activity and Errors: Working');
+    expectActivityStatus('progress', 'Working…', 'Activity and errors: Working');
     expect(document.getElementById('panel').hidden).toBe(true);
     expect(document.querySelector('#list li').textContent).toBe('Loopify started.');
   });
@@ -112,7 +112,7 @@ function press(key: string, target: Element = document.activeElement!) {
   return event;
 }
 
-describe('detailed Activity and Errors', () => {
+describe('detailed Activity and errors', () => {
   test('information entries expose safe clip details without opening the panel', () => {
     const control = createControl();
     control.log({ kind: 'information', message: 'Extracted clip.mp4 in 12 ms.', fields: [
@@ -127,7 +127,7 @@ describe('detailed Activity and Errors', () => {
     expect(document.getElementById('panel').hidden).toBe(true);
   });
 
-  test('each error has its own More Details control, including errors without diagnostics', () => {
+  test('each error has its own More details control, including errors without diagnostics', () => {
     const control = createControl();
     control.showError('First failure', { technicalDetails: 'First cause' });
     control.showError('Second failure');
@@ -135,8 +135,8 @@ describe('detailed Activity and Errors', () => {
     expect(rows()).toHaveLength(2);
     const secondDetails = rows()[0].querySelector('details');
     const firstDetails = rows()[1].querySelector('details');
-    expect(secondDetails?.querySelector('summary')?.textContent).toBe('More Details');
-    expect(firstDetails?.querySelector('summary')?.textContent).toBe('More Details');
+    expect(secondDetails?.querySelector('summary')?.textContent).toBe('More details');
+    expect(firstDetails?.querySelector('summary')?.textContent).toBe('More details');
     expect(secondDetails?.textContent).toContain('No additional details were provided.');
     expect(firstDetails?.textContent).toContain('First cause');
     firstDetails.open = true;
@@ -164,32 +164,32 @@ describe('detailed Activity and Errors', () => {
     control.resolveError(resolved);
     button('Clear history').click();
     expect(rows()).toHaveLength(1);
-    expectActivityStatus('error', '1 error', 'Activity and Errors: 1 unresolved error');
+    expectActivityStatus('error', '1 error', 'Activity and errors: 1 unresolved error');
     expect(document.querySelector('.activity-indicator-clear-feedback').textContent).toContain('1 unresolved error retained');
     button('Clear error').focus();
     button('Clear error').click();
     expect(rows()).toHaveLength(0);
     expect(document.activeElement).toBe(document.querySelector('[role=region]'));
-    expectActivityStatus('idle', 'Ready', 'Activity and Errors: Ready');
+    expectActivityStatus('idle', 'Ready', 'Activity and errors: Ready');
   });
 
   test('counts every unresolved error and updates immediately when errors resolve', () => {
     const control = createControl();
     const firstError = control.showError('First failure');
     const secondError = control.showError('Second failure');
-    expectActivityStatus('error', '2 errors', 'Activity and Errors: 2 unresolved errors');
+    expectActivityStatus('error', '2 errors', 'Activity and errors: 2 unresolved errors');
 
     control.showProgress('Background retry started');
-    expectActivityStatus('error', '2 errors', 'Activity and Errors: 2 unresolved errors');
+    expectActivityStatus('error', '2 errors', 'Activity and errors: 2 unresolved errors');
 
     control.resolveError(firstError);
-    expectActivityStatus('error', '1 error', 'Activity and Errors: 1 unresolved error');
+    expectActivityStatus('error', '1 error', 'Activity and errors: 1 unresolved error');
 
     control.resolveError(secondError);
-    expectActivityStatus('progress', 'Working…', 'Activity and Errors: Working');
+    expectActivityStatus('progress', 'Working…', 'Activity and errors: Working');
 
     control.showSuccess('Background retry finished');
-    expectActivityStatus('success', 'Ready', 'Activity and Errors: Ready');
+    expectActivityStatus('success', 'Ready', 'Activity and errors: Ready');
   });
 
   test('does not keep showing Working after a failed operation is dismissed', () => {
@@ -197,7 +197,7 @@ describe('detailed Activity and Errors', () => {
     control.showProgress('Saving settings');
     control.showError('Settings were not saved');
     button('Clear error').click();
-    expectActivityStatus('idle', 'Ready', 'Activity and Errors: Ready');
+    expectActivityStatus('idle', 'Ready', 'Activity and errors: Ready');
   });
 
   test('preserves focused controls and open technical details as new messages arrive', () => {
@@ -243,10 +243,10 @@ describe('detailed Activity and Errors', () => {
     expect(rows()).toHaveLength(1);
     finish({ ok: false, error: 'Still full' });
     await vi.waitFor(() => expect(rows()[0].textContent).toContain('Retry failed: Still full'));
-    expectActivityStatus('error', '1 error', 'Activity and Errors: 1 unresolved error');
+    expectActivityStatus('error', '1 error', 'Activity and errors: 1 unresolved error');
     button('Retry').click();
     await vi.waitFor(() => expect(rows()[0].dataset.resolution).toBe('resolved'));
-    expectActivityStatus('idle', 'Ready', 'Activity and Errors: Ready');
+    expectActivityStatus('idle', 'Ready', 'Activity and errors: Ready');
     expect(rows()[0].textContent).not.toContain('Retry failed');
     expect(document.body.contains(document.activeElement)).toBe(true);
     button('Clear history').click();
@@ -293,7 +293,7 @@ describe('detailed Activity and Errors', () => {
     expect(requestPanelOpen).toHaveBeenCalledOnce();
     expect(document.getElementById('panel').hidden).toBe(true);
     expect(document.activeElement).toBe(protectedControl);
-    expectActivityStatus('error', '1 error', 'Activity and Errors: 1 unresolved error');
+    expectActivityStatus('error', '1 error', 'Activity and errors: 1 unresolved error');
     document.getElementById('panel').hidden = false;
     for (const child of [document.querySelector('summary'), button('Clear error')]) {
       child.focus();

@@ -76,7 +76,7 @@ export async function chooseNextFolder(page: Page, folderPath: string): Promise<
 
 export async function openMovie(page: Page, moviePath: string): Promise<void> {
   await page.evaluate(next => (window as unknown as DesktopTestHooks).clipSandboxDesktop.__testSetNextMoviePath(next), moviePath);
-  await page.getByRole('button', { name: 'Open movie...' }).click();
+  await page.getByRole('button', { name: 'Open movie…' }).click();
 }
 
 export async function openMovieForExactReview(page: Page, moviePath: string): Promise<void> {

@@ -58,7 +58,7 @@ describe('AppSettingsStore', () => {
     await expect(new AppSettingsStore(directory).load()).resolves.toEqual({
       ok: true,
       settings: { pipelinesRootPath: null, singleClipAudioDefault: true, startupScreenId: 'collection' },
-      warning: 'Ignored unrecognized saved settings fields: obsoletePreference, futureSettings.',
+      warning: 'Ignored unknown settings: obsoletePreference, futureSettings',
       warningKind: 'ignored-fields',
     });
   });

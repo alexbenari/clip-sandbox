@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ActivityReporter } from '../../src/app/activity-reporter.js';
+import { recordedActivityLog } from '../support/recorded-activity-log.js';
 import { AppSessionState } from '../../src/app/app-session-state.js';
 import { AppText } from '../../src/app/app-text.js';
 import type { SaveOutcome } from '../../src/app/collection-save-workflow.js';
@@ -46,7 +47,8 @@ function trashWorkflow({ saveOutcome = 'saved' as SaveOutcome, failingTrashes = 
         : { filename, ok: true })) })),
   };
   const written: Collection[] = [];
-  const entries: { kind: string; message: string; affected?: string }[] = [];
+  const activityLog = recordedActivityLog();
+  const { entries } = activityLog;
   const toolbar = new EventSource<{ trashSelectedRequested: void }>();
   const zoom = { isOpen: vi.fn(() => false) };
   const folderSelection = { reloadSelection: vi.fn(async () => undefined) };
@@ -67,7 +69,7 @@ function trashWorkflow({ saveOutcome = 'saved' as SaveOutcome, failingTrashes = 
     folderSelection,
     collectionView: { refreshToolbar: vi.fn() },
     diagnostics: { logTrashFailures: vi.fn(async () => undefined) },
-    reporter: new ActivityReporter({ log: entry => { entries.push(entry); } }),
+    reporter: new ActivityReporter(activityLog),
     appText: new AppText(),
   });
   const makeViewDirty = () => {
@@ -133,7 +135,7 @@ describe('TrashClipsWorkflow', () => {
     expect(context.files.trashFiles).not.toHaveBeenCalled();
   });
 
-  it('drops the move when Save as Collection is cancelled', async () => {
+  it('drops the move when Save as collection is cancelled', async () => {
     const context = trashWorkflow({ saveOutcome: 'cancelled' });
     context.makeViewDirty();
 

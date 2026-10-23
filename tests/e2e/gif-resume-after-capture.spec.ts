@@ -27,7 +27,7 @@ test('opening a movie with saved captures displays the frame after the last rang
       await page.evaluate(moviePath => (window as unknown as {
         clipSandboxDesktop: { __testSetNextMoviePath(path: string): Promise<void> };
       }).clipSandboxDesktop.__testSetNextMoviePath(moviePath), movie);
-      await page.getByRole('button', { name: 'Open movie...' }).click();
+      await page.getByRole('button', { name: 'Open movie…' }).click();
       await expect(page.locator('.frame-review-readiness')).toContainText('Exact review ready', { timeout: 90_000 });
       const progress = page.locator('.frame-review-progress-row input');
       for (const [frame, key] of [[3, 'q'], [5, 'w']] as const) {
@@ -52,7 +52,7 @@ test('opening a movie with saved captures displays the frame after the last rang
       await page.evaluate(moviePath => (window as unknown as {
         clipSandboxDesktop: { __testSetNextMoviePath(path: string): Promise<void> };
       }).clipSandboxDesktop.__testSetNextMoviePath(moviePath), movie);
-      await page.getByRole('button', { name: 'Open movie...' }).click();
+      await page.getByRole('button', { name: 'Open movie…' }).click();
       await expect(page.locator('[data-range-id="range-1"]')).toBeVisible();
       await expect(page.locator('.frame-review-identity')).toContainText('Frame 6', { timeout: 90_000 });
       await expect(page.locator('.frame-review-progress-row input')).toHaveValue('6');

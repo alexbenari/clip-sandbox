@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AddToCollectionWorkflow, type AddToCollectionTarget } from '../../src/app/add-to-collection-workflow.js';
 import { ActivityReporter } from '../../src/app/activity-reporter.js';
+import { recordedActivityLog } from '../support/recorded-activity-log.js';
 import { AppText } from '../../src/app/app-text.js';
 import { CollectionNameValidator } from '../../src/app/collection-name-validator.js';
 import { EventSource } from '../../src/app/event-source.js';
@@ -30,7 +31,8 @@ function addWorkflow({ writeFails = false } = {}) {
   const dialog = new FakeAddDialog();
   const toolbar = new EventSource<{ addToCollectionRequested: void }>();
   const written: Collection[] = [];
-  const entries: { kind: string; message: string }[] = [];
+  const activityLog = recordedActivityLog();
+  const { entries } = activityLog;
   const workflow = new AddToCollectionWorkflow({
     pipelineWorkingCopy,
     grid,
@@ -49,7 +51,7 @@ function addWorkflow({ writeFails = false } = {}) {
       }),
     },
     collectionView: { cacheKeyFor: collection => `collection:${collection?.filename}`, refreshSelector: vi.fn(), refreshToolbar: vi.fn() },
-    reporter: new ActivityReporter({ log: entry => { entries.push(entry); } }),
+    reporter: new ActivityReporter(activityLog),
     appText: new AppText(),
   });
   return { workflow, pipeline, grid, dialog, toolbar, written, entries };

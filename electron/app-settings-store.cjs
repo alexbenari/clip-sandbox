@@ -145,8 +145,7 @@ class AppSettingsStore {
   }
 
   #ignoredFieldsWarning(fields) {
-    const label = fields.length === 1 ? 'field' : 'fields';
-    return `Ignored unrecognized saved settings ${label}: ${fields.join(', ')}.`;
+    return `Ignored unknown settings: ${fields.join(', ')}`;
   }
 
   #errorMessage(error) {

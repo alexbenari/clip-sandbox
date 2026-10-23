@@ -186,7 +186,7 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
     }
     const newOption = this.doc.createElement('option');
     newOption.value = this.newChoiceValue;
-    newOption.textContent = 'New collection...';
+    newOption.textContent = 'New collection…';
     this.destinationSelect.appendChild(newOption);
     this.destinationSelect.value = startWithNewCollection
       ? this.newChoiceValue

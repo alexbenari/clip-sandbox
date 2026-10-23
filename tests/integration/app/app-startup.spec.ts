@@ -43,7 +43,7 @@ describe('AppController startup on the shipped page', () => {
 
     const collectionSelect = document.getElementById('activeCollectionName');
     expect(document.getElementById('count').textContent).toBe('0 clips');
-    expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Hide Titles');
+    expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Hide titles');
     expect(collectionSelect.disabled).toBe(true);
     expect(collectionSelect.options[0].textContent).toBe('No pipeline loaded');
     expect(document.title).toBe('Clip Sandbox');

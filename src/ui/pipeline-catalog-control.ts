@@ -10,6 +10,7 @@ import { DocumentElements } from './document-elements.js';
 export interface IPipelineCatalogEvents {
   loadRequested: IPipelineCatalogEntry;
   failed: Readonly<{ message: string; error: unknown }>;
+  loaded: void;
 }
 
 type PipelineCatalogPort = {
@@ -55,6 +56,7 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
       const result = await this.catalog.listPipelineCatalog();
       if (!this.isCurrent(requestGeneration)) return;
       this.renderCatalog(result);
+      this.events.emit('loaded');
     } catch (error) {
       if (!this.isCurrent(requestGeneration)) return;
       this.host.replaceChildren(this.message('Pipelines could not be loaded. Review the configured folder and try again.', 'pipeline-catalog-error'));

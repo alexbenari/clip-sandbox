@@ -57,7 +57,7 @@ const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
 .clip-collection-grid .thumb:focus-visible{ outline:2px solid var(--accent); outline-offset:5px; }
 .clip-collection-grid .thumb.dragging{ opacity:.65; }
 .clip-collection-grid .thumb.drag-over::after{ content:""; position:absolute; inset:0; border:2px dashed var(--accent); border-radius:var(--radius); pointer-events:none; }
-.clip-collection-grid .thumb > video{ max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; background:black; display:block; border-radius:10px; }
+.clip-collection-grid .thumb > video{ width:100%; height:100%; object-fit:contain; background:black; display:block; border-radius:10px; }
 .clip-collection-grid .filename{ position:absolute; left:0; right:0; bottom:0; font-size:12px; line-height:1.3; color:#d1d5db; padding:6px 8px; background:linear-gradient(180deg, rgba(2,6,23,0), rgba(2,6,23,.75)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .clip-collection-grid-root.titles-hidden .filename{ display:none; }
 `;

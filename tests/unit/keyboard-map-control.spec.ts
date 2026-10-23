@@ -111,8 +111,8 @@ describe('KeyboardMapControl', () => {
       title: button.title,
       type: button.type,
     }))).toEqual([{
-      label: 'Close Keyboard shortcuts',
-      title: 'Close Keyboard shortcuts',
+      label: 'Close keyboard shortcuts',
+      title: 'Close keyboard shortcuts',
       type: 'button',
     }]);
     expect(root.querySelector('button svg.shell-icon')?.getAttribute('aria-hidden')).toBe('true');

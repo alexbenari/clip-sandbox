@@ -10,7 +10,7 @@ describe('Settings workflow and screen', () => {
   function setup() {
     const settings: IAppSettings = { pipelinesRootPath: 'D:\\יצירה\\<clips>', singleClipAudioDefault: false, startupScreenId: 'gif-extraction' };
     const port = { load: vi.fn<[], Promise<SettingsResult>>(async () => ({ ok: true, settings })), save: vi.fn<[IAppSettings], Promise<SettingsResult>>(async (value) => ({ ok: true, settings: value })), chooseRoot: vi.fn<[], Promise<RootChoice>>(async () => ({ kind: 'canceled' })) };
-    const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn() };
+    const reporter = { progress: vi.fn(), success: vi.fn(), failure: vi.fn(), information: vi.fn() };
     const catalog = { load: vi.fn(async () => undefined) };
     const navigation = { activeScreen: { id: 'gif-extraction' }, activate: vi.fn((id: string) => { navigation.activeScreen = { id }; }) };
     const service = new AppSettingsService(port);
@@ -62,16 +62,27 @@ describe('Settings workflow and screen', () => {
     expect(port.save).toHaveBeenCalledWith(expect.objectContaining({ pipelinesRootPath: 'C:/pipelines' }));
   });
 
-  it('reports ignored saved fields without claiming that all settings were reset', async () => {
+  it('notes ignored saved fields in Activity without reporting an error', async () => {
     const { screen, workflow, port, reporter } = setup();
-    port.load.mockResolvedValueOnce({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: true, startupScreenId: 'collection' }, warning: 'Ignored unrecognized saved settings field: obsoletePreference.', warningKind: 'ignored-fields' });
+    port.load.mockResolvedValueOnce({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: true, startupScreenId: 'collection' }, warning: 'Ignored unknown settings: version', warningKind: 'ignored-fields' });
 
     await workflow.loadAtStartup();
 
-    expect(screen.root.querySelector('#settingsStatus')?.textContent).toBe('Some saved settings were ignored.');
-    expect(reporter.failure).toHaveBeenCalledWith('Some saved settings were ignored.', expect.objectContaining({
+    expect(reporter.information).toHaveBeenCalledWith('Ignored unknown settings: version');
+    expect(reporter.failure).not.toHaveBeenCalled();
+    expect(screen.root.querySelector('#settingsStatus')?.textContent).toBe('');
+  });
+
+  it('reports unreadable saved settings as an error, because defaults replaced them', async () => {
+    const { screen, workflow, port, reporter } = setup();
+    port.load.mockResolvedValueOnce({ ok: true, settings: { pipelinesRootPath: null, singleClipAudioDefault: false, startupScreenId: 'gif-extraction' }, warning: 'Could not load settings: Unexpected token', warningKind: 'recovered-defaults' });
+
+    await workflow.loadAtStartup();
+
+    expect(screen.root.querySelector('#settingsStatus')?.textContent).toBe('Could not read settings. Defaults are in use.');
+    expect(reporter.failure).toHaveBeenCalledWith('Could not read settings. Defaults are in use.', expect.objectContaining({
       affected: 'Load settings',
-      technicalDetails: 'Ignored unrecognized saved settings field: obsoletePreference.',
+      technicalDetails: 'Could not load settings: Unexpected token',
     }));
   });
 

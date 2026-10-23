@@ -62,7 +62,7 @@ const DEFAULT_CONTEXT_MENU_CSS = `
   font-size:12px;
   font-weight:400;
 }
-.context-menu-panel button.context-menu-item-destructive{ color:#ef4444; }
+.context-menu-panel button.context-menu-item-destructive{ color:var(--danger-text, #f87171); }
 .context-menu-separator{
   flex:none;
   height:1px;

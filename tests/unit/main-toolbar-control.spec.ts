@@ -42,10 +42,10 @@ describe('main toolbar control', () => {
     expect(document.getElementById('count').textContent).toBe('0 clips');
     expect(document.getElementById('saveBtn').disabled).toBe(true);
     expect(document.getElementById('saveAsNewBtn').disabled).toBe(true);
-    expect(document.getElementById('saveAsNewBtn').textContent).toBe('Save as Collection');
+    expect(document.getElementById('saveAsNewBtn').textContent).toBe('Save as collection…');
     expect(document.getElementById('addToCollectionBtn').disabled).toBe(true);
     expect(document.getElementById('trashSelectedBtn').disabled).toBe(true);
-    expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Hide Titles');
+    expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Hide titles');
   });
 
   test('renders toolbar count, button states, and toggle text for collection mode', () => {
@@ -80,11 +80,11 @@ describe('main toolbar control', () => {
     expect(document.getElementById('count').textContent).toBe('4 clips');
     expect(document.getElementById('saveBtn').disabled).toBe(false);
     expect(document.getElementById('saveAsNewBtn').disabled).toBe(false);
-    expect(document.getElementById('saveAsNewBtn').textContent).toBe('Save Collection As...');
+    expect(document.getElementById('saveAsNewBtn').textContent).toBe('Save collection as…');
     expect(document.getElementById('saveAsNewBtn').title).toBe('Save the current collection as another collection file');
     expect(document.getElementById('addToCollectionBtn').disabled).toBe(false);
     expect(document.getElementById('trashSelectedBtn').disabled).toBe(false);
-    expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Show Titles');
+    expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Show titles');
   });
 
   test('owns its button event bindings and removes them when destroyed', () => {
@@ -145,16 +145,16 @@ test('starts with the Save changes button hidden', () => {
 test('focuses Browse and preserves fullscreen button content when updating its label', () => {
   const browseButton = document.createElement('button');
   const fullscreenButton = document.createElement('button');
-  fullscreenButton.innerHTML = '<svg></svg><span class="command-label">Full Screen</span>';
+  fullscreenButton.innerHTML = '<svg></svg><span class="command-label">Full screen</span>';
   const icon = fullscreenButton.firstElementChild;
   document.body.append(browseButton, fullscreenButton);
   const toolbar = new MainToolbarControl({ appText, browseButton, fullscreenButton });
   toolbar.focusBrowse();
   expect(document.activeElement).toBe(browseButton);
   toolbar.setFullscreenButtonState(true);
-  expect(fullscreenButton.textContent).toBe('Exit Full Screen');
+  expect(fullscreenButton.textContent).toBe('Exit full screen');
   toolbar.setFullscreenButtonState(false);
-  expect(fullscreenButton.getAttribute('aria-label')).toBe('Full Screen');
+  expect(fullscreenButton.getAttribute('aria-label')).toBe('Full screen');
   expect(fullscreenButton.firstElementChild).toBe(icon);
   browseButton.remove(); fullscreenButton.remove();
 });

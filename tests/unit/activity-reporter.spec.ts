@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ActivityInput } from '../../src/app/activity-logger.js';
+import { ActivityLogger } from '../../src/app/activity-logger.js';
 import { ActivityReporter } from '../../src/app/activity-reporter.js';
+import { recordedActivityLog } from '../support/recorded-activity-log.js';
 
-function reporterWithLog(): { reporter: ActivityReporter; entries: ActivityInput[] } {
-  const entries: ActivityInput[] = [];
-  return { reporter: new ActivityReporter({ log: entry => { entries.push(entry); } }), entries };
+function reporterWithLog() {
+  const activityLog = recordedActivityLog();
+  return { reporter: new ActivityReporter(activityLog), entries: activityLog.entries };
 }
 
 describe('ActivityReporter', () => {
@@ -32,6 +33,24 @@ describe('ActivityReporter', () => {
       { kind: 'progress', message: 'Saving settings…' },
       { kind: 'error', message: 'Could not open archive.', affected: 'Open pipeline', recovery: 'Refresh Pipelines.' },
     ]);
+  });
+
+  it('records a note that is neither progress nor an error', () => {
+    const { reporter, entries } = reporterWithLog();
+
+    reporter.information('Ignored unknown settings: version');
+
+    expect(entries).toEqual([{ kind: 'information', message: 'Ignored unknown settings: version' }]);
+  });
+
+  it('resolves a failure it reported once the caller says the problem is gone', () => {
+    const activity = new ActivityLogger();
+    const reporter = new ActivityReporter(activity);
+
+    const failure = reporter.failure('Could not load Pipelines.', { affected: 'Pipelines' });
+    reporter.resolveFailure(failure);
+
+    expect(activity.snapshot.entries).toEqual([expect.objectContaining({ message: 'Could not load Pipelines.', resolution: 'resolved' })]);
   });
 
   it('describes an error by its stack, and any other value as text', () => {
