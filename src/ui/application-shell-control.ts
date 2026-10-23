@@ -6,6 +6,7 @@ import { EventSource, type EventHandler, type IEventSource } from '../app/event-
 export interface IApplicationShellEvents {
   screenChanged: IAppScreen;
   settingsRequested: void;
+  screenChangeRefused: Readonly<{ from: IAppScreen; to: IAppScreen }>;
 }
 
 type ShellPanel = {
@@ -188,6 +189,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     }
     if (this.activated && this.elements.leavePolicy?.canLeave(this.current, incoming) === false) {
       this.elements.selector.value = this.current.id;
+      this.events.emit('screenChangeRefused', { from: this.current, to: incoming });
       return;
     }
     if (this.activated) {

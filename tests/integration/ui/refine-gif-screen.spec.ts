@@ -64,7 +64,7 @@ function extractionSnapshot(refinement: IRangeRefinementDraftSnapshot): IGifExtr
   });
 }
 
-function activeRefineScreen(refinement: IRangeRefinementDraftSnapshot) {
+function activeRefineScreen(refinement: IRangeRefinementDraftSnapshot, use: 'gif' | 'collection' = 'gif') {
   let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
   const session = {
     reviewSession: {} as never,
@@ -82,7 +82,7 @@ function activeRefineScreen(refinement: IRangeRefinementDraftSnapshot) {
     frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
   vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
   vi.spyOn(player, 'enterExactScrubAt').mockResolvedValue({} as never);
-  const screen = RefineGifScreen.forGifExtraction({
+  const screen = RefineGifScreen[use === 'gif' ? 'forGifExtraction' : 'forCollectionRefinement']({
     player, keyboard: new GifWorkflowKeyboard(), session: session as never, document });
   document.body.replaceChildren(screen.commands, screen.root);
   screen.onActivate();
@@ -97,6 +97,22 @@ describe('RefineGifScreen', () => {
     expect(hint()).toBe('Scrub to the exact start frame, then set it with Q.');
     expect(screen.commands.textContent).not.toContain('start');
     expect(screen.commands.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('names a refined collection clip by its own filename, with its movie as secondary text', () => {
+    const { screen } = activeRefineScreen(refinementSnapshot(), 'collection');
+
+    screen.showRefinedClip('Feature-004.mp4');
+
+    expect(screen.commands.querySelector('[data-refine-command-title]')?.textContent).toBe('Refine clip · Feature-004.mp4');
+    expect(screen.commands.querySelector('.gif-workflow-source span')?.textContent).toBe('From Feature.mp4');
+  });
+
+  it('names a refined GIF range by its number, with its movie as secondary text', () => {
+    const { screen } = activeRefineScreen(refinementSnapshot());
+
+    expect(screen.commands.querySelector('[data-refine-command-title]')?.textContent).toBe('Refine Gif · Range 1');
+    expect(screen.commands.querySelector('.gif-workflow-source span')?.textContent).toBe('Feature.mp4');
   });
 
   it('says in the workbench that the staged range is looping while the loop runs', () => {
@@ -142,7 +158,7 @@ describe('RefineGifScreen', () => {
     expect([fromExtraction.id, fromExtraction.label]).toEqual(['refine-gif', 'Refine Gif']);
     expect(fromExtraction.commands.querySelector('[data-command="back"]')?.textContent).toBe('Back to GIF Extraction');
     expect(fromExtraction.root.querySelector<HTMLButtonElement>('[data-command="next-inexact"]')?.hidden).toBe(false);
-    expect([fromCollection.id, fromCollection.label]).toEqual(['collection-refine', 'Refine Clip']);
+    expect([fromCollection.id, fromCollection.label]).toEqual(['collection-refine', 'Refine clip']);
     expect(fromCollection.commands.querySelector('[data-command="back"]')?.textContent).toBe('Back to Collection');
     expect(fromCollection.root.querySelector('.gif-workflow-empty-copy h1')?.textContent).toBe('Preparing source movie');
     expect(fromCollection.root.querySelector<HTMLButtonElement>('[data-command="next-inexact"]')?.hidden).toBe(true);
@@ -260,7 +276,6 @@ describe('RefineGifScreen', () => {
     expect(session.beginRefinement).toHaveBeenCalledWith('range-2');
 
     screen.commands.querySelector<HTMLButtonElement>('[data-command="back"]')?.click();
-    expect(session.abandonRefinement).toHaveBeenCalled();
     expect(onBack).toHaveBeenCalledWith('range-1');
     const panelContribution = screen.panelContributions[0];
     expect(panelContribution?.content).toBe(rangesPanel);

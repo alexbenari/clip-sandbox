@@ -24,7 +24,7 @@ type CaptureThumbnailsOptions = Readonly<{
 
 export class CaptureThumbnails {
   private readonly rangeThumbnails = new Map<CapturedRangeId, ThumbnailSlot>();
-  private readonly restoredMissing = new Set<CapturedRangeId>();
+  private readonly missingRanges = new Set<CapturedRangeId>();
   private draftThumbnail: ThumbnailSlot | null = null;
   private disposed = false;
 
@@ -39,12 +39,12 @@ export class CaptureThumbnails {
 
   stateForRange(rangeId: CapturedRangeId): GifThumbnailState {
     return this.rangeThumbnails.get(rangeId)?.state
-      ?? (this.restoredMissing.has(rangeId)
+      ?? (this.missingRanges.has(rangeId)
         ? Object.freeze({ kind: 'missing', message: 'Thumbnail can be recreated from the movie.' })
         : Object.freeze({ kind: 'empty' }));
   }
 
-  markRestoredMissing(rangeId: CapturedRangeId): void { this.restoredMissing.add(rangeId); }
+  markMissing(rangeId: CapturedRangeId): void { this.missingRanges.add(rangeId); }
 
   replaceDraft(frame: FrameReviewDisplayFrame): void {
     if (this.disposed) return;
@@ -68,7 +68,7 @@ export class CaptureThumbnails {
 
   replaceRange(rangeId: CapturedRangeId, frame: FrameReviewDisplayFrame): void {
     if (this.disposed) return;
-    this.restoredMissing.delete(rangeId);
+    this.missingRanges.delete(rangeId);
     const previous = this.rangeThumbnails.get(rangeId) ?? null;
     const replacement = this.createLoadingSlot(frame);
     this.rangeThumbnails.set(rangeId, replacement);
@@ -86,7 +86,7 @@ export class CaptureThumbnails {
   }
 
   removeRange(rangeId: CapturedRangeId): void {
-    this.restoredMissing.delete(rangeId);
+    this.missingRanges.delete(rangeId);
     const thumbnail = this.rangeThumbnails.get(rangeId);
     this.rangeThumbnails.delete(rangeId);
     if (thumbnail) void this.disposeThumbnail(thumbnail);
@@ -98,7 +98,7 @@ export class CaptureThumbnails {
     );
     this.draftThumbnail = null;
     this.rangeThumbnails.clear();
-    this.restoredMissing.clear();
+    this.missingRanges.clear();
     await Promise.allSettled(slots.map(slot => this.disposeThumbnail(slot)));
   }
 

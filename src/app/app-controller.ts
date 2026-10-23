@@ -33,6 +33,8 @@ import { GifRangeRefinementWorkflow } from './gif-range-refinement-workflow.js';
 import { FullScreenChangeWorkflow } from './full-screen-change-workflow.js';
 import { SettingsWorkflow } from './settings-workflow.js';
 import { RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
+import { RefineLeaveWorkflow } from './refine-leave-workflow.js';
+import { PipelineCatalogRefresher } from './pipeline-catalog-refresher.js';
 import { ActivityPanelAutoOpenPolicy } from '../ui/activity-panel-auto-open-policy.js';
 import { AddToCollectionDialogControl } from '../ui/add-to-collection-dialog-control.js';
 import { CollectionSelectorControl } from '../ui/collection-selector-control.js';
@@ -68,6 +70,7 @@ import { CollectionConflictControl } from '../ui/collection-conflict-control.js'
 import { TrashClipsDialogControl } from '../ui/trash-clips-dialog-control.js';
 import { SaveAsNewDialogControl } from '../ui/save-as-new-dialog-control.js';
 import { UnsavedChangesDialogControl } from '../ui/unsaved-changes-dialog-control.js';
+import { DiscardRefinementDialogControl } from '../ui/discard-refinement-dialog-control.js';
 import { CollectionTextFormat } from '../business-logic/collection-text-format.js';
 import { OpenFolderRefresher } from './open-folder-refresher.js';
 import { ControlFailureReporting } from './control-failure-reporting.js';
@@ -135,6 +138,7 @@ export class AppController {
       nameCheck: newCollectionNameCheck,
     });
     const unsavedChangesDialog = UnsavedChangesDialogControl.fromDocument(document);
+    const discardRefinementDialog = DiscardRefinementDialogControl.fromDocument(document);
     const trashClipsDialog = TrashClipsDialogControl.fromDocument(document, { appText });
     const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
       fullScreen: fullscreenAdapter,
@@ -229,8 +233,13 @@ export class AppController {
       rangesPanel: collectionRangesPanelControl ?? undefined,
       document,
     });
-    const refineScreenLeavePolicy = new RefineScreenLeavePolicy(
-      collectionRefineScreen.id, collectionRefinementSession, activityReporter);
+    const refineScreens = [
+      { id: refineGifScreen.id, session: gifExtractionSession },
+      { id: collectionRefineScreen.id, session: collectionRefinementSession },
+    ];
+    const refineScreenLeavePolicy = new RefineScreenLeavePolicy({
+      refineScreens, collectionRefineScreenId: collectionRefineScreen.id, reporter: activityReporter,
+    });
     const shell = ApplicationShellControl.fromDocument(document, {
       initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
       screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
@@ -251,6 +260,17 @@ export class AppController {
       : null;
 
     // Workflows.
+    const refineLeave = new RefineLeaveWorkflow({
+      policy: refineScreenLeavePolicy,
+      prompt: discardRefinementDialog,
+      refineScreens,
+      navigation: shell,
+      screenChanges: shell,
+    });
+    const pipelineCatalogRefresher = new PipelineCatalogRefresher({
+      publishers: [gifExtractionSession, collectionRefinementSession],
+      catalog: pipelineCatalogControl,
+    });
     const collectionView = new CollectionViewWorkflow({
       pipelineWorkingCopy,
       openFolder: state,
@@ -357,6 +377,7 @@ export class AppController {
       pipelineWorkingCopy,
       openFolder: state,
       diagnostics,
+      stagedChanges: refineLeave,
       reporter: activityReporter,
     });
     const gridContextMenu = new GridContextMenuWorkflow({
@@ -379,6 +400,7 @@ export class AppController {
       refineScreen: refineGifScreen,
       extractionScreenId: gifExtractionScreen.id,
       navigation: shell,
+      stagedChanges: refineLeave,
       reporter: activityReporter,
     });
     const collectionFullScreen = new CollectionFullScreenWorkflow({
@@ -436,7 +458,8 @@ export class AppController {
       },
       disposeWorkflow: async () => {
         for (const workflow of [collectionView, collectionSave, addToCollection, folderSelection, trashClips,
-          zoom, collectionRefinement, gridContextMenu, gifRangeRefinement, settingsWorkflow, controlFailureReporting]) workflow.dispose();
+          zoom, collectionRefinement, gridContextMenu, gifRangeRefinement, refineLeave, pipelineCatalogRefresher, settingsWorkflow,
+          controlFailureReporting]) workflow.dispose();
         await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
       },
       destroyControls: () => {

@@ -236,7 +236,7 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
       ? 'unlocked range; exact frames required' : 'locked exact range'}`);
     if (selected) card.setAttribute('aria-current', 'true');
     card.append(
-      this.renderThumbnail(range.thumbnail, range.id, { unavailable: range.validation === 'stale' }),
+      this.renderThumbnail(range.thumbnail, range.id, { unavailable: range.validation === 'stale', hasStart: true }),
       this.renderLockIcon(range.kind !== 'needs-exact-frames', range.kind !== 'needs-exact-frames'
         ? 'Locked exact range' : 'Unlocked range; exact frames required'),
       this.renderRemoveButton(range.id, `Remove capture ${number}`, !this.session.canRemoveRange(range.id),

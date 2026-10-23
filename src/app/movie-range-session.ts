@@ -16,6 +16,7 @@ import type { CaptureRejectionText } from './capture-rejection-text.js';
 import type { ICaptureStorage } from './capture-storage.js';
 import type { ClipExtractionEntryState, IExtractionBatchProgress } from './clip-extraction-workflow.js';
 import { CurrentMovie } from './current-movie.js';
+import { EventSource, type EventHandler, type IEventSource } from './event-source.js';
 import type { ExtractionDestination } from './extraction-publisher.js';
 import type { GifThumbnailState } from './capture-thumbnails.js';
 import { GifSessionStatus } from './gif-session-status.js';
@@ -70,10 +71,15 @@ export type MovieRangeSessionOptions = {
   readonly destination?: ExtractionDestination;
 };
 
+export interface IMovieRangeSessionEvents {
+  clipsPublished: void;
+}
+
 // What GIF Extraction and Collection Refine share: one opened movie, its ranges, their refinement and
 // extraction, and the snapshot both GIF screens and the Clips panel read. The two sessions add the ways
 // a movie and its ranges arrive.
-export abstract class MovieRangeSession {
+export abstract class MovieRangeSession implements IEventSource<IMovieRangeSessionEvents> {
+  private readonly events = new EventSource<IMovieRangeSessionEvents>();
   private readonly listeners = new Set<(snapshot: IGifExtractionSessionSnapshot) => void>();
   protected readonly status = new GifSessionStatus();
   protected readonly movie: CurrentMovie;
@@ -114,6 +120,7 @@ export abstract class MovieRangeSession {
       if (review) void this.queue.restore(review);
     });
     this.queue.on('rangeRemoved', rangeId => this.refinement.endForRemovedRange(rangeId));
+    this.extraction.on('clipsPublished', () => this.events.emit('clipsPublished'));
   }
 
   get reviewSession(): IFrameReviewSession | null { return this.movie.review; }
@@ -152,6 +159,10 @@ export abstract class MovieRangeSession {
     this.listeners.add(listener);
     listener(this.snapshot);
     return () => this.listeners.delete(listener);
+  }
+
+  on<TName extends keyof IMovieRangeSessionEvents>(name: TName, handler: EventHandler<IMovieRangeSessionEvents[TName]>): () => void {
+    return this.events.on(name, handler);
   }
 
   setExtractionDestination(destination: ExtractionDestination): void {

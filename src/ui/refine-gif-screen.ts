@@ -38,6 +38,8 @@ const REFINE_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
   { description: 'Extract the current exact range', sequences: [[GIF_CAPTURE_KEYS.extract]] },
 ]);
 
+type RefinedItem = Readonly<{ rangeNumber: string | null; clipName: string | null }>;
+
 type RefineScreenVariant = Readonly<{
   id: string;
   rootId: string;
@@ -49,6 +51,8 @@ type RefineScreenVariant = Readonly<{
   offersNextRange: boolean;
   lockedInstruction: string;
   invalidatedInstruction: string;
+  refinedName: (refined: RefinedItem) => string | null;
+  movieText: (movieName: string) => string;
 }>;
 
 const GIF_EXTRACTION_REFINEMENT: RefineScreenVariant = Object.freeze({
@@ -62,12 +66,14 @@ const GIF_EXTRACTION_REFINEMENT: RefineScreenVariant = Object.freeze({
   offersNextRange: true,
   lockedInstruction: 'Exact range locked. Continue to the next inexact clip or return.',
   invalidatedInstruction: 'Return to GIF Extraction and choose a current range.',
+  refinedName: ({ rangeNumber }) => rangeNumber ? `Range ${rangeNumber}` : null,
+  movieText: movieName => movieName,
 });
 
 const COLLECTION_REFINEMENT: RefineScreenVariant = Object.freeze({
   id: 'collection-refine',
   rootId: 'collection-refineScreen',
-  label: 'Refine Clip',
+  label: 'Refine clip',
   returnLabel: 'Back to Collection',
   workbenchHeading: 'Refine collection clip',
   emptyHeading: 'Preparing source movie',
@@ -75,6 +81,8 @@ const COLLECTION_REFINEMENT: RefineScreenVariant = Object.freeze({
   offersNextRange: false,
   lockedInstruction: 'Exact range locked. Extract a new clip or return to Collection.',
   invalidatedInstruction: 'Return to Collection and choose the clip again.',
+  refinedName: ({ clipName }) => clipName,
+  movieText: movieName => `From ${movieName}`,
 });
 
 type RefineGifScreenOptions = {
@@ -135,6 +143,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
   private pendingPreviewStop: Promise<unknown> = Promise.resolve();
   private preparationMessage: string | null = null;
   private preparing = false;
+  private clipName: string | null = null;
 
   static forGifExtraction(options: RefineGifScreenOptions): RefineGifScreen {
     return new RefineGifScreen(GIF_EXTRACTION_REFINEMENT, options);
@@ -284,6 +293,11 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     if (this.snapshot) this.render(this.options.session?.snapshot ?? this.snapshot);
   }
 
+  showRefinedClip(filename: string): void {
+    this.clipName = filename;
+    if (this.snapshot) this.render(this.options.session?.snapshot ?? this.snapshot);
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
@@ -391,9 +405,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
   }
 
   private backToExtraction(): void {
-    const rangeId = this.snapshot?.refinement?.rangeId ?? null;
-    this.options.session?.abandonRefinement();
-    this.events.emit('backRequested', rangeId);
+    this.events.emit('backRequested', this.snapshot?.refinement?.rangeId ?? null);
   }
 
   on<TName extends keyof IRefineGifScreenEvents>(name: TName, handler: EventHandler<IRefineGifScreenEvents[TName]>): () => void {
@@ -414,14 +426,15 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     }
     this.previewRevision = snapshot.previewRevision;
     const refinement = this.preparationMessage === null ? snapshot.refinement : null;
-    this.sourceName.textContent = this.preparationMessage === null ? snapshot.source?.name ?? 'No movie open' : 'Original movie';
+    this.sourceName.textContent = this.preparationMessage !== null ? 'Original movie'
+      : snapshot.source ? this.variant.movieText(snapshot.source.name) : 'No movie open';
     this.workbench.hidden = refinement === null;
     this.emptyCopy.hidden = refinement !== null;
     if (!refinement) {
       this.pendingSeek = null;
       this.seekGeneration += 1;
       this.lastSeekKey = null;
-      this.commandTitle.textContent = this.label;
+      this.commandTitle.textContent = this.titleFor({ rangeNumber: null, clipName: this.clipName });
       const explanation = this.emptyCopy.querySelector('p');
       if (explanation && this.preparationMessage !== null) explanation.textContent = this.preparationMessage;
       const progress = this.emptyCopy.querySelector('progress');
@@ -431,7 +444,8 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     const progress = this.emptyCopy.querySelector('progress');
     if (progress) progress.hidden = true;
     if (this.active) this.requestExactPosition(refinement);
-    this.commandTitle.textContent = `${this.label} · Range ${this.rangeNumber(refinement.rangeId)}`;
+    this.commandTitle.textContent = this.titleFor({
+      rangeNumber: this.rangeNumber(refinement.rangeId), clipName: this.clipName });
     this.rangeTitle.textContent = `Range ${this.rangeNumber(refinement.rangeId)}`;
     this.renderEndpoint('start', refinement);
     this.renderEndpoint('end', refinement);
@@ -515,6 +529,11 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     if (refinement.status === 'invalidated') return this.variant.invalidatedInstruction;
     const label = refinement.focusedEndpoint === 'start' ? 'start' : 'end';
     return `Scrub to the exact ${label} frame, then set it with ${label === 'start' ? GIF_CAPTURE_KEYS.markStart : GIF_CAPTURE_KEYS.markEnd}.`;
+  }
+
+  private titleFor(refined: RefinedItem): string {
+    const name = this.variant.refinedName(refined);
+    return name ? `${this.label} · ${name}` : this.label;
   }
 
   private rangeNumber(rangeId: CapturedRangeId): string {

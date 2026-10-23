@@ -3,6 +3,7 @@ import type { ActivityReporter } from './activity-reporter.js';
 import type { IScreenNavigation } from './collection-refinement-workflow.js';
 import type { IEventSource } from './event-source.js';
 import type { GifExtractionSession } from './gif-extraction-session.js';
+import type { RefineLeaveWorkflow } from './refine-leave-workflow.js';
 
 export interface ICaptureList extends IEventSource<{ refineRequested: CapturedRangeId }> {
   focusRange(rangeId: CapturedRangeId): void;
@@ -14,6 +15,7 @@ type GifRangeRefinementDependencies = Readonly<{
   refineScreen: IEventSource<{ backRequested: CapturedRangeId | null }> & Readonly<{ id: string }>;
   extractionScreenId: string;
   navigation: Pick<IScreenNavigation, 'activate'>;
+  stagedChanges: Pick<RefineLeaveWorkflow, 'confirmDiscard'>;
   reporter: Pick<ActivityReporter, 'failure'>;
 }>;
 
@@ -23,7 +25,7 @@ export class GifRangeRefinementWorkflow {
 
   constructor(private readonly refinement: GifRangeRefinementDependencies) {
     this.unsubscribes = [
-      refinement.refineScreen.on('backRequested', rangeId => this.backToExtraction(rangeId)),
+      refinement.refineScreen.on('backRequested', rangeId => { void this.backToExtraction(rangeId); }),
       ...(refinement.captureList
         ? [refinement.captureList.on('refineRequested', rangeId => { void this.refine(rangeId); })]
         : []),
@@ -31,6 +33,7 @@ export class GifRangeRefinementWorkflow {
   }
 
   async refine(rangeId: CapturedRangeId): Promise<void> {
+    if (!await this.refinement.stagedChanges.confirmDiscard(this.refinement.refineScreen)) return;
     const revision = ++this.revision;
     const result = await this.refinement.session?.beginRefinement(rangeId);
     if (revision !== this.revision) return;
@@ -42,7 +45,8 @@ export class GifRangeRefinementWorkflow {
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe();
   }
 
-  private backToExtraction(rangeId: CapturedRangeId | null): void {
+  private async backToExtraction(rangeId: CapturedRangeId | null): Promise<void> {
+    if (!await this.refinement.stagedChanges.confirmDiscard(this.refinement.refineScreen)) return;
     this.refinement.navigation.activate(this.refinement.extractionScreenId);
     if (rangeId) this.refinement.captureList?.focusRange(rangeId);
   }

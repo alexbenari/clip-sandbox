@@ -20,14 +20,22 @@ const { FakeGifSession } = vi.hoisted(() => {
       this.destinations = [];
       this.openCollectionSource = vi.fn(async () => undefined);
       this.importCollectionRange = vi.fn(async () => ({ kind: 'started' }));
+      this.publishedHandlers = new Set();
+      this.staged = null;
       FakeGifSession.instances.push(this);
     }
+    on(name, handler) {
+      if (name !== 'clipsPublished') return () => undefined;
+      this.publishedHandlers.add(handler);
+      return () => this.publishedHandlers.delete(handler);
+    }
+    finishPublishingRun() { for (const handler of [...this.publishedHandlers]) handler(); }
     get snapshot() { return emptySnapshot; }
     get reviewSession() { return null; }
-    get refinementDraft() { return null; }
+    get refinementDraft() { return this.staged ? { unlockedChanges: this.staged } : null; }
     subscribe(listener) { listener(emptySnapshot); return () => undefined; }
     setExtractionDestination(destination) { this.destinations.push(destination); }
-    abandonRefinement() { return null; }
+    abandonRefinement() { this.staged = null; return null; }
     async beginRefinement() { return { kind: 'rejected', message: 'Not used by these tests.' }; }
     canExtractRange() { return false; }
     canRemoveRange() { return false; }
@@ -284,6 +292,46 @@ describe('AppController characterization', () => {
     });
   });
 
+  describe('an extraction run that creates the first pipeline folder', () => {
+    let entries;
+    const createExtractionTmpFolder = () => { entries = [{ id: 'catalog_extraction_0001', name: 'extraction-tmp' }]; };
+
+    beforeEach(() => {
+      entries = [];
+      installGifDesktopApiFakes(window.clipSandboxDesktop, {
+        collectionRefine: collectionRefineApi({ resolve: async () => ({ kind: 'cancelled' }) }),
+      });
+      installPipelineCatalogFakes(window.clipSandboxDesktop, { entries: [], openEntry: () => null });
+      window.clipSandboxDesktop.listPipelineCatalog = vi.fn(async () => ({ kind: 'available', entries }));
+    });
+
+    async function startWithEmptyCatalog() {
+      await startCollectionScreen();
+      await waitFor(() => expect(document.getElementById('pipelinesPanelHost').textContent)
+        .toContain('No pipelines with video clips were found'));
+    }
+
+    test('GIF Extraction publishing its clips shows the new pipeline in the Pipelines panel', async () => {
+      await startWithEmptyCatalog();
+      const { extraction } = await gifSessions();
+
+      createExtractionTmpFolder();
+      extraction.finishPublishingRun();
+
+      await waitFor(() => expect(document.querySelector('[aria-label="Load extraction-tmp"]')).not.toBeNull());
+    });
+
+    test('Collection Refine publishing its clip shows the new pipeline in the Pipelines panel', async () => {
+      await startWithEmptyCatalog();
+      const { collectionRefinement } = await gifSessions();
+
+      createExtractionTmpFolder();
+      collectionRefinement.finishPublishingRun();
+
+      await waitFor(() => expect(document.querySelector('[aria-label="Load extraction-tmp"]')).not.toBeNull());
+    });
+  });
+
   describe('starting to refine a collection clip', () => {
     let resolveSource;
 
@@ -361,6 +409,74 @@ describe('AppController characterization', () => {
       await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection'));
       expect(collectionRefinement.openCollectionSource).not.toHaveBeenCalled();
       expect(collectionRefinement.destinations).toEqual([]);
+    });
+  });
+
+  describe('leaving Collection Refine with a staged endpoint that is not locked', () => {
+    beforeEach(() => {
+      installGifDesktopApiFakes(window.clipSandboxDesktop, {
+        collectionRefine: collectionRefineApi({ resolve: () => new Promise(() => undefined) }),
+      });
+    });
+
+    const discardDialog = () => document.getElementById('discardRefinementDialog');
+    const dialogButton = name => [...discardDialog().querySelectorAll('button')].find(button => button.textContent === name);
+    const backButton = () => [...document.querySelectorAll('#screenCommandHost button')]
+      .find(button => button.textContent === 'Back to Collection');
+
+    async function stageEndOnCollectionRefine() {
+      await startCollectionScreen();
+      await openFolder(['alpha.mp4', 'bravo.mp4']);
+      openContextMenuOnFirstClip();
+      await waitFor(() => expect(contextMenuItem('Refine')?.disabled).toBe(false));
+      contextMenuItem('Refine').click();
+      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection-refine'));
+      const { collectionRefinement } = await gifSessions();
+      collectionRefinement.staged = [{ endpoint: 'end', frameIndex: 7 }];
+      return collectionRefinement;
+    }
+
+    test('Back asks whether to discard the staged end', async () => {
+      await stageEndOnCollectionRefine();
+
+      backButton().click();
+
+      await waitFor(() => expect(discardDialog().open).toBe(true));
+      expect(discardDialog().querySelector('h2').textContent).toBe('Discard the staged end (frame 7)?');
+    });
+
+    test('Keep editing after Back stays on Refine with the staged end', async () => {
+      const session = await stageEndOnCollectionRefine();
+      backButton().click();
+      await waitFor(() => expect(discardDialog().open).toBe(true));
+
+      dialogButton('Keep editing').click();
+
+      expect(discardDialog().open).toBe(false);
+      expect(document.querySelector('#appScreenSelector').value).toBe('collection-refine');
+      expect(session.staged).toEqual([{ endpoint: 'end', frameIndex: 7 }]);
+    });
+
+    test('Back then Discard drops the staged end and shows Collection', async () => {
+      const session = await stageEndOnCollectionRefine();
+
+      backButton().click();
+      await waitFor(() => expect(discardDialog().open).toBe(true));
+      dialogButton('Discard').click();
+
+      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection'));
+      expect(session.staged).toBeNull();
+    });
+
+    test('choosing another workspace asks too, and Discard completes the switch', async () => {
+      await stageEndOnCollectionRefine();
+
+      activateScreen('gif-extraction');
+      expect(document.querySelector('#appScreenSelector').value).toBe('collection-refine');
+      await waitFor(() => expect(discardDialog().open).toBe(true));
+      dialogButton('Discard').click();
+
+      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('gif-extraction'));
     });
   });
 });

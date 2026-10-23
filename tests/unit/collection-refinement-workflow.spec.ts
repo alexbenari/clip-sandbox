@@ -5,6 +5,7 @@ import type { CollectionClipSourceResult } from '../../src/app/collection-clip-r
 import { CollectionRefinementWorkflow } from '../../src/app/collection-refinement-workflow.js';
 import { EventSource } from '../../src/app/event-source.js';
 import type { CapturedRangeId } from '../../src/domain/captured-range.js';
+import { flushPendingWork } from '../support/flush-pending-work.js';
 import { FrameReviewOpaqueId } from '../../src/frame-review/frame-review-api.js';
 
 const movieSource = { name: 'Movie.mkv', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_0123456789abcdef') };
@@ -18,9 +19,12 @@ const resolvedSource: CollectionClipSourceResult = {
 class FakeRefineScreen extends EventSource<{ backRequested: CapturedRangeId | null }> {
   readonly id = 'collection-refine';
   showPreparation = vi.fn();
+  showRefinedClip = vi.fn();
 }
 
-function refinementWorkflow({ dirty = false, lookup = async (): Promise<CollectionClipSourceResult> => resolvedSource } = {}) {
+function refinementWorkflow({
+  dirty = false, discardStaged = true, lookup = async (): Promise<CollectionClipSourceResult> => resolvedSource,
+} = {}) {
   const navigation = { activeScreen: { id: 'collection' }, activate: vi.fn((id: string) => { navigation.activeScreen = { id }; }) };
   const session = {
     setExtractionDestination: vi.fn(),
@@ -35,6 +39,7 @@ function refinementWorkflow({ dirty = false, lookup = async (): Promise<Collecti
   const refineScreen = new FakeRefineScreen();
   const refinedClipList = new EventSource<{ refineRequested: CapturedRangeId }>();
   const reporter = { failure: vi.fn() };
+  const stagedChanges = { confirmDiscard: vi.fn(async () => discardStaged) };
   const workflow = new CollectionRefinementWorkflow({
     refinementSession: session,
     sourceLookup: { resolve: vi.fn(lookup) },
@@ -45,9 +50,10 @@ function refinementWorkflow({ dirty = false, lookup = async (): Promise<Collecti
     pipelineWorkingCopy: { hasDirtyClipSequenceChanges: dirty, activeCollectionFilename: () => 'picks.txt' },
     openFolder,
     diagnostics: { logRuntimeError: vi.fn(async () => undefined) },
+    stagedChanges,
     reporter,
   });
-  return { workflow, session, navigation, refineScreen, refinedClipList, reporter };
+  return { workflow, session, navigation, refineScreen, refinedClipList, reporter, stagedChanges };
 }
 
 const request = { folderPath: 'C:/clips', filename: 'picks-001.mp4' };
@@ -63,6 +69,14 @@ describe('CollectionRefinementWorkflow', () => {
     expect(session.openCollectionSource).toHaveBeenCalledWith(movieSource);
     expect(session.importCollectionRange).toHaveBeenCalledOnce();
     expect(refineScreen.showPreparation).toHaveBeenLastCalledWith(null);
+  });
+
+  it('names the clip being refined on the Refine screen', async () => {
+    const { workflow, refineScreen } = refinementWorkflow();
+
+    await workflow.start(request, 'picks.txt');
+
+    expect(refineScreen.showRefinedClip).toHaveBeenCalledWith('picks-001.mp4');
   });
 
   it('refuses to start while the view has unsaved changes', async () => {
@@ -106,6 +120,37 @@ describe('CollectionRefinementWorkflow', () => {
 
     expect(session.openCollectionSource).not.toHaveBeenCalled();
     expect(refineScreen.showPreparation).toHaveBeenLastCalledWith(null);
+  });
+
+  it('goes back to Collection once staged endpoints may be discarded', async () => {
+    const { workflow, navigation, refineScreen, stagedChanges } = refinementWorkflow();
+    await workflow.start(request, 'picks.txt');
+
+    refineScreen.emit('backRequested', 'range-1' as CapturedRangeId);
+
+    await vi.waitFor(() => expect(navigation.activeScreen.id).toBe('collection'));
+    expect(stagedChanges.confirmDiscard).toHaveBeenCalledWith(refineScreen);
+  });
+
+  it('stays on Refine when the user keeps editing instead of discarding staged endpoints on Back', async () => {
+    const { workflow, navigation, refineScreen, stagedChanges } = refinementWorkflow({ discardStaged: false });
+    await workflow.start(request, 'picks.txt');
+
+    refineScreen.emit('backRequested', 'range-1' as CapturedRangeId);
+    await vi.waitFor(() => expect(stagedChanges.confirmDiscard).toHaveBeenCalled());
+    await flushPendingWork();
+
+    expect(navigation.activeScreen.id).toBe('collection-refine');
+  });
+
+  it('keeps the staged refinement when the user keeps editing instead of refining the clip again', async () => {
+    const { refinedClipList, session, stagedChanges } = refinementWorkflow({ discardStaged: false });
+
+    refinedClipList.emit('refineRequested', 'range-1' as CapturedRangeId);
+    await vi.waitFor(() => expect(stagedChanges.confirmDiscard).toHaveBeenCalled());
+    await flushPendingWork();
+
+    expect(session.beginRefinement).not.toHaveBeenCalled();
   });
 
   it('reports a rejected request to refine the clip again', async () => {

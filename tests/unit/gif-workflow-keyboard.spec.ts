@@ -53,6 +53,24 @@ describe('GifWorkflowKeyboard', () => {
     expect(transport.exitMovieFullScreen).toHaveBeenCalledOnce();
   });
 
+  it('leaves keys pressed inside a dialog to that dialog', () => {
+    const transport = player();
+    const commands = capture(true);
+    const controller = new GifWorkflowKeyboard();
+    controller.activate({ player: transport, capture: commands });
+    const dialog = document.createElement('dialog');
+    const keepEditing = document.createElement('button');
+    dialog.append(keepEditing);
+
+    for (const key of ['q', 'w', 'x', ' ', 'ArrowLeft']) controller.handleKeyDown(event(key, keepEditing));
+
+    expect(commands.markStart).not.toHaveBeenCalled();
+    expect(commands.markEnd).not.toHaveBeenCalled();
+    expect(commands.lockRange).not.toHaveBeenCalled();
+    expect(transport.togglePlayback).not.toHaveBeenCalled();
+    expect(transport.pressStep).not.toHaveBeenCalled();
+  });
+
   it('routes transport and capture commands only while an active target is installed', () => {
     const transport = player();
     const commands = capture(true);

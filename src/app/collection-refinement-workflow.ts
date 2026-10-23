@@ -6,28 +6,31 @@ import type { ICollectionClipRefinementRequest, ICollectionClipRefinementService
 import type { IEventSource } from './event-source.js';
 import type { CollectionClipRefinementSession } from './collection-clip-refinement-session.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
+import type { RefineLeaveWorkflow } from './refine-leave-workflow.js';
 
 export interface IScreenNavigation {
   activate(screenId: string): void;
   readonly activeScreen: Readonly<{ id: string }>;
 }
 
-export interface IRefinePreparationScreen extends IEventSource<{ backRequested: CapturedRangeId | null }> {
+export interface ICollectionRefineScreen extends IEventSource<{ backRequested: CapturedRangeId | null }> {
   readonly id: string;
   showPreparation(message: string | null, inProgress?: boolean): void;
+  showRefinedClip(filename: string): void;
 }
 
 type CollectionRefinementDependencies = Readonly<{
   refinementSession: Pick<CollectionClipRefinementSession, 'setExtractionDestination' | 'openCollectionSource'
     | 'importCollectionRange' | 'abandonRefinement' | 'beginRefinement'> | null;
   sourceLookup: Pick<ICollectionClipRefinementService, 'resolve'> | null;
-  refineScreen: IRefinePreparationScreen;
+  refineScreen: ICollectionRefineScreen;
   refinedClipList: IEventSource<{ refineRequested: CapturedRangeId }> | null;
   navigation: IScreenNavigation;
   collectionScreenId: string;
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'hasDirtyClipSequenceChanges' | 'activeCollectionFilename'>;
   openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   diagnostics: Pick<AppDiagnostics, 'logRuntimeError'>;
+  stagedChanges: Pick<RefineLeaveWorkflow, 'confirmDiscard'>;
   reporter: Pick<ActivityReporter, 'failure'>;
 }>;
 
@@ -37,7 +40,7 @@ export class CollectionRefinementWorkflow {
 
   constructor(private readonly refinement: CollectionRefinementDependencies) {
     this.unsubscribes = [
-      refinement.refineScreen.on('backRequested', () => this.backToCollection()),
+      refinement.refineScreen.on('backRequested', () => { void this.backToCollection(); }),
       ...(refinement.refinedClipList
         ? [refinement.refinedClipList.on('refineRequested', rangeId => { void this.refineAgain(rangeId); })]
         : []),
@@ -53,6 +56,7 @@ export class CollectionRefinementWorkflow {
         reporter.failure('Save or discard the current changes before refining a clip.');
         return;
       }
+      refineScreen.showRefinedClip(request.filename);
       refineScreen.showPreparation(`Finding the original movie for ${request.filename}…`);
       navigation.activate(refineScreen.id);
       const resolved = await sourceLookup.resolve(request);
@@ -97,8 +101,9 @@ export class CollectionRefinementWorkflow {
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe();
   }
 
-  private backToCollection(): void {
-    const { navigation, collectionScreenId, refineScreen } = this.refinement;
+  private async backToCollection(): Promise<void> {
+    const { navigation, collectionScreenId, refineScreen, stagedChanges } = this.refinement;
+    if (!await stagedChanges.confirmDiscard(refineScreen)) return;
     navigation.activate(collectionScreenId);
     if (navigation.activeScreen.id === collectionScreenId) {
       this.revision += 1;
@@ -107,6 +112,7 @@ export class CollectionRefinementWorkflow {
   }
 
   private async refineAgain(rangeId: CapturedRangeId): Promise<void> {
+    if (!await this.refinement.stagedChanges.confirmDiscard(this.refinement.refineScreen)) return;
     const started = await this.refinement.refinementSession?.beginRefinement(rangeId);
     if (started?.kind === 'rejected') this.refinement.reporter.failure(started.message);
   }

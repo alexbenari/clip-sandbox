@@ -27,6 +27,11 @@ function originalMovie({ phase = 'exact-ready' as Parameters<typeof FrameReviewS
     state: () => FrameReviewState.create(phase, 1, { playbackDurationUs: 2_000_000n }),
     subscribe: vi.fn((next: (event: FrameReviewEvent) => void) => { listeners.add(next); return () => listeners.delete(next); }),
     frameIdentity: vi.fn(async (frameIndex: number) => frameAt(frameIndex, hashFor(frameIndex))),
+    thumbnailFrame: vi.fn(async (frameIndex: number) => Object.freeze({
+      kind: 'exact-frame' as const, identity: frameAt(frameIndex, hashFor(frameIndex)),
+      reviewTimeUs: BigInt(frameIndex * 1_000), sourceGeneration: 1, frameGeneration: 1,
+      width: 2, height: 2, sourceWidth: 640, sourceHeight: 360, pixels: new Blob([new Uint8Array(16)]),
+    })),
     dispose: vi.fn(async () => undefined),
   } as unknown as IFrameReviewSession;
   const service: IFrameReviewService = { chooseSource: vi.fn(), open: vi.fn(async () => review) };
@@ -51,6 +56,17 @@ describe('CollectionClipRefinementSession', () => {
     expect(started.kind).toBe('started');
     expect(session.snapshot.ranges).toEqual([expect.objectContaining({ id: 'range-1', kind: 'ready-to-extract' })]);
     expect(session.snapshot.capture?.capture).toMatchObject({ kind: 'draft', start: null, end: null });
+  });
+
+  it('shows the start frame of the imported clip range as its thumbnail', async () => {
+    const movie = originalMovie();
+    const session = new CollectionClipRefinementSession(movie.service, thumbnails());
+    await session.openCollectionSource(source);
+
+    await session.importCollectionRange(clipRange);
+
+    await vi.waitFor(() => expect(session.snapshot.ranges[0]?.thumbnail)
+      .toEqual({ kind: 'ready', id: 'thumbnail_00000001', url: 'blob:thumbnail-1' }));
   });
 
   it('waits for exact frames before checking the clip\'s range', async () => {

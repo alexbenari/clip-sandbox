@@ -532,6 +532,23 @@ describe('GifExtractionSession saved captures, refinement and extraction outcome
     expect(report.failure).toHaveBeenCalledWith('Some clips could not be completed. Retry them from Clips.');
   });
 
+  it('announces once, after the whole batch, that its clips were published', async () => {
+    const extract = vi.fn()
+      .mockResolvedValueOnce(createdMedia('Sample Movie-001.mp4'))
+      .mockResolvedValueOnce(createdMedia('Sample Movie-002.mp4'));
+    const session = new GifExtractionSession(movieService(), thumbnailService(),
+      { extractionService: extractionService(extract) });
+    const published = vi.fn();
+    session.on('clipsPublished', published);
+    await session.openMovie();
+    await lockExact(session, 3, 6);
+    await lockExact(session, 8, 9);
+
+    await session.extractAll();
+
+    expect(published).toHaveBeenCalledOnce();
+  });
+
   it('reports a cancelled extraction and keeps the clips already made', async () => {
     const report = reporter();
     let finishFirst: (media: ReturnType<typeof createdMedia>) => void = () => undefined;

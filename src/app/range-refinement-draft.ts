@@ -10,6 +10,8 @@ import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capt
 
 export type RefineGifEndpoint = 'start' | 'end';
 
+export type UnlockedEndpointChange = Readonly<{ endpoint: RefineGifEndpoint; frameIndex: number }>;
+
 export type RefineGifTransition =
   | Readonly<{ kind: 'focused'; endpoint: RefineGifEndpoint; seekTimeUs: bigint }>
   | Readonly<{ kind: 'staged'; endpoint: RefineGifEndpoint }>
@@ -90,6 +92,21 @@ export class RangeRefinementDraft {
         : null,
       message: this.message,
     });
+  }
+
+  // Staged frames that differ from the captured range; they are lost unless locked.
+  get unlockedChanges(): readonly UnlockedEndpointChange[] {
+    if (this.status !== 'editing') return [];
+    const changes: UnlockedEndpointChange[] = [];
+    for (const [endpoint, staged, captured] of [
+      ['start', this.start, this.original.start], ['end', this.end, this.original.end],
+    ] as const) {
+      const frameIndex = CaptureEndpoints.frameIndexOf(staged);
+      if (frameIndex !== null && frameIndex !== CaptureEndpoints.frameIndexOf(captured)) {
+        changes.push(Object.freeze({ endpoint, frameIndex }));
+      }
+    }
+    return Object.freeze(changes);
   }
 
   markStart(capture: IFrameReviewDisplayedCapture | null): RefineGifTransition {

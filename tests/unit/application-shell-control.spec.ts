@@ -126,6 +126,21 @@ describe('application shell screen ownership', () => {
     expect(leavePolicy.canLeave).toHaveBeenCalledWith(f.collection, f.settings);
     shell.destroy();
   });
+  it('reports which screen change its leave guard held, so the change can be completed later', () => {
+    const f = fixture();
+    const shell = new ApplicationShellControl({ ...f,
+      screens: [f.collection, f.settings], leavePolicy: { canLeave: () => false },
+    });
+    const refused = vi.fn();
+    shell.on('screenChangeRefused', refused);
+    shell.start();
+
+    f.selector.value = f.settings.id;
+    f.selector.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(refused).toHaveBeenCalledWith({ from: f.collection, to: f.settings });
+    shell.destroy();
+  });
   it('reclaims each panel width and notifies the active screen once after both settle', async () => {
     const f = fixture();
     const workspace = document.createElement('div');

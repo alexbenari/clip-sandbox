@@ -102,7 +102,13 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   }
 
   // Replaces the queue with a model built elsewhere, such as the one range of a collection clip.
-  useModel(model: RangeCaptureModel): void { this.model = model; }
+  useModel(model: RangeCaptureModel): void {
+    this.model = model;
+    const review = this.deps.movie.review;
+    if (!review) return;
+    for (const range of model.snapshot.ranges) this.captureThumbnails.markMissing(range.id);
+    void this.drawImportedThumbnails(review, this.deps.movie.sourceGeneration);
+  }
 
   endRestore(): void { this.deps.storage.endRestore(); }
   stopShowingLoading(): void { this.deps.storage.stopShowingLoading(); }
@@ -321,7 +327,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
       const restored = await storage.attach(review.id);
       if (!restored || this.disposed || movie.review !== review || movie.sourceGeneration !== generation) return;
       this.model = restored;
-      for (const range of restored.snapshot.ranges) this.captureThumbnails.markRestoredMissing(range.id);
+      for (const range of restored.snapshot.ranges) this.captureThumbnails.markMissing(range.id);
       void this.restoreThumbnails(review, generation);
       const continuation = restored.continuationEndpoint();
       if (continuation) {
@@ -396,8 +402,7 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
   }
 
   private async restoreThumbnails(review: IFrameReviewSession, generation: number): Promise<void> {
-    const { movie } = this.deps;
-    const current = () => !this.disposed && movie.review === review && movie.sourceGeneration === generation;
+    const current = () => this.reviewIsCurrent(review, generation);
     let failures = 0;
     const draft = this.model?.snapshot.capture;
     if (draft?.kind === 'draft' && draft.start?.kind === 'saved-exact-frame') {
@@ -411,20 +416,42 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
         failures += 1;
       }
     }
+    failures += await this.drawRangeThumbnails(review, generation);
+    if (failures > 0 && current()) {
+      this.deps.failures.report(`${failures} saved start thumbnails could not be recreated. Retry them from Clips.`);
+    }
+  }
+
+  private async drawImportedThumbnails(review: IFrameReviewSession, generation: number): Promise<void> {
+    const failures = await this.drawRangeThumbnails(review, generation);
+    if (failures > 0 && this.reviewIsCurrent(review, generation)) {
+      this.deps.failures.report(failures === 1
+        ? 'A start thumbnail could not be drawn. Retry it from Clips.'
+        : `${failures} start thumbnails could not be drawn. Retry them from Clips.`);
+    }
+  }
+
+  // Draws without moving the player.
+  private async drawRangeThumbnails(review: IFrameReviewSession, generation: number): Promise<number> {
+    const current = () => this.reviewIsCurrent(review, generation);
+    let failures = 0;
     for (const range of this.model?.snapshot.ranges ?? []) {
-      if (!current()) return;
-      if (range.start.kind !== 'saved-exact-frame') continue;
+      if (!current()) return 0;
+      const start = range.start;
+      if (!CaptureEndpoints.isFrame(start)) continue;
       try {
-        const frame = await review.thumbnailFrame(range.start.frameIndex);
-        if (!current()) return;
-        if (frame.identity.frameInfoHash === range.start.frameInfoHash) this.captureThumbnails.replaceRange(range.id, frame);
+        const frame = await review.thumbnailFrame(CaptureEndpoints.frameIndexOf(start));
+        if (!current()) return 0;
+        if (frame.identity.frameInfoHash === CaptureEndpoints.frameHashOf(start)) this.captureThumbnails.replaceRange(range.id, frame);
       } catch {
         failures += 1;
       }
     }
-    if (failures > 0 && movie.review === review && movie.sourceGeneration === generation) {
-      this.deps.failures.report(`${failures} saved start thumbnails could not be recreated. Retry them from Clips.`);
-    }
+    return failures;
+  }
+
+  private reviewIsCurrent(review: IFrameReviewSession, generation: number): boolean {
+    return !this.disposed && this.deps.movie.review === review && this.deps.movie.sourceGeneration === generation;
   }
 
   private reportCheckFailure(error: unknown, fallback: string): void {

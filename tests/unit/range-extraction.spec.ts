@@ -121,6 +121,33 @@ describe('RangeExtraction', () => {
     expect(changed).toHaveBeenCalled();
   });
 
+  it('announces nothing when a run published no clip', async () => {
+    const first = readyRange(1, 3, 6);
+    const { extraction } = rangeExtraction(vi.fn(async () => { throw new Error('Encoder stopped.'); }));
+    const published = vi.fn();
+    extraction.on('clipsPublished', published);
+
+    await extraction.extractOne(movie, first, () => [first.id]);
+
+    expect(extraction.state(first.id).kind).toBe('failed');
+    expect(published).not.toHaveBeenCalled();
+  });
+
+  it('announces a clip published by a collection save retry', async () => {
+    const first = readyRange(1, 3, 6);
+    const saveCollection = vi.fn()
+      .mockRejectedValueOnce(new Error('collection write failed'))
+      .mockResolvedValueOnce(undefined);
+    const { extraction } = rangeExtraction(vi.fn(async () => media('Sample Movie-001.mp4')), saveCollection);
+    await extraction.extractOne(movie, first, () => [first.id]);
+    const published = vi.fn();
+    extraction.on('clipsPublished', published);
+
+    await extraction.retryPublication(first.id, () => [first.id]);
+
+    expect(published).toHaveBeenCalledOnce();
+  });
+
   it('is unavailable without an extraction service', () => {
     const extraction = new RangeExtraction({ status: new GifSessionStatus(), failures: { report: vi.fn() } });
     extraction.startForMovie(movie.movieName);

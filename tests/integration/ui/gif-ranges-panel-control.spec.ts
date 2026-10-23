@@ -129,6 +129,28 @@ describe('GifRangesPanelControl', () => {
     expect(host.firstElementChild).toBe(root);
   });
 
+  it('says the preview is unavailable, not that the start is unset, for a range without a start picture', () => {
+    const exact = (frameIndex: number) => ({ kind: 'exact-frame' as const,
+      identity: { frameIndex, originalFrameIndex: frameIndex, pts: BigInt(frameIndex), duration: 1n,
+        timebaseNumerator: 1n, timebaseDenominator: 24n, frameInfoPts: BigInt(frameIndex), frameInfoHash: 'hash' },
+      reviewTimeUs: BigInt(frameIndex), sourceGeneration: 1 });
+    const range = { id: 'range-1' as never, kind: 'ready-to-extract' as const, sourceGeneration: 1,
+      start: exact(3), end: exact(5), thumbnail: { kind: 'empty' as const } };
+    const snapshot = { lifecycle: 'open' as const, source: null, reviewState: null, capture: null,
+      draftThumbnail: { kind: 'empty' as const }, selectedRangeId: null, refinement: null,
+      capturesLoading: false, extractionAvailable: true, message: null, ranges: [range],
+      previewTarget: null, previewRevision: 0 };
+    const session = { subscribe(listener: (value: IGifExtractionSessionSnapshot) => void) {
+      listener(snapshot as never); return vi.fn();
+    }, canExtractRange: vi.fn(() => true), canRemoveRange: vi.fn(() => true) };
+    const root = document.createElement('section');
+
+    const control = new GifRangesPanelControl(root, session as never, { document });
+
+    expect(root.querySelector('[data-range-id="range-1"] .gif-range-thumbnail')?.textContent).toBe('Preview unavailable');
+    control.destroy();
+  });
+
   it('makes an inexact range visually compact while retaining its unlocked state for assistive technology', () => {
     const snapshot: IGifExtractionSessionSnapshot = {
       lifecycle: 'open', source: null, reviewState: null, capture: null,

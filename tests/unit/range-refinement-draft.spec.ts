@@ -157,6 +157,41 @@ describe('RangeRefinementDraft', () => {
     expect(firstRefinement.session.commit()).toMatchObject({ kind: 'rejected' });
   });
 
+  it('lists a staged endpoint that differs from the captured range as an unlocked change', async () => {
+    const { session } = await openSession();
+    const range = await lockExactRange(session, 3, 5);
+    const begin = await session.beginRefinement(range.id);
+    if (begin.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(begin));
+
+    begin.session.markEnd(displayedCapture('exact', 70_000n, 7));
+
+    expect(begin.session.unlockedChanges).toEqual([{ endpoint: 'end', frameIndex: 7 }]);
+  });
+
+  it('lists no unlocked change when the staged endpoints equal the captured ones', async () => {
+    const { session } = await openSession();
+    const range = await lockExactRange(session, 3, 5);
+    const begin = await session.beginRefinement(range.id);
+    if (begin.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(begin));
+
+    begin.session.markStart(displayedCapture('exact', 30_000n, 3));
+    begin.session.markEnd(displayedCapture('exact', 50_000n, 5));
+
+    expect(begin.session.unlockedChanges).toEqual([]);
+  });
+
+  it('lists no unlocked change once the staged range is locked', async () => {
+    const { session } = await openSession();
+    const range = await lockExactRange(session, 3, 5);
+    const begin = await session.beginRefinement(range.id);
+    if (begin.kind !== 'started') throw new Error('Refinement did not start: ' + JSON.stringify(begin));
+    begin.session.markEnd(displayedCapture('exact', 70_000n, 7));
+
+    begin.session.commit();
+
+    expect(begin.session.unlockedChanges).toEqual([]);
+  });
+
   it('opens an exact capture, discards staged edits on Back, then replaces the same panel entry on Lock', async () => {
     const { session } = await openSession();
     const first = await lockExactRange(session);

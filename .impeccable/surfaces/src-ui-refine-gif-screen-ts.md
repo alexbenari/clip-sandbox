@@ -15,7 +15,7 @@ OWN-WORLD: Inherit the Screening Room Workbench: booth-black media field, rail-n
 
 STORY: The user opens an inexact or exact captured range by Refine or double-click, sets either endpoint against displayed canonical frames, locks once, sees the same queue entry update, and explicitly extracts a changed revision when desired. An earlier extracted clip remains saved.
 
-CONTROLS: Q/W stage exact Start/End from the displayed picture; A/S jump to staged exact endpoints; Z previews an eligible exact pair in the shared player; Space pauses into exact scrub and resumes the unchanged in-range loop; X commits the staged pair; E extracts only after commit. The loop is timestamp-driven and may be audible. Back discards staged changes. The Clips panel remains keyboard-focus stable when loop availability changes.
+CONTROLS: Q/W stage exact Start/End from the displayed picture; A/S jump to staged exact endpoints; Z previews an eligible exact pair in the shared player; Space pauses into exact scrub and resumes the unchanged in-range loop; X commits the staged pair; E extracts only after commit. The loop is timestamp-driven and may be audible. Back discards staged changes, asking first (Keep editing or Discard) when a staged endpoint differs from the captured range. The Clips panel remains keyboard-focus stable when loop availability changes.
 
 FIRST VIEWPORT: One dominant shared player above a compact two-endpoint workbench; Back and range identity live in the command bar, while the open Clips panel keeps queue context and selection visible.
 

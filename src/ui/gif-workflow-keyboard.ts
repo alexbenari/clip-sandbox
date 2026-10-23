@@ -56,7 +56,7 @@ export class GifWorkflowKeyboard {
   }
 
   handleKeyDown(event: KeyboardEvent): void {
-    if (!this.target || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (!this.target || event.altKey || event.ctrlKey || event.metaKey || this.isInDialog(event.target)) return;
     const key = event.key.toLowerCase();
     if (key === 'escape' && this.target.player.isMovieFullScreen()) {
       void this.target.player.exitMovieFullScreen();
@@ -138,6 +138,10 @@ export class GifWorkflowKeyboard {
     const input = target.closest('input');
     if (input instanceof HTMLInputElement && input.type === 'range') return false;
     return target.closest('input, textarea, select, [contenteditable], [contenteditable="true"]') !== null;
+  }
+
+  private isInDialog(target: EventTarget | null): boolean {
+    return target instanceof Element && target.closest('dialog') !== null;
   }
 
   private isTextEditable(target: EventTarget | null): boolean {

@@ -35,6 +35,8 @@ export interface IExtractionProgressQuery {
 
 export interface IRangeExtractionEvents {
   extractionStateChanged: void;
+  // Sent once when a run that published at least one clip has finished.
+  clipsPublished: void;
 }
 
 type RangeExtractionDependencies = Readonly<{
@@ -55,6 +57,7 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
   private workflow: ClipExtractionWorkflow | null = null;
   private target: ExtractionDestination | undefined;
   private readonly reportedWarnings = new Set<string>();
+  private publishedInRun = false;
 
   constructor(private readonly deps: RangeExtractionDependencies) {
     this.target = deps.destination;
@@ -82,7 +85,10 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
         new ClipExtractor(service),
         new ExtractionPublisher(service, {
           destination: this.target,
-          onPublished: publication => this.deps.publications?.onFolderContentsPublished(publication.folderPath),
+          onPublished: publication => {
+            this.publishedInRun = true;
+            return this.deps.publications?.onFolderContentsPublished(publication.folderPath);
+          },
           onPublishError: error => this.deps.failures.report('The clip was saved, but the Collection view could not refresh.', error),
         }),
         () => { this.events.emit('extractionStateChanged'); this.deps.status.changed(); },
@@ -147,6 +153,7 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
     status.show('Extracting exact range');
     this.deps.reporter?.progress('Extracting exact range');
     status.changed();
+    this.publishedInRun = false;
     try {
       await operation();
       const rangeIds = queuedRangeIds();
@@ -168,6 +175,7 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
       this.deps.failures.report(message, error);
     }
     status.changed();
+    if (this.publishedInRun) this.events.emit('clipsPublished');
   }
 
   private reportWarningOnce(rangeId: CapturedRangeId): void {
