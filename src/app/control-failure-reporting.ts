@@ -4,7 +4,9 @@ import type { IEventSource } from './event-source.js';
 
 export interface IVideoMetadataFailures extends IEventSource<{ metadataFailed: Readonly<{ clip: Readonly<{ name: string }>; error: unknown }> }> {}
 
-export interface IPipelineCatalogFailures extends IEventSource<{ failed: Readonly<{ message: string; error: unknown }>; loaded: void }> {}
+type PipelineCatalogFailure = Readonly<{ kind: 'catalog' | 'pipeline-contents'; message: string; error: unknown }>;
+
+export interface IPipelineCatalogFailures extends IEventSource<{ failed: PipelineCatalogFailure; loaded: void }> {}
 
 type ControlFailureReportingDependencies = Readonly<{
   grid: IVideoMetadataFailures;
@@ -36,13 +38,15 @@ export class ControlFailureReporting {
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe();
   }
 
-  private reportCatalogFailure({ message, error }: Readonly<{ message: string; error: unknown }>): void {
+  private reportCatalogFailure({ kind, message, error }: PipelineCatalogFailure): void {
     const { reporter, diagnostics } = this.reporting;
-    this.unresolvedCatalogFailures.push(reporter.failure(message, {
+    const failureId = reporter.failure(message, {
       affected: 'Pipelines',
       recovery: 'Check the Pipelines top folder in Settings, then try again.',
       technicalDetails: reporter.technicalDetailsOf(error),
-    }));
+    });
+    // Only a successful list load answers a list failure; a pipeline's contents are read again only when expanded.
+    if (kind === 'catalog') this.unresolvedCatalogFailures.push(failureId);
     void diagnostics.logRuntimeError(message, error);
   }
 

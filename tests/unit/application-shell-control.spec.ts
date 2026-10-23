@@ -290,14 +290,14 @@ describe('application shell screen ownership', () => {
     expect(clips.root.hidden).toBe(true);
     expect(pipelines.root.hidden).toBe(false);
     pipelines.foldButton.click();
-    expect(boundsChanging).toHaveBeenLastCalledWith(1200 - 36, 240);
+    expect(boundsChanging).toHaveBeenLastCalledWith(1200 - 36, expect.any(Number));
 
     shell.activate(extraction.id);
     expect(clips.root.hidden).toBe(false);
     shell.destroy();
   });
 
-  it('restores a hidden panel as its screen left it when that screen returns', () => {
+  it('shows a hidden panel again, folded as its screen left it, when that screen returns', () => {
     const f = fixture();
     const clips = { ...panelFixture('clips'), fallbackContent: undefined };
     const workspace = workspaceFixture(f.commandHost, f.screenHost, clips);

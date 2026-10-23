@@ -46,12 +46,12 @@ describe('PipelineCatalogControl', () => {
     };
     const control = new PipelineCatalogControl({ host, catalog });
     const outcomes: string[] = [];
-    control.on('failed', () => outcomes.push('failed'));
+    control.on('failed', ({ kind }) => outcomes.push(`failed ${kind}`));
     control.on('loaded', () => outcomes.push('loaded'));
 
     await control.load();
     await control.load();
 
-    expect(outcomes).toEqual(['failed', 'loaded']);
+    expect(outcomes).toEqual(['failed catalog', 'loaded']);
   });
 });

@@ -7,9 +7,11 @@ import type {
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
 
+export type PipelineCatalogFailureKind = 'catalog' | 'pipeline-contents';
+
 export interface IPipelineCatalogEvents {
   loadRequested: IPipelineCatalogEntry;
-  failed: Readonly<{ message: string; error: unknown }>;
+  failed: Readonly<{ kind: PipelineCatalogFailureKind; message: string; error: unknown }>;
   loaded: void;
 }
 
@@ -60,7 +62,7 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
     } catch (error) {
       if (!this.isCurrent(requestGeneration)) return;
       this.host.replaceChildren(this.message('Pipelines could not be loaded. Review the configured folder and try again.', 'pipeline-catalog-error'));
-      this.events.emit('failed', { message: 'Could not load Pipelines.', error });
+      this.events.emit('failed', { kind: 'catalog', message: 'Could not load Pipelines.', error });
     }
   }
 
@@ -135,7 +137,7 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
     } catch (error) {
       if (this.destroyed || expand.getAttribute('aria-expanded') !== 'true') return;
       details.replaceChildren(this.message('Pipeline contents could not be loaded.', 'pipeline-catalog-error'));
-      this.events.emit('failed', { message: `Could not load ${entry.name}.`, error });
+      this.events.emit('failed', { kind: 'pipeline-contents', message: `Could not load ${entry.name}.`, error });
     }
   }
 

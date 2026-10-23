@@ -207,6 +207,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     this.applyingPanelState = true;
     try {
       for (const [panelId, panel] of this.panels) {
+        // A hidden panel is not folded or opened, so it starts no animation or workspace resize.
         if (panel.shell.root.hidden) continue;
         const folded = incoming.openPanelIdsOnEntry?.includes(panelId)
           ? false
@@ -260,7 +261,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     }
   }
 
-  // A panel with neither a contribution from the screen nor fallback content is hidden and keeps its folded state for later screens.
+  // A panel with neither a contribution from the screen nor fallback content is hidden.
   private mountPanelContributions(screen: IAppScreen): void {
     const contributions = new Map(screen.panelContributions.map(contribution => [contribution.panelId, contribution]));
     for (const [panelId, panel] of this.panels) {
