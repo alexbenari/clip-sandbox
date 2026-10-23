@@ -124,8 +124,8 @@ const desktopApi = {
   appendTextFile(payload) {
     return ipcRenderer.invoke('clip-sandbox:append-text-file', payload);
   },
-  deleteFiles(payload) {
-    return ipcRenderer.invoke('clip-sandbox:delete-files', payload);
+  trashFiles(payload) {
+    return ipcRenderer.invoke('clip-sandbox:trash-files', payload);
   },
 };
 

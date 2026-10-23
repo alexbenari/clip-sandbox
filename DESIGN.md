@@ -55,6 +55,11 @@ components:
     typography: "{typography.label}"
     rounded: "{rounded.control}"
     padding: "10px 14px"
+  button-destructive:
+    textColor: "{colors.screen-silver}"
+    typography: "{typography.label}"
+    rounded: "{rounded.control}"
+    padding: "10px 14px"
   collection-selector:
     backgroundColor: "{colors.rail-navy}"
     textColor: "{colors.projector-blue}"
@@ -170,6 +175,7 @@ Buttons feel compact and tactile rather than flat or oversized.
 - **Shape:** gently rounded control corners (`12px`) with `10px 14px` padding.
 - **Primary:** Screen Silver text over a deep blue vertical gradient; reserved for the initiating action or safe confirmation.
 - **Secondary:** Screen Silver text over a dark slate-to-navy gradient.
+- **Destructive:** Screen Silver text over a deep Warning Red vertical gradient (Warning Red mixed with black, 70% to 45%), same shape and padding as Primary. Reserved for confirming an action that removes files from the folder, such as Move to Recycle Bin; never used for safe confirmations.
 - **Hover / Focus / Active:** a small brightness increase on hover, a one-pixel downward press on activation, and a visible Projector Blue focus outline where explicitly styled.
 - **Disabled:** reduced opacity (`.45–.5`) without changing the component's silhouette.
 
@@ -191,7 +197,7 @@ Dialogs use near-opaque Rail Navy, `16px` corners, a low-opacity blue or red bor
 
 ### Context Menus
 
-Context menus are compact floating utilities with `12px` outer corners, `8px` padding, a near-opaque booth-dark surface, and the Floating Utility shadow. Menu rows have `8px` corners, left-aligned text, optional `16px` inline SVG icons, and the standard secondary-button gradient without their own shadow.
+Context menus are compact floating utilities with `12px` outer corners, `8px` padding, a near-opaque booth-dark surface, and the Floating Utility shadow. Menu rows have `8px` corners, left-aligned text, optional `16px` inline SVG icons, and the standard secondary-button gradient without their own shadow. A destructive command sits last, below a one-pixel slate divider, in Warning Red text with a 1.6px-stroke trash icon; the same rule applies to the toolbar Actions menu. A disabled row that has a reason shows it as a second line in `12px` Quiet Slate at full strength, so it reads without hovering while the label stays dimmed.
 
 ### Activity Indicator
 

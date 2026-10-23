@@ -1,6 +1,6 @@
 import type { FolderAccess } from '../../app/folder-access.js';
 
-type DesktopDeleteResult = {
+type DesktopTrashResult = {
   filename: string;
   ok?: boolean;
   code?: string;
@@ -10,10 +10,10 @@ type DesktopDeleteResult = {
 type ElectronFolderFileApi = {
   saveTextFile?: (request: { folderPath: string; filename: string; text: string }) => Promise<{ mode?: string }>;
   appendTextFile?: (request: { folderPath: string; filename: string; text: string }) => Promise<{ mode?: string }>;
-  deleteFiles?: (request: { folderPath: string; filenames: Iterable<string> }) => Promise<{
+  trashFiles?: (request: { folderPath: string; filenames: Iterable<string> }) => Promise<{
     ok?: boolean;
     code?: string;
-    results?: DesktopDeleteResult[];
+    results?: DesktopTrashResult[];
   } | null | undefined>;
 };
 
@@ -21,7 +21,7 @@ type ElectronFolderFileWindow = Window & {
   clipSandboxDesktop?: ElectronFolderFileApi;
 };
 
-export type DesktopDeleteFileResult =
+export type DesktopTrashFileResult =
   | { filename: string; ok: true; error: null }
   | { filename: string; ok: false; code: string; error: Error };
 
@@ -84,13 +84,13 @@ export class ElectronFolderFileService {
     });
   }
 
-  async deleteFiles({
+  async trashFiles({
     folderAccess = null,
     filenames = [],
   }: { folderAccess?: FolderAccess | null; filenames?: Iterable<string> } = {}): Promise<{
     ok: boolean;
     code: string;
-    results: DesktopDeleteFileResult[];
+    results: DesktopTrashFileResult[];
   }> {
     const rawFilenames = Array.from(filenames || []).map((filename) => String(filename || '').trim());
     if (!folderAccess) {
@@ -115,30 +115,30 @@ export class ElectronFolderFileService {
         results: rawFilenames.map((filename) => ({
           filename,
           ok: false,
-          code: 'delete-failed',
+          code: 'trash-failed',
           error: error instanceof Error ? error : new Error(String(error || 'Invalid top-level filename')),
         })),
       };
     }
 
-    const response = await this.requireApi().deleteFiles({
+    const response = await this.requireApi().trashFiles({
       folderPath: folderAccess.folderPath,
       filenames: rawFilenames,
     });
     return {
       ok: !!response?.ok,
       code: response?.code || 'partial',
-      results: Array.from(response?.results || []).map((result): DesktopDeleteFileResult => {
+      results: Array.from(response?.results || []).map((result): DesktopTrashFileResult => {
         if (result?.ok) {
           return { filename: result.filename, ok: true, error: null };
         }
         const errorMessage = typeof result?.error === 'object' && result.error
           ? result.error.message || String(result.error)
-          : result?.error || result?.code || 'delete-failed';
+          : result?.error || result?.code || 'trash-failed';
         return {
           filename: result?.filename || '',
           ok: false,
-          code: result?.code || 'delete-failed',
+          code: result?.code || 'trash-failed',
           error: new Error(String(errorMessage)),
         };
       }),

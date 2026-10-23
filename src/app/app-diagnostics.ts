@@ -5,8 +5,8 @@ type ErrorLogFiles = {
   appendTextFile(request: { folderAccess: FolderAccess | null; filename: string; text: string }): Promise<{ mode?: string }>;
 };
 
-type DeleteFailureSummary = {
-  failedDeletes?: Array<{ filename: string; error?: unknown; code?: string }>;
+type TrashFailureSummary = {
+  failedTrashes?: Array<{ filename: string; error?: unknown; code?: string }>;
   failedCollectionRewrites?: Array<{ filename: string; collectionName: string; error?: unknown }>;
 };
 
@@ -63,10 +63,10 @@ export class AppDiagnostics {
     await this.appendErrorLog(detail, folderAccess);
   }
 
-  async logDeleteFailures(result: DeleteFailureSummary, folderAccess: FolderAccess | null = this.getCurrentFolderAccess()): Promise<void> {
-    for (const failedDelete of Array.from(result?.failedDeletes || [])) {
+  async logTrashFailures(result: TrashFailureSummary, folderAccess: FolderAccess | null = this.getCurrentFolderAccess()): Promise<void> {
+    for (const failedTrash of Array.from(result?.failedTrashes || [])) {
       await this.appendErrorLog(
-        `Disk delete error\nFile: ${failedDelete.filename}\nDetails: ${this.errorDetail(failedDelete.error) || failedDelete.code}\n\n`,
+        `Recycle Bin move error\nFile: ${failedTrash.filename}\nDetails: ${this.errorDetail(failedTrash.error) || failedTrash.code}\n\n`,
         folderAccess,
       );
     }

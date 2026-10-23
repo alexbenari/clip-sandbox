@@ -746,6 +746,44 @@ describe('clip collection grid controller', () => {
     expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
   });
 
+  function gridWithTwoClips() {
+    const contextMenuRequests = [];
+    const controller = createClipCollectionGridControl({
+      grid: document.getElementById('grid'),
+      gridRoot: document.getElementById('gridWrap'),
+      formatLabel: (name) => name,
+      recomputeLayout: vi.fn(),
+    });
+    controller.on('contextMenuRequested', (payload) => contextMenuRequests.push(payload));
+    controller.renderCollection(new ClipSequence({
+      name: 'demo',
+      clips: [testClip('clip_1', 'alpha.mp4'), testClip('clip_2', 'bravo.webm')],
+    }));
+    const cards = document.querySelectorAll('#grid .thumb');
+    const rightClick = (card) => card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
+    return { controller, contextMenuRequests, cards, rightClick };
+  }
+
+  test('right-clicking a clip outside the selection makes it the only selected clip before the menu request', () => {
+    const { controller, contextMenuRequests, cards, rightClick } = gridWithTwoClips();
+    cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    rightClick(cards[1]);
+
+    expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
+    expect(contextMenuRequests[0]).toMatchObject({ clipId: 'clip_2', selectedClipIds: ['clip_2'] });
+  });
+
+  test('right-clicking a clip inside a multi-selection keeps the selection', () => {
+    const { controller, cards, rightClick } = gridWithTwoClips();
+    cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    cards[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+
+    rightClick(cards[1]);
+
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+  });
+
   test('injects default styles only once per document', () => {
     createClipCollectionGridControl({
       grid: document.getElementById('grid'),

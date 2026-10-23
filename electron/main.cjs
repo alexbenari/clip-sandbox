@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -177,7 +177,7 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     return { mode: 'saved' };
   });
 
-  ipcMain.handle('clip-sandbox:delete-files', async (event, payload = {}) => {
+  ipcMain.handle('clip-sandbox:trash-files', async (event, payload = {}) => {
     const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
     const rawFilenames = Array.from(payload.filenames || []).map((filename) => String(filename || '').trim()).filter(Boolean);
     try {
@@ -189,7 +189,7 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
         results: rawFilenames.map((filename) => ({
           filename,
           ok: false,
-          code: 'delete-failed',
+          code: 'trash-failed',
           error: {
             message: error?.message || String(error),
           },
@@ -201,13 +201,13 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
 
     for (const filename of filenames) {
       try {
-        await fs.unlink(path.join(folderPath, filename));
+        await shell.trashItem(path.join(folderPath, filename));
         results.push({ filename, ok: true });
       } catch (error) {
         results.push({
           filename,
           ok: false,
-          code: 'delete-failed',
+          code: 'trash-failed',
           error: {
             message: error?.message || String(error),
           },
@@ -217,7 +217,7 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
 
     return {
       ok: results.every((result) => result.ok),
-      code: results.every((result) => result.ok) ? 'deleted' : 'partial',
+      code: results.every((result) => result.ok) ? 'trashed' : 'partial',
       results,
     };
   });

@@ -845,11 +845,14 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     if (!this.events.hasSubscribers('contextMenuRequested')) return;
     event.preventDefault();
     const card = event.target instanceof Element ? this.asClipCard(event.target.closest('.thumb')) : null;
+    const clipId = card?.dataset.clipId || null;
+    // So the menu acts on the clip that was right-clicked.
+    if (clipId && !this.selectedClipIds.has(clipId)) this.selectOnlyCard(card);
     this.events.emit('contextMenuRequested', {
       point: { x: event.clientX, y: event.clientY },
       selectedClipId: this.getSelectedClipId(),
       selectedClipIds: this.getSelectedClipIds(),
-      clipId: card?.dataset.clipId || null,
+      clipId,
     });
   }
 

@@ -125,20 +125,20 @@ describe('electron folder services', () => {
     expect(api.openPipelineCatalogEntry).toHaveBeenCalledWith({ pipelineId: 'pipeline_1' });
   });
 
-  it('maps delete responses into renderer-facing errors', async () => {
+  it('maps Recycle Bin responses into renderer-facing errors', async () => {
     const api = {
-      deleteFiles: vi.fn(async () => ({
+      trashFiles: vi.fn(async () => ({
         ok: false,
         code: 'partial',
         results: [
           { filename: 'alpha.mp4', ok: true },
-          { filename: 'bravo.mp4', ok: false, code: 'delete-failed', error: { message: 'locked' } },
+          { filename: 'bravo.mp4', ok: false, code: 'trash-failed', error: { message: 'locked' } },
         ],
       })),
     };
     const service = new ElectronFolderFileService(api);
 
-    const result = await service.deleteFiles({
+    const result = await service.trashFiles({
       folderAccess: { folderPath: 'C:/clips' },
       filenames: ['alpha.mp4', 'bravo.mp4'],
     });
@@ -147,7 +147,7 @@ describe('electron folder services', () => {
     expect(result.code).toBe('partial');
     expect(result.results[0]).toMatchObject({ filename: 'alpha.mp4', ok: true });
     expect(result.results[0].error).toBeNull();
-    expect(result.results[1]).toMatchObject({ filename: 'bravo.mp4', ok: false, code: 'delete-failed' });
+    expect(result.results[1]).toMatchObject({ filename: 'bravo.mp4', ok: false, code: 'trash-failed' });
     expect(result.results[1].error).toBeInstanceOf(Error);
     expect(result.results[1].error.message).toBe('locked');
   });
@@ -176,17 +176,17 @@ describe('electron folder services', () => {
     expect(api.appendTextFile).not.toHaveBeenCalled();
   });
 
-  it('returns structured delete failures for invalid filenames without calling the desktop api', async () => {
+  it('returns structured Recycle Bin failures for invalid filenames without calling the desktop api', async () => {
     const api = {
-      deleteFiles: vi.fn(async () => ({
+      trashFiles: vi.fn(async () => ({
         ok: true,
-        code: 'deleted',
+        code: 'trashed',
         results: [],
       })),
     };
     const service = new ElectronFolderFileService(api);
 
-    const result = await service.deleteFiles({
+    const result = await service.trashFiles({
       folderAccess: { folderPath: 'C:/clips' },
       filenames: ['alpha.mp4', '..\\secret.mp4'],
     });
@@ -197,16 +197,16 @@ describe('electron folder services', () => {
     expect(result.results[0]).toMatchObject({
       filename: 'alpha.mp4',
       ok: false,
-      code: 'delete-failed',
+      code: 'trash-failed',
     });
     expect(result.results[1]).toMatchObject({
       filename: '..\\secret.mp4',
       ok: false,
-      code: 'delete-failed',
+      code: 'trash-failed',
     });
     expect(result.results[0].error).toBeInstanceOf(Error);
     expect(result.results[1].error).toBeInstanceOf(Error);
-    expect(api.deleteFiles).not.toHaveBeenCalled();
+    expect(api.trashFiles).not.toHaveBeenCalled();
   });
 
   it('delegates video edit requests through the desktop api', async () => {

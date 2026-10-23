@@ -84,7 +84,7 @@ export class DesktopAppTestEnvironment {
       saveTextFile: vi.fn(async () => ({ mode: 'saved' })),
       appendTextFile: vi.fn(async () => ({ mode: 'saved' })),
       createVideoEdit: vi.fn(async () => ({ ok: false, code: 'missing-binary' })),
-      deleteFiles: vi.fn(async () => ({ ok: true, code: 'deleted', results: [] })),
+      trashFiles: vi.fn(async () => ({ ok: true, code: 'trashed', results: [] })),
       listPipelineCatalog: vi.fn(async () => ({ kind: 'unconfigured' })),
     };
     this.#originals = {

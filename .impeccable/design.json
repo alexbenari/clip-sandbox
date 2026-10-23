@@ -112,6 +112,14 @@
       "css": ".ds-btn-primary { appearance:none; border:0; cursor:pointer; padding:10px 14px; border-radius:12px; background:linear-gradient(180deg,#2a4b9e,#1f2b6b); color:#e5e7eb; font:600 13.3333px Arial,sans-serif; letter-spacing:.2px; box-shadow:0 8px 24px rgba(0,0,0,.35); } .ds-btn-primary:hover { filter:brightness(1.05); } .ds-btn-primary:focus-visible { outline:2px solid rgba(122,162,247,.8); outline-offset:2px; } .ds-btn-primary:active { transform:translateY(1px); }"
     },
     {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Confirms an action that removes files from the folder, such as Move to Recycle Bin.",
+      "html": "<button class=\"ds-btn-destructive\">Move to Recycle Bin</button>",
+      "css": ".ds-btn-destructive { appearance:none; border:0; cursor:pointer; padding:10px 14px; border-radius:12px; background:linear-gradient(180deg,color-mix(in srgb,#ef4444 70%,#000),color-mix(in srgb,#ef4444 45%,#000)); color:#e5e7eb; font:600 13.3333px Arial,sans-serif; letter-spacing:.2px; box-shadow:0 8px 24px rgba(0,0,0,.35); } .ds-btn-destructive:hover { filter:brightness(1.05); } .ds-btn-destructive:focus-visible { outline:2px solid rgba(122,162,247,.8); outline-offset:2px; } .ds-btn-destructive:active { transform:translateY(1px); }"
+    },
+    {
       "name": "Secondary Button",
       "kind": "button",
       "refersTo": "button-standard",

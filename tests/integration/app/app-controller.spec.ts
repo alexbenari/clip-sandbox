@@ -48,20 +48,51 @@ describe('AppController Collection and Zoom workflows', () => {
       const items = document.querySelectorAll('#clipContextMenu [role="menuitem"]');
       expect(items).toHaveLength(2);
       expect(Array.from(items).map((item) => item.textContent)).toEqual([
-        'New collection...',
-        'Delete from Disk...',
+        'New collection…',
+        'Move selected to Recycle Bin…',
       ]);
     });
   });
 
-  test('failed disk deletion shows the file and operating system error in More Details', async () => {
-    window.clipSandboxDesktop.deleteFiles = vi.fn(async () => ({
+  test('right-clicking a clip outside the selection moves that clip to the Recycle Bin from the menu', async () => {
+    window.clipSandboxDesktop.pickFolder = vi.fn(async () => ({
+      canceled: false,
+      folderPath: 'C:/clips',
+      folderName: 'clips',
+      files: [desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.mp4' })],
+    }));
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
+    document.getElementById('pickBtn').click();
+    await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(2));
+
+    document.querySelector('#grid .thumb[data-name="alpha.mp4"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.querySelector('#grid .thumb[data-name="bravo.mp4"]').dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      clientX: 50,
+      clientY: 60,
+    }));
+    await waitFor(() => expect(document.querySelector('#clipContextMenu [data-item-id="trash-selected"]')).not.toBeNull());
+    document.querySelector('#clipContextMenu [data-item-id="trash-selected"]').click();
+    await waitFor(() => expect(document.getElementById('trashClipsDialog').open).toBe(true));
+    document.getElementById('confirmTrashClipsBtn').click();
+
+    await waitFor(() => expect(window.clipSandboxDesktop.trashFiles).toHaveBeenCalledWith({
+      folderPath: 'C:/clips',
+      filenames: ['bravo.mp4'],
+    }));
+  });
+
+  test('a failed move to the Recycle Bin shows the file and operating system error in More Details', async () => {
+    window.clipSandboxDesktop.trashFiles = vi.fn(async () => ({
       ok: false,
       code: 'partial',
       results: [{
         filename: 'alpha.mp4',
         ok: false,
-        code: 'delete-failed',
+        code: 'trash-failed',
         error: { message: "EBUSY: resource busy or locked, unlink 'C:/clips/alpha.mp4'" },
       }],
     }));
@@ -73,11 +104,11 @@ describe('AppController Collection and Zoom workflows', () => {
     await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
 
     document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    document.getElementById('deleteFromDiskBtn').click();
-    await waitFor(() => expect(document.getElementById('deleteFromDiskDialog').open).toBe(true));
-    document.getElementById('confirmDeleteFromDiskBtn').click();
+    document.getElementById('trashSelectedBtn').click();
+    await waitFor(() => expect(document.getElementById('trashClipsDialog').open).toBe(true));
+    document.getElementById('confirmTrashClipsBtn').click();
 
-    await waitFor(() => expect(document.querySelector('#activityIndicatorList li')?.textContent).toContain('Failed to delete'));
+    await waitFor(() => expect(document.querySelector('#activityIndicatorList li')?.textContent).toContain('Could not move the selected clips to the Recycle Bin.'));
     const details = document.querySelector('#activityIndicatorList li details');
     expect(details?.querySelector('summary')?.textContent).toBe('More Details');
     expect(details?.textContent).toContain('alpha.mp4');
@@ -502,7 +533,7 @@ describe('AppController Collection and Zoom workflows', () => {
     });
   });
 
-  test('save failure does not continue from delete preflight into delete confirmation', async () => {
+  test('save failure does not continue from the Recycle Bin preflight into its confirmation', async () => {
     window.clipSandboxDesktop.pickFolder = vi.fn(async () => ({
       canceled: false,
       folderPath: 'C:/clips',
@@ -558,20 +589,20 @@ describe('AppController Collection and Zoom workflows', () => {
     });
 
     document.querySelector('#grid .thumb').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    document.getElementById('deleteFromDiskBtn').click();
+    document.getElementById('trashSelectedBtn').click();
 
     await waitFor(() => {
-      expect(document.getElementById('deletePreflightDialog').open).toBe(true);
-      expect(document.getElementById('deleteFromDiskDialog').open).toBe(false);
+      expect(document.getElementById('trashPreflightDialog').open).toBe(true);
+      expect(document.getElementById('trashClipsDialog').open).toBe(false);
     });
 
-    document.getElementById('confirmDeletePreflightBtn').click();
+    document.getElementById('confirmTrashPreflightBtn').click();
 
     await waitFor(() => {
       expect(window.clipSandboxDesktop.saveTextFile).toHaveBeenCalledWith(expect.objectContaining({ filename: 'subset.txt' }));
-      expect(document.getElementById('deletePreflightDialog').open).toBe(true);
-      expect(document.getElementById('deleteFromDiskDialog').open).toBe(false);
-      expect(window.clipSandboxDesktop.deleteFiles).not.toHaveBeenCalled();
+      expect(document.getElementById('trashPreflightDialog').open).toBe(true);
+      expect(document.getElementById('trashClipsDialog').open).toBe(false);
+      expect(window.clipSandboxDesktop.trashFiles).not.toHaveBeenCalled();
       expect(Array.from(document.querySelectorAll('#grid .thumb')).map((el) => el.dataset.name)).toEqual([
         'bravo.mp4',
         'charlie.mp4',

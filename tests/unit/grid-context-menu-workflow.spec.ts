@@ -23,7 +23,7 @@ function contextMenu({ canRefine = true, inspect }: { canRefine?: boolean; inspe
   const navigation = { activeScreen: { id: 'collection' } };
   const zoom = { isOpen: vi.fn(() => false) };
   const collectionRefinement = { start: vi.fn(async () => undefined) };
-  const deleteFromDisk = { start: vi.fn() };
+  const trashClips = { start: vi.fn() };
   const workflow = new GridContextMenuWorkflow({
     pipelineWorkingCopy,
     openFolder,
@@ -35,10 +35,10 @@ function contextMenu({ canRefine = true, inspect }: { canRefine?: boolean; inspe
     zoom,
     fullScreen: { isDocumentFullScreen: () => false },
     addToCollection: { destinationChoices: () => [], addSelectedClips: vi.fn(async () => undefined), openDialog: vi.fn() },
-    deleteFromDisk,
+    trashClips,
     collectionRefinement,
   });
-  return { workflow, grid, menuRequests, alpha, navigation, zoom, collectionRefinement, deleteFromDisk };
+  return { workflow, grid, menuRequests, alpha, navigation, zoom, collectionRefinement, trashClips };
 }
 
 describe('GridContextMenuWorkflow', () => {
@@ -48,9 +48,25 @@ describe('GridContextMenuWorkflow', () => {
     grid.emit('contextMenuRequested', { point: { x: 5, y: 6 }, clipId: alpha.id });
 
     await vi.waitFor(() => expect(menuRequests).toHaveLength(1));
-    expect(menuRequests[0]).toMatchObject({ point: { x: 5, y: 6 }, hasClip: true, canRefine: true, hasSelection: true });
+    expect(menuRequests[0]).toMatchObject({ point: { x: 5, y: 6 }, hasClip: true, refineAvailability: 'available', hasSelection: true });
     menuRequests[0].onRefine();
     expect(collectionRefinement.start).toHaveBeenCalledWith({ folderPath: 'C:/clips', filename: 'alpha.mp4' }, '');
+  });
+
+  it('marks Refine as lacking source movie info for a clip without provenance', async () => {
+    const { workflow, menuRequests, alpha } = contextMenu({ canRefine: false });
+
+    await workflow.open({ x: 1, y: 1 }, alpha.id);
+
+    expect(menuRequests[0].refineAvailability).toBe('no-source-info');
+  });
+
+  it('marks the source movie info as unreadable when checking the clip fails', async () => {
+    const { workflow, menuRequests, alpha } = contextMenu({ inspect: async () => { throw new Error('ffprobe failed'); } });
+
+    await workflow.open({ x: 1, y: 1 }, alpha.id);
+
+    expect(menuRequests[0].refineAvailability).toBe('source-info-unreadable');
   });
 
   it('opens nothing while Zoom is open', async () => {
@@ -86,13 +102,12 @@ describe('GridContextMenuWorkflow', () => {
     expect(menuRequests).toEqual([]);
   });
 
-  it('starts deletion from the menu', async () => {
-    const { workflow, menuRequests, alpha, deleteFromDisk } = contextMenu({ canRefine: false });
+  it('starts moving the selection to the Recycle Bin from the menu', async () => {
+    const { workflow, menuRequests, alpha, trashClips } = contextMenu();
 
     await workflow.open({ x: 1, y: 1 }, alpha.id);
-    menuRequests[0].onDeleteFromDisk();
+    menuRequests[0].onTrashSelected();
 
-    expect(menuRequests[0].canRefine).toBe(false);
-    expect(deleteFromDisk.start).toHaveBeenCalledOnce();
+    expect(trashClips.start).toHaveBeenCalledOnce();
   });
 });

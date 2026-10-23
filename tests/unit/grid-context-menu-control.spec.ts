@@ -2,6 +2,8 @@
 import { describe, expect, test, vi } from 'vitest';
 import { GridContextMenuControl } from '../../src/ui/grid-context-menu-control.js';
 
+const subset = { label: 'subset', value: 'subset.txt', collectionFilename: 'subset.txt' };
+
 describe('grid context menu control', () => {
   test('builds disabled items when nothing is selected', () => {
     const control = new GridContextMenuControl();
@@ -22,28 +24,39 @@ describe('grid context menu control', () => {
     });
   });
 
-  test('builds active add/delete menu items when selection exists', () => {
+  test('builds active add, new collection and Recycle Bin items when a selection exists', () => {
     const control = new GridContextMenuControl();
     const onAddToCollection = vi.fn();
     const onNewCollection = vi.fn();
-    const onDeleteFromDisk = vi.fn();
+    const onTrashSelected = vi.fn();
 
     const items = control.buildItems({
       hasSelection: true,
       hasPipeline: true,
-      targetCollections: [{ label: 'subset', value: 'subset.txt', collectionFilename: 'subset.txt' }],
+      targetCollections: [subset],
       onAddToCollection,
       onNewCollection,
-      onDeleteFromDisk,
+      onTrashSelected,
     });
+    const item = (id) => items.find(entry => entry.id === id);
 
-    expect(items.map((item) => item.id)).toEqual(['add-to-subset.txt', 'new-collection', 'delete-from-disk']);
-    items[0].onSelect();
-    items[1].onSelect();
-    items[2].onSelect();
-    expect(onAddToCollection).toHaveBeenCalledWith({ label: 'subset', value: 'subset.txt', collectionFilename: 'subset.txt' });
+    item('add-to-subset.txt').onSelect();
+    item('new-collection').onSelect();
+    item('trash-selected').onSelect();
+    expect(onAddToCollection).toHaveBeenCalledWith(subset);
     expect(onNewCollection).toHaveBeenCalledOnce();
-    expect(onDeleteFromDisk).toHaveBeenCalledOnce();
+    expect(onTrashSelected).toHaveBeenCalledOnce();
+  });
+
+  test('puts Move selected to Recycle Bin last, after a separator, as a destructive item with an icon', () => {
+    const control = new GridContextMenuControl();
+
+    const items = control.buildItems({ hasSelection: true, hasPipeline: true, hasClip: true, targetCollections: [subset] });
+
+    expect(items.at(-2)).toEqual({ separator: true });
+    expect(items.at(-1)).toMatchObject({ id: 'trash-selected', label: 'Move selected to Recycle Bin…', tone: 'destructive' });
+    expect(items.at(-1).icon).toMatchObject({ kind: 'svg', paint: 'stroke' });
+    expect(items.filter(entry => entry.separator)).toHaveLength(1);
   });
 
   test('delegates open with built items to the generic context menu controller', () => {
@@ -54,27 +67,47 @@ describe('grid context menu control', () => {
       point: { x: 12, y: 24 },
       hasSelection: true,
       hasPipeline: true,
-      targetCollections: [{ label: 'subset', value: 'subset.txt', collectionFilename: 'subset.txt' }],
+      targetCollections: [subset],
     });
 
     expect(contextMenu.open).toHaveBeenCalledOnce();
     expect(contextMenu.open.mock.calls[0][0].point).toEqual({ x: 12, y: 24 });
-    expect(contextMenu.open.mock.calls[0][0].items.map((item) => item.id)).toEqual([
+    expect(contextMenu.open.mock.calls[0][0].items.map((item) => item.id ?? 'separator')).toEqual([
       'add-to-subset.txt',
       'new-collection',
-      'delete-from-disk',
+      'separator',
+      'trash-selected',
     ]);
   });
 
-  test('offers Refine for a collection clip and disables it without provenance', () => {
+  test('offers Refine for a collection clip the source movie is known for', () => {
     const control = new GridContextMenuControl();
     const onRefine = vi.fn();
-    const unavailable = control.buildItems({ hasClip: true, canRefine: false, onRefine });
-    const available = control.buildItems({ hasClip: true, canRefine: true, onRefine });
-    expect(unavailable.find(item => item.id === 'refine-clip')).toMatchObject({ disabled: true });
-    const refine = available.find(item => item.id === 'refine-clip');
+
+    const refine = control.buildItems({ hasClip: true, refineAvailability: 'available', onRefine })
+      .find(item => item.id === 'refine-clip');
+
     expect(refine).toMatchObject({ label: 'Refine', disabled: false });
-    refine?.onSelect?.();
+    expect(refine.detail).toBeUndefined();
+    refine.onSelect();
     expect(onRefine).toHaveBeenCalledOnce();
+  });
+
+  test('disables Refine and says why when the clip has no source movie info', () => {
+    const control = new GridContextMenuControl();
+
+    const refine = control.buildItems({ hasClip: true, refineAvailability: 'no-source-info' })
+      .find(item => item.id === 'refine-clip');
+
+    expect(refine).toMatchObject({ label: 'Refine', detail: 'No source movie info', disabled: true });
+  });
+
+  test('disables Refine and says the source movie info could not be read when checking failed', () => {
+    const control = new GridContextMenuControl();
+
+    const refine = control.buildItems({ hasClip: true, refineAvailability: 'source-info-unreadable' })
+      .find(item => item.id === 'refine-clip');
+
+    expect(refine).toMatchObject({ label: 'Refine', detail: 'Couldn’t read source movie info', disabled: true });
   });
 });

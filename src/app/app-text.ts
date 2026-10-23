@@ -3,9 +3,9 @@ type VideoEditFailure = {
   code?: string;
 };
 
-type DeleteFromDiskResult = {
-  deletedCount?: number;
-  failedDeleteCount?: number;
+type TrashClipsResult = {
+  trashedCount?: number;
+  failedTrashCount?: number;
   cleanedSavedCollectionCount?: number;
   failedCollectionRewriteCount?: number;
 };
@@ -128,34 +128,34 @@ export class AppText {
     return failureTextByCode[code] || `${actionLabel} failed.`;
   }
 
-  deleteFromDiskPreflightText(): string {
-    return 'The current view has unsaved changes. Save before deleting clips from disk?';
+  trashClipsPreflightText(): string {
+    return 'The current view has unsaved changes. Save before moving clips to the Recycle Bin?';
   }
 
-  deleteFromDiskConfirmationText(clipCount: number, affectedSavedCollectionCount = 0): string {
+  trashClipsConfirmationText(clipCount: number, affectedSavedCollectionCount = 0): string {
     const clipText = `${clipCount} clip${clipCount === 1 ? '' : 's'}`;
     if (affectedSavedCollectionCount === 0) {
-      return `Delete ${clipText} from disk? This does not affect any saved collections in this pipeline.`;
+      return `Move ${clipText} to the Recycle Bin? This does not affect any saved collections in this pipeline.`;
     }
-    return `Delete ${clipText} from disk? This also removes them from ${affectedSavedCollectionCount} saved collection${affectedSavedCollectionCount === 1 ? '' : 's'} in this pipeline.`;
+    return `Move ${clipText} to the Recycle Bin? This also removes ${clipCount === 1 ? 'it' : 'them'} from ${affectedSavedCollectionCount} saved collection${affectedSavedCollectionCount === 1 ? '' : 's'} in this pipeline.`;
   }
 
-  deleteFromDiskPreviewOverflowText(hiddenCount: number): string {
-    return `...and ${hiddenCount} more`;
+  trashClipsPreviewOverflowText(hiddenCount: number): string {
+    return `…and ${hiddenCount} more`;
   }
 
-  deleteFromDiskResultText({
-    deletedCount = 0,
-    failedDeleteCount = 0,
+  trashClipsResultText({
+    trashedCount = 0,
+    failedTrashCount = 0,
     cleanedSavedCollectionCount = 0,
     failedCollectionRewriteCount = 0,
-  }: DeleteFromDiskResult = {}): string {
-    if (deletedCount === 0) return 'Failed to delete the selected clips from disk.';
+  }: TrashClipsResult = {}): string {
+    if (trashedCount === 0) return 'Could not move the selected clips to the Recycle Bin.';
 
-    const parts = [`Deleted ${deletedCount} clip${deletedCount === 1 ? '' : 's'} from disk.`];
-    if (failedDeleteCount > 0) parts.push(`Failed to delete ${failedDeleteCount}.`);
+    const parts = [`Moved ${trashedCount} clip${trashedCount === 1 ? '' : 's'} to the Recycle Bin.`];
+    if (failedTrashCount > 0) parts.push(`Could not move ${failedTrashCount}.`);
     if (cleanedSavedCollectionCount > 0) {
-      parts.push(`Removed deleted clips from ${cleanedSavedCollectionCount} saved collection${cleanedSavedCollectionCount === 1 ? '' : 's'}.`);
+      parts.push(`Removed ${trashedCount === 1 ? 'it' : 'them'} from ${cleanedSavedCollectionCount} saved collection${cleanedSavedCollectionCount === 1 ? '' : 's'}.`);
     }
     if (failedCollectionRewriteCount > 0) {
       parts.push(`Failed to update ${failedCollectionRewriteCount} saved collection${failedCollectionRewriteCount === 1 ? '' : 's'}.`);

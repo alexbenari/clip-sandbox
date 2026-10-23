@@ -8,7 +8,7 @@ export interface IMainToolbarEvents {
   saveRequested: void;
   saveAsNewRequested: void;
   addToCollectionRequested: void;
-  deleteFromDiskRequested: void;
+  trashSelectedRequested: void;
   toggleTitlesRequested: void;
   toggleFullscreenRequested: void;
 }
@@ -24,10 +24,10 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
   saveBtn: HTMLButtonElement | null;
   saveAsNewBtn: HTMLButtonElement | null;
   addToCollectionBtn: HTMLButtonElement | null;
-  deleteFromDiskBtn: HTMLButtonElement | null;
+  trashSelectedBtn: HTMLButtonElement | null;
   toggleTitlesBtn: HTMLButtonElement | null;
 
-  // The Save, Save as, Add and Delete commands are items of the toolbar's Actions menu.
+  // The Save, Save as, Add and Recycle Bin commands are items of the toolbar's Actions menu.
   static fromDocument(doc: Document, { appText }: { appText: Pick<AppText, 'countText'> }): MainToolbarControl {
     const elements = new DocumentElements(doc);
     return new MainToolbarControl({
@@ -39,7 +39,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
       saveBtn: elements.required<HTMLButtonElement>('saveBtn'),
       saveAsNewBtn: elements.required<HTMLButtonElement>('saveAsNewBtn'),
       addToCollectionBtn: elements.optional<HTMLButtonElement>('addToCollectionBtn'),
-      deleteFromDiskBtn: elements.optional<HTMLButtonElement>('deleteFromDiskBtn'),
+      trashSelectedBtn: elements.optional<HTMLButtonElement>('trashSelectedBtn'),
       toggleTitlesBtn: elements.required<HTMLButtonElement>('toggleTitlesBtn'),
     });
   }
@@ -52,7 +52,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
     saveBtn,
     saveAsNewBtn,
     addToCollectionBtn,
-    deleteFromDiskBtn,
+    trashSelectedBtn,
     toggleTitlesBtn,
     orderMenu,
   }: {
@@ -64,7 +64,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
     saveBtn?: HTMLButtonElement | null;
     saveAsNewBtn?: HTMLButtonElement | null;
     addToCollectionBtn?: HTMLButtonElement | null;
-    deleteFromDiskBtn?: HTMLButtonElement | null;
+    trashSelectedBtn?: HTMLButtonElement | null;
     toggleTitlesBtn?: HTMLButtonElement | null;
   }) {
     this.appText = appText;
@@ -74,7 +74,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
     this.saveBtn = saveBtn || null;
     this.saveAsNewBtn = saveAsNewBtn || null;
     this.addToCollectionBtn = addToCollectionBtn || null;
-    this.deleteFromDiskBtn = deleteFromDiskBtn || null;
+    this.trashSelectedBtn = trashSelectedBtn || null;
     this.toggleTitlesBtn = toggleTitlesBtn || null;
     this.orderMenu = orderMenu ?? null;
     this.buttonRequests = [
@@ -82,7 +82,7 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
       [this.saveBtn, () => this.events.emit('saveRequested')],
       [this.saveAsNewBtn, () => this.events.emit('saveAsNewRequested')],
       [this.addToCollectionBtn, () => this.events.emit('addToCollectionRequested')],
-      [this.deleteFromDiskBtn, () => this.events.emit('deleteFromDiskRequested')],
+      [this.trashSelectedBtn, () => this.events.emit('trashSelectedRequested')],
       [this.toggleTitlesBtn, () => this.events.emit('toggleTitlesRequested')],
       [this.fullscreenButton, () => this.events.emit('toggleFullscreenRequested')],
     ];
@@ -138,8 +138,8 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
       this.addToCollectionBtn.disabled = !hasPipeline || !hasSelection;
     }
 
-    if (this.deleteFromDiskBtn) {
-      this.deleteFromDiskBtn.disabled = !hasPipeline || !hasSelection;
+    if (this.trashSelectedBtn) {
+      this.trashSelectedBtn.disabled = !hasPipeline || !hasSelection;
     }
 
     if (this.toggleTitlesBtn) {

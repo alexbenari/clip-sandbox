@@ -73,16 +73,6 @@ async function openOrderMenu(page) {
   await expect(page.locator('#orderMenu')).toHaveAttribute('data-open', 'true');
 }
 
-async function openGridContextMenu(page, locator = page.locator('#gridWrap')) {
-  await locator.dispatchEvent('contextmenu', {
-    bubbles: true,
-    button: 2,
-    clientX: 48,
-    clientY: 48,
-  });
-  await expect.poll(async () => page.locator('#clipContextMenu [role="menuitem"]').count()).toBeGreaterThan(0);
-}
-
 async function openActivityPanel(page) {
   const panel = page.locator('#activityIndicatorPanel');
   if (await panel.isHidden()) {
@@ -207,26 +197,24 @@ test.describe('Collection workflows', () => {
     expect(lines.includes('two.webm')).toBe(true);
   });
 
-  test('deletes clips from disk and rewrites affected saved collections', async () => {
+  // The Recycle Bin itself is not inspected; the file leaving the folder without an error is the observable outcome.
+  test('moves a right-clicked clip to the Recycle Bin and rewrites affected saved collections', async () => {
     ({ tempRoot, folderPath } = await createScenarioFolder('delete'));
     await fsp.writeFile(path.join(folderPath, 'subset.txt'), 'solo.mp4\n', 'utf8');
 
     await loadFolder(page, folderPath);
-    await page.locator('#grid .thumb').nth(1).click();
+    await page.locator('#grid .thumb[data-name="solo.mp4"]').click({ button: 'right' });
 
-    await openGridContextMenu(page);
-    await expect(page.locator('#clipContextMenu [role="menuitem"]')).toHaveText([
-      'Add to subset',
-      'New collection...',
-      'Delete from Disk...',
-    ]);
-
-    await page.locator('#clipContextMenu [data-item-id="delete-from-disk"]').click();
-    await expect(page.locator('#deleteFromDiskDialog')).toHaveAttribute('open', '');
-    await page.locator('#confirmDeleteFromDiskBtn').click();
+    const trashItem = page.locator('#clipContextMenu [role="menuitem"]').last();
+    await expect(trashItem).toHaveText('Move selected to Recycle Bin…');
+    await trashItem.click();
+    await expect(page.locator('#trashClipsDialog')).toHaveAttribute('open', '');
+    await expect(page.locator('#trashClipsPreview')).toHaveText('solo.mp4');
+    await page.locator('#confirmTrashClipsBtn').click();
 
     await openActivityPanel(page);
-    await expect(page.locator('#activityIndicatorList li').first()).toContainText('Deleted 1 clip from disk.');
+    await expect(page.locator('#activityIndicatorList li').first())
+      .toContainText('Moved 1 clip to the Recycle Bin. Removed it from 1 saved collection.');
     await expect(page.locator('#grid .thumb')).toHaveCount(1);
     await expect(page.locator('#grid .thumb').first()).toHaveAttribute('data-name', 'duo.webm');
     await expect(fsp.access(path.join(folderPath, 'solo.mp4')).then(() => true).catch(() => false)).resolves.toBe(false);

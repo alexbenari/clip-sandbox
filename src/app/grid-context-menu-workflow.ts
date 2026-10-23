@@ -1,12 +1,14 @@
 import type { AddToCollectionWorkflow, CollectionDestinationChoice } from './add-to-collection-workflow.js';
 import type { AppSessionState } from './app-session-state.js';
-import type { ICollectionClipRefinementService } from './collection-clip-refinement.js';
+import type { ICollectionClipRefinementRequest, ICollectionClipRefinementService } from './collection-clip-refinement.js';
 import type { CollectionRefinementWorkflow, IScreenNavigation } from './collection-refinement-workflow.js';
-import type { DeleteFromDiskWorkflow } from './delete-from-disk-workflow.js';
+import type { TrashClipsWorkflow } from './trash-clips-workflow.js';
 import type { IEventSource } from './event-source.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
 type MenuPoint = Readonly<{ x: number; y: number }>;
+
+export type ClipRefineAvailability = 'available' | 'no-source-info' | 'source-info-unreadable';
 
 export interface IClipContextMenu {
   open(request: {
@@ -14,12 +16,12 @@ export interface IClipContextMenu {
     hasSelection: boolean;
     hasPipeline: boolean;
     hasClip: boolean;
-    canRefine: boolean;
+    refineAvailability: ClipRefineAvailability;
     onRefine: () => void;
     targetCollections: CollectionDestinationChoice[];
     onAddToCollection: (choice: Readonly<{ collectionFilename?: string | null }>) => void;
     onNewCollection: () => void;
-    onDeleteFromDisk: () => void;
+    onTrashSelected: () => void;
   }): void;
 }
 
@@ -35,7 +37,7 @@ type GridContextMenuDependencies = Readonly<{
   zoom: { isOpen(): boolean };
   fullScreen: { isDocumentFullScreen(): boolean };
   addToCollection: Pick<AddToCollectionWorkflow, 'destinationChoices' | 'addSelectedClips' | 'openDialog'>;
-  deleteFromDisk: Pick<DeleteFromDiskWorkflow, 'start'>;
+  trashClips: Pick<TrashClipsWorkflow, 'start'>;
   collectionRefinement: Pick<CollectionRefinementWorkflow, 'start'>;
 }>;
 
@@ -61,11 +63,7 @@ export class GridContextMenuWorkflow {
     const folderAccess = openFolder.currentFolderAccess;
     const request = clip && folderAccess
       ? { folderPath: folderAccess.folderPath, filename: clip.name } : null;
-    let canRefine = false;
-    if (request && this.menu.refinementAvailability) {
-      try { canRefine = await this.menu.refinementAvailability.inspect(request); }
-      catch { canRefine = false; }
-    }
+    const refineAvailability = request ? await this.refineAvailability(request) : 'no-source-info';
     if (revision !== this.revision || collectionFilename !== pipelineWorkingCopy.activeCollectionFilename()
       || openFolder.currentFolderAccess !== folderAccess
       || this.menu.navigation.activeScreen.id !== this.menu.collectionScreenId
@@ -75,7 +73,7 @@ export class GridContextMenuWorkflow {
       hasSelection: this.menu.grid.getSelectedClipIds().length > 0,
       hasPipeline: !!pipelineWorkingCopy.pipeline,
       hasClip: request !== null,
-      canRefine,
+      refineAvailability,
       onRefine: () => {
         if (request) void this.menu.collectionRefinement.start(request, collectionFilename);
       },
@@ -84,8 +82,17 @@ export class GridContextMenuWorkflow {
         void this.menu.addToCollection.addSelectedClips({ kind: 'existing', collectionFilename: choice.collectionFilename ?? null });
       },
       onNewCollection: () => this.menu.addToCollection.openDialog({ startWithNewCollection: true }),
-      onDeleteFromDisk: () => this.menu.deleteFromDisk.start(),
+      onTrashSelected: () => this.menu.trashClips.start(),
     });
+  }
+
+  private async refineAvailability(request: ICollectionClipRefinementRequest): Promise<ClipRefineAvailability> {
+    if (!this.menu.refinementAvailability) return 'source-info-unreadable';
+    try {
+      return await this.menu.refinementAvailability.inspect(request) ? 'available' : 'no-source-info';
+    } catch {
+      return 'source-info-unreadable';
+    }
   }
 
   dispose(): void {

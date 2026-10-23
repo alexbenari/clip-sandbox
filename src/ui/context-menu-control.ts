@@ -51,26 +51,53 @@ const DEFAULT_CONTEXT_MENU_CSS = `
   justify-content:center;
   color:currentColor;
 }
+.context-menu-item-text{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+}
+.context-menu-item-detail{
+  color:#94a3b8;
+  font-size:12px;
+  font-weight:400;
+}
+.context-menu-panel button.context-menu-item-destructive{ color:#ef4444; }
+.context-menu-separator{
+  flex:none;
+  height:1px;
+  margin:2px 4px;
+  background:rgba(148,163,184,.2);
+}
 .context-menu-panel button:hover{ filter:brightness(1.05); }
 .context-menu-panel button:disabled{
-  opacity:.5;
   cursor:not-allowed;
+  background:linear-gradient(180deg, rgba(30,41,59,.5), rgba(17,24,39,.5));
 }
+.context-menu-panel button:disabled .context-menu-item-icon,
+.context-menu-panel button:disabled .context-menu-item-label{ opacity:.5; }
 `;
 
 export type ContextMenuIcon = {
   kind: 'svg';
   viewBox?: string;
   paths?: Iterable<string>;
+  paint?: 'fill' | 'stroke';
 };
 
 export type ContextMenuItem = {
   id?: string;
   label?: string;
+  detail?: string;
+  tone?: 'destructive';
   disabled?: boolean;
   icon?: ContextMenuIcon | null;
   onSelect?: () => void;
 };
+
+export type ContextMenuSeparator = Readonly<{ separator: true }>;
+
+export type ContextMenuEntry = ContextMenuItem | ContextMenuSeparator;
 
 export type ContextMenuPoint = {
   x?: number;
@@ -181,34 +208,11 @@ export class ContextMenuControl {
     this.panel.style.top = `${top}px`;
   }
 
-  renderItems(items: Iterable<ContextMenuItem> = []): void {
+  renderItems(entries: Iterable<ContextMenuEntry> = []): void {
     if (!this.panel) return;
     this.panel.innerHTML = '';
-    for (const item of Array.from(items)) {
-      const button = this.doc.createElement('button');
-      button.type = 'button';
-      button.setAttribute('role', 'menuitem');
-      const content = this.doc.createElement('span');
-      content.className = 'context-menu-item-content';
-      const iconWrap = this.doc.createElement('span');
-      iconWrap.className = 'context-menu-item-icon';
-      const iconEl = this.createIconElement(item?.icon);
-      if (iconEl) {
-        iconWrap.appendChild(iconEl);
-        content.appendChild(iconWrap);
-      }
-      const labelEl = this.doc.createElement('span');
-      labelEl.textContent = item?.label || '';
-      content.appendChild(labelEl);
-      button.appendChild(content);
-      button.disabled = !!item?.disabled;
-      if (item?.id) button.dataset.itemId = item.id;
-      button.addEventListener('click', () => {
-        if (button.disabled) return;
-        this.close({ restoreFocus: false });
-        item?.onSelect?.();
-      });
-      this.panel.appendChild(button);
+    for (const entry of Array.from(entries)) {
+      this.panel.appendChild('separator' in entry ? this.createSeparatorElement() : this.createItemElement(entry));
     }
   }
 
@@ -227,7 +231,7 @@ export class ContextMenuControl {
 
   open({ point = {}, items = [], focusFirst = false, restoreFocusTo = null }: {
     point?: ContextMenuPoint;
-    items?: Iterable<ContextMenuItem>;
+    items?: Iterable<ContextMenuEntry>;
     focusFirst?: boolean;
     restoreFocusTo?: Element | null;
   } = {}): void {
@@ -270,16 +274,69 @@ export class ContextMenuControl {
       .filter(element => !('disabled' in element) || !element.disabled);
   }
 
+  private createItemElement(item: ContextMenuItem): HTMLButtonElement {
+    const button = this.doc.createElement('button');
+    button.type = 'button';
+    button.setAttribute('role', 'menuitem');
+    if (item.tone === 'destructive') button.classList.add('context-menu-item-destructive');
+    const content = this.doc.createElement('span');
+    content.className = 'context-menu-item-content';
+    const iconEl = this.createIconElement(item.icon);
+    if (iconEl) {
+      const iconWrap = this.doc.createElement('span');
+      iconWrap.className = 'context-menu-item-icon';
+      iconWrap.appendChild(iconEl);
+      content.appendChild(iconWrap);
+    }
+    const textEl = this.doc.createElement('span');
+    textEl.className = 'context-menu-item-text';
+    const labelEl = this.doc.createElement('span');
+    labelEl.className = 'context-menu-item-label';
+    labelEl.textContent = item.label || '';
+    textEl.appendChild(labelEl);
+    if (item.detail) {
+      const detailEl = this.doc.createElement('span');
+      detailEl.className = 'context-menu-item-detail';
+      detailEl.textContent = item.detail;
+      textEl.appendChild(detailEl);
+    }
+    content.appendChild(textEl);
+    button.appendChild(content);
+    button.disabled = !!item.disabled;
+    if (item.id) button.dataset.itemId = item.id;
+    button.addEventListener('click', () => {
+      if (button.disabled) return;
+      this.close({ restoreFocus: false });
+      item.onSelect?.();
+    });
+    return button;
+  }
+
+  private createSeparatorElement(): HTMLElement {
+    const separator = this.doc.createElement('div');
+    separator.className = 'context-menu-separator';
+    separator.setAttribute('role', 'separator');
+    return separator;
+  }
+
   private createIconElement(icon: ContextMenuIcon | null | undefined): SVGSVGElement | null {
     if (!icon || icon.kind !== 'svg') return null;
     const svgEl = this.doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svgEl.setAttribute('viewBox', icon.viewBox || '0 0 16 16');
     svgEl.setAttribute('aria-hidden', 'true');
     svgEl.setAttribute('focusable', 'false');
+    const stroked = icon.paint === 'stroke';
+    if (stroked) {
+      svgEl.setAttribute('fill', 'none');
+      svgEl.setAttribute('stroke', 'currentColor');
+      svgEl.setAttribute('stroke-width', '1.6');
+      svgEl.setAttribute('stroke-linecap', 'round');
+      svgEl.setAttribute('stroke-linejoin', 'round');
+    }
     for (const pathData of Array.from(icon.paths || [])) {
       const pathEl = this.doc.createElementNS('http://www.w3.org/2000/svg', 'path');
       pathEl.setAttribute('d', pathData);
-      pathEl.setAttribute('fill', 'currentColor');
+      if (!stroked) pathEl.setAttribute('fill', 'currentColor');
       svgEl.appendChild(pathEl);
     }
     return svgEl;

@@ -25,7 +25,7 @@ import { CollectionViewWorkflow } from './collection-view-workflow.js';
 import { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import { AddToCollectionWorkflow } from './add-to-collection-workflow.js';
 import { FolderSelectionWorkflow } from './folder-selection-workflow.js';
-import { DeleteFromDiskWorkflow } from './delete-from-disk-workflow.js';
+import { TrashClipsWorkflow } from './trash-clips-workflow.js';
 import { ZoomWorkflow } from './zoom-workflow.js';
 import { CollectionRefinementWorkflow } from './collection-refinement-workflow.js';
 import { GridContextMenuWorkflow } from './grid-context-menu-workflow.js';
@@ -65,7 +65,7 @@ import { ZoomEditMenuControl } from '../ui/zoom-edit-menu-control.js';
 import { ZoomOverlayControl } from '../ui/zoom-overlay-control.js';
 import { ClipCollectionGridControl } from '../ui/clip-collection-grid-control.js';
 import { CollectionConflictControl } from '../ui/collection-conflict-control.js';
-import { DeleteFromDiskDialogControl } from '../ui/delete-from-disk-dialog-control.js';
+import { TrashClipsDialogControl } from '../ui/trash-clips-dialog-control.js';
 import { SaveAsNewDialogControl } from '../ui/save-as-new-dialog-control.js';
 import { UnsavedChangesDialogControl } from '../ui/unsaved-changes-dialog-control.js';
 import { CollectionTextFormat } from '../business-logic/collection-text-format.js';
@@ -135,7 +135,7 @@ export class AppController {
       nameCheck: newCollectionNameCheck,
     });
     const unsavedChangesDialog = UnsavedChangesDialogControl.fromDocument(document);
-    const deleteFromDiskDialog = DeleteFromDiskDialogControl.fromDocument(document, { appText });
+    const trashClipsDialog = TrashClipsDialogControl.fromDocument(document, { appText });
     const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
       fullScreen: fullscreenAdapter,
       zoom: zoomOverlay,
@@ -312,13 +312,13 @@ export class AppController {
       reporter: activityReporter,
       appText,
     });
-    const deleteFromDisk = new DeleteFromDiskWorkflow({
+    const trashClips = new TrashClipsWorkflow({
       pipelineWorkingCopy,
       openFolder: state,
       folders,
       files: folderFiles,
       fileWriter: collectionFileWriter,
-      dialog: deleteFromDiskDialog,
+      dialog: trashClipsDialog,
       grid,
       toolbar: mainToolbarControl,
       zoom: zoomOverlay,
@@ -370,7 +370,7 @@ export class AppController {
       zoom: zoomOverlay,
       fullScreen: fullscreenAdapter,
       addToCollection,
-      deleteFromDisk,
+      trashClips,
       collectionRefinement,
     });
     const gifRangeRefinement = new GifRangeRefinementWorkflow({
@@ -411,7 +411,7 @@ export class AppController {
     const appKeyDownHandler = new AppKeyDownHandler({
       saveAsNewDialog,
       addToCollectionDialog,
-      deleteFromDiskDialog,
+      trashClipsDialog,
       unsavedChangesDialog,
       zoom,
       grid,
@@ -434,7 +434,7 @@ export class AppController {
         shell.destroy();
       },
       disposeWorkflow: async () => {
-        for (const workflow of [collectionView, collectionSave, addToCollection, folderSelection, deleteFromDisk,
+        for (const workflow of [collectionView, collectionSave, addToCollection, folderSelection, trashClips,
           zoom, collectionRefinement, gridContextMenu, gifRangeRefinement, settingsWorkflow, controlFailureReporting]) workflow.dispose();
         await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
       },

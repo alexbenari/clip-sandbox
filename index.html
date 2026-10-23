@@ -87,6 +87,7 @@
     button:active{ transform:translateY(1px); }
     button:disabled{ opacity:.45; cursor:not-allowed; }
     .btn-primary{ background:linear-gradient(180deg, #2a4b9e, #1f2b6b); }
+    .btn-destructive{ background:linear-gradient(180deg, color-mix(in srgb, var(--danger) 70%, #000), color-mix(in srgb, var(--danger) 45%, #000)); }
     .order-menu{
       position:relative;
       display:inline-flex;
@@ -121,6 +122,10 @@
       box-shadow:none;
     }
     .order-menu-panel button:disabled{ opacity:.5; }
+    .order-menu-panel button{ white-space:nowrap; }
+    .order-menu-separator{ flex:none; height:1px; margin:2px 4px; background:var(--line); }
+    .order-menu-panel .menu-item-destructive{ display:flex; align-items:center; gap:8px; color:var(--danger); }
+    .menu-item-icon{ width:16px; height:16px; flex:none; pointer-events:none; }
     .order-menu[data-open="true"] .order-menu-panel{
       max-height:260px;
       opacity:1;
@@ -277,7 +282,7 @@
       justify-content:flex-end;
       flex-wrap:wrap;
     }
-    .delete-from-disk-dialog{
+    .trash-clips-dialog{
       width:min(92vw, 520px);
       border:1px solid rgba(239,68,68,.45);
       border-radius:16px;
@@ -286,19 +291,19 @@
       color:var(--fg);
       box-shadow: var(--shadow);
     }
-    .delete-from-disk-dialog::backdrop{
+    .trash-clips-dialog::backdrop{
       background:rgba(2,6,23,.62);
       backdrop-filter: blur(3px);
     }
-    .delete-from-disk-dialog h2{
+    .trash-clips-dialog h2{
       margin:0 0 8px;
       font-size:18px;
     }
-    .delete-from-disk-dialog p{
+    .trash-clips-dialog p{
       margin:0 0 12px;
       color:var(--muted);
     }
-    .delete-from-disk-preview{
+    .trash-clips-preview{
       margin:0 0 12px;
       padding:10px 12px;
       border-radius:10px;
@@ -309,7 +314,7 @@
       max-height:180px;
       overflow:auto;
     }
-    .delete-from-disk-actions{
+    .trash-clips-actions{
       display:flex;
       gap:10px;
       justify-content:flex-end;
@@ -528,7 +533,7 @@
     .fs-active .save-as-new-dialog,
     .fs-active .unsaved-changes-dialog,
     .fs-active .add-to-collection-dialog,
-    .fs-active .delete-from-disk-dialog{ display:none !important; }
+    .fs-active .trash-clips-dialog{ display:none !important; }
 
     .fs-active .thumb{ background:#000 !important; border:none !important; box-shadow:none !important; }
     .fs-active .thumb.selected{ box-shadow:none !important; }
@@ -670,7 +675,8 @@
         <button id="saveBtn" role="menuitem" title="Save the active collection file in the current pipeline folder" disabled>Save</button>
         <button id="saveAsNewBtn" role="menuitem" title="Save the current sequence as a collection file" disabled>Save as Collection</button>
         <button id="addToCollectionBtn" role="menuitem" title="Add the current selected clips to another collection" disabled>Add Selected to Collection...</button>
-        <button id="deleteFromDiskBtn" role="menuitem" title="Delete the current selected clips from disk" disabled>Delete Selected from Disk...</button>
+        <div class="order-menu-separator" role="separator"></div>
+        <button id="trashSelectedBtn" class="menu-item-destructive" role="menuitem" title="Move the selected clips to the Recycle Bin" disabled><svg class="menu-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span>Move selected to Recycle Bin…</span></button>
       </div>
     </div>
     <button id="toggleTitlesBtn" title="Hide or show clip titles"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16M12 5v14M8 19h8"/></svg><span class="command-label">Hide Titles</span></button>
@@ -738,23 +744,23 @@
     </div>
   </dialog>
 
-  <dialog class="unsaved-changes-dialog" id="deletePreflightDialog">
-    <h2>Save changes before deleting?</h2>
-    <p id="deletePreflightText">The current view has unsaved changes.</p>
+  <dialog class="unsaved-changes-dialog" id="trashPreflightDialog">
+    <h2>Save changes before moving clips?</h2>
+    <p id="trashPreflightText">The current view has unsaved changes.</p>
     <div class="unsaved-changes-actions">
-      <button id="cancelDeletePreflightBtn" type="button">Cancel</button>
-      <button id="discardDeletePreflightBtn" type="button">Continue Without Saving</button>
-      <button id="confirmDeletePreflightBtn" type="button" class="btn-primary">Save and Continue</button>
+      <button id="cancelTrashPreflightBtn" type="button">Cancel</button>
+      <button id="discardTrashPreflightBtn" type="button">Continue Without Saving</button>
+      <button id="confirmTrashPreflightBtn" type="button" class="btn-primary">Save and Continue</button>
     </div>
   </dialog>
 
-  <dialog class="delete-from-disk-dialog" id="deleteFromDiskDialog">
-    <h2>Delete Clips from Disk</h2>
-    <p id="deleteFromDiskSummary">Delete the selected clips from disk?</p>
-    <pre class="delete-from-disk-preview" id="deleteFromDiskPreview"></pre>
-    <div class="delete-from-disk-actions">
-      <button id="cancelDeleteFromDiskBtn" type="button">Cancel</button>
-      <button id="confirmDeleteFromDiskBtn" type="button" class="btn-primary">Delete</button>
+  <dialog class="trash-clips-dialog" id="trashClipsDialog">
+    <h2>Move to Recycle Bin</h2>
+    <p id="trashClipsSummary">Move the selected clips to the Recycle Bin?</p>
+    <pre class="trash-clips-preview" id="trashClipsPreview"></pre>
+    <div class="trash-clips-actions">
+      <button id="cancelTrashClipsBtn" type="button">Cancel</button>
+      <button id="confirmTrashClipsBtn" type="button" class="btn-destructive">Move to Recycle Bin</button>
     </div>
   </dialog>
 

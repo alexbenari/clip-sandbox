@@ -63,7 +63,7 @@ describe('KeyboardMapControl', () => {
     ]);
     expect(Array.from(root.querySelectorAll('dt')).map((description) => description.textContent)).toEqual([
       'Open selected clip in Zoom',
-      'Remove selection',
+      'Remove selection; in the pipeline view, move to Recycle Bin',
       'Toggle audio',
       'Previous clip',
       'Next clip',

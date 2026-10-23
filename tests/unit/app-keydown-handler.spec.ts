@@ -13,7 +13,7 @@ function createContext(overrides = {}) {
       isOpen: vi.fn(() => false),
       close: vi.fn(),
     },
-    deleteFromDiskDialog: {
+    trashClipsDialog: {
       handleGlobalKeyDown: vi.fn(() => false),
       isOpen: vi.fn(() => false),
     },

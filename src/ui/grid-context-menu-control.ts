@@ -1,4 +1,17 @@
-import type { ContextMenuControl, ContextMenuItem, ContextMenuPoint } from './context-menu-control.js';
+import type { ClipRefineAvailability } from '../app/grid-context-menu-workflow.js';
+import type { ContextMenuControl, ContextMenuEntry, ContextMenuIcon, ContextMenuItem, ContextMenuPoint } from './context-menu-control.js';
+
+const TRASH_ICON: ContextMenuIcon = Object.freeze({
+  kind: 'svg',
+  viewBox: '0 0 24 24',
+  paint: 'stroke',
+  paths: ['M4 7h16M10 11v6m4-6v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3'],
+});
+
+const REFINE_UNAVAILABLE_REASONS: Readonly<Record<Exclude<ClipRefineAvailability, 'available'>, string>> = Object.freeze({
+  'no-source-info': 'No source movie info',
+  'source-info-unreadable': 'Couldn’t read source movie info',
+});
 
 type TargetCollectionChoice = {
   value: string;
@@ -17,9 +30,9 @@ type GridContextMenuRequest = {
   targetCollections?: TargetCollectionChoice[];
   onAddToCollection?: (choice: TargetCollectionChoice) => void;
   onNewCollection?: () => void;
-  onDeleteFromDisk?: () => void;
+  onTrashSelected?: () => void;
   hasClip?: boolean;
-  canRefine?: boolean;
+  refineAvailability?: ClipRefineAvailability;
   onRefine?: () => void;
 };
 
@@ -38,12 +51,12 @@ export class GridContextMenuControl {
     targetCollections = [],
     onAddToCollection = () => {},
     onNewCollection = () => {},
-    onDeleteFromDisk = () => {},
+    onTrashSelected = () => {},
     hasClip = false,
-    canRefine = false,
+    refineAvailability = 'no-source-info',
     onRefine = () => {},
-  }: GridContextMenuRequest = {}): ContextMenuItem[] {
-    const items: ContextMenuItem[] = hasSelection
+  }: GridContextMenuRequest = {}): ContextMenuEntry[] {
+    const items: ContextMenuEntry[] = hasSelection
       ? targetCollections.map((choice) => ({
         id: `add-to-${choice.value}`,
         label: `Add to ${choice.label}`,
@@ -55,60 +68,38 @@ export class GridContextMenuControl {
         disabled: true,
       }];
 
-    if (hasClip) items.push({
-      id: 'refine-clip',
-      label: 'Refine',
-      disabled: !canRefine,
-      onSelect: onRefine,
-    });
+    if (hasClip) items.push(this.refineItem(refineAvailability, onRefine));
 
     items.push({
       id: 'new-collection',
-      label: 'New collection...',
+      label: 'New collection…',
       disabled: !hasPipeline || !hasSelection,
       onSelect: onNewCollection,
     });
 
     if (hasPipeline && hasSelection) {
-      items.push({
-        id: 'delete-from-disk',
-        label: 'Delete from Disk...',
-        onSelect: onDeleteFromDisk,
+      items.push({ separator: true }, {
+        id: 'trash-selected',
+        label: 'Move selected to Recycle Bin…',
+        tone: 'destructive',
+        icon: TRASH_ICON,
+        onSelect: onTrashSelected,
       });
     }
 
     return items;
   }
 
-  open({
-    point = {},
-    hasSelection = false,
-    hasPipeline = false,
-    targetCollections = [],
-    onAddToCollection = () => {},
-    onNewCollection = () => {},
-    onDeleteFromDisk = () => {},
-    hasClip = false,
-    canRefine = false,
-    onRefine = () => {},
-  }: GridContextMenuRequest = {}): void {
-    this.contextMenu?.open({
-      point,
-      items: this.buildItems({
-        hasSelection,
-        hasPipeline,
-        targetCollections,
-        onAddToCollection,
-        onNewCollection,
-        onDeleteFromDisk,
-        hasClip,
-        canRefine,
-        onRefine,
-      }),
-    });
+  open({ point = {}, ...request }: GridContextMenuRequest = {}): void {
+    this.contextMenu?.open({ point, items: this.buildItems(request) });
   }
 
   close(options?: { restoreFocus?: boolean }): void {
     this.contextMenu?.close(options);
+  }
+
+  private refineItem(availability: ClipRefineAvailability, onRefine: () => void): ContextMenuItem {
+    if (availability === 'available') return { id: 'refine-clip', label: 'Refine', disabled: false, onSelect: onRefine };
+    return { id: 'refine-clip', label: 'Refine', detail: REFINE_UNAVAILABLE_REASONS[availability], disabled: true };
   }
 }

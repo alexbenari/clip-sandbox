@@ -1,44 +1,44 @@
 import type { AppText } from '../app/app-text.js';
 import { DocumentElements } from './document-elements.js';
 
-type DeleteDialogHandlers = {
+type TrashDialogHandlers = {
   onSave?: (() => void) | null;
   onDiscard?: (() => void) | null;
   onConfirm?: (() => void) | null;
   onCancel?: (() => void) | null;
 };
 
-type DeleteRequestPreview = {
+type TrashRequestPreview = {
   selectedClipNames: string[];
   affectedSavedCollectionCount: number;
 };
 
-export class DeleteFromDiskDialogControl {
-  private readonly appText: Pick<AppText, 'deleteFromDiskConfirmationText' | 'deleteFromDiskPreviewOverflowText'>;
+export class TrashClipsDialogControl {
+  private readonly appText: Pick<AppText, 'trashClipsConfirmationText' | 'trashClipsPreviewOverflowText'>;
   private readonly preflightDialog: HTMLDialogElement | null;
   private readonly preflightTextEl: HTMLElement | null;
   private readonly confirmDialog: HTMLDialogElement | null;
   private readonly confirmSummaryEl: HTMLElement | null;
   private readonly confirmPreviewEl: HTMLElement | null;
-  private preflightHandlers: DeleteDialogHandlers;
-  private confirmHandlers: DeleteDialogHandlers;
+  private preflightHandlers: TrashDialogHandlers;
+  private confirmHandlers: TrashDialogHandlers;
 
   static fromDocument(doc: Document, { appText }: {
-    appText: Pick<AppText, 'deleteFromDiskConfirmationText' | 'deleteFromDiskPreviewOverflowText'>;
-  }): DeleteFromDiskDialogControl {
+    appText: Pick<AppText, 'trashClipsConfirmationText' | 'trashClipsPreviewOverflowText'>;
+  }): TrashClipsDialogControl {
     const elements = new DocumentElements(doc);
-    return new DeleteFromDiskDialogControl({
+    return new TrashClipsDialogControl({
       appText,
-      preflightDialog: elements.optional<HTMLDialogElement>('deletePreflightDialog'),
-      preflightTextEl: elements.optional('deletePreflightText'),
-      confirmPreflightBtn: elements.optional<HTMLButtonElement>('confirmDeletePreflightBtn'),
-      discardPreflightBtn: elements.optional<HTMLButtonElement>('discardDeletePreflightBtn'),
-      cancelPreflightBtn: elements.optional<HTMLButtonElement>('cancelDeletePreflightBtn'),
-      confirmDialog: elements.optional<HTMLDialogElement>('deleteFromDiskDialog'),
-      confirmSummaryEl: elements.optional('deleteFromDiskSummary'),
-      confirmPreviewEl: elements.optional('deleteFromDiskPreview'),
-      confirmDeleteBtn: elements.optional<HTMLButtonElement>('confirmDeleteFromDiskBtn'),
-      cancelDeleteBtn: elements.optional<HTMLButtonElement>('cancelDeleteFromDiskBtn'),
+      preflightDialog: elements.optional<HTMLDialogElement>('trashPreflightDialog'),
+      preflightTextEl: elements.optional('trashPreflightText'),
+      confirmPreflightBtn: elements.optional<HTMLButtonElement>('confirmTrashPreflightBtn'),
+      discardPreflightBtn: elements.optional<HTMLButtonElement>('discardTrashPreflightBtn'),
+      cancelPreflightBtn: elements.optional<HTMLButtonElement>('cancelTrashPreflightBtn'),
+      confirmDialog: elements.optional<HTMLDialogElement>('trashClipsDialog'),
+      confirmSummaryEl: elements.optional('trashClipsSummary'),
+      confirmPreviewEl: elements.optional('trashClipsPreview'),
+      confirmTrashBtn: elements.optional<HTMLButtonElement>('confirmTrashClipsBtn'),
+      cancelTrashBtn: elements.optional<HTMLButtonElement>('cancelTrashClipsBtn'),
     });
   }
 
@@ -52,10 +52,10 @@ export class DeleteFromDiskDialogControl {
     confirmDialog,
     confirmSummaryEl,
     confirmPreviewEl,
-    confirmDeleteBtn,
-    cancelDeleteBtn,
+    confirmTrashBtn,
+    cancelTrashBtn,
   }: {
-    appText: Pick<AppText, 'deleteFromDiskConfirmationText' | 'deleteFromDiskPreviewOverflowText'>;
+    appText: Pick<AppText, 'trashClipsConfirmationText' | 'trashClipsPreviewOverflowText'>;
     preflightDialog?: HTMLDialogElement | null;
     preflightTextEl?: HTMLElement | null;
     confirmPreflightBtn?: HTMLElement | null;
@@ -64,8 +64,8 @@ export class DeleteFromDiskDialogControl {
     confirmDialog?: HTMLDialogElement | null;
     confirmSummaryEl?: HTMLElement | null;
     confirmPreviewEl?: HTMLElement | null;
-    confirmDeleteBtn?: HTMLElement | null;
-    cancelDeleteBtn?: HTMLElement | null;
+    confirmTrashBtn?: HTMLElement | null;
+    cancelTrashBtn?: HTMLElement | null;
   }) {
     this.appText = appText;
     this.preflightDialog = preflightDialog || null;
@@ -92,12 +92,12 @@ export class DeleteFromDiskDialogControl {
       this.cancelPreflight();
     });
 
-    confirmDeleteBtn?.addEventListener('click', () => {
+    confirmTrashBtn?.addEventListener('click', () => {
       const { onConfirm } = this.confirmHandlers;
       this.closeConfirm();
       onConfirm?.();
     });
-    cancelDeleteBtn?.addEventListener('click', () => this.cancelConfirm());
+    cancelTrashBtn?.addEventListener('click', () => this.cancelConfirm());
     confirmDialog?.addEventListener('cancel', (event) => {
       event.preventDefault();
       this.cancelConfirm();
@@ -162,29 +162,29 @@ export class DeleteFromDiskDialogControl {
     onCancel?.();
   }
 
-  openPreflight({ text = '', onSave = null, onDiscard = null, onCancel = null }: { text?: string } & DeleteDialogHandlers = {}): void {
+  openPreflight({ text = '', onSave = null, onDiscard = null, onCancel = null }: { text?: string } & TrashDialogHandlers = {}): void {
     this.preflightHandlers = { onSave, onDiscard, onCancel };
     if (this.preflightTextEl) this.preflightTextEl.textContent = text;
     this.openDialog(this.preflightDialog);
   }
 
-  openConfirm({ summary = '', preview = '', onConfirm = null, onCancel = null }: { summary?: string; preview?: string } & DeleteDialogHandlers = {}): void {
+  openConfirm({ summary = '', preview = '', onConfirm = null, onCancel = null }: { summary?: string; preview?: string } & TrashDialogHandlers = {}): void {
     this.confirmHandlers = { onConfirm, onCancel };
     if (this.confirmSummaryEl) this.confirmSummaryEl.textContent = summary;
     if (this.confirmPreviewEl) this.confirmPreviewEl.textContent = preview;
     this.openDialog(this.confirmDialog);
   }
 
-  openConfirmForDeleteRequest(deleteRequest: DeleteRequestPreview | null | undefined, { onConfirm = null, onCancel = null }: DeleteDialogHandlers = {}): void {
-    if (!deleteRequest) return;
-    const summary = this.appText.deleteFromDiskConfirmationText(
-      deleteRequest.selectedClipNames.length,
-      deleteRequest.affectedSavedCollectionCount
+  openConfirmForTrashRequest(trashRequest: TrashRequestPreview | null | undefined, { onConfirm = null, onCancel = null }: TrashDialogHandlers = {}): void {
+    if (!trashRequest) return;
+    const summary = this.appText.trashClipsConfirmationText(
+      trashRequest.selectedClipNames.length,
+      trashRequest.affectedSavedCollectionCount
     );
-    const previewNames = deleteRequest.selectedClipNames.slice(0, 5);
-    const hiddenCount = Math.max(0, deleteRequest.selectedClipNames.length - previewNames.length);
+    const previewNames = trashRequest.selectedClipNames.slice(0, 5);
+    const hiddenCount = Math.max(0, trashRequest.selectedClipNames.length - previewNames.length);
     const preview = hiddenCount > 0
-      ? `${previewNames.join('\n')}\n${this.appText.deleteFromDiskPreviewOverflowText(hiddenCount)}`
+      ? `${previewNames.join('\n')}\n${this.appText.trashClipsPreviewOverflowText(hiddenCount)}`
       : previewNames.join('\n');
 
     this.openConfirm({

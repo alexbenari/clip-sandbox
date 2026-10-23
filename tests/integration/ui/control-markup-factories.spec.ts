@@ -16,7 +16,7 @@ import { KeyboardMapControl } from '../../../src/ui/keyboard-map-control.js';
 import { AddToCollectionDialogControl } from '../../../src/ui/add-to-collection-dialog-control.js';
 import { CollectionConflictControl } from '../../../src/ui/collection-conflict-control.js';
 import { ContextMenuControl } from '../../../src/ui/context-menu-control.js';
-import { DeleteFromDiskDialogControl } from '../../../src/ui/delete-from-disk-dialog-control.js';
+import { TrashClipsDialogControl } from '../../../src/ui/trash-clips-dialog-control.js';
 import { MainToolbarControl } from '../../../src/ui/main-toolbar-control.js';
 import { SaveAsNewDialogControl } from '../../../src/ui/save-as-new-dialog-control.js';
 import { UnsavedChangesDialogControl } from '../../../src/ui/unsaved-changes-dialog-control.js';
@@ -64,21 +64,29 @@ describe('controls built from the page markup', () => {
     expect(onSave).toHaveBeenCalledOnce();
   });
 
-  it('the delete dialogs show their text and answer Save and Delete', () => {
-    const dialogs = DeleteFromDiskDialogControl.fromDocument(document, { appText: new AppText() });
+  it('the Recycle Bin dialogs show their text and answer Save and Move to Recycle Bin', () => {
+    const dialogs = TrashClipsDialogControl.fromDocument(document, { appText: new AppText() });
     const onSave = vi.fn();
     const onConfirm = vi.fn();
 
-    dialogs.openPreflight({ text: 'Save before deleting?', onSave });
-    expect(text('deletePreflightText')).toBe('Save before deleting?');
-    click('confirmDeletePreflightBtn');
-    dialogs.openConfirm({ summary: 'Delete 1 clip?', preview: 'alpha.mp4', onConfirm });
-    expect(text('deleteFromDiskSummary')).toBe('Delete 1 clip?');
-    expect(text('deleteFromDiskPreview')).toBe('alpha.mp4');
-    click('confirmDeleteFromDiskBtn');
+    dialogs.openPreflight({ text: 'Save first?', onSave });
+    expect(text('trashPreflightText')).toBe('Save first?');
+    click('confirmTrashPreflightBtn');
+    dialogs.openConfirm({ summary: 'Move 1 clip?', preview: 'alpha.mp4', onConfirm });
+    expect(text('trashClipsSummary')).toBe('Move 1 clip?');
+    expect(text('trashClipsPreview')).toBe('alpha.mp4');
+    expect(text('confirmTrashClipsBtn')).toBe('Move to Recycle Bin');
+    click('confirmTrashClipsBtn');
 
     expect(onSave).toHaveBeenCalledOnce();
     expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it('the Actions menu ends with the Recycle Bin command, set apart by a separator', () => {
+    const entries = Array.from(document.getElementById('orderMenuPanel')!.children);
+
+    expect(entries.slice(-2).map(entry => entry.getAttribute('role'))).toEqual(['separator', 'menuitem']);
+    expect(entries.at(-1)!.textContent).toBe('Move selected to Recycle Bin…');
   });
 
   it('the collection conflict shows its summary and answers Apply', () => {

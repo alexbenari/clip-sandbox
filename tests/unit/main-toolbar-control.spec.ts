@@ -16,7 +16,7 @@ describe('main toolbar control', () => {
       <button id="saveBtn"></button>
       <button id="saveAsNewBtn"></button>
       <button id="addToCollectionBtn"></button>
-      <button id="deleteFromDiskBtn"></button>
+      <button id="trashSelectedBtn"></button>
       <button id="toggleTitlesBtn"></button>
     `;
 
@@ -26,7 +26,7 @@ describe('main toolbar control', () => {
       saveBtn: document.getElementById('saveBtn'),
       saveAsNewBtn: document.getElementById('saveAsNewBtn'),
       addToCollectionBtn: document.getElementById('addToCollectionBtn'),
-      deleteFromDiskBtn: document.getElementById('deleteFromDiskBtn'),
+      trashSelectedBtn: document.getElementById('trashSelectedBtn'),
       toggleTitlesBtn: document.getElementById('toggleTitlesBtn'),
     });
 
@@ -44,7 +44,7 @@ describe('main toolbar control', () => {
     expect(document.getElementById('saveAsNewBtn').disabled).toBe(true);
     expect(document.getElementById('saveAsNewBtn').textContent).toBe('Save as Collection');
     expect(document.getElementById('addToCollectionBtn').disabled).toBe(true);
-    expect(document.getElementById('deleteFromDiskBtn').disabled).toBe(true);
+    expect(document.getElementById('trashSelectedBtn').disabled).toBe(true);
     expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Hide Titles');
   });
 
@@ -54,7 +54,7 @@ describe('main toolbar control', () => {
       <button id="saveBtn"></button>
       <button id="saveAsNewBtn"></button>
       <button id="addToCollectionBtn"></button>
-      <button id="deleteFromDiskBtn"></button>
+      <button id="trashSelectedBtn"></button>
       <button id="toggleTitlesBtn"></button>
     `;
 
@@ -64,7 +64,7 @@ describe('main toolbar control', () => {
       saveBtn: document.getElementById('saveBtn'),
       saveAsNewBtn: document.getElementById('saveAsNewBtn'),
       addToCollectionBtn: document.getElementById('addToCollectionBtn'),
-      deleteFromDiskBtn: document.getElementById('deleteFromDiskBtn'),
+      trashSelectedBtn: document.getElementById('trashSelectedBtn'),
       toggleTitlesBtn: document.getElementById('toggleTitlesBtn'),
     });
 
@@ -83,7 +83,7 @@ describe('main toolbar control', () => {
     expect(document.getElementById('saveAsNewBtn').textContent).toBe('Save Collection As...');
     expect(document.getElementById('saveAsNewBtn').title).toBe('Save the current collection as another collection file');
     expect(document.getElementById('addToCollectionBtn').disabled).toBe(false);
-    expect(document.getElementById('deleteFromDiskBtn').disabled).toBe(false);
+    expect(document.getElementById('trashSelectedBtn').disabled).toBe(false);
     expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Show Titles');
   });
 
@@ -92,7 +92,7 @@ describe('main toolbar control', () => {
     const saveBtn = document.createElement('button');
     const saveAsNewBtn = document.createElement('button');
     const addToCollectionBtn = document.createElement('button');
-    const deleteFromDiskBtn = document.createElement('button');
+    const trashSelectedBtn = document.createElement('button');
     const toggleTitlesBtn = document.createElement('button');
     const fullscreenButton = document.createElement('button');
     const handlers = Array.from({ length: 7 }, () => vi.fn());
@@ -101,7 +101,7 @@ describe('main toolbar control', () => {
       saveBtn,
       saveAsNewBtn,
       addToCollectionBtn,
-      deleteFromDiskBtn,
+      trashSelectedBtn,
       toggleTitlesBtn,
       fullscreenButton,
     ];
@@ -112,7 +112,7 @@ describe('main toolbar control', () => {
       saveBtn,
       saveAsNewBtn,
       addToCollectionBtn,
-      deleteFromDiskBtn,
+      trashSelectedBtn,
       toggleTitlesBtn,
       fullscreenButton,
     });
@@ -120,7 +120,7 @@ describe('main toolbar control', () => {
     control.on('saveRequested', handlers[1]);
     control.on('saveAsNewRequested', handlers[2]);
     control.on('addToCollectionRequested', handlers[3]);
-    control.on('deleteFromDiskRequested', handlers[4]);
+    control.on('trashSelectedRequested', handlers[4]);
     control.on('toggleTitlesRequested', handlers[5]);
     control.on('toggleFullscreenRequested', handlers[6]);
 

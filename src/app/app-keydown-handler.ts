@@ -3,7 +3,7 @@ import type { IEventSource } from './event-source.js';
 
 export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Open selected clip in Zoom', group: 'Grid', sequences: [['Z']] },
-  { description: 'Remove selection', group: 'Grid', sequences: [['Delete'], ['Backspace']] },
+  { description: 'Remove selection; in the pipeline view, move to Recycle Bin', group: 'Grid', sequences: [['Delete'], ['Backspace']] },
   { description: 'Toggle audio', group: 'Zoom', sequences: [['A']] },
   { description: 'Previous clip', group: 'Zoom', sequences: [['Left']] },
   { description: 'Next clip', group: 'Zoom', sequences: [['Right']] },
@@ -19,7 +19,7 @@ type KeyboardDialog = {
 export type AppKeyDownContext = {
   saveAsNewDialog: Required<Pick<KeyboardDialog, 'isOpen' | 'handleGlobalKeyDown'>>;
   addToCollectionDialog: Required<Pick<KeyboardDialog, 'isOpen' | 'close'>>;
-  deleteFromDiskDialog: Required<Pick<KeyboardDialog, 'isOpen' | 'handleGlobalKeyDown'>>;
+  trashClipsDialog: Required<Pick<KeyboardDialog, 'isOpen' | 'handleGlobalKeyDown'>>;
   unsavedChangesDialog: Required<Pick<KeyboardDialog, 'isOpen' | 'handleGlobalKeyDown'>>;
   zoom: {
     isOpen(): boolean;
@@ -70,7 +70,7 @@ export class AppKeyDownHandler {
       context.addToCollectionDialog.close();
       return true;
     }
-    if (context.deleteFromDiskDialog.handleGlobalKeyDown(event)) {
+    if (context.trashClipsDialog.handleGlobalKeyDown(event)) {
       event.preventDefault();
       return true;
     }
@@ -127,7 +127,7 @@ export class AppKeyDownHandler {
     return (
       this.context.saveAsNewDialog.isOpen()
       || this.context.addToCollectionDialog.isOpen()
-      || this.context.deleteFromDiskDialog.isOpen()
+      || this.context.trashClipsDialog.isOpen()
       || this.context.unsavedChangesDialog.isOpen()
     );
   }

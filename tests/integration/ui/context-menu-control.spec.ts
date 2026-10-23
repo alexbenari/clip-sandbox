@@ -90,5 +90,35 @@ describe('context menu controller', () => {
     expect(panel.querySelector('svg')).not.toBeNull();
     expect(panel.querySelector('[data-item-id="loopify"]').textContent).toContain('Loopify');
   });
+
+  test('shows the detail line of a disabled item as part of its visible text', () => {
+    const { panel, controller } = setup();
+
+    controller.open({
+      point: { x: 20, y: 30 },
+      items: [{ id: 'refine', label: 'Refine', detail: 'No source movie info', disabled: true }],
+    });
+
+    const item = panel.querySelector('[data-item-id="refine"]');
+    expect(item.textContent).toContain('No source movie info');
+  });
+
+  test('renders a separator between items that arrow keys skip', () => {
+    const { panel, controller } = setup();
+
+    controller.open({
+      point: { x: 20, y: 30 },
+      items: [
+        { id: 'first', label: 'First', onSelect: vi.fn() },
+        { separator: true },
+        { id: 'last', label: 'Last', onSelect: vi.fn() },
+      ],
+      focusFirst: true,
+    });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(Array.from(panel.children).map(child => child.getAttribute('role'))).toEqual(['menuitem', 'separator', 'menuitem']);
+    expect(document.activeElement).toBe(panel.querySelector('[data-item-id="last"]'));
+  });
 });
 

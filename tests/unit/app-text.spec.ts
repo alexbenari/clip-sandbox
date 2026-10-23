@@ -24,15 +24,42 @@ describe('AppText', () => {
     expect(appText.downloadedCollectionFileText('my-cut.txt')).toBe('Downloaded my-cut.txt.');
     expect(appText.removedClipsText(1)).toBe('Clip removed from view.');
     expect(appText.removedClipsText(3)).toBe('Removed 3 clips from view.');
-    expect(appText.deleteFromDiskPreflightText()).toContain('Save before deleting');
-    expect(appText.deleteFromDiskConfirmationText(3, 0)).toContain('does not affect any saved collections');
-    expect(appText.deleteFromDiskConfirmationText(3, 2)).toContain('2 saved collections');
-    expect(appText.deleteFromDiskPreviewOverflowText(4)).toBe('...and 4 more');
-    expect(appText.deleteFromDiskResultText({ deletedCount: 3, cleanedSavedCollectionCount: 2 })).toBe(
-      'Deleted 3 clips from disk. Removed deleted clips from 2 saved collections.'
+  });
+
+  test('asks to save before moving clips to the Recycle Bin', () => {
+    expect(appText.trashClipsPreflightText()).toBe(
+      'The current view has unsaved changes. Save before moving clips to the Recycle Bin?'
     );
-    expect(appText.deleteFromDiskResultText({ deletedCount: 3, failedDeleteCount: 1, failedCollectionRewriteCount: 1 })).toBe(
-      'Deleted 3 clips from disk. Failed to delete 1. Failed to update 1 saved collection.'
+  });
+
+  test('confirms how many clips move to the Recycle Bin and which saved collections lose them', () => {
+    expect(appText.trashClipsConfirmationText(3, 0)).toBe(
+      'Move 3 clips to the Recycle Bin? This does not affect any saved collections in this pipeline.'
+    );
+    expect(appText.trashClipsConfirmationText(3, 2)).toBe(
+      'Move 3 clips to the Recycle Bin? This also removes them from 2 saved collections in this pipeline.'
+    );
+    expect(appText.trashClipsConfirmationText(1, 1)).toBe(
+      'Move 1 clip to the Recycle Bin? This also removes it from 1 saved collection in this pipeline.'
+    );
+  });
+
+  test('counts the file names hidden from the Recycle Bin preview', () => {
+    expect(appText.trashClipsPreviewOverflowText(4)).toBe('…and 4 more');
+  });
+
+  test('reports how many clips moved to the Recycle Bin and what could not be done', () => {
+    expect(appText.trashClipsResultText({ trashedCount: 1, cleanedSavedCollectionCount: 1 })).toBe(
+      'Moved 1 clip to the Recycle Bin. Removed it from 1 saved collection.'
+    );
+    expect(appText.trashClipsResultText({ trashedCount: 3, cleanedSavedCollectionCount: 2 })).toBe(
+      'Moved 3 clips to the Recycle Bin. Removed them from 2 saved collections.'
+    );
+    expect(appText.trashClipsResultText({ trashedCount: 3, failedTrashCount: 1, failedCollectionRewriteCount: 1 })).toBe(
+      'Moved 3 clips to the Recycle Bin. Could not move 1. Failed to update 1 saved collection.'
+    );
+    expect(appText.trashClipsResultText({ trashedCount: 0, failedTrashCount: 2 })).toBe(
+      'Could not move the selected clips to the Recycle Bin.'
     );
   });
 
