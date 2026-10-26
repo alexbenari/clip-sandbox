@@ -1,11 +1,9 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
 
 import { generatedMovieFixture, nativeBinaryFolder, nativeFrameReviewUnavailableReason } from '../support/frame-review-dependencies.js';
 import {
-  enterMovieFullScreen, expectNoFullScreenRequest, launchApp, leaveMovieFullScreen, openMovieForExactReview, seekToFrame,
+  enterMovieFullScreen, expectNoFullScreenRequest, leaveMovieFullScreen, seekToFrame, withFreshApp,
 } from './support/app.js';
 
 const movie = generatedMovieFixture('cfr-audio.mkv');
@@ -13,19 +11,7 @@ const unavailable = nativeFrameReviewUnavailableReason(path.join(nativeBinaryFol
 
 test.skip(unavailable !== null, unavailable ?? '');
 
-async function withApp(prefix: string, run: (page: Page) => Promise<void>, { openMovie = true } = {}): Promise<void> {
-  test.setTimeout(120_000);
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  const app = await launchApp(path.join(directory, 'profile'));
-  try {
-    const page = await app.firstWindow();
-    if (openMovie) await openMovieForExactReview(page, movie);
-    await run(page);
-  } finally {
-    await app.close().catch(() => undefined);
-    await fs.rm(directory, { recursive: true, force: true });
-  }
-}
+const withMovie = (profilePrefix: string, run: (page: Page) => Promise<void>) => withFreshApp(profilePrefix, run, { movie });
 
 /** A point on the movie picture, well above the seek row at the bottom of the player. */
 async function pointOnPicture(player: Locator, heightFraction: number): Promise<{ x: number; y: number }> {
@@ -34,17 +20,17 @@ async function pointOnPicture(player: Locator, heightFraction: number): Promise<
 }
 
 test('F has no effect before a movie review session exists', async () => {
-  await withApp('clip-movie-fs-empty-', async page => {
+  await withFreshApp('clip-movie-fs-empty-', async page => {
     const player = page.locator('.frame-review-player');
     await expect(player.getByRole('button', { name: 'Full screen' })).toBeDisabled();
     await player.focus();
 
     await expectNoFullScreenRequest(page, () => page.keyboard.press('f'));
-  }, { openMovie: false });
+  });
 });
 
 test('F reviews the same frame at display size and F again restores the workspace', async () => {
-  await withApp('clip-movie-fs-flow-', async page => {
+  await withMovie('clip-movie-fs-flow-', async page => {
     const player = page.locator('.frame-review-player');
     await page.locator('#foldClips').click();
     await expect(page.locator('#clipsPanel')).toHaveClass(/folded/);
@@ -77,19 +63,31 @@ test('F reviews the same frame at display size and F again restores the workspac
   });
 });
 
-test('in movie full screen the seek row hides when idle, returns on pointer movement, and a click does not start playback', async () => {
-  await withApp('clip-movie-fs-overlay-', async page => {
+test('in movie full screen the seek row appears on pointer movement and hides when idle', async () => {
+  await withMovie('clip-movie-fs-overlay-', async page => {
     const player = page.locator('.frame-review-player');
     const row = player.locator('.frame-review-progress-row');
     await enterMovieFullScreen(page, () => player.getByRole('button', { name: 'Full screen' }).click());
-    const upperPicture = await pointOnPicture(player, 0.25);
-    const lowerPicture = await pointOnPicture(player, 0.5);
+    await expect(row).toHaveCSS('opacity', '0', { timeout: 5_000 });
+    const picture = await pointOnPicture(player, 0.25);
 
-    await page.mouse.move(upperPicture.x, upperPicture.y);
+    await page.mouse.move(picture.x, picture.y);
+
     await expect(row).toHaveCSS('opacity', '1');
     await expect(row).toHaveCSS('opacity', '0', { timeout: 5_000 });
+  });
+});
 
-    await page.mouse.click(lowerPicture.x, lowerPicture.y);
+test('a click on the picture in movie full screen shows the seek row briefly without starting playback', async () => {
+  await withMovie('clip-movie-fs-click-', async page => {
+    const player = page.locator('.frame-review-player');
+    const row = player.locator('.frame-review-progress-row');
+    await enterMovieFullScreen(page, () => player.getByRole('button', { name: 'Full screen' }).click());
+    await expect(row).toHaveCSS('opacity', '0', { timeout: 5_000 });
+    const picture = await pointOnPicture(player, 0.5);
+
+    await page.mouse.click(picture.x, picture.y);
+
     await expect(row).toHaveCSS('opacity', '1');
     await expect(player.locator('[data-command="play-pause"]')).toHaveAttribute('data-playing', 'false');
     await expect(row).toHaveCSS('opacity', '0', { timeout: 5_000 });
@@ -97,7 +95,7 @@ test('in movie full screen the seek row hides when idle, returns on pointer move
 });
 
 test('dragging the seek row in movie full screen moves to the frame and returns focus to the player', async () => {
-  await withApp('clip-movie-fs-drag-', async page => {
+  await withMovie('clip-movie-fs-drag-', async page => {
     const player = page.locator('.frame-review-player');
     const row = player.locator('.frame-review-progress-row');
     await enterMovieFullScreen(page, () => player.getByRole('button', { name: 'Full screen' }).click());
@@ -118,21 +116,30 @@ test('dragging the seek row in movie full screen moves to the frame and returns 
 // That entering full screen closes Activity is proven in full-screen-change-workflow.spec.ts: here any
 // click or focus that could start full screen already closes Activity, and on a small display the
 // open panel covers the Full screen button.
-test('F works from the Jump-by selector, the keyboard map lists the full-screen keys, and Escape exits', async () => {
-  await withApp('clip-movie-fs-keys-', async page => {
+test('F enters and leaves movie full screen from the Jump-by selector and keeps focus on the player', async () => {
+  await withMovie('clip-movie-fs-jump-by-', async page => {
     const player = page.locator('.frame-review-player');
     await player.getByRole('combobox', { name: 'Jump by seconds' }).focus();
+
     await enterMovieFullScreen(page, () => page.keyboard.press('f'));
     await expect(player).toBeFocused();
     await leaveMovieFullScreen(page, () => page.keyboard.press('f'));
     await expect(player).toBeFocused();
+  });
+});
 
+test('the keyboard map lists the keys for movie full screen', async () => {
+  await withFreshApp('clip-movie-fs-map-', async page => {
     await page.locator('#keyboardMapBtn').click();
+
     await expect(page.locator('#keyboardMapPanel')).toContainText('Enter or exit movie full screen');
     await expect(page.locator('#keyboardMapPanel')).toContainText('Exit movie full screen');
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#keyboardMapPanel')).toBeHidden();
+  });
+});
 
+test('Escape leaves movie full screen and keeps focus on the player', async () => {
+  await withMovie('clip-movie-fs-escape-', async page => {
+    const player = page.locator('.frame-review-player');
     await enterMovieFullScreen(page, () => player.getByRole('button', { name: 'Full screen' }).click());
     await expect(player).toBeFocused();
 
