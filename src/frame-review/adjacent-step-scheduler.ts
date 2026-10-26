@@ -13,6 +13,8 @@ export class AdjacentStepScheduler<TFrame> {
   private static readonly holdRepeatDelayMs = 250;
   private static readonly acceleratedRepeatIntervalMs = 38;
   private heldDirection: AdjacentDirection | null = null;
+  private unsteppedPress: AdjacentDirection | null = null;
+  private wakeFromRepeatDelay: (() => void) | null = null;
   private heldSinceMs = 0;
   private completedStepsInHold = 0;
   private running = false;
@@ -37,6 +39,7 @@ export class AdjacentStepScheduler<TFrame> {
     this.sourceGeneration = generation;
     this.requestRevision += 1;
     this.heldDirection = null;
+    this.unsteppedPress = null;
     this.completedStepsInHold = 0;
   }
 
@@ -46,6 +49,8 @@ export class AdjacentStepScheduler<TFrame> {
       this.requestRevision += 1;
       this.heldSinceMs = Date.now();
       this.completedStepsInHold = 0;
+      this.unsteppedPress = direction;
+      this.wakeFromRepeatDelay?.();
     }
     this.heldDirection = direction;
     this.startIfNeeded();
@@ -61,15 +66,20 @@ export class AdjacentStepScheduler<TFrame> {
   }
 
   private startIfNeeded(): void {
-    if (this.running || this.heldDirection === null) return;
+    if (this.running || this.nextDirection() === null) return;
     this.running = true;
     void this.run();
   }
 
+  // A press steps once even when it is released before the loop reaches it.
+  private nextDirection(): AdjacentDirection | null {
+    return this.heldDirection ?? this.unsteppedPress;
+  }
+
   private async run(): Promise<void> {
     try {
-      while (this.heldDirection !== null) {
-        const direction = this.heldDirection;
+      for (let direction = this.nextDirection(); direction !== null; direction = this.nextDirection()) {
+        this.unsteppedPress = null;
         const generation = this.sourceGeneration;
         const revision = this.requestRevision;
         const frame = await this.target.stepAdjacent(direction);
@@ -79,19 +89,29 @@ export class AdjacentStepScheduler<TFrame> {
           const delayMs = this.completedStepsInHold === 1
             ? (this.options.holdRepeatDelayMs ?? AdjacentStepScheduler.holdRepeatDelayMs) - (Date.now() - this.heldSinceMs)
             : this.options.repeatIntervalMs ?? AdjacentStepScheduler.acceleratedRepeatIntervalMs;
-          if (this.heldDirection !== null && delayMs > 0) {
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-          }
+          if (this.heldDirection !== null && delayMs > 0) await this.waitToRepeat(delayMs);
         }
       }
     } catch (error) {
       this.heldDirection = null;
+      this.unsteppedPress = null;
       this.onError(error);
     } finally {
       this.running = false;
       for (const resolve of this.idleWaiters.splice(0)) resolve();
       this.startIfNeeded();
     }
+  }
+
+  private async waitToRepeat(delayMs: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, delayMs);
+      this.wakeFromRepeatDelay = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    });
+    this.wakeFromRepeatDelay = null;
   }
 
   private static validateDelay(value: number | undefined, label: string): void {

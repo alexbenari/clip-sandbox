@@ -657,10 +657,15 @@ export class FrameReviewPlayerControl {
     this.renderState();
     const step = (): void => {
       if (revision !== this.jumpRevision || this.destroyed || !this.session) return;
-      if (wasPlaying) void this.enterExactScrubForHeldStep(direction);
-      else if (this.heldStepDirections.has(direction)) {
-        void this.session.pressAdjacent(direction).catch(error => this.showError(error));
+      if (wasPlaying) {
+        void this.enterExactScrubForHeldStep(direction);
+        return;
       }
+      const session = this.session;
+      let request = session.pressAdjacent(direction);
+      // A tap released while a jump was landing still steps once.
+      if (!this.heldStepDirections.has(direction)) request = request.then(() => session.releaseAdjacent(direction));
+      void request.catch(error => this.showError(error));
     };
     if (activeJump) void barrier.then(step);
     else step();
