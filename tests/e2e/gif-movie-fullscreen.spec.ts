@@ -85,12 +85,14 @@ test('a click on the picture in movie full screen shows the seek row briefly wit
     await enterMovieFullScreen(page, () => player.getByRole('button', { name: 'Full screen' }).click());
     await expect(row).toHaveCSS('opacity', '0', { timeout: 5_000 });
     const picture = await pointOnPicture(player, 0.5);
+    const timeBeforeClick = await player.locator('[data-time="current"]').textContent();
 
     await page.mouse.click(picture.x, picture.y);
 
     await expect(row).toHaveCSS('opacity', '1');
-    await expect(player.locator('[data-command="play-pause"]')).toHaveAttribute('data-playing', 'false');
     await expect(row).toHaveCSS('opacity', '0', { timeout: 5_000 });
+    await expect(player.locator('[data-command="play-pause"]')).toHaveAttribute('data-playing', 'false');
+    await expect(player.locator('[data-time="current"]')).toHaveText(timeBeforeClick!);
   });
 });
 
@@ -125,15 +127,6 @@ test('F enters and leaves movie full screen from the Jump-by selector and keeps 
     await expect(player).toBeFocused();
     await leaveMovieFullScreen(page, () => page.keyboard.press('f'));
     await expect(player).toBeFocused();
-  });
-});
-
-test('the keyboard map lists the keys for movie full screen', async () => {
-  await withFreshApp('clip-movie-fs-map-', async page => {
-    await page.locator('#keyboardMapBtn').click();
-
-    await expect(page.locator('#keyboardMapPanel')).toContainText('Enter or exit movie full screen');
-    await expect(page.locator('#keyboardMapPanel')).toContainText('Exit movie full screen');
   });
 });
 

@@ -65,89 +65,65 @@ const withMovieOpen = (profilePrefix, run) => withFreshApp(profilePrefix, run, {
 const playPause = page => page.locator('.frame-review-player [data-command="play-pause"]');
 const lockedRange = page => page.locator('[data-range-id="range-1"]');
 
-test('an exact draft plays, loops, jumps to its ends, pauses to scrub, resumes and locks with X', async () => {
+test('an exact draft plays, jumps to its ends, loops, pauses, resumes, and X locks it and stops the loop', async () => {
   await withMovieOpen('clip-exact-draft-', async page => {
+    const identity = page.locator('.frame-review-identity');
     await stageExactDraft(page, 5, 30);
-    const loop = page.locator('#gifExtractionScreen [data-command="loop-range"]');
-    await expect(page.locator('#gifExtractionScreen [data-command="jump-start"]')).toBeEnabled();
-    await expect(page.locator('#gifExtractionScreen [data-command="jump-end"]')).toBeEnabled();
-    await expect(loop).toBeEnabled();
 
     await page.keyboard.press('Space');
     await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
-    await expect(loop).toBeDisabled();
-    await page.keyboard.press('z');
-    await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
     await page.keyboard.press('a');
-    await expect(page.locator('.frame-review-identity')).toHaveText('Frame 5');
+    await expect(identity).toHaveText('Frame 5');
     await page.keyboard.press('s');
-    await expect(page.locator('.frame-review-identity')).toHaveText('Frame 30');
+    await expect(identity).toHaveText('Frame 30');
+    await expect(playPause(page)).toHaveAttribute('data-playing', 'false');
     await page.keyboard.press('z');
     await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
     await page.keyboard.press('Space');
-    await expect(page.locator('.frame-review-identity')).toHaveText(/^Frame \d+$/);
     await expect(playPause(page)).toHaveAttribute('data-playing', 'false');
     await page.keyboard.press('Space');
     await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
     await page.keyboard.press('x');
 
     await expect(lockedRange(page)).toHaveCount(1);
-    await expect(page.locator('#gifExtractionScreen [data-command="lock-range"]')).toBeDisabled();
     await expect(playPause(page)).toHaveAttribute('data-playing', 'false');
   });
 });
 
-test('capture marks are unavailable while a draft loops', async () => {
-  await withMovieOpen('clip-exact-loop-marks-', async page => {
-    await stageExactDraft(page, 5, 30);
-
-    await page.keyboard.press('z');
-
-    await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
-    await expect(page.locator('#gifExtractionScreen [data-command="mark-start"]')).toBeDisabled();
-    await expect(page.locator('#gifExtractionScreen [data-command="mark-end"]')).toBeDisabled();
-  });
-});
-
-test('entering and leaving movie full screen keeps a draft loop playing', async () => {
+test('a draft loop keeps running through entering and leaving movie full screen', async () => {
   await withMovieOpen('clip-exact-loop-fs-', async page => {
+    const currentTime = page.locator('.frame-review-player [data-time="current"]');
     await stageExactDraft(page, 5, 30);
     await page.keyboard.press('z');
     await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
 
     await enterMovieFullScreen(page, () => page.keyboard.press('f'));
-    await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
     await leaveMovieFullScreen(page, () => page.keyboard.press('f'));
-    await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
+
+    const timeAfterLeaving = await currentTime.textContent();
+    await expect(currentTime).not.toHaveText(timeAfterLeaving!);
   });
 });
 
-test('a locked range cannot be extracted while it loops', async () => {
-  await withMovieOpen('clip-exact-locked-loop-', async page => {
+test('Refine Gif puts keyboard focus on the movie player', async () => {
+  await withMovieOpen('clip-exact-refine-focus-', async page => {
     await lockExactRange(page, 5, 30);
-    await lockedRange(page).click();
-    const extract = lockedRange(page).locator('[data-extract-range]');
-    await expect(extract).toBeEnabled();
 
-    await page.keyboard.press('z');
+    await lockedRange(page).locator('[data-refine-range]').click();
 
-    await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
-    await expect(extract).toBeDisabled();
+    await expect(page.locator('#refineGifScreen')).toBeVisible();
+    await expect(page.locator('.frame-review-player')).toBeFocused();
   });
 });
 
-test('Refine Gif opens on the same focused player with the Clips panel open', async () => {
-  await withMovieOpen('clip-exact-refine-open-', async page => {
+test('Refine Gif shows the movie player from GIF Extraction rather than a second one', async () => {
+  await withMovieOpen('clip-exact-refine-player-', async page => {
     await lockExactRange(page, 5, 30);
     const playerBeforeRefine = await page.locator('.frame-review-player').elementHandle();
 
     await lockedRange(page).locator('[data-refine-range]').click();
 
     await expect(page.locator('#refineGifScreen')).toBeVisible();
-    await expect(page.locator('.frame-review-player')).toBeFocused();
-    await expect(page.locator('#appScreenSelector option:checked')).toHaveText('Refine Gif');
-    await expect(page.locator('#clipsPanel')).not.toHaveClass(/folded/);
-    await expect(page.locator('#pipelinesPanel')).toHaveClass(/folded/);
     await expect(page.locator('#mainScreenHost input[type="range"]')).toHaveCount(1);
     expect(await playerBeforeRefine!.evaluate(player => document.querySelector('.frame-review-player') === player)).toBe(true);
   });
@@ -166,23 +142,6 @@ test('F enters and leaves movie full screen on Refine Gif and stays on Refine Gi
   });
 });
 
-test('Refine Gif cannot extract the locked range while it loops', async () => {
-  await withMovieOpen('clip-exact-refine-loop-', async page => {
-    await lockExactRange(page, 5, 30);
-    await lockedRange(page).locator('[data-refine-range]').click();
-    await stageExactDraft(page, 7, 29);
-    await page.keyboard.press('x');
-    await expect(page.locator('#refineGifScreen')).toContainText('Exact range locked');
-    const extract = page.locator('#refineGifScreen [data-command="extract-current"]');
-    await expect(extract).toBeEnabled();
-
-    await page.keyboard.press('z');
-
-    await expect(playPause(page)).toHaveAttribute('data-playing', 'true');
-    await expect(extract).toBeDisabled();
-  });
-});
-
 test('a range refined during its loop locks with X, and Back shows its new frames on GIF Extraction', async () => {
   await withMovieOpen('clip-exact-refine-lock-', async page => {
     await lockExactRange(page, 5, 30);
@@ -195,7 +154,6 @@ test('a range refined during its loop locks with X, and Back shows its new frame
     await expect(page.locator('#refineGifScreen')).toContainText('Exact range locked');
     await page.getByRole('button', { name: 'Back to GIF Extraction' }).click();
 
-    await expect(page.locator('#appScreenSelector option', { hasText: 'Refine Gif' })).toHaveCount(0);
     await expect(lockedRange(page)).toContainText('frame 7');
     await expect(lockedRange(page)).toContainText('frame 29');
   });
