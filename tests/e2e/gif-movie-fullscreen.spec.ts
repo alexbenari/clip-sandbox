@@ -48,6 +48,8 @@ test('F reviews the same frame at display size and F again restores the workspac
     const player = page.locator('.frame-review-player');
     await page.locator('#foldClips').click();
     await expect(page.locator('#clipsPanel')).toHaveClass(/folded/);
+    // The fold animates the panel width, which can grow the player host at narrow windows.
+    await expect.poll(() => page.locator('#clipsPanel').evaluate(panel => panel.getAnimations().length)).toBe(0);
     await seekToFrame(page, 10);
     const hostHeight = () => player.evaluate(element => element.parentElement!.getBoundingClientRect().height);
     const workspaceHeight = await hostHeight();
