@@ -64,7 +64,15 @@ function extractionSnapshot(refinement: IRangeRefinementDraftSnapshot): IGifExtr
   });
 }
 
-function activeRefineScreen(refinement: IRangeRefinementDraftSnapshot, use: 'gif' | 'collection' = 'gif') {
+function moviePlayer(): FrameReviewPlayerControl {
+  return new FrameReviewPlayerControl({ document, frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+}
+
+function activeRefineScreen(
+  refinement: IRangeRefinementDraftSnapshot,
+  use: 'gif' | 'collection' = 'gif',
+  player = moviePlayer(),
+) {
   let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
   const session = {
     reviewSession: {} as never,
@@ -78,8 +86,6 @@ function activeRefineScreen(refinement: IRangeRefinementDraftSnapshot, use: 'gif
     abandonRefinement: vi.fn(),
     canExtractRange: () => false,
   };
-  const player = new FrameReviewPlayerControl({ document,
-    frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
   vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
   vi.spyOn(player, 'enterExactScrubAt').mockResolvedValue({} as never);
   const screen = RefineGifScreen[use === 'gif' ? 'forGifExtraction' : 'forCollectionRefinement']({
@@ -113,6 +119,18 @@ describe('RefineGifScreen', () => {
 
     expect(screen.commands.querySelector('[data-refine-command-title]')?.textContent).toBe('Refine Gif · Range 1');
     expect(screen.commands.querySelector('.gif-workflow-source span')?.textContent).toBe('Feature.mp4');
+  });
+
+  it('keeps the jump length chosen on the movie player when Refine opens', () => {
+    const player = moviePlayer();
+    const jumpBy = player.root.querySelector<HTMLSelectElement>('select[aria-label="Jump by seconds"]')!;
+    jumpBy.value = '7';
+    jumpBy.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const { screen } = activeRefineScreen(refinementSnapshot(), 'gif', player);
+
+    expect(screen.root.querySelector<HTMLSelectElement>('select[aria-label="Jump by seconds"]')?.value).toBe('7');
+    expect(screen.root.querySelector('[data-command="jump-seconds"]')?.textContent).toBe('Jump +7s');
   });
 
   it('says in the workbench that the staged range is looping while the loop runs', () => {
@@ -149,8 +167,7 @@ describe('RefineGifScreen', () => {
   });
 
   it('shows its own wording for each use', () => {
-    const player = new FrameReviewPlayerControl({ document,
-      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const player = moviePlayer();
     const keyboard = new GifWorkflowKeyboard();
     const fromExtraction = RefineGifScreen.forGifExtraction({ player, keyboard, document });
     const fromCollection = RefineGifScreen.forCollectionRefinement({ player, keyboard, document });
@@ -173,8 +190,7 @@ describe('RefineGifScreen', () => {
       },
       abandonRefinement: vi.fn(),
     };
-    const player = new FrameReviewPlayerControl({ document,
-      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const player = moviePlayer();
     const attach = vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
     const screen = RefineGifScreen.forCollectionRefinement({
       player, keyboard: new GifWorkflowKeyboard(), session: session as never, document });

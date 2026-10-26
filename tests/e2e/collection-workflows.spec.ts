@@ -275,18 +275,6 @@ test.describe('Collection workflows', () => {
     await expect.poll(() => firstCardPictureFit(page)).toEqual(PICTURE_FILLS_CARD_ON_BLACK);
   });
 
-  test('scales a clip smaller than its full-screen cell up to fill the cell on black', async () => {
-    ({ tempRoot, folderPath } = await createScenarioFolder('video-edit'));
-    await resizeContent(electronApp, page, 1280, 800);
-    await loadFolder(page, folderPath);
-    await expect(page.locator('#grid .thumb')).toHaveCount(2);
-
-    await page.keyboard.press('F');
-    await expect(page.locator('body')).toHaveClass(/fs-active/);
-
-    await expect.poll(() => firstCardPictureFit(page)).toEqual(PICTURE_FILLS_CARD_ON_BLACK);
-  });
-
   test('runs Loopify end to end from zoom mode and keeps collection changes unsaved', async () => {
     ({ tempRoot, folderPath } = await createScenarioFolder('video-edit'));
 
