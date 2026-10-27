@@ -52,7 +52,7 @@ import { ElectronGifSessionServices } from '../adapters/electron/electron-gif-se
 import { ElectronClipCapturesStoreService } from '../adapters/electron/electron-clip-captures-store-service.js';
 import { ElectronCollectionClipRefinementService } from '../adapters/electron/electron-collection-clip-refinement-service.js';
 import { ElectronClipSourceMovieService } from '../adapters/electron/electron-clip-source-movie-service.js';
-import { ClipSourceMovieWorkflow } from './clip-source-movie-workflow.js';
+import { ClipSourceMovieRefresher } from './clip-source-movie-refresher.js';
 import { GifExtractionSession } from './gif-extraction-session.js';
 import { CollectionClipRefinementSession } from './collection-clip-refinement-session.js';
 import { SavedCaptureStorage } from './capture-storage.js';
@@ -313,7 +313,7 @@ export class AppController {
       reporter: activityReporter,
       appText,
     });
-    const clipSourceMovies = new ClipSourceMovieWorkflow({
+    const clipSourceMovies = new ClipSourceMovieRefresher({
       service: clipSourceMovieService,
       pipelineWorkingCopy,
       openFolder: state,

@@ -5,7 +5,7 @@ import { ActivityReporter } from '../../src/app/activity-reporter.js';
 import { AppSessionState } from '../../src/app/app-session-state.js';
 import { AppText } from '../../src/app/app-text.js';
 import { ClipSourceMovieReport, type IClipSourceMovieService } from '../../src/app/clip-source-movie-service.js';
-import { ClipSourceMovieWorkflow } from '../../src/app/clip-source-movie-workflow.js';
+import { ClipSourceMovieRefresher } from '../../src/app/clip-source-movie-refresher.js';
 import type { FolderAccess } from '../../src/app/folder-access.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
@@ -37,14 +37,14 @@ class ScriptedSourceMovieService implements IClipSourceMovieService {
   }
 }
 
-function sourceMovieWorkflow() {
+function sourceMovieRefresher() {
   const pipelineWorkingCopy = new PipelineWorkingCopy();
   const openFolder = new AppSessionState();
   const service = new ScriptedSourceMovieService();
   const grid = { refreshSourceMovieGlyphs: vi.fn() };
   const activityLog = recordedActivityLog();
   const diagnostics = { logRuntimeError: vi.fn(async (_problem: string, _error: unknown, _folder?: FolderAccess | null) => undefined) };
-  const workflow = new ClipSourceMovieWorkflow({
+  const refresher = new ClipSourceMovieRefresher({
     service,
     pipelineWorkingCopy,
     openFolder,
@@ -60,15 +60,15 @@ function sourceMovieWorkflow() {
     return folder;
   };
   const clipNamed = (name: string) => pipelineWorkingCopy.pipeline!.clipMap().get(name)!;
-  return { workflow, service, grid, diagnostics, entries: activityLog.entries, openPipeline, clipNamed, pipelineWorkingCopy };
+  return { refresher, service, grid, diagnostics, entries: activityLog.entries, openPipeline, clipNamed, pipelineWorkingCopy };
 }
 
-describe('ClipSourceMovieWorkflow', () => {
+describe('ClipSourceMovieRefresher', () => {
   it('asks for every clip of the open folder and gives each clip its source movie', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4', 'bravo.mp4']);
 
-    const reading = context.workflow.readFolderClips(folder);
+    const reading = context.refresher.readFolderClips(folder);
     context.service.requests[0].answer({ 'alpha.mp4': 'Sample Feature.mkv', 'bravo.mp4': null });
     await reading;
 
@@ -79,10 +79,10 @@ describe('ClipSourceMovieWorkflow', () => {
   });
 
   it('ignores an answer that arrives after another folder was opened', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const firstFolder = context.openPipeline('clips', ['alpha.mp4']);
     const firstAlpha = context.clipNamed('alpha.mp4');
-    const reading = context.workflow.readFolderClips(firstFolder);
+    const reading = context.refresher.readFolderClips(firstFolder);
     context.openPipeline('archive', ['alpha.mp4']);
 
     context.service.requests[0].answer({ 'alpha.mp4': 'Sample Feature.mkv' });
@@ -94,10 +94,10 @@ describe('ClipSourceMovieWorkflow', () => {
   });
 
   it('ignores an older folder answer once a newer folder read has begun', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4']);
-    const olderReading = context.workflow.readFolderClips(folder);
-    const newerReading = context.workflow.readFolderClips(folder);
+    const olderReading = context.refresher.readFolderClips(folder);
+    const newerReading = context.refresher.readFolderClips(folder);
     context.service.requests[1].answer({ 'alpha.mp4': 'Newer Feature.mkv' });
     await newerReading;
 
@@ -108,22 +108,22 @@ describe('ClipSourceMovieWorkflow', () => {
   });
 
   it('keeps a clip\'s source movie while its next answer is pending', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4']);
     context.clipNamed('alpha.mp4').recordSourceMovie(SourceMovie.fromFileName('Sample Feature.mkv'));
 
-    void context.workflow.readFolderClips(folder);
+    void context.refresher.readFolderClips(folder);
 
     expect(context.service.requests).toHaveLength(1);
     expect(context.clipNamed('alpha.mp4').sourceMovie?.name).toBe('Sample Feature');
   });
 
   it('replaces a clip\'s source movie with the newest answer', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4']);
     context.clipNamed('alpha.mp4').recordSourceMovie(SourceMovie.fromFileName('Sample Feature.mkv'));
 
-    const reading = context.workflow.readFolderClips(folder);
+    const reading = context.refresher.readFolderClips(folder);
     context.service.requests[0].answer({ 'alpha.mp4': null });
     await reading;
 
@@ -131,10 +131,10 @@ describe('ClipSourceMovieWorkflow', () => {
   });
 
   it('reads only a clip an edit created', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4', 'alpha-looped.mp4']);
 
-    const reading = context.workflow.readCreatedClip(context.clipNamed('alpha-looped.mp4'));
+    const reading = context.refresher.readCreatedClip(context.clipNamed('alpha-looped.mp4'));
     context.service.requests[0].answer({ 'alpha-looped.mp4': 'Sample Feature.mkv' });
     await reading;
 
@@ -143,10 +143,10 @@ describe('ClipSourceMovieWorkflow', () => {
   });
 
   it('notes in Activity how many clips could not be read', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4', 'bravo.mp4', 'charlie.mp4']);
 
-    const reading = context.workflow.readFolderClips(folder);
+    const reading = context.refresher.readFolderClips(folder);
     context.service.requests[0].answer({ 'alpha.mp4': 'unreadable', 'bravo.mp4': 'unreadable', 'charlie.mp4': null });
     await reading;
 
@@ -154,10 +154,10 @@ describe('ClipSourceMovieWorkflow', () => {
   });
 
   it('notes in Activity when the folder could not be read', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4']);
 
-    const reading = context.workflow.readFolderClips(folder);
+    const reading = context.refresher.readFolderClips(folder);
     context.service.requests[0].fail(new Error('Folder access is unavailable for this folder session.'));
     await reading;
 
@@ -165,11 +165,11 @@ describe('ClipSourceMovieWorkflow', () => {
   });
 
   it('writes a failed folder read to the error log of that folder', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4']);
     const failure = new Error('Folder access is unavailable for this folder session.');
 
-    const reading = context.workflow.readFolderClips(folder);
+    const reading = context.refresher.readFolderClips(folder);
     context.service.requests[0].fail(failure);
     await reading;
 
@@ -177,21 +177,21 @@ describe('ClipSourceMovieWorkflow', () => {
   });
 
   it('starts no read after shutdown began', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4']);
-    context.workflow.dispose();
+    context.refresher.dispose();
 
-    await context.workflow.readFolderClips(folder);
+    await context.refresher.readFolderClips(folder);
 
     expect(context.service.requests).toEqual([]);
   });
 
   it('ignores an answer that arrives after shutdown began', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4']);
-    const reading = context.workflow.readFolderClips(folder);
+    const reading = context.refresher.readFolderClips(folder);
 
-    context.workflow.dispose();
+    context.refresher.dispose();
     context.service.requests[0].answer({ 'alpha.mp4': 'Sample Feature.mkv' });
     await reading;
 
@@ -200,10 +200,10 @@ describe('ClipSourceMovieWorkflow', () => {
   });
 
   it('adds nothing to Activity when every clip was read', async () => {
-    const context = sourceMovieWorkflow();
+    const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4', 'bravo.mp4']);
 
-    const reading = context.workflow.readFolderClips(folder);
+    const reading = context.refresher.readFolderClips(folder);
     context.service.requests[0].answer({ 'alpha.mp4': 'Sample Feature.mkv', 'bravo.mp4': null });
     await reading;
 

@@ -29,7 +29,7 @@ type SourceMovieRead = Readonly<{
   isLatestRequest: () => boolean;
 }>;
 
-export class ClipSourceMovieWorkflow {
+export class ClipSourceMovieRefresher {
   private folderReadRevision = 0;
   private disposed = false;
 
