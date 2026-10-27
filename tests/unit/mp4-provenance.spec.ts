@@ -57,6 +57,14 @@ describe('Mp4Provenance', () => {
     await expect(provenance.read(sourceMovieFixture('invalid-record.mp4'))).resolves.toBeNull();
   });
 
+  it('reads no source record when the stored movie name contains a folder', async () => {
+    const record = JSON.parse(sourceMovieTag.value);
+    record.sourceMovie.displayName = 'movies\\Sample Feature.mkv';
+    const provenanceReadingRecord = new Mp4Provenance({ tagReader: { read: async () => JSON.stringify(record) } });
+
+    await expect(provenanceReadingRecord.read('clip.mp4')).resolves.toBeNull();
+  });
+
   it('passes on the file-system error when the clip cannot be read', async () => {
     await expect(provenance.read(sourceMovieFixture('missing.mp4'))).rejects.toMatchObject({ code: 'ENOENT' });
   });

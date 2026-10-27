@@ -99,6 +99,9 @@ const desktopApi = {
     attach(request) { return ipcRenderer.invoke('clip-sandbox:clip-captures-attach', request); },
     save(request) { return ipcRenderer.invoke('clip-sandbox:clip-captures-save', request); },
   },
+  clipSourceMovies: {
+    read(request) { return ipcRenderer.invoke('clip-sandbox:clip-source-movies-read', request); },
+  },
   collectionRefine: {
     inspect(request) { return ipcRenderer.invoke('clip-sandbox:collection-refine-inspect', request); },
     resolve(request) { return ipcRenderer.invoke('clip-sandbox:collection-refine-resolve', request); },

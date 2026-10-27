@@ -69,6 +69,7 @@ class Mp4Provenance {
       && typeof frame.frameInfoHash === 'string' && /^[a-f0-9]{16}$/.test(frame.frameInfoHash);
     if (record?.provenanceVersion !== 1 || typeof record.sourceMovie?.displayName !== 'string'
       || record.sourceMovie.displayName.length < 1 || record.sourceMovie.displayName.length > 512
+      || /[\\/]/.test(record.sourceMovie.displayName)
       || fingerprint?.fingerprintVersion !== 1
       || typeof fingerprint.sourceSampleDigest !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint.sourceSampleDigest)
       || typeof fingerprint.streamMetadataDigest !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint.streamMetadataDigest)

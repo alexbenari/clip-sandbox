@@ -13,6 +13,7 @@ const { ClipCapturesStore } = require('./clip-captures-store.cjs');
 const { registerClipCapturesIpc } = require('./clip-captures-ipc.cjs');
 const { createClipExtractionRuntime } = require('./clip-extraction-runtime.cjs');
 const { CollectionClipRefinement } = require('./collection-clip-refinement.cjs');
+const { ClipSourceMovieRuntime } = require('./clip-source-movie-runtime.cjs');
 const { NativeProductLocator } = require('./native-product-locator.cjs');
 const { ThumbnailCacheRuntime } = require('./thumbnail-cache-runtime.cjs');
 
@@ -120,6 +121,9 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     hostForEvent: frameReviewRuntime.hostForEvent,
     chooseSourcePath: event => pickMovieFromDialog(BrowserWindow.fromWebContents(event.sender)),
   });
+  const clipSourceMovieRuntime = new ClipSourceMovieRuntime({ folderAccess });
+  ipcMain.handle('clip-sandbox:clip-source-movies-read', (event, request) =>
+    clipSourceMovieRuntime.read(event, request));
   ipcMain.handle('clip-sandbox:collection-refine-inspect', (event, request) =>
     collectionClipRefinement.inspect(event, request));
   ipcMain.handle('clip-sandbox:collection-refine-resolve', (event, request) =>
