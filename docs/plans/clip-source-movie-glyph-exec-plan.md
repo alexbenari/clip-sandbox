@@ -6,8 +6,8 @@ Clips that Clip Sandbox extracts from a movie carry a metadata tag naming that m
 
 ## Progress
 
-- [ ] Milestone 0 - Workspace setup (dependencies, native products for end-to-end tests)
-- [ ] Milestone 1 - Direct metadata reader replaces FFprobe for every source-info read
+- [x] (2026-10-27) Milestone 0 - Workspace setup. G0 passed: `npm ci`, build, linked `ffprobe` and `native-build/frame-review/bin` exist. Baseline `npm run unit`: 122 files, 824 tests passed (`baseline-unit.log`).
+- [x] (2026-10-27) Milestone 1 - Direct metadata reader replaces FFprobe for every source-info read. G1: 9 reader tests; G2: typecheck, lint, `npm run unit` 123 files / 844 tests passed, no `ffprobe`/`runCommand` in the source-info code; G3: 127 real clips, 52 tagged, 0 mismatches (`reader-parity-2026-10-27.txt`); G4: 4 end-to-end tests passed, none skipped (`m1-e2e.log`). Every new test was seen failing under a targeted mutation (`m1-reader-mutations.log`). Code quality review (fresh context): fixed 8 findings (method shadowing `valueOf` renamed, named byte offsets and helper methods, three-argument box parsing, unused size option removed, provenance tests split and renamed, a Refine test duplicated by the real-file tests removed, node test environment pinned, locator loop guard); none declined, none open.
 - [ ] Milestone 2 - Folder read across the process boundary
 - [ ] Milestone 3 - Glyph on grid cards
 - [ ] Milestone 4 - Documentation and full validation
@@ -48,6 +48,10 @@ Unavailable skills or fallbacks:
 - Discovery: the grid keeps cards of other views in a cache and reuses them unchanged, so glyph updates must reach cached views, not only the visible one (D8).
   Evidence: `gridViewCache`, `cachedEntryFor`, and `showCachedEntry` in `src/ui/clip-collection-grid-control.ts`.
 - Discovery: this worktree has no `native-build/` or `tools/frame-review/.deps/` (both ignored by git), so native end-to-end tests would skip; Milestone 0 links them from the main checkout.
+- Discovery: the native end-to-end tests also need the generated movies in `tests/fixtures/gif-extraction/generated/` (ignored by git); without them G4's four tests skipped silently with exit code 0. Milestone 0 now links that folder too.
+  Evidence: first G4 run reported "4 skipped"; after the junction, "4 passed".
+- Discovery: the staged FFmpeg has no `lavfi` test sources, and FFmpeg always writes a `udta`/`meta` box even with metadata stripped. The fixtures were re-encoded from `tests/e2e/fixtures/video-edit/clips/source.mp4` (about 22 KB each), and the "no user-data box" case is derived in the test by renaming the `udta` box to `free`. A `tagged-after-other-key.mp4` fixture was added after a mutation showed no fixture placed another key before the tag.
+- Discovery: no automated test asserts the absence of the "source metadata could not be verified" warning after extraction; the Collection Refine end-to-end test does read a freshly extracted clip's tag through the new reader, which covers the same read path.
 
 ## Decision Log
 
@@ -106,6 +110,7 @@ Make unit and end-to-end tests runnable in this worktree without touching the ma
   `New-Item -ItemType Junction -Path native-build -Target D:\tmp\dev\clip-sandbox\native-build` and
   `New-Item -ItemType Junction -Path tools\frame-review\.deps -Target D:\tmp\dev\clip-sandbox\tools\frame-review\.deps`.
   If `resolved-dependencies.json` holds absolute paths into the main checkout, they still resolve.
+  Also `New-Item -ItemType Junction -Path tests\fixtures\gif-extraction\generated -Target D:\tmp\dev\clip-sandbox\tests\fixtures\gif-extraction\generated` for the generated movies the native end-to-end tests use.
 
 ### Validation
 
@@ -127,7 +132,7 @@ All source-info reads in the main process go through the D1 reader (spec D2); be
   `tagged.mp4` (a valid `clip-sandbox.prov.v1` record built like `Mp4Provenance.create`, written with `-movflags +faststart+use_metadata_tags`);
   `tagged-moov-at-end.mp4` (same tag, `-movflags +use_metadata_tags` without `faststart`);
   `untagged.mp4` (normal output, no custom key);
-  `no-metadata.mp4` (`-map_metadata -1 -fflags +bitexact -flags:v +bitexact`, so no `udta`/`meta`);
+  `tagged-after-other-key.mp4` (another key stored before the tag);
   `other-key.mp4` (only `-metadata example.other=1` with `use_metadata_tags`);
   `oversized.mp4` (the key with a 70 KB value);
   `invalid-record.mp4` (the key with valid JSON that fails `Mp4Provenance.validate`).

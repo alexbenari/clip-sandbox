@@ -1,9 +1,14 @@
 const path = require('node:path');
+const { Mp4MetadataTagReader } = require('./mp4-metadata-tag-reader.cjs');
 
 const KEY = 'clip-sandbox.prov.v1';
 const MAX_BYTES = 4096;
 
 class Mp4Provenance {
+  constructor({ tagReader = new Mp4MetadataTagReader() } = {}) {
+    this.tagReader = tagReader;
+  }
+
   create(source, start, end) {
     const identity = source.identity;
     const fingerprint = {
@@ -31,25 +36,27 @@ class Mp4Provenance {
     return ['-movflags', '+faststart+use_metadata_tags', '-metadata', `${KEY}=${serialized}`];
   }
 
-  async readBack(ffprobe, outputPath, runCommand, environment, signal) {
-    const result = await runCommand(ffprobe, [
-      '-v', 'error', '-show_entries', 'format_tags', '-of', 'json', outputPath,
-    ], { signal, env: environment });
-    if (!result.ok) throw new Error('Clip provenance could not be read back.');
-    const document = JSON.parse(String(result.stdout || '').replace(/^\uFEFF/, ''));
-    const serialized = document?.format?.tags?.[KEY];
-    if (typeof serialized !== 'string' || Buffer.byteLength(serialized, 'utf8') > MAX_BYTES) {
-      throw new Error('Clip provenance is missing or too large.');
-    }
-    const record = JSON.parse(serialized);
-    this.validate(record);
+  async readBack(outputPath) {
+    const serialized = await this.tagReader.read(outputPath, KEY);
+    const record = this.parsedRecord(serialized);
+    if (!record) throw new Error('Clip provenance is missing or invalid.');
     return serialized;
   }
 
-  async read(ffprobe, outputPath, runCommand, environment, signal) {
+  canBeTagged(filename) {
+    return path.extname(filename).toLowerCase() === '.mp4';
+  }
+
+  async read(clipPath) {
+    return this.parsedRecord(await this.tagReader.read(clipPath, KEY));
+  }
+
+  parsedRecord(serialized) {
+    if (typeof serialized !== 'string' || Buffer.byteLength(serialized, 'utf8') > MAX_BYTES) return null;
     try {
-      const serialized = await this.readBack(ffprobe, outputPath, runCommand, environment, signal);
-      return JSON.parse(serialized);
+      const record = JSON.parse(serialized);
+      this.validate(record);
+      return record;
     } catch {
       return null;
     }

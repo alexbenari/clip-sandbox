@@ -433,8 +433,7 @@ class ClipExtractionRuntime {
     });
     if (serializedProvenance) {
       try {
-        const readBack = await this.provenance.readBack(
-          ffprobe, mediaPath, this.runCommand, this.environment, signal);
+        const readBack = await this.provenance.readBack(mediaPath);
         if (readBack !== serializedProvenance) throw new Error('Clip provenance readback differs from the written record.');
       } catch {
         warning = 'Clip saved, but its source metadata could not be verified.';

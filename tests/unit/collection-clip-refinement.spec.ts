@@ -1,6 +1,10 @@
+// @vitest-environment node
 import { createRequire } from 'node:module';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sourceMovieFixture } from '../support/source-movie-fixtures.js';
 
 const require = createRequire(import.meta.url);
 const { CollectionClipRefinement } = require('../../electron/collection-clip-refinement.cjs');
@@ -26,7 +30,7 @@ describe('CollectionClipRefinement', () => {
     const sourceMatchesFingerprint = vi.fn(async () => true);
     const registerSource = vi.fn(() => 'source_opaque12345678');
     const chooseSourcePath = vi.fn(async () => null);
-    const provenance = { read: vi.fn(async () => provenanceRecord) };
+    const provenance = { read: vi.fn(async () => provenanceRecord), canBeTagged: () => true };
     const rememberedPath = path.join(folder, 'remembered.mkv');
     const service = new CollectionClipRefinement({
       folderAccess: {
@@ -34,7 +38,6 @@ describe('CollectionClipRefinement', () => {
         knownPipelinePaths: vi.fn(() => [folder]),
       },
       capturesStore: { load: vi.fn(async () => ({ lastKnownPath: rememberedPath })) },
-      resolveFfprobe: () => 'ffprobe',
       hostForEvent: () => ({ sourceMatchesFingerprint, registerSource }),
       chooseSourcePath,
       fileSystem: {
@@ -46,12 +49,45 @@ describe('CollectionClipRefinement', () => {
     return { service, sourceMatchesFingerprint, registerSource, chooseSourcePath, provenance, rememberedPath };
   }
 
-  it('enables Refine only when the clip has valid source and range metadata', async () => {
-    const available = fixture();
-    const unavailable = fixture(null);
-    await expect(available.service.inspect({ sender: { id: 1 } }, request)).resolves.toEqual({ available: true });
-    await expect(unavailable.service.inspect({ sender: { id: 1 } }, request)).resolves.toEqual({ available: false });
-    expect(unavailable.provenance.read).toHaveBeenCalledOnce();
+  describe('Refine availability read from clip files', () => {
+    let clipFolder = '';
+    const event = { sender: { id: 1 } };
+
+    beforeEach(async () => {
+      clipFolder = await fs.mkdtemp(path.join(os.tmpdir(), 'refine-availability-'));
+      await fs.copyFile(sourceMovieFixture('tagged.mp4'), path.join(clipFolder, 'tagged.mp4'));
+      await fs.copyFile(sourceMovieFixture('untagged.mp4'), path.join(clipFolder, 'untagged.mp4'));
+      await fs.copyFile(sourceMovieFixture('tagged.mp4'), path.join(clipFolder, 'tagged.mov'));
+    });
+
+    afterEach(async () => {
+      await fs.rm(clipFolder, { recursive: true, force: true });
+    });
+
+    function refinement() {
+      return new CollectionClipRefinement({
+        folderAccess: { requireKnownPath: () => clipFolder, knownPipelinePaths: () => [clipFolder] },
+        capturesStore: { load: async () => null },
+        hostForEvent: () => ({}),
+        chooseSourcePath: async () => null,
+      });
+    }
+
+    it('offers Refine for a tagged MP4 clip', async () => {
+      await expect(refinement().inspect(event, { folderPath: clipFolder, filename: 'tagged.mp4' })).resolves.toEqual({ available: true });
+    });
+
+    it('does not offer Refine for an untagged MP4 clip', async () => {
+      await expect(refinement().inspect(event, { folderPath: clipFolder, filename: 'untagged.mp4' })).resolves.toEqual({ available: false });
+    });
+
+    it('does not offer Refine for a clip that is not an MP4 file, whatever it contains', async () => {
+      await expect(refinement().inspect(event, { folderPath: clipFolder, filename: 'tagged.mov' })).resolves.toEqual({ available: false });
+    });
+
+    it('fails the availability check when the clip file is missing', async () => {
+      await expect(refinement().inspect(event, { folderPath: clipFolder, filename: 'missing.mp4' })).rejects.toMatchObject({ code: 'ENOENT' });
+    });
   });
 
   it('tries the remembered path before loaded pipeline files', async () => {

@@ -1,33 +1,17 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
 const { isVideoFilename } = require('./folder-entry.cjs');
 
-const execFileAsync = promisify(execFile);
-
 class CollectionClipRefinement {
-  constructor({ folderAccess, capturesStore, resolveFfprobe, hostForEvent, chooseSourcePath,
-    environment = process.env, fileSystem = fs, provenance = new Mp4Provenance(),
-    runCommand = async (command, args, options) => {
-      try {
-        const result = await execFileAsync(command, args, {
-          env: options.env, signal: options.signal, windowsHide: true,
-          maxBuffer: 1024 * 1024, timeout: 30_000,
-        });
-        return { ok: true, stdout: result.stdout };
-      } catch { return { ok: false, stdout: '' }; }
-    } }) {
+  constructor({ folderAccess, capturesStore, hostForEvent, chooseSourcePath,
+    fileSystem = fs, provenance = new Mp4Provenance() }) {
     this.folderAccess = folderAccess;
     this.capturesStore = capturesStore;
-    this.resolveFfprobe = resolveFfprobe;
     this.hostForEvent = hostForEvent;
     this.chooseSourcePath = chooseSourcePath;
-    this.environment = environment;
     this.fs = fileSystem;
     this.provenance = provenance;
-    this.runCommand = runCommand;
   }
 
   async inspect(event, request) {
@@ -100,10 +84,11 @@ class CollectionClipRefinement {
       || !isVideoFilename(filename) || filename === '.' || filename === '..') {
       throw new Error('Collection clip filename is invalid.');
     }
+    if (!this.provenance.canBeTagged(filename)) return null;
     const clipPath = path.join(folder, filename);
     const stat = await this.fs.stat(clipPath);
     if (!stat.isFile()) throw new Error('Collection clip is not a file.');
-    return this.provenance.read(this.resolveFfprobe(), clipPath, this.runCommand, this.environment);
+    return this.provenance.read(clipPath);
   }
 }
 

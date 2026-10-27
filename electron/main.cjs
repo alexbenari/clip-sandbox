@@ -117,10 +117,8 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
   const collectionClipRefinement = new CollectionClipRefinement({
     folderAccess,
     capturesStore: clipCapturesStore,
-    resolveFfprobe: () => nativeProducts.ffprobe(),
     hostForEvent: frameReviewRuntime.hostForEvent,
     chooseSourcePath: event => pickMovieFromDialog(BrowserWindow.fromWebContents(event.sender)),
-    environment: nativeEnvironment,
   });
   ipcMain.handle('clip-sandbox:collection-refine-inspect', (event, request) =>
     collectionClipRefinement.inspect(event, request));

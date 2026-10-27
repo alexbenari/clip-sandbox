@@ -1,0 +1,4 @@
+{
+  "key": "clip-sandbox.prov.v1",
+  "value": "{\"provenanceVersion\":1,\"sourceMovie\":{\"displayName\":\"Sample Feature.2001.mkv\",\"fingerprint\":{\"fingerprintVersion\":1,\"sourceSampleDigest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"sourceBytes\":\"1234567890\",\"sourceDurationUs\":\"5400000000\",\"signatureProfileVersion\":\"profile-1\",\"selectedStream\":0,\"streamMetadataDigest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}},\"sourceFrameRange\":{\"start\":{\"frameIndex\":1200,\"frameInfoHash\":\"0123456789abcdef\"},\"end\":{\"frameIndex\":1260,\"frameInfoHash\":\"fedcba9876543210\"},\"endInclusive\":true}}"
+}
