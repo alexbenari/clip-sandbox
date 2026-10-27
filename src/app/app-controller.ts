@@ -51,6 +51,8 @@ import { GifRangesPanelControl } from '../ui/gif-ranges-panel-control.js';
 import { ElectronGifSessionServices } from '../adapters/electron/electron-gif-session-services.js';
 import { ElectronClipCapturesStoreService } from '../adapters/electron/electron-clip-captures-store-service.js';
 import { ElectronCollectionClipRefinementService } from '../adapters/electron/electron-collection-clip-refinement-service.js';
+import { ElectronClipSourceMovieService } from '../adapters/electron/electron-clip-source-movie-service.js';
+import { ClipSourceMovieWorkflow } from './clip-source-movie-workflow.js';
 import { GifExtractionSession } from './gif-extraction-session.js';
 import { CollectionClipRefinementSession } from './collection-clip-refinement-session.js';
 import { SavedCaptureStorage } from './capture-storage.js';
@@ -102,6 +104,7 @@ export class AppController {
     const folderFiles = ElectronFolderFileService.fromWindow(window);
     const collectionFileWriter = new CollectionFileWriter(folderFiles, state);
     const collectionRefinementService = ElectronCollectionClipRefinementService.tryCreate(window);
+    const clipSourceMovieService = ElectronClipSourceMovieService.tryCreate(window);
     const clipEditor = new ClipEditor({ runtimeEditingService: ElectronVideoEditService.fromWindow(window), videoEditCatalog });
     const activityLogger = new ActivityLogger({ clock: window });
     const activityReporter = new ActivityReporter(activityLogger);
@@ -310,6 +313,14 @@ export class AppController {
       reporter: activityReporter,
       appText,
     });
+    const clipSourceMovies = new ClipSourceMovieWorkflow({
+      service: clipSourceMovieService,
+      pipelineWorkingCopy,
+      openFolder: state,
+      grid,
+      reporter: activityReporter,
+      appText,
+    });
     const folderSelection = new FolderSelectionWorkflow({
       pipelineWorkingCopy,
       openFolder: state,
@@ -323,6 +334,7 @@ export class AppController {
       missingClipsPrompt: collectionConflict,
       unsavedChangesPrompt: unsavedChangesDialog,
       collectionSave,
+      sourceMovies: clipSourceMovies,
       navigation: shell,
       collectionScreenId: collectionScreen.id,
       settings: settingsService,
@@ -363,6 +375,7 @@ export class AppController {
       fullScreen: fullscreenAdapter,
       boundaryFeedback: audioFeedback,
       collectionView,
+      sourceMovies: clipSourceMovies,
       diagnostics,
       reporter: activityReporter,
       appText,

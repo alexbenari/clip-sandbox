@@ -5,6 +5,7 @@ import { AppSessionState } from '../../src/app/app-session-state.js';
 import { AppText } from '../../src/app/app-text.js';
 import type { SaveOutcome } from '../../src/app/collection-save-workflow.js';
 import { EventSource } from '../../src/app/event-source.js';
+import type { FolderAccess } from '../../src/app/folder-access.js';
 import { FolderSelectionWorkflow } from '../../src/app/folder-selection-workflow.js';
 import type { IPipelineCatalogEntry } from '../../src/app/pipeline-catalog.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
@@ -47,6 +48,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   const catalog = new EventSource<{ loadRequested: IPipelineCatalogEntry }>();
   const navigation = { activate: vi.fn() };
   const activityLog = { log: vi.fn(), resolveError: vi.fn() };
+  const sourceMovies = { readFolderClips: vi.fn(async (_folder: FolderAccess) => undefined) };
   const workflow = new FolderSelectionWorkflow({
     pipelineWorkingCopy,
     openFolder,
@@ -60,6 +62,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     missingClipsPrompt: { showConflict: vi.fn(), hide: vi.fn() },
     unsavedChangesPrompt,
     collectionSave,
+    sourceMovies,
     navigation,
     collectionScreenId: 'collection',
     settings: { whenLoaded: async () => undefined },
@@ -73,7 +76,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     const ids = pipelineWorkingCopy.currentClipSequence!.orderedClips().map(clip => clip.id);
     pipelineWorkingCopy.replaceCurrentOrder([...ids].reverse());
   };
-  return { workflow, folders, pipelineWorkingCopy, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, activityLog, makeViewDirty };
+  return { workflow, folders, pipelineWorkingCopy, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, activityLog, makeViewDirty, sourceMovies, folderAccess, files };
 }
 
 // A dropped continuation leaves nothing to wait for, so the test lets every queued promise callback run first.
@@ -96,6 +99,26 @@ describe('FolderSelectionWorkflow', () => {
     expect(context.unsavedChangesPrompt.open).not.toHaveBeenCalled();
     expect(context.activityLog.log).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'success', message: 'Loaded pipeline with 2 clips.' }));
+  });
+
+  it('reads the source movies of the clips in a newly opened folder', async () => {
+    const context = folderWorkflow();
+
+    await openFolder(context);
+
+    expect(context.sourceMovies.readFolderClips.mock.calls).toEqual([[context.folderAccess]]);
+  });
+
+  it('reads the source movies again from the folder that switching views listed again', async () => {
+    const context = folderWorkflow();
+    await openFolder(context);
+    const relistedFolder = { folderPath: 'C:/clips' };
+    context.folders.refreshFolder.mockResolvedValueOnce({ folderAccess: relistedFolder, files: context.files, folderName: 'clips' });
+
+    context.selector.emit('selectionRequested', 'subset.txt');
+
+    await vi.waitFor(() => expect(context.sourceMovies.readFolderClips).toHaveBeenCalledTimes(2));
+    expect(context.sourceMovies.readFolderClips.mock.calls[1][0]).toBe(relistedFolder);
   });
 
   it('reports how many clips a chosen collection loaded', async () => {

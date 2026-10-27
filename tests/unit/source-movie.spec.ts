@@ -7,6 +7,10 @@ describe('SourceMovie', () => {
     expect(SourceMovie.fromFileName('Sample Feature.2001.1080p.mkv').name).toBe('Sample Feature.2001.1080p');
   });
 
+  it('drops spaces left before the extension from the movie name', () => {
+    expect(SourceMovie.fromFileName('Sample Feature .mkv').name).toBe('Sample Feature');
+  });
+
   it('keeps a file name that has no extension as the movie name', () => {
     expect(SourceMovie.fromFileName('Sample Feature').name).toBe('Sample Feature');
   });

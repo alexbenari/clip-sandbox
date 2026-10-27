@@ -1,3 +1,5 @@
+import type { SourceMovie } from '../domain/source-movie.js';
+
 export class ClipLabelFormatter {
   readonly placeholderDuration = '--:--:--';
 
@@ -15,6 +17,10 @@ export class ClipLabelFormatter {
       ? this.formatDuration(durationSeconds)
       : this.placeholderDuration;
     return `${name} (${formattedDuration})`;
+  }
+
+  sourceMovieLabel(movie: SourceMovie): string {
+    return `From ${movie.name}`;
   }
 
   private pad(value: number): string {

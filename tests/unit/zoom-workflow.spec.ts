@@ -9,6 +9,7 @@ import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { ZoomWorkflow } from '../../src/app/zoom-workflow.js';
 import type { ClipEditorResult } from '../../src/business-logic/clip-editor.js';
 import type { VideoEdit } from '../../src/business-logic/video-edit-catalog.js';
+import type { Clip } from '../../src/domain/clip.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 import { clipSource } from '../support/clip-source-fixtures.js';
 
@@ -48,6 +49,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
   const { entries } = activityLog;
   const collectionView = { applySelection: vi.fn(), activeCacheKey: () => 'pipeline', refreshSelector: vi.fn(), refreshToolbar: vi.fn() };
   const screens = new EventSource<{ screenChanged: { id: string } }>();
+  const sourceMovies = { readCreatedClip: vi.fn(async (_clip: Clip) => undefined) };
   const workflow = new ZoomWorkflow({
     pipelineWorkingCopy,
     openFolder,
@@ -62,11 +64,12 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
     fullScreen: { isDocumentFullScreen: () => false },
     boundaryFeedback,
     collectionView,
+    sourceMovies,
     diagnostics: { logRuntimeError: vi.fn(async () => undefined) },
     reporter: new ActivityReporter(activityLog),
     appText: new AppText(),
   });
-  return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineWorkingCopy };
+  return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineWorkingCopy, sourceMovies };
 }
 
 describe('ZoomWorkflow', () => {
@@ -136,6 +139,20 @@ describe('ZoomWorkflow', () => {
     await vi.waitFor(() => expect(entries.at(-1)).toMatchObject({ kind: 'success' }));
     expect(pipelineWorkingCopy.pipeline?.videoNames()).toContain('alpha-looped.mp4');
     expect(collectionView.applySelection).toHaveBeenCalled();
+  });
+
+  it('reads the source movie of a clip an edit created', async () => {
+    const created = { name: 'alpha-looped.mp4', mediaSource: 'file:///clips/alpha-looped.mp4' };
+    const { workflow, zoomView, editMenu, entries, alpha, sourceMovies } = zoomWorkflow({
+      editResult: { ok: true, code: 'created', edit: loopify, request: {} as never, createdFile: created },
+    });
+    workflow.openClip(alpha);
+    zoomView.emit('contextMenuRequested', { point: { x: 0, y: 0 } });
+
+    editMenu.open.mock.calls[0][0].onSelectEdit(loopify);
+
+    await vi.waitFor(() => expect(entries.at(-1)).toMatchObject({ kind: 'success' }));
+    expect(sourceMovies.readCreatedClip.mock.calls.map(([clip]) => clip.name)).toEqual(['alpha-looped.mp4']);
   });
 
   it('reports a playback failure in Zoom', () => {

@@ -1,4 +1,5 @@
 import { ClipSource } from './clip-source.js';
+import type { SourceMovie } from './source-movie.js';
 
 export type ClipMetadata = {
   durationSec?: number | null;
@@ -18,6 +19,7 @@ export class Clip {
   #videoWidth: number | null;
   #videoHeight: number | null;
   #metadataFailed: boolean;
+  #sourceMovie: SourceMovie | null = null;
 
   constructor({ id, source, durationSec = null, videoWidth = null, videoHeight = null }: ClipParams) {
     if (!id) throw new Error('Clip id is required.');
@@ -59,6 +61,14 @@ export class Clip {
 
   get metadataFailed() {
     return this.#metadataFailed;
+  }
+
+  get sourceMovie(): SourceMovie | null {
+    return this.#sourceMovie;
+  }
+
+  recordSourceMovie(movie: SourceMovie | null): void {
+    this.#sourceMovie = movie;
   }
 
   hasUsableDimensions() {

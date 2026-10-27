@@ -163,6 +163,14 @@ export class AppText {
     return parts.join(' ');
   }
 
+  unreadableSourceMoviesText(count: number): string {
+    return `Could not read source movie info for ${this.countText(count)}, so ${count === 1 ? 'it shows' : 'they show'} no source movie mark. Reopen the folder to try again.`;
+  }
+
+  sourceMovieReadFailedText(folderName: string): string {
+    return `Could not read source movie info in ${folderName}, so its clips show no source movie mark. Reopen the folder to try again.`;
+  }
+
   activeCollectionText(name: string): string {
     return (name || '').trim() || 'No pipeline loaded';
   }

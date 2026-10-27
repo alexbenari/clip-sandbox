@@ -7,6 +7,7 @@ import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
+import type { ClipSourceMovieWorkflow } from './clip-source-movie-workflow.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
@@ -61,6 +62,7 @@ type ZoomDependencies = Readonly<{
   fullScreen: { isDocumentFullScreen(): boolean };
   boundaryFeedback: { playBoundaryClank(): void };
   collectionView: Pick<CollectionViewWorkflow, 'applySelection' | 'activeCacheKey' | 'refreshSelector' | 'refreshToolbar'>;
+  sourceMovies: Pick<ClipSourceMovieWorkflow, 'readCreatedClip'>;
   diagnostics: Pick<AppDiagnostics, 'logRuntimeError'>;
   reporter: Pick<ActivityReporter, 'success' | 'progress' | 'failure' | 'technicalDetailsOf'>;
   appText: Pick<AppText, 'videoEditStartedText' | 'videoEditSucceededText' | 'videoEditPartialSuccessText' | 'videoEditFailedText'>;
@@ -201,6 +203,7 @@ export class ZoomWorkflow {
       }
       return;
     }
+    void this.zoom.sourceMovies.readCreatedClip(createdClip);
     this.openClip(createdClip);
     reporter.success(appText.videoEditSucceededText(createdSource.name), 4000);
   }

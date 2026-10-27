@@ -2,6 +2,7 @@
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
 import { Clip } from '../../../src/domain/clip.js';
 import { ClipSequence } from '../../../src/domain/clip-sequence.js';
+import { SourceMovie } from '../../../src/domain/source-movie.js';
 import { ClipCollectionGridControl } from '../../../src/ui/clip-collection-grid-control.js';
 import { testClip, clipSource } from '../../support/clip-source-fixtures.js';
 
@@ -425,6 +426,75 @@ describe('clip collection grid controller', () => {
     controller.setTitlesHidden(true);
     expect(controller.areTitlesHidden()).toBe(true);
     expect(document.getElementById('gridWrap').classList.contains('titles-hidden')).toBe(true);
+  });
+
+  describe('source movie glyph', () => {
+    function gridWithClips() {
+      const controller = createClipCollectionGridControl({
+        grid: document.getElementById('grid'),
+        gridRoot: document.getElementById('gridWrap'),
+      });
+      const sequence = makeThreeClipCollection();
+      const [alpha, bravo] = sequence.orderedClips();
+      return { controller, sequence, alpha, bravo };
+    }
+
+    const cardOf = clip => document.querySelector(`#grid .thumb[data-clip-id="${clip.id}"]`);
+    const sampleFeature = () => SourceMovie.fromFileName('Sample Feature.2001.mkv');
+
+    test('marks a clip that came from a movie with a glyph naming that movie', () => {
+      const { controller, sequence, alpha } = gridWithClips();
+      alpha.recordSourceMovie(sampleFeature());
+
+      controller.renderCollection(sequence);
+
+      expect(cardOf(alpha).querySelector('.source-glyph')?.title).toBe('From Sample Feature.2001');
+      expect(cardOf(alpha).getAttribute('aria-description')).toBe('From Sample Feature.2001');
+    });
+
+    test('shows no glyph on a clip without a source movie', () => {
+      const { controller, sequence, bravo } = gridWithClips();
+
+      controller.renderCollection(sequence);
+
+      expect(cardOf(bravo).querySelector('.source-glyph')).toBeNull();
+      expect(cardOf(bravo).hasAttribute('aria-description')).toBe(false);
+    });
+
+    test('hides glyphs with the titles while keeping the card description', () => {
+      const { controller, sequence, alpha } = gridWithClips();
+      alpha.recordSourceMovie(sampleFeature());
+      controller.renderCollection(sequence);
+
+      controller.setTitlesHidden(true);
+
+      expect(getComputedStyle(cardOf(alpha).querySelector('.source-glyph')).display).toBe('none');
+      expect(cardOf(alpha).getAttribute('aria-description')).toBe('From Sample Feature.2001');
+    });
+
+    test('shows a glyph learned while its view was cached once that view is shown again', () => {
+      const { controller, sequence, alpha } = gridWithClips();
+      controller.renderCollection(sequence, { cacheKey: 'pipeline' });
+      controller.renderCollection(new ClipSequence({ name: 'subset', clips: [sequence.orderedClips()[2]] }), { cacheKey: 'collection:subset.txt' });
+      alpha.recordSourceMovie(sampleFeature());
+
+      controller.refreshSourceMovieGlyphs();
+      controller.renderCollection(sequence, { cacheKey: 'pipeline' });
+
+      expect(cardOf(alpha).querySelector('.source-glyph')?.title).toBe('From Sample Feature.2001');
+    });
+
+    test('removes the glyph when the clip no longer has a source movie', () => {
+      const { controller, sequence, alpha } = gridWithClips();
+      alpha.recordSourceMovie(sampleFeature());
+      controller.renderCollection(sequence);
+
+      alpha.recordSourceMovie(null);
+      controller.refreshSourceMovieGlyphs();
+
+      expect(cardOf(alpha).querySelector('.source-glyph')).toBeNull();
+      expect(cardOf(alpha).hasAttribute('aria-description')).toBe(false);
+    });
   });
 
   test('lays out again when its root resizes, except during a workspace resize', () => {

@@ -59,8 +59,12 @@ const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
 .clip-collection-grid .thumb.drag-over::after{ content:""; position:absolute; inset:0; border:2px dashed var(--accent); border-radius:var(--radius); pointer-events:none; }
 .clip-collection-grid .thumb > video{ width:100%; height:100%; object-fit:contain; background:black; display:block; border-radius:10px; }
 .clip-collection-grid .filename{ position:absolute; left:0; right:0; bottom:0; font-size:12px; line-height:1.3; color:#d1d5db; padding:6px 8px; background:linear-gradient(180deg, rgba(2,6,23,0), rgba(2,6,23,.75)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.clip-collection-grid-root.titles-hidden .filename{ display:none; }
+.clip-collection-grid .source-glyph{ position:absolute; top:6px; left:6px; display:flex; padding:3px; border-radius:6px; background:rgba(11,15,20,.6); color:#94a3b8; }
+.clip-collection-grid .source-glyph svg{ width:16px; height:16px; }
+.clip-collection-grid-root.titles-hidden .filename,
+.clip-collection-grid-root.titles-hidden .source-glyph{ display:none; }
 `;
+const SOURCE_GLYPH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/></svg>';
 
 type ClipLabelFormatterFn = (name: string, durationSeconds: number | null) => string;
 
@@ -254,6 +258,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
 
   card.appendChild(vid);
   card.appendChild(name);
+  this.showSourceMovie(card, clip);
 
   vid.addEventListener('loadedmetadata', () => {
     onLoadedMetadata(card, vid, clip, metadataToken);
@@ -272,12 +277,50 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   return card;
 }
 
+  private showSourceMovie(card: ClipCard, clip: Clip | null): void {
+    const movie = clip?.sourceMovie ?? null;
+    let glyph = card.querySelector<HTMLElement>('.source-glyph');
+    if (!movie) {
+      glyph?.remove();
+      card.removeAttribute('aria-description');
+      return;
+    }
+    if (!glyph) {
+      glyph = card.ownerDocument.createElement('span');
+      glyph.className = 'source-glyph';
+      glyph.innerHTML = SOURCE_GLYPH_ICON;
+      card.appendChild(glyph);
+    }
+    const label = this.labelFormatter.sourceMovieLabel(movie);
+    glyph.title = label;
+    card.setAttribute('aria-description', label);
+  }
+
+  refreshSourceMovieGlyphs(): void {
+    for (const { card, clip } of this.allCardsWithClips()) this.showSourceMovie(card, clip);
+  }
+
+  // Cards of views that are not shown stay in the cache.
+  private allCardsWithClips(): { card: ClipCard; clip: Clip | null }[] {
+    const views = [
+      { cards: this.gridCards(this.grid), collection: this.currentCollection },
+      ...[...this.gridViewCache.values()]
+        .filter((entry) => entry.container !== this.grid)
+        .map((entry) => ({ cards: this.gridCards(entry.container), collection: entry.collection })),
+    ];
+    return views.flatMap(({ cards, collection }) => cards.map((card) => ({
+      card,
+      clip: collection?.getClip(card.dataset.clipId || '') ?? null,
+    })));
+  }
+
   private grid: HTMLElement;
   private gridRoot: HTMLElement | null;
   private readonly getAvailableHeight?: () => number;
   private fullscreenSlots = 12;
   private cancelPendingRotation: (() => void) | null = null;
   private formatClipLabel: ClipLabelFormatterFn;
+  private readonly labelFormatter = new ClipLabelFormatter();
   private layoutRules: Pick<DisplayLayoutRules, 'computeBestGrid' | 'computeFullscreenLayout' | 'normalizeFullscreenSlots'> | null;
   private isFullscreen: (() => boolean) | null;
   private rootResizeObserver: ResizeObserver | null = null;
@@ -304,8 +347,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     this.gridRoot = options.gridRoot ?? this.grid?.parentElement ?? null;
     this.getAvailableHeight = options.getAvailableHeight;
     this.coordinateWorkspaceLayout = options.coordinateWorkspaceLayout ?? false;
-    const defaultLabelFormatter = new ClipLabelFormatter();
-    this.formatClipLabel = options.formatLabel ?? defaultLabelFormatter.formatLabel.bind(defaultLabelFormatter);
+    this.formatClipLabel = options.formatLabel ?? this.labelFormatter.formatLabel.bind(this.labelFormatter);
     this.layoutRules = options.layoutRules ?? null;
     this.isFullscreen = options.isFullscreen ?? null;
 

@@ -8,6 +8,7 @@ import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
 import type { FolderAccess, FolderContents } from './folder-access.js';
 import type { IScreenNavigation } from './collection-refinement-workflow.js';
+import type { ClipSourceMovieWorkflow } from './clip-source-movie-workflow.js';
 import type { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
@@ -56,6 +57,7 @@ type FolderSelectionDependencies = Readonly<{
   missingClipsPrompt: IMissingClipsPrompt;
   unsavedChangesPrompt: IUnsavedChangesPrompt;
   collectionSave: Pick<CollectionSaveWorkflow, 'saveActive'>;
+  sourceMovies: Pick<ClipSourceMovieWorkflow, 'readFolderClips'>;
   navigation: Pick<IScreenNavigation, 'activate'>;
   collectionScreenId: string;
   settings: Readonly<{ whenLoaded(): Promise<void> }>;
@@ -282,6 +284,7 @@ export class FolderSelectionWorkflow {
       if (!result) return false;
       grid.invalidateAllViews();
       grid.retagActiveView(null);
+      void this.folder.sourceMovies.readFolderClips(folderAccess);
       const preservedCollection = preserveCollectionFilename ? pipeline.getCollectionByFilename(preserveCollectionFilename) : null;
       if (preservedCollection) {
         await this.reloadSelection({ pipeline, collection: preservedCollection, folderAccess });
@@ -331,6 +334,7 @@ export class FolderSelectionWorkflow {
         collection: collectionFilename ? pipeline.getCollectionByFilename(collectionFilename) : null,
         folderAccess: selection.folderAccess,
       });
+      void this.folder.sourceMovies.readFolderClips(selection.folderAccess);
     } catch (error) {
       if (revision !== this.selectionRevision || openFolder.currentFolderAccess !== folderAccess) return;
       this.folder.reporter.failure('The folder could not be refreshed.', {

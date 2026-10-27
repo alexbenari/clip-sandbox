@@ -25,6 +25,31 @@ describe('AppController Collection and Zoom workflows', () => {
     await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1));
   });
 
+  test('opening a folder marks the clips that came from a movie', async () => {
+    window.clipSandboxDesktop.pickFolder = vi.fn(async () => ({
+      canceled: false,
+      folderPath: 'C:/clips',
+      folderName: 'clips',
+      files: [desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.mp4' })],
+    }));
+    window.clipSandboxDesktop.clipSourceMovies = {
+      read: vi.fn(async ({ filenames }) => ({
+        clips: filenames.map(filename => (filename === 'alpha.mp4'
+          ? { filename, kind: 'movie', movieFileName: 'Sample Feature.mkv' }
+          : { filename, kind: 'none' })),
+      })),
+    };
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
+
+    document.getElementById('pickBtn').click();
+
+    await waitFor(() => expect(document.querySelector('#grid .thumb[data-name="alpha.mp4"] .source-glyph')?.title).toBe('From Sample Feature'));
+    expect(document.querySelector('#grid .thumb[data-name="bravo.mp4"] .source-glyph')).toBeNull();
+  });
+
   test('right-clicking a selected clip opens the app context menu', async () => {
     const { AppController } = await import('../../../src/app/app-controller.js');
     new AppController().init();
