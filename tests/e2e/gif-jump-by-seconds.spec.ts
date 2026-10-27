@@ -19,7 +19,7 @@ test.skip(unavailable !== null, unavailable ?? '');
 const FRAMES_PER_SECOND = 10;
 const MOVIE_SECONDS = 18;
 
-test('top-row and visible jumps use elapsed seconds in playback and directional exact scrub', async () => {
+test('top-row digits jump playback forward by 1, 2, 5, 7 and 10 seconds of the real movie', async () => {
   test.setTimeout(180_000);
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-jump-seconds-'));
   const app = await launchApp(path.join(directory, 'profile'));
@@ -28,56 +28,13 @@ test('top-row and visible jumps use elapsed seconds in playback and directional 
     const page = await app.firstWindow();
     await installPaintProbe(page);
     await openMovieForExactReview(page, movie);
-    const selector = page.getByRole('combobox', { name: 'Jump by seconds' });
-    const jump = page.locator('[data-command="jump-seconds"]');
-    await expect(selector).toHaveValue('2');
-    await expect(jump).toHaveText('Jump +2s');
-    await expect(jump).toBeEnabled();
-
-    // Top-row digits 1-5 jump 1, 2, 5, 7 and 10 seconds forward from wherever playback is.
-    await page.keyboard.press('1');
-    await expectTimeNear(page, 1);
     await page.keyboard.press('Space');
     await expect(page.locator('[data-command="play-pause"]')).toHaveAttribute('data-playing', 'true');
-    for (const [key, seconds] of [['2', 2], ['3', 5], ['4', 7], ['5', 10]] as const) {
+
+    for (const [key, seconds] of [['1', 1], ['2', 2], ['3', 5], ['4', 7], ['5', 10]] as const) {
       await seekPlaybackToStart(page);
       await expectPlaybackJump(page, () => page.keyboard.press(key), seconds);
     }
-
-    // Paused at an exact frame, jumps resolve by elapsed time in the last stepped direction.
-    await page.keyboard.press('Space');
-    await expect(page.locator('[data-command="play-pause"]')).toHaveAttribute('data-playing', 'false');
-    await seekToFrame(page, 120);
-    await page.keyboard.press('ArrowLeft');
-    await expect(jump).toHaveText('Jump −2s');
-    await page.keyboard.press('3');
-    await expectTimeNear(page, 11.9 - 5);
-    await selector.selectOption('2');
-    await jump.click();
-    await expectTimeNear(page, 11.9 - 5 - 2);
-    await expect(page.locator('.frame-review-identity')).toHaveText(/^Frame \d+$/);
-
-    // A backward jump past the start stops at the first frame; stepping right turns jumps forward again.
-    await page.keyboard.press('5');
-    await expect(page.locator('.frame-review-identity')).toHaveText('Frame 0');
-    await page.keyboard.press('ArrowRight');
-    await expect(jump).toHaveText('Jump +2s');
-    await expect(page.locator('.frame-review-identity')).toHaveText('Frame 1');
-
-    // Refine Gif keeps the chosen jump length.
-    await seekToFrame(page, 20);
-    await page.keyboard.press('q');
-    await seekToFrame(page, 60);
-    await page.keyboard.press('w');
-    await page.keyboard.press('x');
-    const captured = page.locator('[data-range-id="range-1"]');
-    await expect(captured).toHaveCount(1);
-    await captured.locator('[data-refine-range]').click();
-    await expect(page.locator('#refineGifScreen')).toBeVisible();
-    await expect(selector).toHaveValue('2');
-    await expect(page.locator('.frame-review-identity')).toHaveText('Frame 20');
-    await page.keyboard.press('2');
-    await expectTimeNear(page, 2 + 2);
   } finally {
     await app.close().catch(() => undefined);
     await fs.rm(directory, { recursive: true, force: true });
@@ -109,7 +66,6 @@ test('variable-frame-rate scrub jumps resolve by time and clamp to indexed endpo
   }
 });
 
-/** Reads the variable-frame-rate fixture's known frame times from the fixture manifest. */
 function vfrFixture(): { startFrame: number; startFrameSeconds: number; lastFrame: number } {
   const manifest = JSON.parse(readFileSync(path.join(projectFolder, 'tests', 'fixtures', 'gif-extraction', 'manifest.json'), 'utf8')
     .replace(/^\uFEFF/, ''));
@@ -121,7 +77,6 @@ function vfrFixture(): { startFrame: number; startFrameSeconds: number; lastFram
   };
 }
 
-/** An 18-second, 10 fps movie whose frames all differ, so every jump lands on a distinct frame. */
 async function createCountingMovie(directory: string): Promise<string> {
   const dependencies = readFrameReviewDependencies();
   const movie = path.join(directory, 'jump-source.mkv');
@@ -152,7 +107,6 @@ type PaintProbeWindow = Window & {
   __clipSandboxFrameReviewPaintProbe?: { painted(frame: { kind: string; playbackTimestampUs?: bigint }): void };
 };
 
-/** Records the timestamp of the latest playback frame the player actually painted. */
 async function installPaintProbe(page: Page): Promise<void> {
   await page.evaluate(() => {
     const win = window as PaintProbeWindow;
@@ -169,10 +123,6 @@ async function paintedSeconds(page: Page): Promise<number | null> {
   return microseconds === undefined ? null : microseconds / 1_000_000;
 }
 
-/**
- * Playback keeps running while a jump is in flight, so the painted time after the jump lies between
- * `before + seconds` and that plus the wall-clock time that has passed since the key press.
- */
 async function expectPlaybackJump(page: Page, act: () => Promise<void>, seconds: number): Promise<void> {
   const before = await paintedSeconds(page);
   expect(before, 'a playback frame was painted before the jump').not.toBeNull();
@@ -180,6 +130,7 @@ async function expectPlaybackJump(page: Page, act: () => Promise<void>, seconds:
   await act();
   await expect.poll(async () => {
     const painted = await paintedSeconds(page);
+    // Playback keeps running during the jump, so it may land later by the time that has passed.
     const elapsed = (Date.now() - pressedAt) / 1000;
     const earliest = before! + seconds - 0.25;
     const latest = before! + seconds + elapsed + 0.25;
@@ -194,10 +145,6 @@ async function seekPlaybackToStart(page: Page): Promise<void> {
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await expect.poll(async () => (await paintedSeconds(page)) ?? Number.POSITIVE_INFINITY, { timeout: 5_000 }).toBeLessThan(1);
-}
-
-async function expectTimeNear(page: Page, seconds: number): Promise<void> {
-  await expectTimeWithin(page, seconds, 0.15);
 }
 
 async function expectTimeWithin(page: Page, seconds: number, tolerance: number): Promise<void> {

@@ -27,6 +27,8 @@ export default defineConfig(
       // Specs that need native tools skip through the shared guard in tests/support/frame-review-dependencies.ts.
       'playwright/no-skipped-test': ['error', { allowConditional: true }],
       'playwright/no-conditional-in-test': 'error',
+      // Shared assertion helpers are named expectSomething.
+      'playwright/expect-expect': ['warn', { assertFunctionPatterns: ['^expect[A-Z]'] }],
     },
   },
 );

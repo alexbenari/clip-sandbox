@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import { expect, _electron as electron, type ElectronApplication, type Locator, type Page } from '@playwright/test';
+import { test, expect, _electron as electron, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
 import { projectFolder } from '../../support/frame-review-dependencies.js';
 
@@ -140,11 +141,32 @@ export async function expectNoFullScreenRequest(page: Page, action: () => Promis
   }))).toEqual({ requests: 0, fullScreen: false });
 }
 
-/** Marks a start and end frame with Q and W, then locks the range with X. */
-export async function lockExactRange(page: Page, startFrame: number, endFrame: number): Promise<void> {
+export async function stageExactDraft(page: Page, startFrame: number, endFrame: number): Promise<void> {
   await seekToFrame(page, startFrame);
   await page.keyboard.press('q');
   await seekToFrame(page, endFrame);
   await page.keyboard.press('w');
+}
+
+export async function lockExactRange(page: Page, startFrame: number, endFrame: number): Promise<void> {
+  await stageExactDraft(page, startFrame, endFrame);
   await page.keyboard.press('x');
+}
+
+export async function withFreshApp(
+  profilePrefix: string,
+  run: (page: Page, app: ElectronApplication) => Promise<void>,
+  { movie }: { movie?: string } = {},
+): Promise<void> {
+  test.setTimeout(120_000);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), profilePrefix));
+  const app = await launchApp(path.join(directory, 'profile'));
+  try {
+    const page = await app.firstWindow();
+    if (movie !== undefined) await openMovieForExactReview(page, movie);
+    await run(page, app);
+  } finally {
+    await app.close().catch(() => undefined);
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
 }

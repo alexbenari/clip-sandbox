@@ -1,37 +1,25 @@
 # Feature Requests
 
 ## Next up
-- Movie edit mode -> full screen
-- Movie edit mode -> ability to jump ahead: number is #secpnds
+- Remember last position of movie scroll
+- Move clip between pipelines (copy semantics and move semantics)
+- Z does not work in Refine?
+- After extraction, clips are cleared from side panel (should be)
+- When selecting to Refine a clip whose movie is already loaded, use the movie
+- clear history of messages -? closes the panel
 - Review the codebase for mixup of clip/gif terminology and unify if needed
-- Extract all: show progress. X/Y and progress for current clip
 
 ## Small bugs
-- The message when opening a movie should appear in the same place other messages appear (e.g. frame indexing etc). Maybe we should make it into its own little component displayign msg + progress? 
 - when clicking open folder in Collection screen the file explorer selection should open on the folder defined in settings
-- why does extraction of a single clip take so long? 
-- pipeline side panel is not populated
-- after extraction should be possible to sqitch to the pipeline view of extracted clips by clicking on the side panel
 - In the status - report after each clip was extracted, name and time it took to extract
 - Status history: clear history should remove all but the latest one
-- Extraction of clip should have a progress indication and "Extracting exact range" should show in the standard location.  No need for the detailed progress message in the thumbnail (Encoding fromt the original  source etc)
 
 ## Movie Edit mode
-- viewer with support for as-you-watch actions
-  - q/w, a/s, z/x: start-stop-capture
-    - As the movie plays, when a is pressed a clip is created from the timestaps between q and w
-      - new clip is added to the current pipeline with a default name: [start-stop]
-    - x locks the clip
-    - a/s jump to q/w frame
-    - z loops between q and a frame
-    - q,w can be pressed multiple times, only last one before z was pressed counts
-  - Extracting in full screen mode (kb only)
-- Movie edit mode is initiated from within a pipeline
+- Movie edit mode can be initiated from within a pipeline
 - Allow capturing frames and enhancing them
 
 ### Pipelines
 #### Pipeline management sidebar
-- Pipelines are viewable via a side-panel tree view 
 - Copy clip/s to pipeline -> drag to that pipeline in the sidebar (supports multi-select)
 - Create a new pipeline -> creates a physical folder names the same as the pipeline
 #### New pipeline from movie
@@ -39,16 +27,12 @@
 - The movie is opened in the player control in clip creation mode
 
 ### Design and code quality
-- app-controller.ts redesign. See details in /D:/tmp/dev/clip-sandbox/docs/research/app-controller-init-refactor-handoff.md
 - add `better-result` for error 
-- Code review flow -> put in place [find a good one or add my own instructions]
 -  make error log usable: 
    -  one line message, timestamp, module, error message
    -  save in available folder
    -  allow viewing in the ui
    -  place in log folder, not in the pipeline folder as now
--  app/app-controller.js is still huge. Understand why and if and what can be done.
-   - runAddToCollection
 
 ### Bugs
 - In the workspace window, the collection drop down selection overrides the info text on the top bar. Find a place for the info text (perhaps collapsable panel)
@@ -66,9 +50,10 @@
 
 ### Quick Actions
 Some quick manipulations on videos that generate new videos in the same collection named: [orig-name]-[action]-[serial]
-- trim from start/end to current frame
+- quick refine: trim from start/end to current frame
 - slow by X%
 - remove background / extract just a specific object/character from the video
+- add metadata to generated clip
 - Actions UX
   - Progress when generating video
   - After generation show in compare mode

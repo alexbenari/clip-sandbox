@@ -81,6 +81,53 @@ describe('bounded frame request scheduling', () => {
     await scheduler.whenIdle();
   });
 
+  it('steps at once for a second tap made while the first tap waits to repeat', async () => {
+    vi.useFakeTimers();
+    const calls: number[] = [];
+    const scheduler = new AdjacentStepScheduler(
+      { stepAdjacent: async (direction) => { calls.push(direction); return calls.length; } },
+      () => undefined,
+      undefined,
+      { holdRepeatDelayMs: 250, repeatIntervalMs: 100 },
+    );
+    scheduler.press(1);
+    await vi.advanceTimersByTimeAsync(0);
+    scheduler.release(1);
+    await vi.advanceTimersByTimeAsync(100);
+
+    scheduler.press(1);
+    scheduler.release(1);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(calls).toEqual([1, 1]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await scheduler.whenIdle();
+    expect(calls).toEqual([1, 1]);
+  });
+
+  it('steps for a second tap made while the first tap is still stepping', async () => {
+    const firstLanding = deferred<number>();
+    const calls: number[] = [];
+    const frames: number[] = [];
+    const scheduler = new AdjacentStepScheduler(
+      { stepAdjacent: async (direction) => {
+        calls.push(direction);
+        return calls.length === 1 ? firstLanding.promise : calls.length;
+      } },
+      (frame) => frames.push(frame),
+    );
+    scheduler.press(-1);
+    scheduler.release(-1);
+    scheduler.press(-1);
+    scheduler.release(-1);
+
+    firstLanding.resolve(1);
+    await scheduler.whenIdle();
+
+    expect(calls).toEqual([-1, -1]);
+    expect(frames.at(-1)).toBe(2);
+  });
+
   it('keeps repeating a held step with its default timing until the key is released', async () => {
     vi.useFakeTimers();
     const calls: number[] = [];

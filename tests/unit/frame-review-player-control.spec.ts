@@ -678,6 +678,26 @@ describe('FrameReviewPlayerControl', () => {
     expect(review.pressAdjacent).not.toHaveBeenCalled();
   });
 
+  it('steps once for an arrow tap released while a paused exact jump is still landing', async () => {
+    const landing = deferred<FrameReviewDisplayFrame>();
+    const review = session();
+    const adjacentRequests: string[] = [];
+    review.pressAdjacent.mockImplementation(async (direction: number) => { adjacentRequests.push(`press ${direction}`); });
+    review.releaseAdjacent.mockImplementation(async (direction: number) => { adjacentRequests.push(`release ${direction}`); });
+    const control = new FrameReviewPlayerControl({ document, frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    control.attachSession(review.value);
+    await control.enterExactScrubAtFrame(12);
+    review.scrubToTime.mockReturnValueOnce(landing.promise);
+    control.jumpBySeconds(2);
+    await vi.waitFor(() => expect(review.scrubToTime).toHaveBeenCalledOnce());
+
+    control.pressStep(1);
+    control.releaseStep(1);
+    landing.resolve(exactFrame(18, 18));
+
+    await vi.waitFor(() => expect(adjacentRequests).toEqual(['release 1', 'press 1', 'release 1']));
+  });
+
   it('accumulates rapid playback presses while one jump is pending', async () => {
     const first = deferred<bigint>();
     const review = session(state('playback-ready', false));

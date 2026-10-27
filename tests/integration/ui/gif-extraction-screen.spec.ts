@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { IGifExtractionSessionSnapshot } from '../../../src/app/gif-extraction-session.js';
 import type { IRangeCaptureSnapshot } from '../../../src/domain/range-capture-model.js';
 import { GifExtractionScreen } from '../../../src/ui/gif-extraction-screen.js';
-import { FrameReviewPlayerControl } from '../../../src/ui/frame-review-player-control.js';
+import type { FrameReviewPlayerControl } from '../../../src/ui/frame-review-player-control.js';
 import { GifWorkflowKeyboard } from '../../../src/ui/gif-workflow-keyboard.js';
+import { captureTransportListener, moviePlayer } from '../../support/movie-player.js';
 
 function snapshot(ready: boolean): IGifExtractionSessionSnapshot {
   const capture: IRangeCaptureSnapshot = Object.freeze({
@@ -34,10 +35,98 @@ function snapshot(ready: boolean): IGifExtractionSessionSnapshot {
   });
 }
 
+const stagedDraft: IGifExtractionSessionSnapshot = Object.freeze({
+  ...snapshot(true),
+  previewTarget: Object.freeze({
+    kind: 'draft' as const, rangeId: null, startFrameIndex: 5, endFrameIndex: 15, sourceGeneration: 1, revision: 1,
+  }),
+});
+
+function activeExtractionScreen(player: FrameReviewPlayerControl, initial: IGifExtractionSessionSnapshot) {
+  let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
+  const session = {
+    reviewSession: null,
+    subscribe: vi.fn((listener: (value: IGifExtractionSessionSnapshot) => void) => {
+      publish = listener;
+      listener(initial);
+      return vi.fn();
+    }),
+    reopenLastMovie: vi.fn(async () => undefined),
+  };
+  const screen = new GifExtractionScreen({
+    player, keyboard: new GifWorkflowKeyboard(), session: session as never, rangesPanel: { mount: vi.fn() }, document,
+  });
+  document.body.replaceChildren(screen.commands, screen.root);
+  screen.onActivate();
+  const command = (name: string) => screen.root.querySelector<HTMLButtonElement>(`[data-command="${name}"]`)!;
+  return { screen, command, publish: (value: IGifExtractionSessionSnapshot) => publish(value) };
+}
+
 describe('GifExtractionScreen', () => {
+  it('offers Jump to start, Jump to end and Loop for a staged draft in exact frame review', () => {
+    const player = moviePlayer();
+    vi.spyOn(player, 'exactScrubActive').mockReturnValue(true);
+    vi.spyOn(player, 'ordinaryPlaybackRunning').mockReturnValue(false);
+
+    const { command } = activeExtractionScreen(player, stagedDraft);
+
+    expect([command('jump-start').disabled, command('jump-end').disabled, command('loop-range').disabled])
+      .toEqual([false, false, false]);
+  });
+
+  it('makes Loop unavailable while ordinary playback runs', () => {
+    const player = moviePlayer();
+    const scrubbing = vi.spyOn(player, 'exactScrubActive').mockReturnValue(true);
+    const playing = vi.spyOn(player, 'ordinaryPlaybackRunning').mockReturnValue(false);
+    const notifyTransport = captureTransportListener(player);
+    const { command } = activeExtractionScreen(player, stagedDraft);
+    expect(command('loop-range').disabled).toBe(false);
+
+    scrubbing.mockReturnValue(false);
+    playing.mockReturnValue(true);
+    notifyTransport();
+
+    expect(command('loop-range').disabled).toBe(true);
+  });
+
+  it('makes both capture marks unavailable while a range loops', () => {
+    const player = moviePlayer();
+    const previewPhase = vi.spyOn(player, 'exactPreviewPhase').mockReturnValue('inactive');
+    const notifyTransport = captureTransportListener(player);
+    const { command } = activeExtractionScreen(player, stagedDraft);
+    expect([command('mark-start').disabled, command('mark-end').disabled]).toEqual([false, false]);
+
+    previewPhase.mockReturnValue('running');
+    notifyTransport();
+
+    expect([command('mark-start').disabled, command('mark-end').disabled]).toEqual([true, true]);
+  });
+
+  it('makes Lock range available only once the draft has a start and an end', () => {
+    const ready = snapshot(true);
+    const endpoint = Object.freeze({ kind: 'exact-frame' }) as never;
+    const { command, publish } = activeExtractionScreen(moviePlayer(), ready);
+    expect(command('lock-range').disabled).toBe(true);
+
+    publish(Object.freeze({
+      ...ready,
+      capture: Object.freeze({ ...ready.capture!, capture: Object.freeze({ kind: 'draft', start: endpoint, end: endpoint, message: null }) }),
+    }));
+
+    expect(command('lock-range').disabled).toBe(false);
+  });
+
+  it('lists F and Escape for movie full screen among its keyboard shortcuts', () => {
+    const screen = new GifExtractionScreen({ player: moviePlayer(), keyboard: new GifWorkflowKeyboard(), document });
+
+    expect(screen.shortcuts).toEqual(expect.arrayContaining([
+      { description: 'Enter or exit movie full screen', sequences: [['F']] },
+      { description: 'Exit movie full screen', sequences: [['Escape']] },
+    ]));
+  });
+
   it('labels its movie and capture commands in sentence case', () => {
-    const player = new FrameReviewPlayerControl({ document,
-      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const player = moviePlayer();
     const screen = new GifExtractionScreen({ player, keyboard: new GifWorkflowKeyboard(), document });
     const label = (command: string, root: ParentNode = screen.root) =>
       root.querySelector(`[data-command="${command}"]`)?.firstChild?.textContent;
@@ -57,8 +146,7 @@ describe('GifExtractionScreen', () => {
       }),
       reopenLastMovie: vi.fn(async () => undefined),
     };
-    const player = new FrameReviewPlayerControl({ document,
-      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const player = moviePlayer();
     const screen = new GifExtractionScreen({ player, keyboard: new GifWorkflowKeyboard(),
       session: session as never, document });
 
@@ -81,10 +169,7 @@ describe('GifExtractionScreen', () => {
       markStart: vi.fn(), markEnd: vi.fn(), lockRange: vi.fn(), openMovie: vi.fn(),
       reopenLastMovie: vi.fn(async () => undefined),
     };
-    const player = new FrameReviewPlayerControl({
-      document,
-      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() },
-    });
+    const player = moviePlayer();
     const capture = { point: { kind: 'playback-timestamp', timestampUs: 1n }, positionUs: 1n, sourceGeneration: 1, thumbnail: {} };
     vi.spyOn(player, 'displayedCapture').mockReturnValue(capture as never);
     const interrupt = vi.spyOn(player, 'interruptJumps');

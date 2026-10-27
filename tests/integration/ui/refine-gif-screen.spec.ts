@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { IGifExtractionSessionSnapshot } from '../../../src/app/gif-extraction-session.js';
 import type { IRangeRefinementDraftSnapshot } from '../../../src/app/range-refinement-draft.js';
-import { FrameReviewPlayerControl } from '../../../src/ui/frame-review-player-control.js';
+import type { FrameReviewPlayerControl } from '../../../src/ui/frame-review-player-control.js';
 import { GifWorkflowKeyboard } from '../../../src/ui/gif-workflow-keyboard.js';
 import { RefineGifScreen } from '../../../src/ui/refine-gif-screen.js';
+import { captureTransportListener, moviePlayer } from '../../support/movie-player.js';
 
 const identity = (frameIndex: number) => Object.freeze({
   frameIndex, originalFrameIndex: frameIndex, pts: BigInt(frameIndex * 1_000), duration: 1_000n,
@@ -64,7 +65,12 @@ function extractionSnapshot(refinement: IRangeRefinementDraftSnapshot): IGifExtr
   });
 }
 
-function activeRefineScreen(refinement: IRangeRefinementDraftSnapshot, use: 'gif' | 'collection' = 'gif') {
+function activeRefineScreen(
+  refinement: IRangeRefinementDraftSnapshot,
+  { use = 'gif', player = moviePlayer(), canExtract = false }: {
+    use?: 'gif' | 'collection'; player?: FrameReviewPlayerControl; canExtract?: boolean;
+  } = {},
+) {
   let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
   const session = {
     reviewSession: {} as never,
@@ -76,10 +82,8 @@ function activeRefineScreen(refinement: IRangeRefinementDraftSnapshot, use: 'gif
       return vi.fn();
     },
     abandonRefinement: vi.fn(),
-    canExtractRange: () => false,
+    canExtractRange: () => canExtract,
   };
-  const player = new FrameReviewPlayerControl({ document,
-    frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
   vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
   vi.spyOn(player, 'enterExactScrubAt').mockResolvedValue({} as never);
   const screen = RefineGifScreen[use === 'gif' ? 'forGifExtraction' : 'forCollectionRefinement']({
@@ -100,7 +104,7 @@ describe('RefineGifScreen', () => {
   });
 
   it('names a refined collection clip by its own filename, with its movie as secondary text', () => {
-    const { screen } = activeRefineScreen(refinementSnapshot(), 'collection');
+    const { screen } = activeRefineScreen(refinementSnapshot(), { use: 'collection' });
 
     screen.showRefinedClip('Feature-004.mp4');
 
@@ -113,6 +117,42 @@ describe('RefineGifScreen', () => {
 
     expect(screen.commands.querySelector('[data-refine-command-title]')?.textContent).toBe('Refine Gif · Range 1');
     expect(screen.commands.querySelector('.gif-workflow-source span')?.textContent).toBe('Feature.mp4');
+  });
+
+  it('keeps the jump length chosen on the movie player when Refine opens', () => {
+    const player = moviePlayer();
+    const jumpBy = player.root.querySelector<HTMLSelectElement>('select[aria-label="Jump by seconds"]')!;
+    jumpBy.value = '7';
+    jumpBy.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const { screen } = activeRefineScreen(refinementSnapshot(), { player });
+
+    expect(screen.root.querySelector<HTMLSelectElement>('select[aria-label="Jump by seconds"]')?.value).toBe('7');
+    expect(screen.root.querySelector('[data-command="jump-seconds"]')?.textContent).toBe('Jump +7s');
+  });
+
+  it('makes Extract unavailable while the locked range loops', () => {
+    const committed = refinementSnapshot('committed');
+    const player = moviePlayer();
+    const previewPhase = vi.spyOn(player, 'exactPreviewPhase').mockReturnValue('inactive');
+    const notifyTransport = captureTransportListener(player);
+    const { screen } = activeRefineScreen(committed, { player, canExtract: true });
+    const extract = screen.root.querySelector<HTMLButtonElement>('[data-command="extract-current"]')!;
+    expect(extract.disabled).toBe(false);
+
+    previewPhase.mockReturnValue('running');
+    notifyTransport();
+
+    expect(extract.disabled).toBe(true);
+  });
+
+  it('enters as a contextual screen that opens the Clips panel and keeps Pipelines folded', () => {
+    const screen = RefineGifScreen.forGifExtraction({
+      player: moviePlayer(), keyboard: new GifWorkflowKeyboard(), rangesPanel: { mount: vi.fn() } as never, document,
+    });
+
+    expect([screen.selectorStatus, screen.openPanelIdsOnEntry, screen.initiallyFoldedPanelIds])
+      .toEqual(['contextual', ['clips'], ['pipelines']]);
   });
 
   it('says in the workbench that the staged range is looping while the loop runs', () => {
@@ -149,8 +189,7 @@ describe('RefineGifScreen', () => {
   });
 
   it('shows its own wording for each use', () => {
-    const player = new FrameReviewPlayerControl({ document,
-      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const player = moviePlayer();
     const keyboard = new GifWorkflowKeyboard();
     const fromExtraction = RefineGifScreen.forGifExtraction({ player, keyboard, document });
     const fromCollection = RefineGifScreen.forCollectionRefinement({ player, keyboard, document });
@@ -173,8 +212,7 @@ describe('RefineGifScreen', () => {
       },
       abandonRefinement: vi.fn(),
     };
-    const player = new FrameReviewPlayerControl({ document,
-      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+    const player = moviePlayer();
     const attach = vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
     const screen = RefineGifScreen.forCollectionRefinement({
       player, keyboard: new GifWorkflowKeyboard(), session: session as never, document });
@@ -210,10 +248,7 @@ describe('RefineGifScreen', () => {
       beginRefinement: vi.fn(),
     };
     const rangesPanel = { mount: vi.fn(), focusRange: vi.fn() };
-    const player = new FrameReviewPlayerControl({
-      document,
-      frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() },
-    });
+    const player = moviePlayer();
     vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
     let finishInitialSeek: (capture: null) => void = () => undefined;
     const initialSeek = new Promise<null>(resolve => { finishInitialSeek = resolve; });

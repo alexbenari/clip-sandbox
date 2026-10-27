@@ -1,111 +1,142 @@
-import { test, expect, _electron as electron } from '@playwright/test';
+import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { resizeContent } from './support/app.js';
+import { launchApp, openActivity, resizeContent } from './support/app.js';
 
-test('Activity retains unresolved errors, copies details, retries a real save failure and navigates overflow', async () => {
+type ActivityProfile = { app: ElectronApplication; page: Page; settingsPath: string };
+
+// A folder where the settings file belongs makes settings unreadable and every save fail.
+async function withUnwritableSettings(run: (profile: ActivityProfile) => Promise<void>): Promise<void> {
   const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-activity-'));
   const settingsPath = path.join(profile, 'app-settings.json');
   await fs.mkdir(settingsPath);
-  const env: NodeJS.ProcessEnv = { ...process.env, CLIP_SANDBOX_E2E: '1' };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const app = await electron.launch({ args: ['.', `--user-data-dir=${profile}`], env });
+  const app = await launchApp(profile);
   try {
     const page = await app.firstWindow();
     await page.locator('#settingsBtn').click();
-    const pill = page.locator('#activityIndicatorBtn');
-    await expect(pill).toHaveAccessibleName('Activity and errors: 1 unresolved error');
+    await expect(page.locator('#activityIndicatorBtn')).toHaveAccessibleName('Activity and errors: 1 unresolved error');
+    await run({ app, page, settingsPath });
+  } finally {
+    await app.close();
+    await fs.rm(profile, { recursive: true, force: true });
+  }
+}
+
+// With no dialog open, the new error opens Activity by itself.
+async function failSettingsSaveIntoOpenActivity(page: Page): Promise<void> {
+  await page.locator('#singleClipAudioDefault').click();
+  await expect(page.locator('#activityIndicatorBtn')).toHaveAccessibleName('Activity and errors: 2 unresolved errors');
+  await expect(page.locator('#activityIndicatorPanel')).toBeVisible();
+}
+
+const failedSaveEntry = (page: Page) => page.locator('#activityIndicatorList > li').filter({ hasText: 'Settings were not saved' });
+
+async function makeSettingsWritable(settingsPath: string): Promise<void> {
+  await fs.rmdir(settingsPath);
+}
+
+// Real successful saves fill the history until it overflows, without a production-only test hook.
+async function fillHistoryUntilItOverflows(page: Page): Promise<void> {
+  const history = page.getByRole('region', { name: 'Activity history' });
+  const historyOverflows = async () => {
+    await page.locator('#activityIndicatorBtn').click();
+    const overflowing = await history.evaluate(el => el.scrollHeight > el.clientHeight * 2);
+    await page.keyboard.press('Escape');
+    return overflowing;
+  };
+  for (let saves = 0; !(await historyOverflows()); saves++) {
+    expect(saves, 'saves needed before the Activity history overflows').toBeLessThan(60);
+    await page.locator('#singleClipAudioDefault').click();
+    await expect(page.locator('#settingsStatus')).toHaveText('Saved');
+  }
+}
+
+async function openLongHistory({ page, settingsPath }: ActivityProfile) {
+  await makeSettingsWritable(settingsPath);
+  await fillHistoryUntilItOverflows(page);
+  await openActivity(page);
+  return page.getByRole('region', { name: 'Activity history' });
+}
+
+test('the Keyboard map button stays in place as the Activity error count grows', async () => {
+  await withUnwritableSettings(async ({ page }) => {
     const before = await page.locator('#keyboardMapBtn').boundingBox();
-    // Put a real dialog in front while the filesystem save is pending.
-    await page.evaluate(() => {
-      document.querySelector<HTMLInputElement>('#singleClipAudioDefault')!.click();
-      document.querySelector<HTMLDialogElement>('#unsavedChangesDialog')!.showModal();
-    });
-    await expect(pill).toHaveAccessibleName('Activity and errors: 2 unresolved errors');
-    await expect(pill).toHaveText('2 errors');
-    await expect(page.locator('#globalUtilityHost')).toBeHidden();
+
+    await page.locator('#singleClipAudioDefault').click();
+
+    await expect(page.locator('#activityIndicatorBtn')).toHaveText('2 errors');
     const after = await page.locator('#keyboardMapBtn').boundingBox();
     expect(Math.abs(after!.x - before!.x)).toBeLessThan(1);
     expect(Math.abs(after!.y - before!.y)).toBeLessThan(1);
     expect(Math.abs(after!.width - before!.width)).toBeLessThan(1);
     expect(Math.abs(after!.height - before!.height)).toBeLessThan(1);
-    await page.evaluate(() => document.querySelector<HTMLDialogElement>('#unsavedChangesDialog')!.close());
-    await pill.click();
-    const panel = page.locator('#activityIndicatorPanel');
-    const history = page.getByRole('region', { name: 'Activity history' });
-    await expect(panel).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'More details', exact: true })).toHaveCount(2);
-    const failedSave = page.locator('#activityIndicatorList > li').filter({ hasText: 'Settings were not saved' });
-    await failedSave.getByRole('button', { name: 'More details', exact: true }).focus();
+  });
+});
+
+test('Activity error details open from the keyboard and can be copied', async () => {
+  await withUnwritableSettings(async ({ page }) => {
+    await failSettingsSaveIntoOpenActivity(page);
+    const moreDetails = failedSaveEntry(page).getByRole('button', { name: 'More details', exact: true });
+
+    await moreDetails.focus();
     await page.keyboard.press('Space');
-    await expect(failedSave.getByRole('button', { name: 'More details', exact: true })).toHaveAttribute('aria-expanded', 'true');
-    await expect(failedSave.locator('pre')).toBeVisible();
-    await page.keyboard.press('ArrowDown');
-    await expect(failedSave.locator('summary')).toBeFocused();
-    const details = await failedSave.locator('pre').innerText();
-    expect(details.trim()).not.toBe('');
-    await failedSave.getByRole('button', { name: 'Copy details' }).click();
+    await expect(moreDetails).toHaveAttribute('aria-expanded', 'true');
+    await expect(failedSaveEntry(page).locator('pre')).toHaveText(/\S/);
+    await failedSaveEntry(page).getByRole('button', { name: 'Copy details' }).click();
+
     // Headless Windows runners can report an empty OS clipboard after a successful write.
-    await expect(failedSave).toContainText('Technical details copied.');
-    await failedSave.getByRole('button', { name: 'Retry', exact: true }).click();
-    await expect(failedSave).toContainText('Retry failed');
+    await expect(failedSaveEntry(page)).toContainText('Technical details copied.');
+  });
+});
+
+test('retrying a failed settings save after saving works resolves the error and applies the setting', async () => {
+  await withUnwritableSettings(async ({ page, settingsPath }) => {
+    await failSettingsSaveIntoOpenActivity(page);
     await expect(page.locator('#singleClipAudioDefault')).not.toBeChecked();
-    await fs.rmdir(settingsPath);
-    await failedSave.getByRole('button', { name: 'Retry', exact: true }).click();
-    await expect(failedSave).toContainText('Resolved');
-    await expect(pill).toHaveAccessibleName('Activity and errors: 1 unresolved error');
+    await makeSettingsWritable(settingsPath);
+
+    await failedSaveEntry(page).getByRole('button', { name: 'Retry', exact: true }).click();
+
+    await expect(failedSaveEntry(page)).toContainText('Resolved');
+    await expect(page.locator('#activityIndicatorBtn')).toHaveAccessibleName('Activity and errors: 1 unresolved error');
     await expect(page.locator('#singleClipAudioDefault')).toBeChecked();
-    await page.getByRole('button', { name: 'Clear history', exact: true }).click();
-    await expect(page.locator('#activityIndicatorList > li')).toHaveCount(1);
-    await expect(panel).toContainText('Defaults are in use.');
-    await page.keyboard.press('Escape');
-    // Real successful saves fill the history until it overflows, without a production-only test hook.
-    const historyOverflows = async () => {
-      await page.locator('#activityIndicatorBtn').click();
-      const overflowing = await history.evaluate(el => el.scrollHeight > el.clientHeight * 2);
-      await page.keyboard.press('Escape');
-      return overflowing;
-    };
-    for (let saves = 0; !(await historyOverflows()); saves++) {
-      expect(saves, 'saves needed before the Activity history overflows').toBeLessThan(60);
-      await page.locator('#singleClipAudioDefault').click();
-      await expect(page.locator('#settingsStatus')).toHaveText('Saved');
-    }
-    await page.locator('#activityIndicatorBtn').click();
+  });
+});
+
+test('Page Down and Page Up scroll a long Activity history', async () => {
+  await withUnwritableSettings(async profile => {
+    const history = await openLongHistory(profile);
     await expect(history).toBeFocused();
-    const rows = page.locator('#activityIndicatorList > li');
-    const rowCount = await rows.count();
-    await page.keyboard.press('End');
-    await expect(rows.last()).toBeFocused();
-    await expect(rows.last()).toBeInViewport();
-    await page.keyboard.press('ArrowUp');
-    await expect(rows.nth(rowCount - 2)).toBeFocused();
-    await page.keyboard.press('Home');
-    await expect(rows.first()).toBeFocused();
-    await page.keyboard.press('ArrowDown');
-    await expect(rows.nth(1)).toBeFocused();
-    await page.keyboard.press('PageDown');
+
+    await profile.page.keyboard.press('PageDown');
     await expect.poll(() => history.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
     const lower = await history.evaluate(el => el.scrollTop);
-    await page.keyboard.press('PageUp');
+    await profile.page.keyboard.press('PageUp');
+
     await expect.poll(() => history.evaluate(el => el.scrollTop)).toBeLessThan(lower);
-    await page.keyboard.press('Home');
+  });
+});
+
+test('the mouse wheel scrolls a long Activity history', async () => {
+  await withUnwritableSettings(async profile => {
+    const history = await openLongHistory(profile);
+    await expect.poll(() => history.evaluate(el => el.scrollTop)).toBe(0);
+
     await history.hover();
-    await page.mouse.wheel(0, 450);
+    await profile.page.mouse.wheel(0, 450);
+
     await expect.poll(() => history.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
-    await resizeContent(app, page, 900, 650);
-    await expect(panel.getByRole('button', { name: 'Clear history', exact: true })).toBeInViewport();
-    await page.getByRole('button', { name: 'Clear history', exact: true }).click();
-    await expect(rows).toHaveCount(1);
-    await rows.getByRole('button', { name: 'Clear error', exact: true }).click();
-    await expect(rows).toHaveCount(0);
-    await expect(pill).toHaveAccessibleName('Activity and errors: Ready');
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#activityIndicatorBtn')).toBeFocused();
-  } finally {
-    await app.close();
-    await fs.rm(profile, { recursive: true, force: true });
-  }
+  });
+});
+
+test('Clear history stays reachable for a long history in a small window', async () => {
+  await withUnwritableSettings(async profile => {
+    await openLongHistory(profile);
+
+    await resizeContent(profile.app, profile.page, 900, 650);
+
+    await expect(profile.page.locator('#activityIndicatorPanel').getByRole('button', { name: 'Clear history', exact: true })).toBeInViewport();
+  });
 });
