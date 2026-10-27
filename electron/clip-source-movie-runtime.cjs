@@ -1,6 +1,6 @@
 const path = require('node:path');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
-const { isVideoFilename } = require('./folder-entry.cjs');
+const { ClipFilenameRule } = require('./clip-filename-rule.cjs');
 
 const MAX_CLIPS_PER_REQUEST = 20_000;
 const CONCURRENT_READS = 4;
@@ -9,6 +9,7 @@ class ClipSourceMovieRuntime {
   constructor({ folderAccess, provenance = new Mp4Provenance() }) {
     this.folderAccess = folderAccess;
     this.provenance = provenance;
+    this.filenameRule = new ClipFilenameRule();
   }
 
   async read(event, request) {
@@ -47,15 +48,10 @@ class ClipSourceMovieRuntime {
 
   validFilenames(filenames) {
     if (!Array.isArray(filenames) || filenames.length > MAX_CLIPS_PER_REQUEST
-      || !filenames.every(filename => this.isPlainVideoFilename(filename))) {
+      || !filenames.every(filename => this.filenameRule.isPlainVideoFilename(filename))) {
       throw new Error('Clip source movie request is invalid.');
     }
     return filenames;
-  }
-
-  isPlainVideoFilename(filename) {
-    return typeof filename === 'string' && path.basename(filename) === filename
-      && filename !== '.' && filename !== '..' && isVideoFilename(filename);
   }
 }
 

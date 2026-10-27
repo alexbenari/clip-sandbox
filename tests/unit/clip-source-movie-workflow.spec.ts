@@ -43,12 +43,14 @@ function sourceMovieWorkflow() {
   const service = new ScriptedSourceMovieService();
   const grid = { refreshSourceMovieGlyphs: vi.fn() };
   const activityLog = recordedActivityLog();
+  const diagnostics = { logRuntimeError: vi.fn(async (_problem: string, _error: unknown, _folder?: FolderAccess | null) => undefined) };
   const workflow = new ClipSourceMovieWorkflow({
     service,
     pipelineWorkingCopy,
     openFolder,
     grid,
     reporter: new ActivityReporter(activityLog),
+    diagnostics,
     appText: new AppText(),
   });
   const openPipeline = (folderName: string, clipNames: string[]) => {
@@ -58,7 +60,7 @@ function sourceMovieWorkflow() {
     return folder;
   };
   const clipNamed = (name: string) => pipelineWorkingCopy.pipeline!.clipMap().get(name)!;
-  return { workflow, service, grid, entries: activityLog.entries, openPipeline, clipNamed, pipelineWorkingCopy };
+  return { workflow, service, grid, diagnostics, entries: activityLog.entries, openPipeline, clipNamed, pipelineWorkingCopy };
 }
 
 describe('ClipSourceMovieWorkflow', () => {
@@ -160,6 +162,41 @@ describe('ClipSourceMovieWorkflow', () => {
     await reading;
 
     expect(context.entries).toEqual([{ kind: 'information', message: new AppText().sourceMovieReadFailedText('clips') }]);
+  });
+
+  it('writes a failed folder read to the error log of that folder', async () => {
+    const context = sourceMovieWorkflow();
+    const folder = context.openPipeline('clips', ['alpha.mp4']);
+    const failure = new Error('Folder access is unavailable for this folder session.');
+
+    const reading = context.workflow.readFolderClips(folder);
+    context.service.requests[0].fail(failure);
+    await reading;
+
+    expect(context.diagnostics.logRuntimeError.mock.calls).toEqual([[expect.any(String), failure, folder]]);
+  });
+
+  it('starts no read after shutdown began', async () => {
+    const context = sourceMovieWorkflow();
+    const folder = context.openPipeline('clips', ['alpha.mp4']);
+    context.workflow.dispose();
+
+    await context.workflow.readFolderClips(folder);
+
+    expect(context.service.requests).toEqual([]);
+  });
+
+  it('ignores an answer that arrives after shutdown began', async () => {
+    const context = sourceMovieWorkflow();
+    const folder = context.openPipeline('clips', ['alpha.mp4']);
+    const reading = context.workflow.readFolderClips(folder);
+
+    context.workflow.dispose();
+    context.service.requests[0].answer({ 'alpha.mp4': 'Sample Feature.mkv' });
+    await reading;
+
+    expect(context.clipNamed('alpha.mp4').sourceMovie).toBeNull();
+    expect(context.grid.refreshSourceMovieGlyphs).not.toHaveBeenCalled();
   });
 
   it('adds nothing to Activity when every clip was read', async () => {

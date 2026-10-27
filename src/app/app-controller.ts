@@ -319,6 +319,7 @@ export class AppController {
       openFolder: state,
       grid,
       reporter: activityReporter,
+      diagnostics,
       appText,
     });
     const folderSelection = new FolderSelectionWorkflow({
@@ -472,7 +473,7 @@ export class AppController {
       disposeWorkflow: async () => {
         for (const workflow of [collectionView, collectionSave, addToCollection, folderSelection, trashClips,
           zoom, collectionRefinement, gridContextMenu, gifRangeRefinement, refineLeave, pipelineCatalogRefresher, settingsWorkflow,
-          controlFailureReporting]) workflow.dispose();
+          controlFailureReporting, clipSourceMovies]) workflow.dispose();
         await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
       },
       destroyControls: () => {

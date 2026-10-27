@@ -1,6 +1,7 @@
 import type { Clip } from '../domain/clip.js';
 import type { Pipeline } from '../domain/pipeline.js';
 import type { ActivityReporter } from './activity-reporter.js';
+import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
 import type { ClipSourceMovieReport, IClipSourceMovieService } from './clip-source-movie-service.js';
@@ -17,6 +18,7 @@ type ClipSourceMovieDependencies = Readonly<{
   openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   grid: ISourceMovieGlyphs;
   reporter: Pick<ActivityReporter, 'information'>;
+  diagnostics: Pick<AppDiagnostics, 'logRuntimeError'>;
   appText: Pick<AppText, 'unreadableSourceMoviesText' | 'sourceMovieReadFailedText'>;
 }>;
 
@@ -29,8 +31,13 @@ type SourceMovieRead = Readonly<{
 
 export class ClipSourceMovieWorkflow {
   private folderReadRevision = 0;
+  private disposed = false;
 
   constructor(private readonly sourceMovies: ClipSourceMovieDependencies) {}
+
+  dispose(): void {
+    this.disposed = true;
+  }
 
   async readFolderClips(folder: FolderAccess): Promise<void> {
     const pipeline = this.sourceMovies.pipelineWorkingCopy.pipeline;
@@ -48,16 +55,21 @@ export class ClipSourceMovieWorkflow {
   // Each folder load builds a new pipeline, so an unchanged pipeline means the answer still belongs to the open folder.
   private async readAndApply({ folder, pipeline, clipNames, isLatestRequest }: SourceMovieRead): Promise<void> {
     const { service } = this.sourceMovies;
-    if (!service) return;
-    const isStillWanted = () => isLatestRequest() && this.sourceMovies.pipelineWorkingCopy.pipeline === pipeline;
+    if (!service || this.disposed) return;
+    const isStillWanted = () => !this.disposed && isLatestRequest() && this.sourceMovies.pipelineWorkingCopy.pipeline === pipeline;
     let report: ClipSourceMovieReport;
     try {
       report = await service.readClips(folder, clipNames);
-    } catch {
-      if (isStillWanted()) this.sourceMovies.reporter.information(this.sourceMovies.appText.sourceMovieReadFailedText(pipeline.displayLabel()));
+    } catch (error) {
+      if (isStillWanted()) this.reportReadFailure(folder, pipeline, error);
       return;
     }
     if (isStillWanted()) this.apply(pipeline, report);
+  }
+
+  private reportReadFailure(folder: FolderAccess, pipeline: Pipeline, error: unknown): void {
+    this.sourceMovies.reporter.information(this.sourceMovies.appText.sourceMovieReadFailedText(pipeline.displayLabel()));
+    void this.sourceMovies.diagnostics.logRuntimeError('Failed to read source movie info.', error, folder);
   }
 
   private apply(pipeline: Pipeline, report: ClipSourceMovieReport): void {

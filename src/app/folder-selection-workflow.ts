@@ -8,7 +8,6 @@ import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
 import type { FolderAccess, FolderContents } from './folder-access.js';
 import type { IScreenNavigation } from './collection-refinement-workflow.js';
-import type { ClipSourceMovieWorkflow } from './clip-source-movie-workflow.js';
 import type { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';
@@ -38,6 +37,10 @@ export interface IMissingClipsPrompt {
   hide(): void;
 }
 
+export interface IFolderClipSourceMovies {
+  readFolderClips(folder: FolderAccess): Promise<void>;
+}
+
 export interface IUnsavedChangesPrompt {
   open(request: { message: string; onSave: () => void; onDiscard: () => void; onCancel: () => void }): void;
   close(): void;
@@ -57,7 +60,7 @@ type FolderSelectionDependencies = Readonly<{
   missingClipsPrompt: IMissingClipsPrompt;
   unsavedChangesPrompt: IUnsavedChangesPrompt;
   collectionSave: Pick<CollectionSaveWorkflow, 'saveActive'>;
-  sourceMovies: Pick<ClipSourceMovieWorkflow, 'readFolderClips'>;
+  sourceMovies: IFolderClipSourceMovies;
   navigation: Pick<IScreenNavigation, 'activate'>;
   collectionScreenId: string;
   settings: Readonly<{ whenLoaded(): Promise<void> }>;

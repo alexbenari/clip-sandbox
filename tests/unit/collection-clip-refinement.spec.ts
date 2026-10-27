@@ -85,6 +85,11 @@ describe('CollectionClipRefinement', () => {
       await expect(refinement().inspect(event, { folderPath: clipFolder, filename: 'tagged.mov' })).resolves.toEqual({ available: false });
     });
 
+    it('refuses to check a clip named with a folder', async () => {
+      await expect(refinement().inspect(event, { folderPath: clipFolder, filename: '../tagged.mp4' }))
+        .rejects.toThrow('Collection clip filename is invalid.');
+    });
+
     it('fails the availability check when the clip file is missing', async () => {
       await expect(refinement().inspect(event, { folderPath: clipFolder, filename: 'missing.mp4' })).rejects.toMatchObject({ code: 'ENOENT' });
     });

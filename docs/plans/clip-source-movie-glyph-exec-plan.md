@@ -93,7 +93,7 @@ Shipped: Collection cards whose clip came from a movie through Clip Sandbox show
 
 Evidence: `test-evidence/clip-source-movie/` (gate logs, mutation logs, real-clip parity, real-app check and screenshots).
 
-Open questions for the user, none affecting behavior: rename `ClipSourceMovieWorkflow` as an application service; consumer-declared `I…` interfaces instead of `Pick<ClipSourceMovieWorkflow, …>`; logging whole-folder read failures to diagnostics; a `dispose()` on the workflow; one shared owner for the plain-video-file-name check used by Refine and the folder read.
+Follow-ups the user approved on 2026-10-27: `FolderSelectionWorkflow` and `ZoomWorkflow` declare their own interfaces (`IFolderClipSourceMovies`, `ICreatedClipSourceMovie`); a whole-folder read failure is also written to the folder's error log through `AppDiagnostics.logRuntimeError`; the workflow has a `dispose()` called at shutdown, after which answers are ignored; `ClipFilenameRule` (`electron/clip-filename-rule.cjs`) is the one owner of the plain-video-file-name check used by Refine and the folder read. Still open: the class name for `ClipSourceMovieWorkflow`, which runs no user flow of its own (proposed `ClipSourceMovieRefresher`).
 
 Follow-up work, each needing its own spec: "extract more from this scene", including remembering where a source movie was found; source info for derived clips such as Loopify output.
 

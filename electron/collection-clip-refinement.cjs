@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
 const { isVideoFilename } = require('./folder-entry.cjs');
+const { ClipFilenameRule } = require('./clip-filename-rule.cjs');
 
 class CollectionClipRefinement {
   constructor({ folderAccess, capturesStore, hostForEvent, chooseSourcePath,
@@ -12,6 +13,7 @@ class CollectionClipRefinement {
     this.chooseSourcePath = chooseSourcePath;
     this.fs = fileSystem;
     this.provenance = provenance;
+    this.filenameRule = new ClipFilenameRule();
   }
 
   async inspect(event, request) {
@@ -80,10 +82,7 @@ class CollectionClipRefinement {
   async clipProvenance(event, request) {
     const folder = this.folderAccess.requireKnownPath(event.sender, request?.folderPath);
     const filename = request?.filename;
-    if (typeof filename !== 'string' || path.basename(filename) !== filename
-      || !isVideoFilename(filename) || filename === '.' || filename === '..') {
-      throw new Error('Collection clip filename is invalid.');
-    }
+    if (!this.filenameRule.isPlainVideoFilename(filename)) throw new Error('Collection clip filename is invalid.');
     if (!this.provenance.canBeTagged(filename)) return null;
     const clipPath = path.join(folder, filename);
     const stat = await this.fs.stat(clipPath);
