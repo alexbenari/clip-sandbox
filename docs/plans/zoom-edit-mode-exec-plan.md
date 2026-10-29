@@ -16,6 +16,7 @@ Refining a Collection clip today means a separate screen that shows nothing unti
 - [ ] Milestone 7 - Zoom edit mode in the Collection view
 - [ ] Milestone 8 - Keep both, Replace and the grid after saving
 - [ ] Milestone 9 - Documentation, full validation and the real-app check
+- [ ] Milestone 10 - Design Loopify as an edit inside Zoom edit mode, with the user's approval, then build it
 
 Evidence logs: `test-evidence/zoom-edit-mode/` (ignored by git). Earlier evidence this plan relies on: `test-evidence/collection-refine-keys/findings.md` and `test-evidence/zoom-edit-window-spike/findings.md` (window cut 0.4 s, window ready in 16.4 s, anchor exact). Reuse `test-evidence/clip-source-movie/mutate.cjs` to see each new test fail under a targeted change, and the spike's `time-prepare.cjs` for preparation timings.
 
@@ -65,14 +66,15 @@ Unavailable skills or fallbacks:
 | P8 | New class `MovieWindowCache` (`electron/movie-window-cache.cjs`) keeps windows under `<applicationFolder>/movie-window-cache/<key>/window.mkv` with a small manifest; the key is derived from the movie fingerprint and the window's bounds. It cuts a window with FFmpeg stream copy (video and first audio track) into a temporary file and renames it into place. It keeps at most 10 windows and removes the least recently used beyond that, together with that window's entries in the prepared-review caches (found by the window's content key through the host), so nothing is left behind; validated windows survive restarts like the other caches. | Spec D15 "kept in the cache"; the prepared-review caches find the window again only if its file still exists. Each window costs about 100 MB with its prepared copy (about 24 MB for the window and 80 MB prepared, judging by the test window and the movie's full proxy), so 10 windows take about 1 GB; the user chose 10 to keep the disk cost small. | 2026-10-29 |
 | P9 | Anchoring: new method `FrameReviewHost.findFrameByCheckValue(sessionId, sourceHandle, frameInfoHash, nearFrameIndex)` searches the exact-ready session outward from the estimate with index-only `frameIdentity` reads and returns the first match. `clip-sandbox:zoom-edit-anchor-window { windowId, sessionId }` tries the clip's reference frames in turn and records the window-to-movie offset for that window id; when none is found it answers `not-found` and the renderer asks for a wider window (P7). In a widened window the search covers every frame but starts with the newly added stretches, nearest to the previous window first, and only then the frames the previous window held; nothing is skipped on the strength of a timestamp mapping between the two cuts. | Spec D15: exact numbering, never guessed; the window fits within the host's existing per-session limits. The search reads only index entries (about a second for a whole window), so ordering it finds a reference in the added part almost at once without the risk of skipping a frame at the seam between cuts. | 2026-10-29 |
 | P10 | The staged range is a domain value `RefineRange` (`src/domain/refine-range.ts`) in clip-relative frame numbers: frame 0 is the clip's first frame, and negative numbers or numbers past the last frame are extensions. It knows its limits (the clip's own frames, or one minute of frames beyond each end when a window is anchored) and answers why a requested start or end is refused. | Staged edits survive switching the player from the clip to the window without being invalidated; spec D4 and D5 reasons come from one owner. | 2026-10-29 |
-| P11 | `ZoomEditSession` (`src/app/zoom-edit-session.ts`) owns one clip's edit: it opens the clip source at once and, for a tagged clip, the window source in the background through the frame-review service, switches the player to the window once it is anchored at the same displayed frame, converts displayed exact frames to clip-relative numbers, holds the `RefineRange`, and reports readiness and hint reasons. It reuses `CurrentMovie` for opening, generations and readiness, and does not extend `MovieRangeSession`. | One edit, one owner; the GIF session's capture queue and extraction model do not apply. | 2026-10-29 |
+| P11 | `ZoomEditModeSession` (`src/app/zoom-edit-mode-session.ts`) owns one clip's edit: it opens the clip source at once and, for a tagged clip, the window source in the background through the frame-review service, switches the player to the window once it is anchored at the same displayed frame, converts displayed exact frames to clip-relative numbers, holds the `RefineRange`, and reports readiness and hint reasons. It reuses `CurrentMovie` for opening, generations and readiness, and does not extend `MovieRangeSession`. | One edit, one owner; the GIF session's capture queue and extraction model do not apply. | 2026-10-29 |
 | P12 | Where the one `FrameReviewPlayerControl` is placed decides how it looks: its `mount(host, emptyMessage)` is replaced by two named methods, `mountInGifScreen(host, emptyMessage)` (today's full look with progress row, transport, readiness and readout; used by GIF Extraction and its Refine screen) and `mountInZoomEdit(host)` (picture only). Each applies its look as a class on the player's root and records it, so the next mount restores the right look. Muting is not part of the look: the frame-review open request gains `muted`, which `ReviewSession` passes to the playback engine instead of its fixed `false`. In Zoom edit mode, readiness and refusal messages belong to Zoom edit mode's hint line, not the player. The GIF screens check whether they are active before touching the player, and call `mountInGifScreen` again on activation. | Spec D1 and D2. One control used in two places gets named entry points rather than a parameter that selects its behavior (`ui-coding-quality.md`); muting belongs to the movie being opened; inactive screens must not disturb the shared player. | 2026-10-29 |
-| P13 | Zoom edit mode's keys come from a new `ZoomEditKeyboard` (`src/ui/zoom-edit-keyboard.ts`), not `GifWorkflowKeyboard`: every key calls a session command that either acts or returns a reason shown in the hint line. `AppKeyDownHandler` gives it keys before Zoom's own handling while the mode is active, and its dialog check includes the discard and save dialogs. | Spec D3, D4 and D13: own keys, no silent drops, no conflict with F, E or Escape in the GIF keyboard. | 2026-10-29 |
-| P14 | `ZoomEditWorkflow` (`src/app/zoom-edit-workflow.ts`) runs the flow: entry from the right-click menu and from Zoom's edit menu, the hint line, saving with the Keep both / Replace / Cancel dialog (`SaveRefinementDialogControl`, typed events), and leaving. Leaving with staged edits asks through a Zoom edit variant of `DiscardRefinementDialogControl`. Screen changes are held by a `ZoomEditLeavePolicy` that `ApplicationShellControl` consults together with `RefineScreenLeavePolicy`; folder loads and collection switches in `FolderSelectionWorkflow` ask first; the automatic re-listing after a GIF extraction waits until the mode ends. `ZoomOverlayControl` reports a backdrop click as `closeRequested` instead of closing itself. | Spec D10 and the UI guidelines: workflows own flows, controls report intent, overlays are closed by their workflow. | 2026-10-29 |
+| P13 | Zoom edit mode's keys come from a new `ZoomEditModeKeyboard` (`src/ui/zoom-edit-mode-keyboard.ts`), not `GifWorkflowKeyboard`: every key calls a session command that either acts or returns a reason shown in the hint line. `AppKeyDownHandler` gives it keys before Zoom's own handling while the mode is active, and its dialog check includes the discard and save dialogs. | Spec D3, D4 and D13: own keys, no silent drops, no conflict with F, E or Escape in the GIF keyboard. | 2026-10-29 |
+| P14 | `ZoomEditModeWorkflow` (`src/app/zoom-edit-mode-workflow.ts`) runs the flow: entry from the right-click menu and from Zoom's edit menu, the hint line, saving with the Keep both / Replace / Cancel dialog (`SaveRefinementDialogControl`, typed events), and leaving. Leaving with staged edits asks through a Zoom edit variant of `DiscardRefinementDialogControl`. Screen changes are held by a `ZoomEditModeLeavePolicy` that `ApplicationShellControl` consults together with `RefineScreenLeavePolicy`; folder loads and collection switches in `FolderSelectionWorkflow` ask first; the automatic re-listing after a GIF extraction waits until the mode ends. `ZoomOverlayControl` reports a backdrop click as `closeRequested` instead of closing itself. | Spec D10 and the UI guidelines: workflows own flows, controls report intent, overlays are closed by their workflow. | 2026-10-29 |
 | P15 | Zoom's edit menu lists Refine as a mode entry, separate from file edits like Loopify in `VideoEditCatalog`, so `ClipEditor` never treats Refine as a file edit. | Spec D13; Loopify's runtime path must not receive Refine. | 2026-10-29 |
 | P16 | New class `RefinedClipSaver` (`electron/refined-clip-saver.cjs`) serves `clip-sandbox:zoom-edit-save { folderPath, filename, source: { kind: 'clip' } \| { kind: 'window', windowId }, sessionId, startFrame, endFrame, outcome: 'keep-both' \| 'replace' }` with frame numbers in the source shown. It builds the source-info record itself: from the window's anchored movie identity with reference frames read from the session (spec D7 complete case), from the clip's own `SourceInfo` shifted by the trim (spec D7 partial case), or none for an untagged clip. It encodes through an encoding step extracted from `ClipExtractionRuntime` (exact frames, audio kept; spec D11). | The main process writes only records it built; one encoding path for extraction and refinement. | 2026-10-29 |
 | P17 | Keep both writes `<stem>-refined.mp4`, then `-refined-2`, … with exclusive creation. Replace writes `<stem>.mp4.refining` (not a video extension, so a re-listing never shows it), moves the original to the Recycle Bin, then renames the temporary file to `<stem>.mp4`; if the Recycle Bin move fails or `<stem>.mp4` is taken by another file, it renames to the Keep both name instead and reports why. The answer gives the final name, a folder entry for it, and for a non-MP4 Replace the old name it replaces. | Spec D8 and D9. | 2026-10-29 |
-| P18 | After Keep both, the new clip is inserted as Loopify's is (`PipelineWorkingCopy.insertCreatedClipAfter` / `insertCreatedClipInPipeline`). After Replace, the clip gets a new `ClipSource` whose media address carries the file's modification time as a query, a new `Clip.replaceFile(source)` clears its duration, size and source movie, the grid's views are invalidated, and the source movie is read again; for a non-MP4 Replace the pipeline renames the video and `CollectionFileWriter` rewrites every collection that lists the old name, as the Recycle Bin flow does. | Spec D8 and D9: the new file must show, not the old picture under the same name. | 2026-10-29 |
+| P19 | Inserting a newly created clip into the open view next to its original moves out of `ZoomWorkflow.showCreatedClip` into a new class `CreatedClipInsertion` (`src/app/created-clip-insertion.ts`) with one method, `insert(originalClip, createdSource)`: in a saved collection's view it places the clip right after the original (the view becomes unsaved), in the folder's full list where its name sorts; it refreshes the grid, selector and toolbar, reads the clip's source movie, and opens it in Zoom. Loopify and Keep both both use it. The existing one-shot edit runner `ZoomVideoEditWorkflow` is renamed `ClipFileEditWorkflow` (it runs a file edit such as Loopify on a clip and is not specific to Zoom), so its name no longer resembles `ZoomEditModeWorkflow`. | One owner for where a created clip goes, so Loopify and Keep both cannot drift apart; names that tell the one-shot file edit and the edit mode apart. | 2026-10-29 |
+| P18 | After Keep both, the new clip is inserted through `CreatedClipInsertion` (P19), exactly as Loopify's output is. After Replace, the clip gets a new `ClipSource` whose media address carries the file's modification time as a query, a new `Clip.replaceFile(source)` clears its duration, size and source movie, the grid's views are invalidated, and the source movie is read again; for a non-MP4 Replace the pipeline renames the video and `CollectionFileWriter` rewrites every collection that lists the old name, as the Recycle Bin flow does. | Spec D8 and D9: the new file must show, not the old picture under the same name. | 2026-10-29 |
 
 ## Validation gates
 
@@ -87,8 +89,8 @@ Unavailable skills or fallbacks:
 | G6 | 4 | Clip and window requests enforce grants and place, cut, cache and anchor windows | 4 | Unit tests for `ZoomEditSources`, `MovieWindowCache`, `SourceMovieLocator`; a host test for `findFrameByCheckValue` against a fixture with known frames | All pass. |
 | G7 | 4 | Window and anchor on the user's movie through the real main process | 0, 4 | A script in `test-evidence/zoom-edit-mode/m4/` driving the new requests in the real app with a throwaway profile | Window ready in under 30 s; anchor at the movie frame numbers in the clip's tag; second open is a cache hit. |
 | G8 | 5 | Saving writes exact frames, audio and the right record, with safe names | 5 | Unit tests for `RefinedClipSaver` and the extracted encoding step, including Replace when the Recycle Bin move fails | All pass. |
-| G9 | 6 | Edit session, range rules and compact muted player | 6 | Unit tests for `RefineRange`, `ZoomEditSession`, player compact mode, and the `muted` open option | All pass. |
-| G10 | 7 | Zoom edit mode keys, hint reasons, entry and leaving | 7 | Unit and integration tests for `ZoomEditKeyboard`, `ZoomEditWorkflow`, `ZoomOverlayControl`, `AppKeyDownHandler`, leave policy and folder guards | All pass. |
+| G9 | 6 | Edit session, range rules and compact muted player | 6 | Unit tests for `RefineRange`, `ZoomEditModeSession`, player compact mode, and the `muted` open option | All pass. |
+| G10 | 7 | Zoom edit mode keys, hint reasons, entry and leaving | 7 | Unit and integration tests for `ZoomEditModeKeyboard`, `ZoomEditModeWorkflow`, `ZoomOverlayControl`, `AppKeyDownHandler`, leave policy and folder guards | All pass. |
 | G11 | 7 | No regression in the renderer | 7 | `npm run typecheck`, `npm run lint`, `npm run unit` | Pass. |
 | G12 | 8 | Keep both and Replace in the views | 8 | Unit and app-level tests for insertion, Replace refresh and non-MP4 collection rewriting | Pass. |
 | G13 | 8 | The whole feature across the process boundary | 0, 4, 5, 6, 7, 8 | New `tests/e2e/zoom-edit-mode.spec.ts` with a generated movie, a tagged clip cut from it, and an untagged clip: trim and Keep both, extend and Replace | Pass three times in a row; fails when anchoring is broken. |
@@ -218,11 +220,11 @@ Revert; extraction behavior is protected by its unchanged tests.
 
 ### Scope
 
-`RefineRange`, `ZoomEditSession`, compact muted player (P10–P12).
+`RefineRange`, `ZoomEditModeSession`, compact muted player (P10–P12).
 
 ### Changes
 
-- `src/domain/refine-range.ts`, `src/app/zoom-edit-session.ts` (new).
+- `src/domain/refine-range.ts`, `src/app/zoom-edit-mode-session.ts` (new).
 - `FrameReviewPlayerControl`: `mountInGifScreen` and `mountInZoomEdit` replace `mount` (P12); `IFrameReviewOpenRequest.muted` through `ElectronFrameReviewService`, `frame-review-ipc.cjs` and `ReviewSession`.
 - `GifExtractionScreen` and `RefineGifScreen`: call `mountInGifScreen` on activation and make no player calls while inactive.
 
@@ -243,8 +245,8 @@ Entry, keys, hint line, saving dialog and leaving (P13–P15).
 ### Changes
 
 - `ZoomOverlayControl`: an edit surface slot that holds the compact player and the hint line under it (column layout), `closeRequested` on backdrop click, current muted state.
-- `src/ui/zoom-edit-keyboard.ts`, `src/ui/save-refinement-dialog-control.ts` with markup in `index.html`, `DiscardRefinementDialogControl.forZoomEdit`.
-- `src/app/zoom-edit-workflow.ts`, `src/app/zoom-edit-leave-policy.ts`; `ApplicationShellControl` consults both leave policies; `FolderSelectionWorkflow` asks before folder loads and collection switches while the mode has staged edits; `OpenFolderRefresher` defers re-listing while the mode is active.
+- `src/ui/zoom-edit-mode-keyboard.ts`, `src/ui/save-refinement-dialog-control.ts` with markup in `index.html`, `DiscardRefinementDialogControl.forZoomEdit`.
+- `src/app/zoom-edit-mode-workflow.ts`, `src/app/zoom-edit-mode-leave-policy.ts`; `ApplicationShellControl` consults both leave policies; `FolderSelectionWorkflow` asks before folder loads and collection switches while the mode has staged edits; `OpenFolderRefresher` defers re-listing while the mode is active.
 - `GridContextMenuWorkflow`/`GridContextMenuControl`: Refine item for every clip, opening Zoom and entering the mode; `ZoomEditMenuControl` lists Refine as a mode entry (P15).
 - `AppKeyDownHandler`: Zoom edit mode first; dialog check includes the new dialogs.
 - `AppController`: composition only.
@@ -265,7 +267,8 @@ The saved clip in the views (P18).
 
 ### Changes
 
-- `ZoomEditWorkflow` applies the save answer; `PipelineWorkingCopy` insertion for Keep both; `Clip.replaceFile`, cache-busting media address, grid invalidation and source-movie re-read for Replace; `Pipeline` rename plus collection rewriting through `CollectionFileWriter` for a non-MP4 Replace; Activity messages.
+- `src/app/created-clip-insertion.ts` (new, P19): the insertion logic moved from `ZoomWorkflow.showCreatedClip`, which now calls it; Loopify's existing tests in `tests/unit/zoom-workflow.spec.ts` and the app-level Loopify tests stay green unchanged and guard the move. Rename `ZoomVideoEditWorkflow` to `ClipFileEditWorkflow` (`src/app/clip-file-edit-workflow.ts`) with its test file.
+- `ZoomEditModeWorkflow` applies the save answer; `CreatedClipInsertion` for Keep both; `Clip.replaceFile`, cache-busting media address, grid invalidation and source-movie re-read for Replace; `Pipeline` rename plus collection rewriting through `CollectionFileWriter` for a non-MP4 Replace; Activity messages.
 - `tests/e2e/zoom-edit-mode.spec.ts` with fixtures generated at test time from `tests/fixtures/gif-extraction/generated` (a movie, a tagged clip cut by a real extraction, an untagged clip).
 
 ### Validation
@@ -300,6 +303,25 @@ Record observations and screenshots in `test-evidence/zoom-edit-mode/m9/`.
 ### Rollback/Containment
 
 Revert the documentation commit.
+
+## Milestone 10 - Loopify as an edit inside Zoom edit mode
+
+### Scope
+
+After Milestones 1–9 are done, Loopify stops being a one-shot menu action and becomes another edit the user can stage in Zoom edit mode, alongside Refine.
+
+### Changes
+
+- First, design it and present the design and its reasoning to the user in the session (not a written spec): how Loopify is staged and previewed in the mode, how it combines with a staged Refine when both are set, its key and hint-line text, how saving and the Keep both / Replace choice apply, what happens to its audio and source info, what remains of `ClipFileEditWorkflow` and Zoom's edit menu, and which parts of Milestones 6–8 it reuses.
+- After the user approves the design, record its decisions in this plan's Decision Log, add the changes and gates here, and implement them with the same skill gates as Milestones 6–8.
+
+### Validation
+
+Gates are added with the approved design; they include the full suite (`npm run test:all`) and a real-app check of Loopify in Zoom edit mode.
+
+### Rollback/Containment
+
+Revert the milestone's commits; Loopify returns to the one-shot action of Milestones 1–9.
 
 ## Rejected alternatives
 
