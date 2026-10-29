@@ -11,6 +11,12 @@ export interface IFrameTimelineIndexResult extends IFrameIndexResult {
   readonly pts: readonly string[];
 }
 
+export interface IIndexedFrameTime {
+  readonly pts: bigint;
+  readonly timebaseNumerator: bigint;
+  readonly timebaseDenominator: bigint;
+}
+
 export class BestSourceFrameIndexer {
   constructor(
     private readonly executable: string,
@@ -45,6 +51,43 @@ export class BestSourceFrameIndexer {
       throw new Error('BestSource produced no valid indexed source metadata.');
     }
     return Object.freeze({ frameCount, duration: source.duration });
+  }
+
+  // Never builds an index: the tool is stopped as soon as it starts indexing.
+  async frameTimesFromExistingIndex(
+    sourcePath: string,
+    indexPath: string,
+    frameIndexes: readonly number[],
+    signal?: AbortSignal,
+  ): Promise<readonly IIndexedFrameTime[] | null> {
+    const stop = new AbortController();
+    const abortWithCaller = () => stop.abort();
+    signal?.addEventListener('abort', abortWithCaller, { once: true });
+    let timebase: Readonly<{ numerator: bigint; denominator: bigint }> | null = null;
+    const found = new Map<number, IIndexedFrameTime>();
+    const wanted = new Set(frameIndexes);
+    try {
+      await this.process.run(this.executable, ['timeline', sourcePath, indexPath], {
+        signal: stop.signal,
+        timeoutMs: 60_000,
+        captureStdout: false,
+        onStdoutLine: (line) => {
+          const event = JSON.parse(line) as Record<string, unknown>;
+          if (event.type === 'index-progress') stop.abort();
+          if (event.type === 'source') timebase = this.timebaseOf(event.timebase);
+          if (event.type === 'frame-time' && wanted.has(event.frameIndex as number) && timebase && typeof event.pts === 'string') {
+            found.set(event.frameIndex as number, Object.freeze({
+              pts: BigInt(event.pts), timebaseNumerator: timebase.numerator, timebaseDenominator: timebase.denominator }));
+            if (found.size === wanted.size) stop.abort();
+          }
+        },
+      });
+    } catch (error) {
+      if (!stop.signal.aborted || signal?.aborted) throw error;
+    } finally {
+      signal?.removeEventListener('abort', abortWithCaller);
+    }
+    return found.size === wanted.size ? Object.freeze(frameIndexes.map(frameIndex => found.get(frameIndex)!)) : null;
   }
 
   async timeline(sourcePath: string, indexPath: string, signal?: AbortSignal): Promise<IFrameTimelineIndexResult> {
@@ -84,5 +127,13 @@ export class BestSourceFrameIndexer {
       timebaseDenominator: String(rational.denominator),
       pts: Object.freeze(pts),
     });
+  }
+
+  private timebaseOf(value: unknown): Readonly<{ numerator: bigint; denominator: bigint }> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const { numerator, denominator } = value as Record<string, unknown>;
+    if (!Number.isSafeInteger(numerator) || !Number.isSafeInteger(denominator)
+      || (numerator as number) <= 0 || (denominator as number) <= 0) return null;
+    return Object.freeze({ numerator: BigInt(numerator as number), denominator: BigInt(denominator as number) });
   }
 }

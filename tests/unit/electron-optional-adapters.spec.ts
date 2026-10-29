@@ -5,6 +5,7 @@ import { ElectronClipExtractionService } from '../../src/adapters/electron/elect
 import { ElectronFrameReviewService } from '../../src/adapters/electron/electron-frame-review-service.js';
 import { ElectronGifSessionServices } from '../../src/adapters/electron/electron-gif-session-services.js';
 import { ElectronThumbnailCacheService } from '../../src/adapters/electron/electron-thumbnail-cache-service.js';
+import { ElectronZoomEditSourceService } from '../../src/adapters/electron/electron-zoom-edit-source-service.js';
 
 function desktopWindow(desktop: Record<string, unknown> | undefined): Window {
   return { clipSandboxDesktop: desktop, document } as unknown as Window;
@@ -40,6 +41,12 @@ const optionalAdapters = [
     tryCreate: (win: Window) => ElectronClipCapturesStoreService.tryCreate(win),
     adapter: ElectronClipCapturesStoreService,
     api: { clipCaptures: { attach: vi.fn(), save: vi.fn() } },
+  },
+  {
+    name: 'zoom edit sources',
+    tryCreate: (win: Window) => ElectronZoomEditSourceService.tryCreate(win),
+    adapter: ElectronZoomEditSourceService,
+    api: { zoomEdit: { openClip: vi.fn(), openWindow: vi.fn(), anchorWindow: vi.fn() } },
   },
 ];
 

@@ -70,6 +70,10 @@ export class PlaybackProxyCache {
     return this.joinWriter(active, consumerSignal);
   }
 
+  async remove(cacheKey: string): Promise<void> {
+    if (!this.activeWriters.has(cacheKey)) await rm(this.entryPath(cacheKey), { recursive: true, force: true });
+  }
+
   private async buildAndPublish(
     identity: IExactReviewProxyIdentity,
     cacheKey: string,

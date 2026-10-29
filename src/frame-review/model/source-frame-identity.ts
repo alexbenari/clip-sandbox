@@ -62,7 +62,7 @@ export class SourceFrameIdentity {
     return Object.freeze(identity);
   }
 
-  static timeUs(identity: ISourceFrameIdentity): bigint {
+  static timeUs(identity: Pick<ISourceFrameIdentity, 'pts' | 'timebaseNumerator' | 'timebaseDenominator'>): bigint {
     return identity.pts * identity.timebaseNumerator * 1_000_000n / identity.timebaseDenominator;
   }
 }

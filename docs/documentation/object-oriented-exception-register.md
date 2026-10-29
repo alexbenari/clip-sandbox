@@ -1,6 +1,6 @@
 # Object-Oriented Exception Register
 
-Last updated: 2026-09-14
+Last updated: 2026-10-29
 
 This document records intentional non-OO holdouts. Production TypeScript is class-owned by default; a module-level function must have a concrete reason to remain outside an object and must be recorded here when it is an architectural exception.
 
@@ -17,6 +17,10 @@ Reason kept non-OO and non-TS: the preload bridge is a narrow Electron boundary 
 ### `electron/frame-review-ipc.cjs`
 
 Reason kept CommonJS: Electron main loads this narrow registration boundary directly while the production frame-review host is emitted ESM. Validation, dispatch, serialization, and error translation are owned by `FrameReviewIpcBoundary`; the exported module-level registration function is only the CommonJS composition entrypoint.
+
+### `electron/process-runner.cjs`
+
+Reason kept as a module-level function: `runProcess` is a process-spawning boundary helper that the main-process classes (`ClipExtractionRuntime`, `MovieWindowCache`, `MovieFrameRateProbe`) take as an injectable `runCommand` dependency. It was moved unchanged from `electron/clip-extraction-runtime.cjs` so those classes share one implementation. `electron/video-edit-runtime.cjs` still keeps its own copy.
 
 ### `vitest.config.js`
 

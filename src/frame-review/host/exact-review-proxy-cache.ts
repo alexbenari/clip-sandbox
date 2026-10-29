@@ -125,6 +125,12 @@ export class ExactReviewProxyCache {
     return this.load(this.cacheKey(identity), identity);
   }
 
+  // An entry still being written is kept; its writer owns it until it is published.
+  async remove(identity: IExactReviewProxyIdentity): Promise<void> {
+    const cacheKey = this.cacheKey(identity);
+    if (!this.activeWriters.has(cacheKey)) await this.removeEntry(cacheKey);
+  }
+
   cacheKey(identity: IExactReviewProxyIdentity): string {
     this.assertIdentity(identity);
     return createHash('sha256').update(this.stableStringify(identity)).digest('hex');
@@ -136,7 +142,7 @@ export class ExactReviewProxyCache {
     build: (workspace: IExactReviewProxyWorkspace) => Promise<IExactReviewProxyBuildResult>,
     writerSignal: AbortSignal,
   ): Promise<IExactReviewProxyEntry> {
-    await this.removeInvalidEntry(cacheKey);
+    await this.removeEntry(cacheKey);
     const workspace = await this.createWorkspace(cacheKey);
     try {
       const result = await build(workspace);
@@ -275,7 +281,7 @@ export class ExactReviewProxyCache {
     return path.join(root, cacheKey);
   }
 
-  private async removeInvalidEntry(cacheKey: string): Promise<void> {
+  private async removeEntry(cacheKey: string): Promise<void> {
     await Promise.all([
       rm(this.entryPath(this.paths.frameIndexCache, cacheKey), { recursive: true, force: true }),
       rm(this.entryPath(this.paths.exactReviewProxyCache, cacheKey), { recursive: true, force: true }),

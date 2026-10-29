@@ -100,6 +100,11 @@ const desktopApi = {
   clipSourceMovies: {
     read(request) { return ipcRenderer.invoke('clip-sandbox:clip-source-movies-read', request); },
   },
+  zoomEdit: {
+    openClip(request) { return ipcRenderer.invoke('clip-sandbox:zoom-edit-open-clip', request); },
+    openWindow(request) { return ipcRenderer.invoke('clip-sandbox:zoom-edit-open-window', request); },
+    anchorWindow(request) { return ipcRenderer.invoke('clip-sandbox:zoom-edit-anchor-window', request); },
+  },
   loadAppSettings() { return ipcRenderer.invoke('clip-sandbox:load-app-settings'); },
   saveAppSettings(settings) { return ipcRenderer.invoke('clip-sandbox:save-app-settings', settings); },
   choosePipelinesRoot() { return ipcRenderer.invoke('clip-sandbox:choose-pipelines-root'); },

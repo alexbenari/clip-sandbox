@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { FrameTime } = require('../frame-time.cjs');
 
 const INVALID = 'Clip provenance is invalid or unsupported.';
 const MAX_REFERENCE_FRAMES = 4;
@@ -41,7 +42,7 @@ class SourceInfo {
 
   // Undefined when the time cannot be stored as a safe JSON integer, so the record leaves it out.
   static timeUsOf(frame) {
-    const timeUs = frame.pts * frame.timebaseNumerator * 1_000_000n / frame.timebaseDenominator;
+    const timeUs = FrameTime.microseconds(frame.pts, frame.timebaseNumerator, frame.timebaseDenominator);
     return timeUs >= 0n && timeUs <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(timeUs) : undefined;
   }
 

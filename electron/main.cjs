@@ -13,6 +13,11 @@ const { ClipCapturesStore } = require('./clip-captures-store.cjs');
 const { registerClipCapturesIpc } = require('./clip-captures-ipc.cjs');
 const { createClipExtractionRuntime } = require('./clip-extraction-runtime.cjs');
 const { ClipSourceMovieRuntime } = require('./clip-source-movie-runtime.cjs');
+const { SourceMovieLocator } = require('./source-movie-locator.cjs');
+const { MovieWindowCache } = require('./movie-window-cache.cjs');
+const { MovieFrameRateProbe } = require('./movie-frame-rate-probe.cjs');
+const { ZoomEditSources } = require('./zoom-edit-sources.cjs');
+const { MovieWindowPlacement } = require('./movie-window-placement.cjs');
 const { NativeProductLocator } = require('./native-product-locator.cjs');
 const { ThumbnailCacheRuntime } = require('./thumbnail-cache-runtime.cjs');
 
@@ -115,8 +120,32 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
   const folderAccess = new FolderAccessRegistry();
   const pipelineCatalogRuntime = new PipelineCatalogRuntime({ settingsStore, folderAccess });
   const clipSourceMovieRuntime = new ClipSourceMovieRuntime({ folderAccess });
+  const frameRateProbe = new MovieFrameRateProbe({ resolveFfprobe: () => nativeProducts.ffprobe(), environment: nativeEnvironment });
+  const zoomEditSources = new ZoomEditSources({
+    folderAccess,
+    hostForEvent: frameReviewRuntime.hostForEvent,
+    locator: new SourceMovieLocator({
+      folderAccess,
+      capturesStore: clipCapturesStore,
+      hostForEvent: frameReviewRuntime.hostForEvent,
+      chooseSourcePath: event => pickMovieFromDialog(BrowserWindow.fromWebContents(event.sender)),
+    }),
+    windowCache: new MovieWindowCache({
+      folder: path.join(frameReviewRuntime.applicationFolder, 'movie-window-cache'),
+      resolveFfmpeg: () => nativeProducts.ffmpeg(),
+      environment: nativeEnvironment,
+      forgetPreparedReview: windowPath => frameReviewRuntime.forgetPreparedReview(windowPath),
+    }),
+    placement: new MovieWindowPlacement({
+      probeFrameRate: (moviePath, selectedStream) => frameRateProbe.framesPerSecond(moviePath, selectedStream),
+    }),
+  });
   ipcMain.handle('clip-sandbox:clip-source-movies-read', (event, request) =>
     clipSourceMovieRuntime.read(event, request));
+  frameReviewRuntime.onHostReleased(webContentsId => zoomEditSources.forgetAppWindow(webContentsId));
+  ipcMain.handle('clip-sandbox:zoom-edit-open-clip', (event, request) => zoomEditSources.openClip(event, request));
+  ipcMain.handle('clip-sandbox:zoom-edit-open-window', (event, request) => zoomEditSources.openWindow(event, request));
+  ipcMain.handle('clip-sandbox:zoom-edit-anchor-window', (event, request) => zoomEditSources.anchorWindow(event, request));
   ipcMain.handle('clip-sandbox:load-app-settings', () => settingsStore.load());
   ipcMain.handle('clip-sandbox:save-app-settings', (_event, settings) => settingsStore.save(settings));
   ipcMain.handle('clip-sandbox:choose-pipelines-root', async event => {
@@ -319,9 +348,18 @@ async function createFrameReviewRuntime(nativeProducts) {
   }
   const hosts = new Map();
   const pendingDisposals = new Set();
+  const releaseListeners = [];
+  // Cache upkeep needs no window, so it runs on one host that no window owns.
+  let maintenanceHost = null;
   return {
     hosts,
+    applicationFolder: configuration.applicationFolder,
     createHost: () => new FrameReviewHost(configuration),
+    forgetPreparedReview: (sourcePath) => {
+      maintenanceHost ??= new FrameReviewHost(configuration);
+      return maintenanceHost.forgetPreparedReview(sourcePath);
+    },
+    onHostReleased: (listener) => { releaseListeners.push(listener); },
     hostForEvent: (event) => {
       const host = hosts.get(event?.sender?.id);
       if (!host) throw new Error('No frame-review host exists for this window.');
@@ -329,12 +367,14 @@ async function createFrameReviewRuntime(nativeProducts) {
     },
     releaseHost: (webContentsId, host) => {
       if (hosts.get(webContentsId) === host) hosts.delete(webContentsId);
+      for (const listener of releaseListeners) listener(webContentsId);
       const disposal = host.dispose().finally(() => pendingDisposals.delete(disposal));
       pendingDisposals.add(disposal);
     },
     dispose: async () => {
-      const activeHosts = [...hosts.values()];
+      const activeHosts = [...hosts.values(), ...(maintenanceHost ? [maintenanceHost] : [])];
       hosts.clear();
+      maintenanceHost = null;
       await Promise.allSettled([...activeHosts.map(host => host.dispose()), ...pendingDisposals]);
     },
   };
