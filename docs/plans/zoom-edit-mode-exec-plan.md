@@ -31,12 +31,12 @@ Planning-time gates:
 
 Execution-time gates:
 
-- code-quality-review: at the end of Milestones 2–8, before their validation gates.
+- code-quality-review: at the end of Milestones 2–8 and 10, before their validation gates.
 - testing-discipline: before writing or changing tests.
 - typescript-coding: every TypeScript change.
 - security-and-trust-boundaries: Milestones 4 and 5 (renderer-supplied folder and file names, file writes, renames and Recycle Bin moves, records the main process writes).
 - error-and-correctness-traps: Milestones 4–8 (child processes, cancellation, stale asynchronous answers, the Replace sequence).
-- before-you-refactor: Milestones 2 and 5 (removing Collection Refine; extracting the encoding step from `ClipExtractionRuntime`).
+- before-you-refactor: Milestones 2, 5 and 8 (removing Collection Refine; extracting the encoding step from `ClipExtractionRuntime`; moving created-clip insertion out of `ZoomWorkflow` and renaming `ZoomVideoEditWorkflow`).
 - build-deploy-and-tooling: Milestone 1 only if it adds a native command.
 - writing-clean-code: each new class.
 - run: the real-app checks (G1, G9 tail, G18).
