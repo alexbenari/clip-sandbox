@@ -6,6 +6,7 @@ Refining a Collection clip today means a separate screen that shows nothing unti
 
 ## Progress
 
+- [x] (2026-10-29) Plan signed off by the user, with the spec (`docs/specs/zoom-edit-mode-spec.md`) signed off and amended as recorded in it.
 - [x] (2026-10-29) Milestone 0 - Workspace setup. Done in the previous feature: packages installed, and junctions to the main checkout's `native-build`, `tools/frame-review/.deps` and `tests/fixtures/gif-extraction/generated` exist (all ignored by git). Re-check with G0.
 - [ ] Milestone 1 - Spike: reading a frame time from a movie's cached index
 - [ ] Milestone 2 - Retire Collection Refine
