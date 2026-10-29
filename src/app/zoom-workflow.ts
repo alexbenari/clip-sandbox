@@ -3,6 +3,7 @@ import type { VideoEdit } from '../business-logic/video-edit-catalog.js';
 import type { Clip } from '../domain/clip.js';
 import type { ClipSource } from '../domain/clip-source.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
+import type { ActiveZoomEdit } from './active-zoom-edit.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
@@ -17,6 +18,7 @@ type MenuPoint = Readonly<{ x: number; y: number }>;
 export interface IZoomView extends IEventSource<{
   playbackFailed: Readonly<{ name: string; error: unknown }>;
   contextMenuRequested: Readonly<{ point: MenuPoint }>;
+  closeRequested: void;
 }> {
   open(item: { clipId: string; src: string; name: string }): boolean;
   close(): void;
@@ -39,7 +41,7 @@ export interface IZoomGrid extends IEventSource<{ openClipRequested: string }> {
 export interface IScreenChanges extends IEventSource<{ screenChanged: Readonly<{ id: string }> }> {}
 
 export interface IZoomEditMenu {
-  open(request: { point: MenuPoint; isDisabled: boolean; onSelectEdit: (edit: VideoEdit) => void }): void;
+  open(request: { point: MenuPoint; isDisabled: boolean; onSelectEdit: (edit: VideoEdit) => void; onRefine: (() => void) | null }): void;
 }
 
 export interface ICreatedClipSourceMovie {
@@ -61,6 +63,8 @@ type ZoomDependencies = Readonly<{
   collectionScreenId: string;
   contextMenu: { close(options: { restoreFocus: boolean }): void };
   editMenu: IZoomEditMenu;
+  activeEdit: Pick<ActiveZoomEdit, 'isActive'>;
+  enterZoomEditMode: ((clip: Clip) => void) | null;
   clipEditor: Pick<ClipEditor, 'createVideoEdit'>;
   fullScreen: { isDocumentFullScreen(): boolean };
   boundaryFeedback: { playBoundaryClank(): void };
@@ -97,6 +101,9 @@ export class ZoomWorkflow {
     this.unsubscribes = [
       zoom.grid.on('openClipRequested', clipId => { this.openClipById(clipId); }),
       zoom.zoom.on('playbackFailed', ({ name, error }) => this.reportPlaybackFailure(name, error)),
+      zoom.zoom.on('closeRequested', () => {
+        if (this.isOpen() && !zoom.activeEdit.isActive) this.close();
+      }),
       zoom.zoom.on('contextMenuRequested', ({ point }) => {
         if (zoom.fullScreen.isDocumentFullScreen()) return;
         this.openEditMenu(point);
@@ -124,7 +131,7 @@ export class ZoomWorkflow {
   }
 
   openClip(clip: Clip | null): boolean {
-    if (!clip || this.zoom.fullScreen.isDocumentFullScreen()) return false;
+    if (!clip || this.zoom.fullScreen.isDocumentFullScreen() || this.zoom.activeEdit.isActive) return false;
     const src = this.zoom.grid.getClipMediaSource(clip.id);
     if (!src) return false;
     this.zoom.grid.setSelectedClipId(clip.id);
@@ -156,11 +163,14 @@ export class ZoomWorkflow {
   }
 
   private openEditMenu(point: MenuPoint): void {
-    if (!this.zoom.zoom.isOpen() || !this.zoomedClip()) return;
+    const clip = this.zoomedClip();
+    if (!this.zoom.zoom.isOpen() || !clip) return;
+    const { enterZoomEditMode } = this.zoom;
     this.zoom.editMenu.open({
       point,
       isDisabled: this.videoEdits.isRunning(),
       onSelectEdit: edit => { void this.runEdit(edit); },
+      onRefine: enterZoomEditMode ? () => enterZoomEditMode(clip) : null,
     });
   }
 

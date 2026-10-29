@@ -115,7 +115,7 @@ describe('application shell screen ownership', () => {
     const f = fixture();
     const leavePolicy = { canLeave: vi.fn(() => false) };
     const shell = new ApplicationShellControl({ ...f,
-      screens: [f.collection, f.settings], leavePolicy,
+      screens: [f.collection, f.settings], leavePolicies: [{ canLeave: () => true }, leavePolicy],
     });
     shell.start();
     f.selector.value = f.settings.id;
@@ -129,7 +129,7 @@ describe('application shell screen ownership', () => {
   it('reports which screen change its leave guard held, so the change can be completed later', () => {
     const f = fixture();
     const shell = new ApplicationShellControl({ ...f,
-      screens: [f.collection, f.settings], leavePolicy: { canLeave: () => false },
+      screens: [f.collection, f.settings], leavePolicies: [{ canLeave: () => false }],
     });
     const refused = vi.fn();
     shell.on('screenChangeRefused', refused);

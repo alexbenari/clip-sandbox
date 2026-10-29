@@ -825,6 +825,23 @@
       <button id="discardRefinementBtn" type="button">Discard</button>
     </div>
   </dialog>
+  <dialog class="unsaved-changes-dialog" id="discardZoomEditDialog" aria-labelledby="discardZoomEditQuestion">
+    <h2 id="discardZoomEditQuestion">Discard the new start and end?</h2>
+    <p>The clip file stays as it is.</p>
+    <div class="unsaved-changes-actions">
+      <button id="keepZoomEditingBtn" type="button">Keep editing</button>
+      <button id="discardZoomEditBtn" type="button">Discard</button>
+    </div>
+  </dialog>
+  <dialog class="unsaved-changes-dialog" id="saveRefinementDialog" aria-labelledby="saveRefinementTitle" aria-describedby="saveRefinementExplanation">
+    <h2 id="saveRefinementTitle">Save the refined clip</h2>
+    <p id="saveRefinementExplanation">Keep both adds the refined clip next to the original. Replace puts it in place of the original and moves the original to the Recycle Bin.</p>
+    <div class="unsaved-changes-actions">
+      <button id="cancelSaveRefinementBtn" type="button">Cancel</button>
+      <button id="replaceRefinedClipBtn" type="button" class="btn-destructive">Replace</button>
+      <button id="keepBothRefinedClipBtn" type="button" class="btn-primary">Keep both</button>
+    </div>
+  </dialog>
   <div id="clipContextMenu" hidden>
     <div id="clipContextMenuPanel"></div>
   </div>

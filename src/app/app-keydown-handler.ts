@@ -1,5 +1,6 @@
 import type { IShortcutDescriptor } from './shortcut-descriptor.js';
 import type { IEventSource } from './event-source.js';
+import { ZOOM_EDIT_MODE_SHORTCUTS } from './zoom-edit-mode-keys.js';
 
 export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Move focus between clips', group: 'Grid', sequences: [['Arrow keys']] },
@@ -18,6 +19,7 @@ export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Previous clip', group: 'Zoom', sequences: [['Left']] },
   { description: 'Next clip', group: 'Zoom', sequences: [['Right']] },
   { description: 'Close Zoom', group: 'Zoom', sequences: [['Escape']] },
+  ...ZOOM_EDIT_MODE_SHORTCUTS,
 ];
 
 type KeyboardDialog = {
@@ -49,6 +51,9 @@ export type AppKeyDownContext = {
   keys: IEventSource<{ keyPressed: KeyboardEvent }>;
   utilities: { readonly isOpen: boolean } | null;
   fullScreenKeys: { onGlobalKeyDown(event: KeyboardEvent): void };
+  activeEdit: { readonly isActive: boolean };
+  zoomEditKeys: { handleKeyDown(event: KeyboardEvent): boolean };
+  zoomEditDialogs: readonly Readonly<{ isOpen(): boolean }>[];
 };
 
 export class AppKeyDownHandler {
@@ -63,11 +68,11 @@ export class AppKeyDownHandler {
   }
 
   // Collection shortcuts come first. Full-screen keys see only keys those left unhandled, and never keys
-  // the user is typing into an open dialog or an editable field.
+  // the user is typing into an open dialog or an editable field, or keys pressed in Zoom edit mode.
   private onCollectionKey(event: KeyboardEvent): void {
     if (this.context.utilities?.isOpen || event.defaultPrevented) return;
     this.handle(event);
-    if (event.defaultPrevented || this.anyDialogOpen() || this.isEditableTarget(event.target)) return;
+    if (event.defaultPrevented || this.context.activeEdit.isActive || this.anyDialogOpen() || this.isEditableTarget(event.target)) return;
     this.context.fullScreenKeys.onGlobalKeyDown(event);
   }
 
@@ -89,6 +94,11 @@ export class AppKeyDownHandler {
     }
     if (context.unsavedChangesDialog.handleGlobalKeyDown(event)) {
       event.preventDefault();
+      return true;
+    }
+    // Zoom edit mode's keys replace Zoom's own while it is active; keys it does not use do nothing.
+    if (context.activeEdit.isActive) {
+      if (!this.anyDialogOpen() && !this.isEditableTarget(event.target)) context.zoomEditKeys.handleKeyDown(event);
       return true;
     }
     if (event.key === 'Escape' && context.zoom.isOpen()) {
@@ -160,6 +170,7 @@ export class AppKeyDownHandler {
       || this.context.addToCollectionDialog.isOpen()
       || this.context.trashClipsDialog.isOpen()
       || this.context.unsavedChangesDialog.isOpen()
+      || this.context.zoomEditDialogs.some(dialog => dialog.isOpen())
     );
   }
 

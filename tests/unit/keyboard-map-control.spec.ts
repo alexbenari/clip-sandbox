@@ -51,13 +51,14 @@ describe('KeyboardMapControl', () => {
     ]);
   });
 
-  it('renders the Collection shortcuts under Grid, Zoom, and Fullscreen contexts', () => {
+  it('renders the Collection shortcuts under Grid, Zoom, Zoom edit and Fullscreen contexts', () => {
     const { root, control } = createControl();
     control.render({ label: 'Collection', shortcuts: [...COLLECTION_SHORTCUTS, ...FULLSCREEN_SHORTCUTS] });
 
     expect(Array.from(root.querySelectorAll('h3')).map((heading) => heading.textContent)).toEqual([
       'Grid',
       'Zoom',
+      'Zoom edit',
       'Fullscreen',
       'Global',
     ]);
@@ -74,6 +75,14 @@ describe('KeyboardMapControl', () => {
       'Previous clip',
       'Next clip',
       'Close Zoom',
+      'Play or pause',
+      'Step one frame',
+      'Jump by 1, 2, 5, 7 or 10 seconds',
+      'Set the start or the end at this frame',
+      'Go to the start or the end',
+      'Loop the range',
+      'Save',
+      'Leave Zoom edit mode',
       'Toggle fullscreen review',
       'Set visible clip count',
       'Close the open app-bar utility',
@@ -90,6 +99,14 @@ describe('KeyboardMapControl', () => {
       'A',
       'Left',
       'Right',
+      'Escape',
+      'Space',
+      'Left or Right',
+      '1-5',
+      'Q or W',
+      'A or S',
+      'Z',
+      'X',
       'Escape',
       'F',
       '0-9',

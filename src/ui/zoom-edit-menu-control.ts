@@ -1,5 +1,5 @@
 import type { VideoEdit, VideoEditCatalog } from '../business-logic/video-edit-catalog.js';
-import type { ContextMenuControl, ContextMenuIcon, ContextMenuItem, ContextMenuPoint } from './context-menu-control.js';
+import type { ContextMenuControl, ContextMenuEntry, ContextMenuIcon, ContextMenuPoint } from './context-menu-control.js';
 
 const CHISEL_ICON: ContextMenuIcon = Object.freeze({
   kind: 'svg',
@@ -10,9 +10,23 @@ const CHISEL_ICON: ContextMenuIcon = Object.freeze({
   ],
 });
 
+const RANGE_ICON: ContextMenuIcon = Object.freeze({
+  kind: 'svg',
+  viewBox: '0 0 24 24',
+  paint: 'stroke',
+  paths: ['M8 4H5v16h3M16 4h3v16h-3M10 12h4'],
+});
+
 // The menu's icon for each edit; the catalog knows which edits exist, the menu knows how they look.
 const EDIT_ICONS: Readonly<Record<VideoEdit['id'], ContextMenuIcon>> = Object.freeze({ loopify: CHISEL_ICON });
 
+type ZoomEditMenuRequest = {
+  isDisabled?: boolean;
+  onSelectEdit?: (edit: VideoEdit) => void;
+  onRefine?: (() => void) | null;
+};
+
+// Refine enters Zoom edit mode, so it is listed apart from the file edits of the catalog.
 export class ZoomEditMenuControl {
   contextMenu: Pick<ContextMenuControl, 'open'> | null;
   private readonly videoEditCatalog: Pick<VideoEditCatalog, 'listZoomEdits'>;
@@ -31,27 +45,23 @@ export class ZoomEditMenuControl {
   buildItems({
     isDisabled = false,
     onSelectEdit = () => {},
-  }: { isDisabled?: boolean; onSelectEdit?: (edit: VideoEdit) => void } = {}): ContextMenuItem[] {
-    return this.videoEditCatalog.listZoomEdits().map((edit) => ({
+    onRefine = null,
+  }: ZoomEditMenuRequest = {}): ContextMenuEntry[] {
+    const fileEdits: ContextMenuEntry[] = this.videoEditCatalog.listZoomEdits().map((edit) => ({
       id: `zoom-edit-${edit.id}`,
       label: edit.label,
       icon: EDIT_ICONS[edit.id],
       disabled: !!isDisabled,
       onSelect: () => onSelectEdit(edit),
     }));
+    if (!onRefine) return fileEdits;
+    return [
+      { id: 'zoom-edit-refine', label: 'Refine', icon: RANGE_ICON, disabled: !!isDisabled, onSelect: onRefine },
+      ...(fileEdits.length > 0 ? [{ separator: true } as const, ...fileEdits] : []),
+    ];
   }
 
-  open({
-    point = {},
-    isDisabled = false,
-    onSelectEdit = () => {},
-  }: { point?: ContextMenuPoint; isDisabled?: boolean; onSelectEdit?: (edit: VideoEdit) => void } = {}): void {
-    this.contextMenu?.open({
-      point,
-      items: this.buildItems({
-        isDisabled,
-        onSelectEdit,
-      }),
-    });
+  open({ point = {}, ...request }: ZoomEditMenuRequest & { point?: ContextMenuPoint } = {}): void {
+    this.contextMenu?.open({ point, items: this.buildItems(request) });
   }
 }

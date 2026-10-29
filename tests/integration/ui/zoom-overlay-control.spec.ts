@@ -214,20 +214,95 @@ describe('zoom overlay controller', () => {
     expect(HTMLMediaElement.prototype.load).toHaveBeenCalled();
   });
 
-  test('closes on outside click but not on frame click', () => {
+  test('asks to close on a backdrop click, staying open for its workflow to decide', () => {
     const controller = createZoomOverlayControl({
       mountEl: document.getElementById('zoomLayerRoot'),
       document,
     });
+    const closeRequested = vi.fn();
+    controller.on('closeRequested', closeRequested);
 
     controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
     document.getElementById('zoomFrame').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(controller.isOpen()).toBe(true);
+    expect(closeRequested).not.toHaveBeenCalled();
 
     document.getElementById('zoomOverlay').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(controller.isOpen()).toBe(false);
-    expect(controller.getCurrentClipId()).toBeNull();
-    expect(document.getElementById('zoomLayerRoot').children.length).toBe(0);
+    expect(closeRequested).toHaveBeenCalledOnce();
+    expect(controller.isOpen()).toBe(true);
+  });
+
+  describe('edit surface', () => {
+    function editableZoom() {
+      const player = { root: document.createElement('section'), mountInZoomEdit: vi.fn(host => host.replaceChildren(player.root)) };
+      const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot'), document, editPlayer: player });
+      controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
+      return { controller, player };
+    }
+
+    test('replaces the zoomed video with the edit player and a hint line under it', () => {
+      const { controller, player } = editableZoom();
+
+      expect(controller.showEditSurface()).toBe(true);
+
+      const surface = document.getElementById('zoomEditSurface');
+      expect(document.getElementById('zoomVideo')).toBeNull();
+      expect(surface.contains(player.root)).toBe(true);
+      expect(player.root.compareDocumentPosition(document.getElementById('zoomEditHint')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(document.getElementById('zoomFrame').getAttribute('aria-label')).toBe('Zoom edit mode');
+      expect(controller.getCurrentClipId()).toBe('clip_1');
+    });
+
+    test('shows the keys and the status it is given in the hint line', () => {
+      const { controller } = editableZoom();
+      controller.showEditSurface();
+      const hint = document.getElementById('zoomEditHint');
+
+      controller.showEditHint({ keys: 'Q start · Esc leave', status: 'Finding the source movie…' });
+      expect(hint.querySelector('.zoom-edit-hint-keys').textContent).toBe('Q start · Esc leave');
+      expect(hint.querySelector('[role="status"]').textContent).toBe('Finding the source movie…');
+
+      controller.showEditHint({ keys: 'Q start · Esc leave', status: null });
+      expect(hint.querySelector('[role="status"]').textContent).toBe('');
+    });
+
+    test('removes the player and the hint line when the surface is hidden', () => {
+      const { controller, player } = editableZoom();
+      controller.showEditSurface();
+
+      controller.hideEditSurface();
+
+      expect(document.getElementById('zoomEditSurface')).toBeNull();
+      expect(player.root.isConnected).toBe(false);
+      expect(document.getElementById('zoomFrame').getAttribute('aria-label')).toBe('Zoomed clip');
+    });
+
+    test('opening a clip again shows its video instead of the edit surface', () => {
+      const { controller } = editableZoom();
+      controller.showEditSurface();
+
+      controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
+
+      expect(document.getElementById('zoomEditSurface')).toBeNull();
+      expect(document.getElementById('zoomVideo')).not.toBeNull();
+    });
+
+    test('has no edit surface without an edit player', () => {
+      const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot'), document });
+      controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
+
+      expect(controller.showEditSurface()).toBe(false);
+      expect(document.getElementById('zoomVideo')).not.toBeNull();
+    });
+  });
+
+  test('reports whether the zoomed clip is muted after the audio was toggled', () => {
+    const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot'), document });
+    controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
+    expect(controller.isMuted()).toBe(true);
+
+    controller.toggleMuted();
+
+    expect(controller.isMuted()).toBe(false);
   });
 
   test('forwards right-clicks on the zoomed video through the context-menu seam', () => {

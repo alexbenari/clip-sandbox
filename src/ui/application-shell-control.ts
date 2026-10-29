@@ -34,7 +34,7 @@ type ShellElements = {
   workspace?: HTMLElement;
   center?: HTMLElement;
   panels?: readonly ShellPanel[];
-  leavePolicy?: IScreenLeavePolicy;
+  leavePolicies?: readonly IScreenLeavePolicy[];
 };
 
 export class ApplicationShellControl implements IEventSource<IApplicationShellEvents> {
@@ -53,7 +53,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
   private readonly onSelectionChange = (): void => { this.activate(this.elements.selector.value); };
   private readonly onSettingsClick = (): void => { this.events.emit('settingsRequested'); };
 
-  static fromDocument(doc: Document, options: Pick<ShellElements, 'screens' | 'initialScreenId' | 'leavePolicy'>): ApplicationShellControl {
+  static fromDocument(doc: Document, options: Pick<ShellElements, 'screens' | 'initialScreenId' | 'leavePolicies'>): ApplicationShellControl {
     const elements = new DocumentElements(doc);
     return new ApplicationShellControl({
       ...options,
@@ -187,7 +187,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
       incoming.focusInitial();
       return;
     }
-    if (this.activated && this.elements.leavePolicy?.canLeave(this.current, incoming) === false) {
+    if (this.activated && this.elements.leavePolicies?.some(policy => !policy.canLeave(this.current, incoming))) {
       this.elements.selector.value = this.current.id;
       this.events.emit('screenChangeRefused', { from: this.current, to: incoming });
       return;

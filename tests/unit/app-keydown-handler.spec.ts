@@ -2,6 +2,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { AppKeyDownHandler } from '../../src/app/app-keydown-handler.js';
 import { EventSource } from '../../src/app/event-source.js';
+import { ZoomEditModeKeyboard } from '../../src/ui/zoom-edit-mode-keyboard.js';
 
 function gridWith({ focusedClipId = null, selectedClipId = null, handlesCardKeys = false } = {}) {
   return {
@@ -46,6 +47,9 @@ function createContext(overrides = {}) {
     keys: new EventSource(),
     utilities: { isOpen: false },
     fullScreenKeys: { onGlobalKeyDown: vi.fn() },
+    activeEdit: { isActive: false },
+    zoomEditKeys: new ZoomEditModeKeyboard(),
+    zoomEditDialogs: [{ isOpen: () => false }],
     ...overrides,
   };
 }
@@ -264,5 +268,84 @@ describe('app keydown handler', () => {
     context.keys.emit('keyPressed', keyOn(target, 's', { ctrlKey: true }));
 
     expect(context.collectionSave.saveActive).not.toHaveBeenCalled();
+  });
+
+  describe('Zoom edit mode', () => {
+    const openZoom = () => ({ isOpen: vi.fn(() => true), close: vi.fn(), toggleMuted: vi.fn(), browseByOffset: vi.fn(), openClipById: vi.fn() });
+
+    function inZoom({ editing, dialogOpen = false }) {
+      const context = createContext({
+        zoom: openZoom(),
+        activeEdit: { isActive: editing },
+        zoomEditDialogs: [{ isOpen: () => false }, { isOpen: () => dialogOpen }],
+      });
+      const commands = [];
+      context.zoomEditKeys.on('commandRequested', command => commands.push(command));
+      new AppKeyDownHandler(context);
+      return { context, commands };
+    }
+
+    test.each([
+      ['a', { kind: 'jump-to-start' }],
+      ['ArrowLeft', { kind: 'step', direction: -1 }],
+      ['ArrowRight', { kind: 'step', direction: 1 }],
+      ['Escape', { kind: 'leave' }],
+    ])('%s acts in Zoom edit mode instead of keeping its Zoom meaning', (key, command) => {
+      const { context, commands } = inZoom({ editing: true });
+
+      context.keys.emit('keyPressed', keyOn(document.body, key));
+
+      expect(commands).toEqual([command]);
+      expect(context.zoom.toggleMuted).not.toHaveBeenCalled();
+      expect(context.zoom.browseByOffset).not.toHaveBeenCalled();
+      expect(context.zoom.close).not.toHaveBeenCalled();
+    });
+
+    test('a key Zoom edit mode does not use neither closes Zoom nor reaches the full-screen keys', () => {
+      const { context, commands } = inZoom({ editing: true });
+
+      context.keys.emit('keyPressed', keyOn(document.body, 'f'));
+
+      expect(commands).toEqual([]);
+      expect(context.zoom.close).not.toHaveBeenCalled();
+      expect(context.fullScreenKeys.onGlobalKeyDown).not.toHaveBeenCalled();
+    });
+
+    test('keys pressed while its save or discard dialog is open stay with the dialog', () => {
+      const { context, commands } = inZoom({ editing: true, dialogOpen: true });
+      const event = keyOn(document.body, 'Escape');
+
+      context.keys.emit('keyPressed', event);
+
+      expect(commands).toEqual([]);
+      expect(context.zoom.close).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    test('outside the mode A toggles Zoom audio', () => {
+      const { context, commands } = inZoom({ editing: false });
+
+      context.keys.emit('keyPressed', keyOn(document.body, 'a'));
+
+      expect(context.zoom.toggleMuted).toHaveBeenCalledOnce();
+      expect(commands).toEqual([]);
+    });
+
+    test.each([['ArrowLeft', -1], ['ArrowRight', 1]])('outside the mode %s moves Zoom to the neighboring clip', (key, offset) => {
+      const { context, commands } = inZoom({ editing: false });
+
+      context.keys.emit('keyPressed', keyOn(document.body, key));
+
+      expect(context.zoom.browseByOffset).toHaveBeenCalledWith(offset);
+      expect(commands).toEqual([]);
+    });
+
+    test('outside the mode Escape closes Zoom', () => {
+      const { context } = inZoom({ editing: false });
+
+      context.keys.emit('keyPressed', keyOn(document.body, 'Escape'));
+
+      expect(context.zoom.close).toHaveBeenCalledOnce();
+    });
   });
 });

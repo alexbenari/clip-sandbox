@@ -15,7 +15,7 @@ import { clipSource } from '../support/clip-source-fixtures.js';
 
 const loopify = { id: 'loopify', label: 'Loopify' } as VideoEdit;
 
-class FakeZoomView extends EventSource<{ playbackFailed: { name: string; error: unknown }; contextMenuRequested: { point: { x: number; y: number } } }> {
+class FakeZoomView extends EventSource<{ playbackFailed: { name: string; error: unknown }; contextMenuRequested: { point: { x: number; y: number } }; closeRequested: void }> {
   currentClipId: string | null = null;
   open = vi.fn(({ clipId }: { clipId: string }) => { this.currentClipId = clipId; return true; });
   close = vi.fn(() => { this.currentClipId = null; });
@@ -24,7 +24,7 @@ class FakeZoomView extends EventSource<{ playbackFailed: { name: string; error: 
   getCurrentClipId() { return this.currentClipId; }
 }
 
-function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
+function zoomWorkflow({ editResult, enterZoomEditMode = null }: { editResult?: ClipEditorResult; enterZoomEditMode?: ((clip: Clip) => void) | null } = {}) {
   const pipeline = new Pipeline({ folderName: 'clips', videoSources: [clipSource('alpha.mp4'), clipSource('bravo.mp4')] });
   const pipelineWorkingCopy = new PipelineWorkingCopy();
   pipelineWorkingCopy.loadPipeline(pipeline);
@@ -50,6 +50,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
   const collectionView = { applySelection: vi.fn(), activeCacheKey: () => 'pipeline', refreshSelector: vi.fn(), refreshToolbar: vi.fn() };
   const screens = new EventSource<{ screenChanged: { id: string } }>();
   const sourceMovies = { readCreatedClip: vi.fn(async (_clip: Clip) => undefined) };
+  const activeEdit = { isActive: false };
   const workflow = new ZoomWorkflow({
     pipelineWorkingCopy,
     openFolder,
@@ -60,6 +61,8 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
     collectionScreenId: 'collection',
     contextMenu: { close: vi.fn() },
     editMenu,
+    activeEdit,
+    enterZoomEditMode,
     clipEditor: { createVideoEdit: vi.fn(async () => editResult ?? { ok: false, code: 'edit-failed', edit: loopify } as ClipEditorResult) },
     fullScreen: { isDocumentFullScreen: () => false },
     boundaryFeedback,
@@ -69,7 +72,7 @@ function zoomWorkflow({ editResult }: { editResult?: ClipEditorResult } = {}) {
     reporter: new ActivityReporter(activityLog),
     appText: new AppText(),
   });
-  return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineWorkingCopy, sourceMovies };
+  return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineWorkingCopy, sourceMovies, activeEdit };
 }
 
 describe('ZoomWorkflow', () => {
@@ -83,6 +86,55 @@ describe('ZoomWorkflow', () => {
 
     expect(workflow.isOpen()).toBe(false);
     expect(zoomView.close).toHaveBeenCalledOnce();
+  });
+
+  it('closes when the backdrop is clicked, returning focus to the clip', () => {
+    const { workflow, zoomView, grid, alpha } = zoomWorkflow();
+    workflow.openClip(alpha);
+
+    zoomView.emit('closeRequested');
+
+    expect(workflow.isOpen()).toBe(false);
+    expect(grid.focusClip).toHaveBeenCalledWith(alpha.id);
+  });
+
+  it('leaves a backdrop click to Zoom edit mode while the mode is active', () => {
+    const { workflow, zoomView, alpha, activeEdit } = zoomWorkflow();
+    workflow.openClip(alpha);
+    activeEdit.isActive = true;
+
+    zoomView.emit('closeRequested');
+
+    expect(workflow.isOpen()).toBe(true);
+  });
+
+  it('keeps the clip in Zoom edit mode when another clip asks to open', () => {
+    const { workflow, zoomView, alpha, bravo, activeEdit } = zoomWorkflow();
+    workflow.openClip(alpha);
+    activeEdit.isActive = true;
+
+    expect(workflow.openClip(bravo)).toBe(false);
+    expect(zoomView.currentClipId).toBe(alpha.id);
+  });
+
+  it('offers Refine in its edit menu, entering Zoom edit mode on the zoomed clip', () => {
+    const enterZoomEditMode = vi.fn();
+    const { workflow, zoomView, editMenu, alpha } = zoomWorkflow({ enterZoomEditMode });
+    workflow.openClip(alpha);
+    zoomView.emit('contextMenuRequested', { point: { x: 0, y: 0 } });
+
+    editMenu.open.mock.calls[0][0].onRefine();
+
+    expect(enterZoomEditMode).toHaveBeenCalledWith(alpha);
+  });
+
+  it('offers no Refine when Zoom edit mode is unavailable', () => {
+    const { workflow, zoomView, editMenu, alpha } = zoomWorkflow({ enterZoomEditMode: null });
+    workflow.openClip(alpha);
+
+    zoomView.emit('contextMenuRequested', { point: { x: 0, y: 0 } });
+
+    expect(editMenu.open.mock.calls[0][0].onRefine).toBeNull();
   });
 
   it('returns focus to the clip shown last when Zoom closes', () => {

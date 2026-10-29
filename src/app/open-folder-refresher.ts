@@ -1,3 +1,4 @@
+import type { ActiveZoomEdit } from './active-zoom-edit.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
@@ -8,6 +9,7 @@ type OpenFolderRefresherOptions = Readonly<{
   folders: { isActiveFolder(folderAccess: FolderAccess | null, folderPath: string): boolean };
   openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'hasDirtyClipSequenceChanges'>;
+  activeEdit: Pick<ActiveZoomEdit, 'isActive'>;
   // Refreshing goes through folder selection, which itself saves first; the composition root closes that loop.
   refreshActiveFolder: () => Promise<void>;
   reporter: Pick<ActivityReporter, 'failure' | 'technicalDetailsOf'>;
@@ -21,22 +23,34 @@ export class OpenFolderRefresher {
 
   async onFolderContentsPublished(folderPath: string): Promise<void> {
     if (!this.isActiveFolder(folderPath)) return;
-    if (this.options.pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
+    if (this.mustWait()) {
       this.pendingFolderPath = folderPath;
       return;
     }
     await this.refreshActiveFolder();
   }
 
-  async afterCollectionSaved(): Promise<void> {
+  afterCollectionSaved(): Promise<void> {
+    return this.runPendingRefresh();
+  }
+
+  afterZoomEditModeEnded(): Promise<void> {
+    return this.runPendingRefresh();
+  }
+
+  private async runPendingRefresh(): Promise<void> {
     const folderPath = this.pendingFolderPath;
     if (!folderPath || !this.isActiveFolder(folderPath)) {
       this.pendingFolderPath = null;
       return;
     }
-    if (this.options.pipelineWorkingCopy.hasDirtyClipSequenceChanges) return;
+    if (this.mustWait()) return;
     this.pendingFolderPath = null;
     await this.refreshActiveFolder();
+  }
+
+  private mustWait(): boolean {
+    return this.options.pipelineWorkingCopy.hasDirtyClipSequenceChanges || this.options.activeEdit.isActive;
   }
 
   private isActiveFolder(folderPath: string): boolean {

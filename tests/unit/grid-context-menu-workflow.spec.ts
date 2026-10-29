@@ -20,6 +20,7 @@ function contextMenu() {
   const menuRequests: MenuRequest[] = [];
   const zoom = { isOpen: vi.fn(() => false) };
   const trashClips = { start: vi.fn() };
+  const refine = { enterFromGrid: vi.fn() };
   const workflow = new GridContextMenuWorkflow({
     pipelineWorkingCopy,
     grid,
@@ -28,8 +29,9 @@ function contextMenu() {
     fullScreen: { isDocumentFullScreen: () => false },
     addToCollection: { destinationChoices: () => [], addSelectedClips: vi.fn(async () => undefined), openDialog: vi.fn() },
     trashClips,
+    refine,
   });
-  return { workflow, grid, menuRequests, alpha, zoom, trashClips };
+  return { workflow, grid, menuRequests, alpha, zoom, trashClips, refine };
 }
 
 describe('GridContextMenuWorkflow', () => {
@@ -51,6 +53,23 @@ describe('GridContextMenuWorkflow', () => {
     grid.emit('contextMenuRequested', { point: { x: 0, y: 0 }, clipId: alpha.id, fromKeyboard: false });
 
     expect(menuRequests).toEqual([]);
+  });
+
+  it('enters Zoom edit mode on the clip the menu was opened for when Refine is chosen', () => {
+    const { grid, menuRequests, alpha, refine } = contextMenu();
+    grid.emit('contextMenuRequested', { point: { x: 5, y: 6 }, clipId: alpha.id, fromKeyboard: false });
+
+    menuRequests[0].onRefine?.();
+
+    expect(refine.enterFromGrid).toHaveBeenCalledWith(alpha.id);
+  });
+
+  it('offers no Refine when the menu was opened away from a clip', () => {
+    const { grid, menuRequests } = contextMenu();
+
+    grid.emit('contextMenuRequested', { point: { x: 5, y: 6 }, clipId: null, fromKeyboard: false });
+
+    expect(menuRequests[0].onRefine).toBeNull();
   });
 
   it('starts moving the selection to the Recycle Bin from the menu', () => {

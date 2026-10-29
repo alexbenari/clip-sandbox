@@ -12,6 +12,7 @@ import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { PipelineFactory } from '../../src/business-logic/PipelineFactory.js';
 import { CollectionTextFormat } from '../../src/business-logic/collection-text-format.js';
 import { folderEntry } from '../support/clip-source-fixtures.js';
+import { deferred } from '../support/deferred.js';
 
 type UnsavedPromptRequest = { message: string; onSave: () => void; onDiscard: () => void; onCancel: () => void };
 
@@ -49,6 +50,8 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
   const navigation = { activate: vi.fn() };
   const activityLog = { log: vi.fn(), resolveError: vi.fn() };
   const sourceMovies = { readFolderClips: vi.fn(async (_folder: FolderAccess) => undefined) };
+  const activeEdit = { isActive: false };
+  const zoomEditLeave = { confirmLeave: vi.fn(async () => { activeEdit.isActive = false; return true; }) };
   const workflow = new FolderSelectionWorkflow({
     pipelineWorkingCopy,
     openFolder,
@@ -62,6 +65,8 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     missingClipsPrompt: { showConflict: vi.fn(), hide: vi.fn() },
     unsavedChangesPrompt,
     collectionSave,
+    activeEdit,
+    zoomEditLeave,
     sourceMovies,
     navigation,
     collectionScreenId: 'collection',
@@ -76,7 +81,7 @@ function folderWorkflow({ saveOutcome = 'saved' as SaveOutcome } = {}) {
     const ids = pipelineWorkingCopy.currentClipSequence!.orderedClips().map(clip => clip.id);
     pipelineWorkingCopy.replaceCurrentOrder([...ids].reverse());
   };
-  return { workflow, folders, pipelineWorkingCopy, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, activityLog, makeViewDirty, sourceMovies, folderAccess, files };
+  return { workflow, folders, pipelineWorkingCopy, unsavedPrompts, unsavedChangesPrompt, collectionSave, collectionView, toolbar, selector, catalog, navigation, activityLog, makeViewDirty, sourceMovies, folderAccess, files, activeEdit, zoomEditLeave };
 }
 
 // A dropped continuation leaves nothing to wait for, so the test lets every queued promise callback run first.
@@ -216,6 +221,85 @@ describe('FolderSelectionWorkflow', () => {
     await vi.waitFor(() => expect(context.pipelineWorkingCopy.activeCollection?.filename).toBe('subset.txt'));
     expect(context.collectionSave.saveActive).not.toHaveBeenCalled();
     expect(context.pipelineWorkingCopy.currentClipSequence?.clipNamesInOrder()).toEqual(['bravo.mp4']);
+  });
+
+  describe('while Zoom edit mode is active', () => {
+    async function inZoomEditMode({ keepEditing }: { keepEditing: boolean }) {
+      const context = folderWorkflow();
+      await openFolder(context);
+      context.activeEdit.isActive = true;
+      context.zoomEditLeave.confirmLeave.mockImplementation(async () => {
+        if (keepEditing) return false;
+        context.activeEdit.isActive = false;
+        return true;
+      });
+      return context;
+    }
+
+    // The answer is held open so a folder action taken before the user answered would show.
+    function heldLeave(context: Awaited<ReturnType<typeof inZoomEditMode>>) {
+      const answer = deferred<boolean>();
+      context.zoomEditLeave.confirmLeave.mockImplementation(() => answer.promise);
+      return (left: boolean) => {
+        if (left) context.activeEdit.isActive = false;
+        answer.resolve(left);
+      };
+    }
+
+    it('loads another folder only after Zoom edit mode was left', async () => {
+      const context = await inZoomEditMode({ keepEditing: false });
+      const answer = heldLeave(context);
+
+      context.toolbar.emit('browseRequested');
+      await queuedContinuations();
+      expect(context.folders.pickFolder).toHaveBeenCalledOnce();
+      answer(true);
+
+      await vi.waitFor(() => expect(context.folders.pickFolder).toHaveBeenCalledTimes(2));
+    });
+
+    it('keeps the open folder when the user keeps editing', async () => {
+      const context = await inZoomEditMode({ keepEditing: true });
+
+      context.toolbar.emit('browseRequested');
+      await queuedContinuations();
+
+      expect(context.zoomEditLeave.confirmLeave).toHaveBeenCalledOnce();
+      expect(context.folders.pickFolder).toHaveBeenCalledOnce();
+    });
+
+    it('keeps the open folder instead of loading a catalog pipeline when the user keeps editing', async () => {
+      const context = await inZoomEditMode({ keepEditing: true });
+
+      context.catalog.emit('loadRequested', { id: 'catalog_archive_0001', name: 'archive' });
+      await queuedContinuations();
+
+      expect(context.pipelineWorkingCopy.pipeline?.folderName).toBe('clips');
+      expect(context.navigation.activate).not.toHaveBeenCalled();
+    });
+
+    it('switches to the requested collection after Zoom edit mode was left', async () => {
+      const context = await inZoomEditMode({ keepEditing: false });
+      const answer = heldLeave(context);
+
+      context.selector.emit('selectionRequested', 'subset.txt');
+      await queuedContinuations();
+      expect(context.folders.refreshFolder).not.toHaveBeenCalled();
+      answer(true);
+
+      await vi.waitFor(() => expect(context.pipelineWorkingCopy.activeCollection?.filename).toBe('subset.txt'));
+    });
+
+    it('keeps the current view and its selector when the user keeps editing instead of switching', async () => {
+      const context = await inZoomEditMode({ keepEditing: true });
+      context.collectionView.refreshSelector.mockClear();
+
+      context.selector.emit('selectionRequested', 'subset.txt');
+      await queuedContinuations();
+
+      expect(context.pipelineWorkingCopy.activeCollection).toBeNull();
+      expect(context.collectionView.refreshSelector).toHaveBeenCalledOnce();
+    });
   });
 
   it('only refreshes the selector when the requested view is already showing', async () => {

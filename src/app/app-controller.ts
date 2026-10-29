@@ -74,9 +74,20 @@ import { CollectionTextFormat } from '../business-logic/collection-text-format.j
 import { OpenFolderRefresher } from './open-folder-refresher.js';
 import { ControlFailureReporting } from './control-failure-reporting.js';
 import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
+import { ElectronFrameReviewService } from '../adapters/electron/electron-frame-review-service.js';
+import { ElectronZoomEditSourceService } from '../adapters/electron/electron-zoom-edit-source-service.js';
+import { ElectronRefinedClipSaveService } from '../adapters/electron/electron-refined-clip-save-service.js';
+import { ActiveZoomEdit } from './active-zoom-edit.js';
+import { ZoomEditModeLeavePolicy } from './zoom-edit-mode-leave-policy.js';
+import { ZoomEditModeSessionStarter } from './zoom-edit-mode-session-starter.js';
+import { ZoomEditModeText } from './zoom-edit-mode-text.js';
+import { ZoomEditModeWorkflow } from './zoom-edit-mode-workflow.js';
+import { ZoomEditModeKeyboard } from '../ui/zoom-edit-mode-keyboard.js';
+import { SaveRefinementDialogControl } from '../ui/save-refinement-dialog-control.js';
 
 const ERROR_LOG_FILENAME = 'err.log';
 const NEW_COLLECTION_CHOICE_VALUE = '__new_collection__';
+const ZOOM_EDIT_PREVIEW_BOUNDS = Object.freeze({ maxWidth: 1280, maxHeight: 720 });
 
 // The composition root: builds services, controls and workflows in dependency order, then starts the app.
 export class AppController {
@@ -116,10 +127,16 @@ export class AppController {
     // Non-Electron DOM tests and unsupported hosts keep the shell available without native movie opening.
     const captureStore = ElectronClipCapturesStoreService.tryCreate(window);
     const gifExtractionServices = captureStore ? ElectronGifSessionServices.tryCreate(window) : null;
+    const zoomEditFrameReview = ElectronFrameReviewService.tryCreate(window);
+    const zoomEditSources = ElectronZoomEditSourceService.tryCreate(window);
+    const refinedClipSaves = ElectronRefinedClipSaveService.tryCreate(window);
+    const activeZoomEdit = new ActiveZoomEdit();
 
     // Controls.
+    const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const zoomOverlay = ZoomOverlayControl.fromDocument(document, {
       audioPreference: settingsService,
+      editPlayer: frameReviewPlayer,
     });
     const clipContextMenu = ContextMenuControl.forClipMenu(document);
     const gridContextMenuControl = new GridContextMenuControl({ contextMenu: clipContextMenu });
@@ -136,6 +153,9 @@ export class AppController {
     });
     const unsavedChangesDialog = UnsavedChangesDialogControl.fromDocument(document);
     const discardRefinementDialog = DiscardRefinementDialogControl.fromDocument(document);
+    const discardZoomEditDialog = DiscardRefinementDialogControl.forZoomEdit(document);
+    const saveRefinementDialog = SaveRefinementDialogControl.fromDocument(document);
+    const zoomEditModeKeyboard = new ZoomEditModeKeyboard();
     const trashClipsDialog = TrashClipsDialogControl.fromDocument(document, { appText });
     const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
       fullScreen: fullscreenAdapter,
@@ -168,13 +188,13 @@ export class AppController {
       ? KeyboardMapControl.fromDocument(document, { globalShortcuts: GLOBAL_UTILITY_SHORTCUTS, requestClose: () => utilities?.close() })
       : null;
     const collectionScreen = CollectionScreen.fromDocument(document, { grid, toolbar: mainToolbarControl });
-    const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboard();
     // Saving refreshes the open folder through folder selection, which itself saves first; the callback below closes that loop.
     const openFolderRefresher = new OpenFolderRefresher({
       folders,
       openFolder: state,
       pipelineWorkingCopy,
+      activeEdit: activeZoomEdit,
       refreshActiveFolder: (): Promise<void> => folderSelection.refreshActiveFolder(),
       reporter: activityReporter,
       diagnostics,
@@ -214,10 +234,11 @@ export class AppController {
     });
     const refineScreens = [{ id: refineGifScreen.id, session: gifExtractionSession }];
     const refineScreenLeavePolicy = new RefineScreenLeavePolicy({ refineScreens });
+    const zoomEditModeLeavePolicy = new ZoomEditModeLeavePolicy({ activeEdit: activeZoomEdit, collectionScreenId: collectionScreen.id });
     const shell = ApplicationShellControl.fromDocument(document, {
       initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
       screens: [gifExtractionScreen, collectionScreen, refineGifScreen, settingsScreen],
-      leavePolicy: refineScreenLeavePolicy,
+      leavePolicies: [refineScreenLeavePolicy, zoomEditModeLeavePolicy],
     });
     shell.on('screenChanged', screen => keyboardMap?.render(screen));
     shell.on('settingsRequested', () => {
@@ -293,6 +314,62 @@ export class AppController {
       diagnostics,
       appText,
     });
+    const zoomEditServices = zoomEditFrameReview && zoomEditSources && refinedClipSaves
+      ? {
+        sessions: new ZoomEditModeSessionStarter({
+          frameReview: zoomEditFrameReview,
+          sources: zoomEditSources,
+          player: frameReviewPlayer,
+          failures: new RuntimeFailureReporter(activityReporter, diagnostics),
+          previewBounds: ZOOM_EDIT_PREVIEW_BOUNDS,
+        }),
+        saves: refinedClipSaves,
+      }
+      : null;
+    const zoom = new ZoomWorkflow({
+      pipelineWorkingCopy,
+      openFolder: state,
+      folderFiles: folders,
+      zoom: zoomOverlay,
+      grid,
+      screens: shell,
+      collectionScreenId: collectionScreen.id,
+      contextMenu: clipContextMenu,
+      editMenu: zoomEditMenuControl,
+      activeEdit: activeZoomEdit,
+      // Zoom edit mode shows its clips through Zoom, so Zoom reaches it through this callback.
+      enterZoomEditMode: zoomEditServices ? clip => zoomEditMode?.enterFromZoom(clip) : null,
+      clipEditor,
+      fullScreen: fullscreenAdapter,
+      boundaryFeedback: audioFeedback,
+      collectionView,
+      sourceMovies: clipSourceMovies,
+      diagnostics,
+      reporter: activityReporter,
+      appText,
+    });
+    const zoomEditMode = zoomEditServices
+      ? new ZoomEditModeWorkflow({
+        ...zoomEditServices,
+        activeEdit: activeZoomEdit,
+        pipelineWorkingCopy,
+        openFolder: state,
+        zoom: zoomOverlay,
+        zoomClips: zoom,
+        keys: zoomEditModeKeyboard,
+        saveDialog: saveRefinementDialog,
+        discardPrompt: discardZoomEditDialog,
+        screens: shell,
+        navigation: shell,
+        policy: zoomEditModeLeavePolicy,
+        collectionScreenId: collectionScreen.id,
+        fullScreen: fullscreenAdapter,
+        folderRefresh: openFolderRefresher,
+        reporter: activityReporter,
+        diagnostics,
+        text: new ZoomEditModeText(),
+      })
+      : null;
     const folderSelection = new FolderSelectionWorkflow({
       pipelineWorkingCopy,
       openFolder: state,
@@ -306,6 +383,8 @@ export class AppController {
       missingClipsPrompt: collectionConflict,
       unsavedChangesPrompt: unsavedChangesDialog,
       collectionSave,
+      activeEdit: activeZoomEdit,
+      zoomEditLeave: zoomEditMode,
       sourceMovies: clipSourceMovies,
       navigation: shell,
       collectionScreenId: collectionScreen.id,
@@ -333,25 +412,6 @@ export class AppController {
       reporter: activityReporter,
       appText,
     });
-    const zoom = new ZoomWorkflow({
-      pipelineWorkingCopy,
-      openFolder: state,
-      folderFiles: folders,
-      zoom: zoomOverlay,
-      grid,
-      screens: shell,
-      collectionScreenId: collectionScreen.id,
-      contextMenu: clipContextMenu,
-      editMenu: zoomEditMenuControl,
-      clipEditor,
-      fullScreen: fullscreenAdapter,
-      boundaryFeedback: audioFeedback,
-      collectionView,
-      sourceMovies: clipSourceMovies,
-      diagnostics,
-      reporter: activityReporter,
-      appText,
-    });
     const gridContextMenu = new GridContextMenuWorkflow({
       pipelineWorkingCopy,
       grid,
@@ -360,6 +420,7 @@ export class AppController {
       fullScreen: fullscreenAdapter,
       addToCollection,
       trashClips,
+      refine: zoomEditMode,
     });
     const gifRangeRefinement = new GifRangeRefinementWorkflow({
       session: gifExtractionSession,
@@ -409,6 +470,9 @@ export class AppController {
       keys: collectionScreen,
       utilities,
       fullScreenKeys: collectionFullScreen,
+      activeEdit: activeZoomEdit,
+      zoomEditKeys: zoomEditModeKeyboard,
+      zoomEditDialogs: [saveRefinementDialog, discardZoomEditDialog],
     });
 
     // Startup: show an empty Collection view, activate the first screen, then load settings.
@@ -427,6 +491,7 @@ export class AppController {
         for (const workflow of [collectionView, collectionSave, addToCollection, folderSelection, trashClips,
           zoom, gridContextMenu, gifRangeRefinement, refineLeave, pipelineCatalogRefresher, settingsWorkflow,
           controlFailureReporting, clipSourceMovies]) workflow.dispose();
+        await zoomEditMode?.dispose();
         await gifExtractionSession?.dispose();
       },
       destroyControls: () => {

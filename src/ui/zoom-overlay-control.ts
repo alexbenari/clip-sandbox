@@ -5,6 +5,13 @@ const DEFAULT_ZOOM_OVERLAY_CSS = `
 .zoom-frame{ width:min(66vw, 1200px); height:min(66vh, 820px); max-width:100%; max-height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#000; border-radius:18px; border:1px solid rgba(148,163,184,.24); box-shadow:0 20px 60px rgba(0,0,0,.45); }
 .zoom-frame:focus{ outline:none; }
 .zoom-video{ width:100%; height:100%; object-fit:contain; display:block; background:#000; }
+.zoom-edit-surface{ width:100%; height:100%; min-height:0; display:flex; flex-direction:column; }
+.zoom-edit-picture{ flex:1 1 auto; min-height:0; display:flex; }
+.zoom-edit-picture > .frame-review-player{ flex:1 1 auto; max-width:none; min-height:0; }
+.zoom-edit-picture > .frame-review-player > .frame-review-stage{ flex:1 1 auto; aspect-ratio:auto; width:100%; }
+.zoom-edit-hint{ flex:none; margin:0; padding:8px 14px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 16px; font-size:13px; line-height:1.4; color:#94a3b8; background:#0b0f14; border-top:1px solid rgba(148,163,184,.2); }
+.zoom-edit-hint-status{ color:#e5e7eb; }
+.zoom-edit-hint-status:empty{ display:none; }
 `;
 
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
@@ -13,6 +20,14 @@ import { DocumentElements } from './document-elements.js';
 export interface IClipAudioPreference {
   readonly current: Readonly<{ singleClipAudioDefault: boolean }>;
 }
+
+export interface IZoomEditPlayer {
+  mountInZoomEdit(host: HTMLElement): void;
+}
+
+export type ZoomEditHintText = Readonly<{ keys: string; status: string | null }>;
+
+type ZoomEditSurface = Readonly<{ root: HTMLElement; keys: HTMLElement; status: HTMLElement }>;
 
 const SILENT_BY_DEFAULT: IClipAudioPreference = Object.freeze({ current: Object.freeze({ singleClipAudioDefault: false }) });
 
@@ -31,6 +46,7 @@ type ZoomPlaybackFailure = {
 export interface IZoomOverlayEvents {
   playbackFailed: Readonly<ZoomPlaybackFailure>;
   contextMenuRequested: Readonly<ZoomContextMenuEvent>;
+  closeRequested: void;
 }
 
 type ZoomItem = {
@@ -49,27 +65,34 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
   private currentItem: ZoomItem | null;
   private readonly handleOverlayClick: (event: MouseEvent) => void;
   private readonly audioPreference: IClipAudioPreference;
+  private readonly editPlayer: IZoomEditPlayer | null;
+  private editSurface: ZoomEditSurface | null = null;
   private playbackAttempt = 0;
   private playbackFailureReported = false;
 
-  static fromDocument(doc: Document, { audioPreference }: { audioPreference: IClipAudioPreference }): ZoomOverlayControl {
-    return new ZoomOverlayControl({ mountEl: new DocumentElements(doc).required('zoomLayerRoot'), document: doc, audioPreference });
+  static fromDocument(doc: Document, { audioPreference, editPlayer }: {
+    audioPreference: IClipAudioPreference;
+    editPlayer?: IZoomEditPlayer;
+  }): ZoomOverlayControl {
+    return new ZoomOverlayControl({ mountEl: new DocumentElements(doc).required('zoomLayerRoot'), document: doc, audioPreference, editPlayer });
   }
 
-  constructor({ mountEl, document: doc = document, audioPreference = SILENT_BY_DEFAULT }: {
+  constructor({ mountEl, document: doc = document, audioPreference = SILENT_BY_DEFAULT, editPlayer }: {
     mountEl?: HTMLElement | null;
     document?: Document;
     audioPreference?: IClipAudioPreference;
+    editPlayer?: IZoomEditPlayer;
   } = {}) {
     this.mountEl = mountEl || null;
     this.doc = doc;
     this.audioPreference = audioPreference;
+    this.editPlayer = editPlayer ?? null;
     this.overlayEl = null;
     this.frameEl = null;
     this.videoEl = null;
     this.currentItem = null;
     this.handleOverlayClick = (event) => {
-      if (event.target === this.overlayEl) this.close();
+      if (event.target === this.overlayEl) this.events.emit('closeRequested');
     };
   }
 
@@ -196,6 +219,7 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     if (!src) return false;
     this.buildOverlay();
     this.clearVideo();
+    this.hideEditSurface();
     this.videoEl = this.createVideo({ src, name });
     this.currentItem = { clipId, src, name };
     this.frameEl?.replaceChildren(this.videoEl);
@@ -208,12 +232,60 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     if (!this.overlayEl) return false;
     if (!this.mountEl) return false;
     this.clearVideo();
+    this.hideEditSurface();
     this.overlayEl.removeEventListener('click', this.handleOverlayClick);
     this.mountEl.replaceChildren();
     this.overlayEl = null;
     this.frameEl = null;
     this.currentItem = null;
     return true;
+  }
+
+  showEditSurface(): boolean {
+    const frame = this.frameEl;
+    if (!frame || !this.editPlayer) return false;
+    if (this.editSurface) return true;
+    this.clearVideo();
+    const root = this.doc.createElement('div');
+    root.id = 'zoomEditSurface';
+    root.className = 'zoom-edit-surface';
+    const picture = this.doc.createElement('div');
+    picture.className = 'zoom-edit-picture';
+    const hint = this.doc.createElement('p');
+    hint.id = 'zoomEditHint';
+    hint.className = 'zoom-edit-hint';
+    const keys = this.doc.createElement('span');
+    keys.className = 'zoom-edit-hint-keys';
+    const status = this.doc.createElement('span');
+    status.className = 'zoom-edit-hint-status';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    hint.append(keys, status);
+    root.append(picture, hint);
+    frame.replaceChildren(root);
+    frame.setAttribute('aria-label', 'Zoom edit mode');
+    this.editPlayer.mountInZoomEdit(picture);
+    this.editSurface = Object.freeze({ root, keys, status });
+    frame.focus({ preventScroll: true });
+    return true;
+  }
+
+  showEditHint({ keys, status }: ZoomEditHintText): void {
+    if (!this.editSurface) return;
+    this.editSurface.keys.textContent = keys;
+    this.editSurface.status.textContent = status ?? '';
+  }
+
+  hideEditSurface(): void {
+    const surface = this.editSurface;
+    if (!surface) return;
+    this.editSurface = null;
+    surface.root.remove();
+    this.frameEl?.setAttribute('aria-label', 'Zoomed clip');
+  }
+
+  isMuted(): boolean {
+    return this.videoEl ? this.videoEl.muted : !this.audioPreference.current.singleClipAudioDefault;
   }
 
   destroy(): void {

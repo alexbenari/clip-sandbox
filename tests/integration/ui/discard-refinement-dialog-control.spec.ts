@@ -82,3 +82,62 @@ describe('DiscardRefinementDialogControl', () => {
     expect(button('Discard').classList.contains('btn-primary')).toBe(false);
   });
 });
+
+describe('DiscardRefinementDialogControl.forZoomEdit', () => {
+  beforeEach(() => { document.body.innerHTML = pageBody; });
+
+  function openZoomEditDialog() {
+    const dialog = DiscardRefinementDialogControl.forZoomEdit(document);
+    const confirmed = vi.fn();
+    const cancelled = vi.fn();
+    dialog.on('confirmed', confirmed);
+    dialog.on('cancelled', cancelled);
+    return { dialog, confirmed, cancelled };
+  }
+
+  const zoomEditDialog = (): HTMLDialogElement => document.getElementById('discardZoomEditDialog') as HTMLDialogElement;
+  const zoomEditButton = (name: string): HTMLButtonElement => [...zoomEditDialog().querySelectorAll<HTMLButtonElement>('button')]
+    .find(candidate => candidate.textContent === name)!;
+
+  it('asks about the changed ends of the clip without frame numbers, since they count from the clip', () => {
+    const { dialog } = openZoomEditDialog();
+
+    dialog.open([{ endpoint: 'start', frameIndex: -12 }, { endpoint: 'end', frameIndex: 40 }]);
+
+    expect(zoomEditDialog().querySelector('h2')?.textContent).toBe('Discard the new start and end?');
+    expect(zoomEditDialog().open).toBe(true);
+    expect(dialogElement().open).toBe(false);
+  });
+
+  it('opens on Keep editing and answers Discard as confirmed', () => {
+    const { dialog, confirmed, cancelled } = openZoomEditDialog();
+    dialog.open([{ endpoint: 'end', frameIndex: 40 }]);
+    expect(document.activeElement).toBe(zoomEditButton('Keep editing'));
+
+    zoomEditButton('Discard').click();
+
+    expect(confirmed).toHaveBeenCalledOnce();
+    expect(cancelled).not.toHaveBeenCalled();
+    expect(zoomEditDialog().open).toBe(false);
+  });
+
+  it('treats Escape as Keep editing', () => {
+    const { dialog, cancelled } = openZoomEditDialog();
+    dialog.open([{ endpoint: 'end', frameIndex: 40 }]);
+
+    zoomEditDialog().dispatchEvent(new Event('cancel', { cancelable: true }));
+
+    expect(cancelled).toHaveBeenCalledOnce();
+    expect(dialog.isOpen()).toBe(false);
+  });
+
+  it('leaves the Refine screen dialog alone when answered', () => {
+    const refine = openDialog();
+    const zoomEdit = openZoomEditDialog();
+    zoomEdit.dialog.open([{ endpoint: 'end', frameIndex: 40 }]);
+
+    zoomEditButton('Discard').click();
+
+    expect(refine.confirmed).not.toHaveBeenCalled();
+  });
+});

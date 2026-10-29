@@ -41,6 +41,10 @@ export interface IFolderClipSourceMovies {
   readFolderClips(folder: FolderAccess): Promise<void>;
 }
 
+export interface IZoomEditModeLeave {
+  confirmLeave(): Promise<boolean>;
+}
+
 export interface IUnsavedChangesPrompt {
   open(request: { message: string; onSave: () => void; onDiscard: () => void; onCancel: () => void }): void;
   close(): void;
@@ -60,6 +64,8 @@ type FolderSelectionDependencies = Readonly<{
   missingClipsPrompt: IMissingClipsPrompt;
   unsavedChangesPrompt: IUnsavedChangesPrompt;
   collectionSave: Pick<CollectionSaveWorkflow, 'saveActive'>;
+  activeEdit: Readonly<{ isActive: boolean }>;
+  zoomEditLeave: IZoomEditModeLeave | null;
   sourceMovies: IFolderClipSourceMovies;
   navigation: Pick<IScreenNavigation, 'activate'>;
   collectionScreenId: string;
@@ -92,6 +98,7 @@ export class FolderSelectionWorkflow {
   }
 
   async browseForFolder(): Promise<void> {
+    if (this.folder.activeEdit.isActive && !(await this.leaveZoomEditMode())) return;
     if (this.folder.pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
       this.askAboutUnsavedChanges({ type: 'browse-folder' });
       return;
@@ -100,6 +107,7 @@ export class FolderSelectionWorkflow {
   }
 
   async openCatalogPipeline(entry: IPipelineCatalogEntry): Promise<void> {
+    if (this.folder.activeEdit.isActive && !(await this.leaveZoomEditMode())) return;
     if (this.folder.pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
       this.askAboutUnsavedChanges({ type: 'open-catalog-pipeline', pipeline: entry });
       return;
@@ -113,7 +121,18 @@ export class FolderSelectionWorkflow {
       collectionView.refreshSelector();
       return;
     }
-    if (pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
+    if (!this.folder.activeEdit.isActive) {
+      this.switchSelection(collectionFilename);
+      return;
+    }
+    void this.leaveZoomEditMode().then(left => {
+      if (left) this.switchSelection(collectionFilename);
+      else collectionView.refreshSelector();
+    });
+  }
+
+  private switchSelection(collectionFilename: string | null): void {
+    if (this.folder.pipelineWorkingCopy.hasDirtyClipSequenceChanges) {
       this.askAboutUnsavedChanges({ type: 'switch-selection', collectionFilename });
       return;
     }
@@ -175,6 +194,11 @@ export class FolderSelectionWorkflow {
 
   dispose(): void {
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe();
+  }
+
+  // Callers ask only while Zoom edit mode is active, so requests made outside it are still handled at once.
+  private leaveZoomEditMode(): Promise<boolean> {
+    return this.folder.zoomEditLeave?.confirmLeave() ?? Promise.resolve(true);
   }
 
   private askAboutUnsavedChanges(action: PendingSelectionAction): void {
