@@ -24,6 +24,8 @@ class MovieWindowAnchor {
       if (clipStartFrame < 0 || clipEndFrame >= reader.frameCount) return null;
       return {
         offset,
+        referenceFrameIndex: reference.frameIndex,
+        referenceWindowTimeUs: FrameTime.safeMicrosecondsOf(await reader.frameIdentity(found)),
         clipStartFrame,
         earliestFrame: await this.#farthestFrameWithin(reader, clipStartFrame, -EXTENSION_LIMIT_US),
         latestFrame: await this.#farthestFrameWithin(reader, clipEndFrame, EXTENSION_LIMIT_US),

@@ -2,22 +2,13 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { checkValue, sourceMovie } from '../support/movie-window-fixtures.js';
 
 const require = createRequire(import.meta.url);
 const { ZoomEditSources } = require('../../electron/zoom-edit-sources.cjs');
 const { SourceInfo } = require('../../electron/clip-provenance/source-info.cjs');
 const { MovieWindowPlacement } = require('../../electron/movie-window-placement.cjs');
 
-// A 25 frames per second movie: movie frame n is shown at n × 40 ms and has check value n in hex.
-const FRAME_US = 40_000;
-const checkValue = (movieFrame: number) => movieFrame.toString(16).padStart(16, '0');
-const sourceMovie = {
-  displayName: 'Feature.mkv',
-  fingerprint: {
-    fingerprintVersion: 1, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '1000', sourceDurationUs: '7200000000',
-    signatureProfileVersion: 'profile-1', selectedStream: 0, streamMetadataDigest: 'b'.repeat(64),
-  },
-};
 const folder = path.resolve('pipelines', 'picks');
 const clipRequest = { folderPath: folder, filename: 'Feature-002.mp4' };
 const event = { sender: { id: 7 } };
@@ -52,8 +43,9 @@ function sources({ sourceInfo = storedTimesInfo() as unknown, located = { kind: 
   let handles = 0;
   const host = {
     registerSource: vi.fn(() => `source_handle${String(++handles).padStart(4, '0')}`),
-    cachedFrameTimesUs: vi.fn(async (_movie: string, frameIndexes: number[]) =>
-      frameIndexes.every(frameIndex => cachedTimes.has(frameIndex)) ? frameIndexes.map(frameIndex => cachedTimes.get(frameIndex)!) : null),
+    cachedFrameTimesUs: vi.fn(async (moviePath: string, frameIndexes: number[]) =>
+      moviePath === 'D:\\movies\\Feature.mkv' && frameIndexes.every(frameIndex => cachedTimes.has(frameIndex))
+        ? frameIndexes.map(frameIndex => cachedTimes.get(frameIndex)!) : null),
     exactFrameReader: vi.fn(() => window.reader),
     findFrameByCheckValue: vi.fn(async (_session: string, _handle: string, hash: string, order: Iterable<number>) => {
       for (const frameIndex of order) {
@@ -325,6 +317,60 @@ describe('ZoomEditSources', () => {
 
       await expect(zoomEditSources.anchorWindow({ sender: { id: 8 } }, { windowId, sessionId: 'session_window01' }))
         .rejects.toThrow('Movie window is unknown.');
+    });
+  });
+
+  describe('looking up an anchored window for saving', () => {
+    async function openedWindow(options: Parameters<typeof sources>[0] = {}) {
+      const fixture = sources(options);
+      const { windowId } = await fixture.zoomEditSources.openWindow(event, { ...clipRequest, widen: 0 });
+      return { ...fixture, windowId };
+    }
+
+    it('gives the window the clip’s record, the window source and the anchor', async () => {
+      const { zoomEditSources, windowId, window: frames } = await openedWindow();
+      await zoomEditSources.anchorWindow(event, { windowId, sessionId: 'session_window01' });
+
+      const window = zoomEditSources.anchoredWindow(event, windowId);
+      const clipAgain = await window.movieRecordOf(await frames.reader.frameIdentity(1880), await frames.reader.frameIdentity(1930));
+
+      expect([window.clipPath, window.sourceHandle, clipAgain.toRecord()]).toEqual([
+        path.join(folder, 'Feature-002.mp4'), 'source_handle0001', storedTimesInfo().toRecord(),
+      ]);
+    });
+
+    it('anchors the window by the reference frame that was found when the first one is not in the window', async () => {
+      // The references are not the clip's ends, so the movie's cached index times the reference frame.
+      const references = SourceInfo.forMovieRange(sourceMovie, { start: 3000, end: 3050, startTimeUs: 120_000_000, endTimeUs: 122_000_000 },
+        [{ frameIndex: 2900, frameInfoHash: 'ffffffffffffffff' }, { frameIndex: 3050, frameInfoHash: checkValue(3050) }]);
+      const cachedTimes = new Map([[2900, 116_000_000n], [3050, 122_000_000n]]);
+      const { zoomEditSources, windowId, window: frames } = await openedWindow({ sourceInfo: references, cachedTimes });
+      await zoomEditSources.anchorWindow(event, { windowId, sessionId: 'session_window01' });
+
+      const clipStart = await frames.reader.frameIdentity(1880);
+      const record = await zoomEditSources.anchoredWindow(event, windowId).movieRecordOf(clipStart, clipStart);
+
+      expect(record.range).toEqual({ start: 3000, end: 3000, startTimeUs: 120_000_000, endTimeUs: 120_000_000 });
+    });
+
+    it('refuses a window that was never anchored', async () => {
+      const { zoomEditSources, windowId } = await openedWindow();
+
+      expect(() => zoomEditSources.anchoredWindow(event, windowId)).toThrow('Movie window is not anchored.');
+    });
+
+    it('refuses a window in which no reference frame was found', async () => {
+      const { zoomEditSources, windowId } = await openedWindow({ window: windowFrames(5000, 3805) });
+      await zoomEditSources.anchorWindow(event, { windowId, sessionId: 'session_window01' });
+
+      expect(() => zoomEditSources.anchoredWindow(event, windowId)).toThrow('Movie window is not anchored.');
+    });
+
+    it('refuses an anchored window of another app window', async () => {
+      const { zoomEditSources, windowId } = await openedWindow();
+      await zoomEditSources.anchorWindow(event, { windowId, sessionId: 'session_window01' });
+
+      expect(() => zoomEditSources.anchoredWindow({ sender: { id: 8 } }, windowId)).toThrow('Movie window is unknown.');
     });
   });
 });

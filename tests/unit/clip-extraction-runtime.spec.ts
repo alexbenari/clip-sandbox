@@ -16,6 +16,16 @@ function exactFrame(frameIndex: number, pts: number) {
   };
 }
 
+const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
+const { ExactRangeEncoder } = require('../../electron/exact-range-encoder.cjs');
+
+// The runtime with a real encoder, so these tests keep covering extraction from request to published file.
+function runtimeWith({ fs, getSettings, randomId, provenance, ...encoding }: Record<string, any>) {
+  return createClipExtractionRuntime({
+    fs, getSettings, randomId, provenance, encoder: new ExactRangeEncoder({ fs, provenance, ...encoding }),
+  });
+}
+
 /** The value that follows a command-line flag, such as `-c:v` -> `libx264`. */
 function argumentAfter(args: readonly string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
@@ -23,27 +33,7 @@ function argumentAfter(args: readonly string[], flag: string): string | undefine
 }
 
 describe('clip extraction runtime', () => {
-  it('declines local seeking for normalized sources and ambiguous indexed timestamps', async () => {
-    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
-    const runtime = createClipExtractionRuntime({
-      getSettings: vi.fn(), resolveFfmpeg: vi.fn(), resolveFfprobe: vi.fn(),
-    });
-    const identity = (frameIndex: number, pts: number) => ({
-      frameIndex, originalFrameIndex: frameIndex, pts: BigInt(pts), duration: 40n,
-      timebaseNumerator: 1n, timebaseDenominator: 1000n,
-    });
-    const host = { extractionFrameTimeline: vi.fn(async () => [identity(10, 1000), identity(11, 1000), identity(12, 1080)]) };
-    const source = { sourcePath: 'D:\\Movie.mp4', canonicalSourcePath: 'D:\\Movie.mp4',
-      normalizedSourcePath: null, frameCount: 100, identity: {} };
-    const request = { reviewSessionId: 'session_12345678', sourceHandle: 'source_12345678',
-      startFrameIndex: 10, endFrameIndex: 11 };
-    expect(await runtime.indexedBoundary(host, { ...source, normalizedSourcePath: 'D:\\normalized.mp4' },
-      request, new AbortController().signal)).toBeNull();
-    expect(host.extractionFrameTimeline).not.toHaveBeenCalled();
-    expect(await runtime.indexedBoundary(host, source, request, new AbortController().signal)).toBeNull();
-  });
   it('uses indexed source times to extract a late exact range without a whole-source probe', async () => {
-    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const fs = {
       mkdir: vi.fn(async () => undefined), readdir: vi.fn(async () => []),
       mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
@@ -60,7 +50,7 @@ describe('clip extraction runtime', () => {
         : '',
     }));
     const probeFrameTimes = vi.fn(async () => { throw new Error('whole-source probe used'); });
-    const runtime = createClipExtractionRuntime({
+    const runtime = runtimeWith({
       fs, getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
       resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'),
       probeFrameTimes, verifyMedia: vi.fn(async () => undefined), runCommand,
@@ -92,12 +82,13 @@ describe('clip extraction runtime', () => {
     expect(videoArguments.join(' ')).toContain('lt(pts,55080)');
   });
 
-  it('discards a failed local media candidate before the exact fallback publishes', async () => {
-    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
+  it('publishes one clip when the locally seeked media fails verification and the exact fallback encodes it again', async () => {
+    const published: string[] = [];
     const fs = {
       mkdir: vi.fn(async () => undefined), readdir: vi.fn(async () => []),
       mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
-      rm: vi.fn(async () => undefined), copyFile: vi.fn(async () => undefined),
+      rm: vi.fn(async () => undefined),
+      copyFile: vi.fn(async (_source: string, destination: string) => { published.push(path.basename(destination)); }),
       stat: vi.fn(async () => ({ isFile: () => true, size: 100, mtimeMs: 123 })),
     };
     const runCommand = vi.fn(async (_command: string, args: string[]) => ({
@@ -107,47 +98,45 @@ describe('clip extraction runtime', () => {
           + '[Parsed_showinfo_1] n: 0 pts: 55000 pts_time:55\n'
           + '[Parsed_showinfo_1] n: 1 pts: 55040 pts_time:55.04\n' : '',
     }));
-    const probeFrameTimes = vi.fn(async () => ({ startUs: 55_000_000n, endUs: 55_080_000n }));
-    const runtime = createClipExtractionRuntime({
+    const verifyMedia = vi.fn().mockRejectedValueOnce(new Error('The encoded media has the wrong number of frames.'))
+      .mockResolvedValue(undefined);
+    const runtime = runtimeWith({
       fs, getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
       resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'),
-      probeFrameTimes, runCommand, randomId: vi.fn(() => 'opaque12345678'),
+      probeFrameTimes: vi.fn(async () => ({ startUs: 55_000_000n, endUs: 55_080_000n })), verifyMedia, runCommand,
+      randomId: vi.fn(() => 'opaque12345678'),
     });
-    runtime.finalizeMedia = vi.fn().mockResolvedValueOnce({ ok: false, code: 'unverified-media' })
-      .mockResolvedValueOnce({ ok: true });
     const identity = (frameIndex: number, pts: number) => ({
       frameIndex, originalFrameIndex: frameIndex, pts: BigInt(pts), duration: 40n,
       timebaseNumerator: 1n, timebaseDenominator: 1000n,
     });
     const destination = await runtime.openDestination(7);
+
     const result = await runtime.extract(7, {
       prepareExtractionSource: vi.fn(async () => ({
         sourcePath: 'D:\\Movie.mp4', canonicalSourcePath: 'D:\\Movie.mp4',
         normalizedSourcePath: null, frameCount: 100, selectedStream: 0, identity: {},
       })),
       extractionFrameTimeline: vi.fn(async () => [identity(10, 55000), identity(11, 55040), identity(12, 55080)]),
+      extractionFrameIdentities: vi.fn(async () => [identity(10, 55000), identity(11, 55040)]),
     }, {
       operationId: 'extract_12345678', destinationHandle: destination.result.destinationHandle,
       sourceHandle: 'source_12345678', reviewSessionId: 'session_12345678', sourceGeneration: 1,
       collectionName: 'Movie', startFrameIndex: 10, endFrameIndex: 11,
     });
-    expect(result).toMatchObject({ ok: true });
-    expect(probeFrameTimes).toHaveBeenCalledOnce();
-    expect(runCommand).toHaveBeenCalledTimes(2);
-    expect(fs.rm).toHaveBeenCalledWith(expect.stringMatching(/video\.mp4$/), { force: true });
-    expect(fs.rm).toHaveBeenCalledWith(expect.stringMatching(/media\.mp4$/), { force: true });
-    expect(fs.copyFile).toHaveBeenCalledOnce();
+
+    expect(result).toMatchObject({ ok: true, result: { filename: 'Movie-001.mp4' } });
+    expect(published).toEqual(['Movie-001.mp4']);
   });
 
   function provenanceTestRuntime(runCommand: ReturnType<typeof vi.fn>, provenance: unknown) {
-    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const fs = {
       mkdir: vi.fn(async () => undefined), readdir: vi.fn(async () => []),
       mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
       rm: vi.fn(async () => undefined), copyFile: vi.fn(async () => undefined),
       stat: vi.fn(async () => ({ isFile: () => true, size: 100, mtimeMs: 123 })),
     };
-    const runtime = createClipExtractionRuntime({
+    const runtime = runtimeWith({
       fs,
       getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
       resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'),
@@ -168,6 +157,33 @@ describe('clip extraction runtime', () => {
     };
     return { fs, extractFramesTwoToFour };
   }
+
+  it('answers a failed extraction, and removes its workspace, when the review session gives malformed frame identities', async () => {
+    const removed: string[] = [];
+    const fs = {
+      mkdir: vi.fn(async () => undefined), readdir: vi.fn(async () => []),
+      mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
+      rm: vi.fn(async (target: string) => { removed.push(target); }),
+    };
+    const runtime = runtimeWith({
+      fs, getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
+      resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'), runCommand: vi.fn(),
+      randomId: vi.fn(() => 'opaque12345678'),
+    });
+    const destination = await runtime.openDestination(7);
+
+    const result = await runtime.extract(7, {
+      prepareExtractionSource: vi.fn(async () => ({ sourcePath: 'D:\\movies\\Movie.mp4', selectedStream: 0, identity: movieIdentity })),
+      extractionFrameIdentities: vi.fn(async () => null),
+    }, {
+      operationId: 'extract_12345678', destinationHandle: destination.result.destinationHandle,
+      sourceHandle: 'source_12345678', reviewSessionId: 'session_12345678', sourceGeneration: 1,
+      collectionName: 'Movie', startFrameIndex: 2, endFrameIndex: 4,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'extraction-failed' });
+    expect(removed).toEqual(['D:\\pipelines\\extraction-tmp\\.clip-extraction-op']);
+  });
 
   it('publishes media with a warning when provenance muxing fails', async () => {
     const runCommand = vi.fn(async (_command: string, args: string[]) => ({
@@ -207,7 +223,6 @@ describe('clip extraction runtime', () => {
     });
   });
   it('aborts active media work and finishes disposal only after its temporary workspace is removed', async () => {
-    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     let commandSignal: AbortSignal | undefined;
     const runCommand = vi.fn(async (_command: string, _args: string[], options: { signal?: AbortSignal }) => {
       commandSignal = options.signal;
@@ -226,7 +241,7 @@ describe('clip extraction runtime', () => {
         removedPaths.push(target);
       }),
     };
-    const runtime = createClipExtractionRuntime({
+    const runtime = runtimeWith({
       fs,
       getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
       resolveFfmpeg: vi.fn(() => 'D:\\products\\ffmpeg.exe'),
@@ -253,11 +268,10 @@ describe('clip extraction runtime', () => {
 
     expect(commandSignal?.aborted).toBe(true);
     expect(removedPaths).toContain('D:\\pipelines\\extraction-tmp\\.clip-extraction-op');
-    await expect(extraction).resolves.toMatchObject({ ok: false, code: 'cancelled' });
+    await expect(extraction).resolves.toEqual({ ok: false, code: 'cancelled', error: { message: 'Extraction was cancelled.' } });
   });
 
   it('publishes to the first unoccupied sequence without overwriting an external collision', async () => {
-    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const copied: string[] = [];
     let collision = true;
     const fs = {
@@ -279,7 +293,7 @@ describe('clip extraction runtime', () => {
       }),
       unlink: vi.fn(async () => undefined),
     };
-    const runtime = createClipExtractionRuntime({
+    const runtime = runtimeWith({
       fs,
       getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
       resolveFfmpeg: vi.fn(() => 'D:\\products\\ffmpeg.exe'),
@@ -315,7 +329,6 @@ describe('clip extraction runtime', () => {
   });
 
   it('encodes exactly the selected original frames as bitrate-capped H.264 in YUV 4:2:0', async () => {
-    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const fs = {
       mkdir: vi.fn(async () => undefined),
       readdir: vi.fn(async () => []),
@@ -325,7 +338,7 @@ describe('clip extraction runtime', () => {
       copyFile: vi.fn(async () => undefined),
     };
     const runCommand = vi.fn(async (_command: string, _args: string[]) => ({ ok: true, exitCode: 0 }));
-    const runtime = createClipExtractionRuntime({
+    const runtime = runtimeWith({
       fs,
       getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
       resolveFfmpeg: vi.fn(() => 'D:\\products\\ffmpeg.exe'),
@@ -358,10 +371,9 @@ describe('clip extraction runtime', () => {
   });
 
   it('rejects an unknown destination before preparing or running media work', async () => {
-    const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const runCommand = vi.fn();
     const prepareExtractionSource = vi.fn();
-    const runtime = createClipExtractionRuntime({
+    const runtime = runtimeWith({
       fs: {},
       getSettings: vi.fn(),
       resolveFfmpeg: vi.fn(),

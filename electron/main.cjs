@@ -17,6 +17,10 @@ const { SourceMovieLocator } = require('./source-movie-locator.cjs');
 const { MovieWindowCache } = require('./movie-window-cache.cjs');
 const { MovieFrameRateProbe } = require('./movie-frame-rate-probe.cjs');
 const { ZoomEditSources } = require('./zoom-edit-sources.cjs');
+const { RefinedClipSaver } = require('./refined-clip-saver.cjs');
+const { RefinedClipPlacement } = require('./refined-clip-placement.cjs');
+const { ExactRangeEncoder } = require('./exact-range-encoder.cjs');
+const { registerZoomEditSaveIpc } = require('./zoom-edit-save-ipc.cjs');
 const { MovieWindowPlacement } = require('./movie-window-placement.cjs');
 const { NativeProductLocator } = require('./native-product-locator.cjs');
 const { ThumbnailCacheRuntime } = require('./thumbnail-cache-runtime.cjs');
@@ -111,11 +115,15 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
   });
   const settingsStore = new AppSettingsStore(app.getPath('userData'));
   const clipCapturesStore = new ClipCapturesStore(app.getPath('userData'));
-  const clipExtractionRuntime = createClipExtractionRuntime({
-    getSettings: () => settingsStore.load(),
+  // The encoder holds only tool locations, so extraction and refined-clip saving share one.
+  const exactRangeEncoder = new ExactRangeEncoder({
     resolveFfmpeg: () => nativeProducts.ffmpeg(),
     resolveFfprobe: () => nativeProducts.ffprobe(),
     environment: nativeEnvironment,
+  });
+  const clipExtractionRuntime = createClipExtractionRuntime({
+    getSettings: () => settingsStore.load(),
+    encoder: exactRangeEncoder,
   });
   const folderAccess = new FolderAccessRegistry();
   const pipelineCatalogRuntime = new PipelineCatalogRuntime({ settingsStore, folderAccess });
@@ -139,6 +147,13 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     placement: new MovieWindowPlacement({
       probeFrameRate: (moviePath, selectedStream) => frameRateProbe.framesPerSecond(moviePath, selectedStream),
     }),
+  });
+  const refinedClipSaver = new RefinedClipSaver({
+    folderAccess,
+    hostForEvent: frameReviewRuntime.hostForEvent,
+    sources: zoomEditSources,
+    encoder: exactRangeEncoder,
+    placement: new RefinedClipPlacement({ trashItem: itemPath => shell.trashItem(itemPath) }),
   });
   ipcMain.handle('clip-sandbox:clip-source-movies-read', (event, request) =>
     clipSourceMovieRuntime.read(event, request));
@@ -291,13 +306,14 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     runtime: clipExtractionRuntime,
     hostForEvent: frameReviewRuntime.hostForEvent,
   });
+  registerZoomEditSaveIpc({ ipcMain, saver: refinedClipSaver });
   registerClipCapturesIpc({
     ipcMain,
     store: clipCapturesStore,
     hostForEvent: frameReviewRuntime.hostForEvent,
   });
   return { dispose: async () => {
-    await Promise.allSettled([clipExtractionRuntime.dispose(), clipCapturesStore.flush()]);
+    await Promise.allSettled([clipExtractionRuntime.dispose(), refinedClipSaver.dispose(), clipCapturesStore.flush()]);
   } };
 }
 

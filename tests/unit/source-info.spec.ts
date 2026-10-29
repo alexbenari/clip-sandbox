@@ -93,6 +93,36 @@ describe('SourceInfo', () => {
       .toThrow('A trim must keep at least one frame of the clip.');
   });
 
+  describe('exact stored times', () => {
+    const endsAsReferences = () => SourceInfo.fromRecord(versionTwoRecord({
+      referenceFrames: [{ frameIndex: 1300, frameInfoHash: '0123456789abcdef' }, { frameIndex: 1340, frameInfoHash: 'fedcba9876543210' }],
+    }));
+
+    it('answers the stored times of both ends while the reference frames are the range’s ends', () => {
+      const info = endsAsReferences();
+
+      expect([info.exactTimeUsOf(1300), info.exactTimeUsOf(1340)]).toEqual([54_221_000, 55_889_000]);
+    });
+
+    it('answers no time for a frame that is not an end', () => {
+      expect(endsAsReferences().exactTimeUsOf(1320)).toBeUndefined();
+    });
+
+    it('answers no time for an end of a trimmed record, whose stored times belong to the original ends', () => {
+      expect(endsAsReferences().trimmed(0, -5).exactTimeUsOf(1300)).toBeUndefined();
+    });
+
+    it('answers no time for a record trimmed to a single frame that is one of its reference frames', () => {
+      const singleFrame = endsAsReferences().trimmed(40, 0);
+
+      expect([singleFrame.exactTimeUsOf(1340), singleFrame.range]).toEqual([undefined, { start: 1340, end: 1340, startTimeUs: 54_221_000, endTimeUs: 55_889_000 }]);
+    });
+
+    it('answers no time for a record whose reference frame is not an end', () => {
+      expect(SourceInfo.fromRecord(versionTwoRecord()).exactTimeUsOf(1300)).toBeUndefined();
+    });
+  });
+
   it('builds a complete record for a range cut from the movie', () => {
     const info = SourceInfo.forMovieRange(
       sourceMovie,

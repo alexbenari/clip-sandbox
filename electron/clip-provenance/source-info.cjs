@@ -42,8 +42,7 @@ class SourceInfo {
 
   // Undefined when the time cannot be stored as a safe JSON integer, so the record leaves it out.
   static timeUsOf(frame) {
-    const timeUs = FrameTime.microseconds(frame.pts, frame.timebaseNumerator, frame.timebaseDenominator);
-    return timeUs >= 0n && timeUs <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(timeUs) : undefined;
+    return FrameTime.safeMicrosecondsOf(frame);
   }
 
   static #fromVersionOne(record) {
@@ -114,6 +113,18 @@ class SourceInfo {
 
   get movieDisplayName() {
     return this.sourceMovie.displayName;
+  }
+
+  // A trim keeps the times of the original ends, so a stored time is exact only while the reference
+  // frames are the range's two ends.
+  exactTimeUsOf(frameIndex) {
+    const [first, second] = this.referenceFrames;
+    const untrimmed = this.referenceFrames.length === 2
+      && first.frameIndex === this.range.start && second.frameIndex === this.range.end;
+    if (!untrimmed) return undefined;
+    if (frameIndex === this.range.start) return this.range.startTimeUs;
+    if (frameIndex === this.range.end) return this.range.endTimeUs;
+    return undefined;
   }
 
   // The stored times stay those of the original ends: they only place the movie window, whose margin

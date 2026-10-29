@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 let frameReviewOperation = 0;
-let clipExtractionOperation = 0;
+let correlatedOperation = 0;
 
 function frameReviewOperationId() {
   frameReviewOperation += 1;
@@ -21,19 +21,24 @@ async function invokeFrameReview(channel, payload) {
   return response;
 }
 
-function extractionOperationId(kind) {
-  clipExtractionOperation += 1;
-  return `${kind}_${Date.now()}_${clipExtractionOperation}`;
+function correlatedOperationId(kind) {
+  correlatedOperation += 1;
+  return `${kind}_${Date.now()}_${correlatedOperation}`;
 }
 
-async function invokeClipExtraction(channel, kind, payload, requestedOperationId = null) {
-  const operationId = requestedOperationId || extractionOperationId(kind);
-  const response = await ipcRenderer.invoke(channel, { operationId, ...payload });
-  if (!response || response.operationId !== operationId) {
-    return { ok: false, operationId, error: { code: 'protocol-error', message: 'Clip-extraction response correlation failed.' } };
-  }
-  return response;
+function correlatedInvoker(label) {
+  return async (channel, kind, payload, requestedOperationId = null) => {
+    const operationId = requestedOperationId || correlatedOperationId(kind);
+    const response = await ipcRenderer.invoke(channel, { operationId, ...payload });
+    if (!response || response.operationId !== operationId) {
+      return { ok: false, operationId, error: { code: 'protocol-error', message: `${label} response correlation failed.` } };
+    }
+    return response;
+  };
 }
+
+const invokeClipExtraction = correlatedInvoker('Clip-extraction');
+const invokeZoomEditSave = correlatedInvoker('Zoom edit save');
 
 const frameReviewApi = {
   chooseSource() {
@@ -104,6 +109,18 @@ const desktopApi = {
     openClip(request) { return ipcRenderer.invoke('clip-sandbox:zoom-edit-open-clip', request); },
     openWindow(request) { return ipcRenderer.invoke('clip-sandbox:zoom-edit-open-window', request); },
     anchorWindow(request) { return ipcRenderer.invoke('clip-sandbox:zoom-edit-anchor-window', request); },
+    subscribeSaveProgress(listener) {
+      if (typeof listener !== 'function') throw new TypeError('Zoom edit save progress listener must be a function.');
+      const handler = (_event, payload) => listener(payload);
+      ipcRenderer.on('clip-sandbox:zoom-edit-save-progress', handler);
+      return () => ipcRenderer.removeListener('clip-sandbox:zoom-edit-save-progress', handler);
+    },
+    save(request) {
+      return invokeZoomEditSave('clip-sandbox:zoom-edit-save', 'refine', request, request?.operationId);
+    },
+    cancelSave(saveOperationId) {
+      return invokeZoomEditSave('clip-sandbox:zoom-edit-cancel-save', 'cancel', { saveOperationId });
+    },
   },
   loadAppSettings() { return ipcRenderer.invoke('clip-sandbox:load-app-settings'); },
   saveAppSettings(settings) { return ipcRenderer.invoke('clip-sandbox:save-app-settings', settings); },

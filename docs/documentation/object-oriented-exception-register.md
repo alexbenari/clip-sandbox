@@ -1,6 +1,6 @@
 # Object-Oriented Exception Register
 
-Last updated: 2026-10-29
+Last updated: 2026-10-30
 
 This document records intentional non-OO holdouts. Production TypeScript is class-owned by default; a module-level function must have a concrete reason to remain outside an object and must be recorded here when it is an architectural exception.
 
@@ -14,13 +14,19 @@ Reason kept non-OO and non-TS: Electron main-process bootstrap remained pragmati
 
 Reason kept non-OO and non-TS: the preload bridge is a narrow Electron boundary file. Keeping it in CommonJS reduced migration risk without weakening the renderer OO design.
 
-### `electron/frame-review-ipc.cjs`
+### `register*Ipc` composition entrypoints
 
-Reason kept CommonJS: Electron main loads this narrow registration boundary directly while the production frame-review host is emitted ESM. Validation, dispatch, serialization, and error translation are owned by `FrameReviewIpcBoundary`; the exported module-level registration function is only the CommonJS composition entrypoint.
+Files: `electron/frame-review-ipc.cjs` (`registerFrameReviewIpc`), `electron/clip-extraction-ipc.cjs` (`registerClipExtractionIpc`), `electron/clip-captures-ipc.cjs` (`registerClipCapturesIpc`), `electron/zoom-edit-save-ipc.cjs` (`registerZoomEditSaveIpc`).
+
+Reason kept as module-level functions: each constructs its IPC boundary class and registers its handlers, and `electron/main.cjs` calls it once while composing the main process. Validation, dispatch, serialization, and error translation are owned by the boundary classes (`FrameReviewIpcBoundary`, `ClipExtractionIpcBoundary`, `ClipCapturesIpcBoundary`, `ZoomEditSaveIpcBoundary`). The frame-review boundary also stays CommonJS because Electron main loads it directly while the production frame-review host is emitted ESM.
 
 ### `electron/process-runner.cjs`
 
-Reason kept as a module-level function: `runProcess` is a process-spawning boundary helper that the main-process classes (`ClipExtractionRuntime`, `MovieWindowCache`, `MovieFrameRateProbe`) take as an injectable `runCommand` dependency. It was moved unchanged from `electron/clip-extraction-runtime.cjs` so those classes share one implementation. `electron/video-edit-runtime.cjs` still keeps its own copy.
+Reason kept as a module-level function: `runProcess` is a process-spawning boundary helper that the main-process classes (`ExactRangeEncoder`, `MovieWindowCache`, `MovieFrameRateProbe`) take as an injectable `runCommand` dependency. It was moved unchanged from `electron/clip-extraction-runtime.cjs` so those classes share one implementation. `electron/video-edit-runtime.cjs` still keeps its own copy.
+
+### `electron/exact-range-encoder.cjs`
+
+Reason kept as module-level functions: `errorResult` builds the plain result object the encoder answers with, and `defaultProbeFrameTimes` and `defaultVerifyMedia` are the FFprobe defaults that `ExactRangeEncoder` takes as injectable `probeFrameTimes` and `verifyMedia` dependencies. They were moved from `electron/clip-extraction-runtime.cjs` with neutral wording when the encoding step was extracted. Accepted holdouts: `defaultProbeFrameTimes` keeps its six positional parameters, the shape callers inject against, and `errorResult` duplicates the helper of the same name that `electron/clip-extraction-runtime.cjs` keeps.
 
 ### `vitest.config.js`
 

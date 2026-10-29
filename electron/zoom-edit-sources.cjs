@@ -1,16 +1,15 @@
 const fs = require('node:fs/promises');
-const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
-const { ClipFilenameRule } = require('./clip-filename-rule.cjs');
 const { MovieWindowAnchor } = require('./movie-window-anchor.cjs');
+const { AnchoredMovieWindow } = require('./anchored-movie-window.cjs');
+const { GrantedClipResolver } = require('./granted-clip-resolver.cjs');
 
 const MAX_WIDEN = 2;
 const WINDOW_ID = /^window_[A-Za-z0-9_-]{8,128}$/;
 
 // Paths and movie identities stay in the main process; the renderer gets opaque handles and ids.
 class ZoomEditSources {
-  #folderAccess;
   #hostForEvent;
   #locator;
   #windowCache;
@@ -19,13 +18,13 @@ class ZoomEditSources {
   #provenance;
   #fs;
   #randomId;
-  #filenameRule = new ClipFilenameRule();
+  #grantedClips;
   #windows = new Map();
   #locatedMovies = new Map();
 
   constructor({ folderAccess, hostForEvent, locator, windowCache, placement,
     provenance = new Mp4Provenance(), fileSystem = fs, randomId = () => randomBytes(18).toString('base64url') }) {
-    this.#folderAccess = folderAccess;
+    this.#grantedClips = new GrantedClipResolver({ folderAccess, fileSystem });
     this.#hostForEvent = hostForEvent;
     this.#locator = locator;
     this.#windowCache = windowCache;
@@ -56,7 +55,8 @@ class ZoomEditSources {
     const windowId = `window_${this.#randomId()}`;
     const sourceHandle = host.registerSource(windowPath);
     this.#windows.set(windowId, {
-      senderId: event.sender.id, clipPath, widen, sourceInfo, sourceHandle, placement, previousWindow: previous?.placement.window ?? null,
+      senderId: event.sender.id, clipPath, moviePath, widen, sourceInfo, sourceHandle, placement,
+      previousWindow: previous?.placement.window ?? null, anchor: null,
     });
     return { kind: 'ready', sourceHandle, windowId };
   }
@@ -64,8 +64,15 @@ class ZoomEditSources {
   async anchorWindow(event, request) {
     const record = this.#windowRecord(event, request?.windowId);
     const anchor = await this.#anchor.find({ host: this.#hostForEvent(event), sessionId: request.sessionId, window: record });
+    record.anchor = anchor;
     if (!anchor) return { kind: 'not-found' };
     return { kind: 'anchored', clipStartFrame: anchor.clipStartFrame, earliestFrame: anchor.earliestFrame, latestFrame: anchor.latestFrame };
+  }
+
+  anchoredWindow(event, windowId) {
+    const { clipPath, moviePath, sourceInfo, sourceHandle, anchor } = this.#windowRecord(event, windowId);
+    if (!anchor) throw new Error('Movie window is not anchored.');
+    return new AnchoredMovieWindow({ clipPath, moviePath, sourceInfo, sourceHandle, anchor, host: this.#hostForEvent(event) });
   }
 
   forgetAppWindow(senderId) {
@@ -74,11 +81,7 @@ class ZoomEditSources {
   }
 
   async #clipPath(event, request) {
-    const folder = this.#folderAccess.requireKnownPath(event.sender, request?.folderPath);
-    if (!this.#filenameRule.isPlainVideoFilename(request?.filename)) throw new Error('Clip filename is invalid.');
-    const clipPath = path.join(folder, request.filename);
-    if (!(await this.#fs.stat(clipPath)).isFile()) throw new Error('Clip is not a file.');
-    return clipPath;
+    return (await this.#grantedClips.resolve(event.sender, request)).path;
   }
 
   #widenedRecord(event, previousWindowId, clipPath, widen) {
