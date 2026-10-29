@@ -14,6 +14,8 @@ Small MP4 files for the clip source-info reader tests. They were made once, by r
 | `other-key.mp4` | `example.other` = `1` | `+faststart+use_metadata_tags` |
 | `tagged-after-other-key.mp4` | `example.other` = `1`, then the same tag as `tagged.mp4` | `+faststart+use_metadata_tags` |
 | `oversized.mp4` | `clip-sandbox.prov.v1` = 70 KiB of `x` | `+faststart+use_metadata_tags` |
-| `invalid-record.mp4` | `clip-sandbox.prov.v1` = `{"provenanceVersion":2}` | `+faststart+use_metadata_tags` |
+| `invalid-record.mp4` | `clip-sandbox.prov.v1` = `{"provenanceVersion":2}` (a version 2 record missing its fields) | `+faststart+use_metadata_tags` |
+| `tagged-v2.mp4` | `clip-sandbox.prov.v1` = `bothEnds` in `expected-tag-v2.json` (version 2: both ends as reference frames, with their times) | `+faststart+use_metadata_tags` |
+| `tagged-v2-single-reference.mp4` | `clip-sandbox.prov.v1` = `singleReference` in `expected-tag-v2.json` (version 2: one reference frame before the range) | `+faststart+use_metadata_tags` |
 
 Tests derive any other shape, such as a truncated file or one without a `udta` box, from these files in their own temporary folder.

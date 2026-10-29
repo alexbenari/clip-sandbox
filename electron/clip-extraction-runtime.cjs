@@ -4,6 +4,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
+const { SourceInfo } = require('./clip-provenance/source-info.cjs');
 
 const COLLECTION_NAME = /^[^<>:"/\\|?*\u0000]{1,180}$/;
 const OPAQUE_ID = /^[a-zA-Z0-9_-]{8,128}$/;
@@ -387,7 +388,12 @@ class ClipExtractionRuntime {
       return errorResult('invalid-source', 'Exact frame ordinals changed before extraction.');
     }
     try {
-      return { ok: true, serializedProvenance: this.provenance.create(source, start, end), warning: undefined };
+      const sourceInfo = SourceInfo.forMovieRange(
+        SourceInfo.movieOf(source.sourcePath, source.identity),
+        { start: start.frameIndex, end: end.frameIndex, startTimeUs: SourceInfo.timeUsOf(start), endTimeUs: SourceInfo.timeUsOf(end) },
+        [start, end],
+      );
+      return { ok: true, serializedProvenance: this.provenance.tagValueOf(sourceInfo), warning: undefined };
     } catch {
       return {
         ok: true, serializedProvenance: null,

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -7,6 +8,7 @@ import { test, expect } from '@playwright/test';
 import { generatedMovieFixture, nativeBinaryFolder, nativeFrameReviewUnavailableReason } from '../support/frame-review-dependencies.js';
 import { closeAppWithin, launchApp, lockExactRange, openMovieForExactReview, writeAppSettings } from './support/app.js';
 
+const { Mp4Provenance } = createRequire(import.meta.url)('../../electron/clip-provenance/mp4-provenance.cjs');
 const movie = generatedMovieFixture('cfr-audio.mkv');
 const timestampRepairMovie = generatedMovieFixture('timestamp-repair-source.mkv');
 const unavailable = nativeFrameReviewUnavailableReason(path.join(nativeBinaryFolder, 'bestsource_media_service.exe'), movie, timestampRepairMovie);
@@ -26,7 +28,7 @@ function ifMissing<T>(fallback: T): (error: NodeJS.ErrnoException) => T | Promis
   return error => error?.code === 'ENOENT' ? fallback : Promise.reject(error);
 }
 
-test('extracts a movie with a space before its extension into a valid collection', async () => {
+test('extracts a movie with a space before its extension into a valid collection, tagged with its source info', async () => {
   test.setTimeout(120_000);
   const { directory, profile, destination } = await extractionWorkspace('clip-spaced-movie-');
   const source = path.join(directory, 'Sample Movie .mkv');
@@ -42,6 +44,14 @@ test('extracts a movie with a space before its extension into a valid collection
     await expect(page.locator('[data-range-id="range-1"]')).toContainText('Extracted as Sample Movie-001.mp4', { timeout: 90_000 });
     expect(await fs.readFile(path.join(destination, 'Sample Movie.txt'), 'utf8')).toBe('Sample Movie-001.mp4\n');
     expect(existsSync(path.join(destination, 'Sample Movie-001.mp4'))).toBe(true);
+    // The fixture runs at 24 frames per second in a millisecond timebase, so frame 5 is stored at 208 ms.
+    const sourceInfo = await new Mp4Provenance().read(path.join(destination, 'Sample Movie-001.mp4'));
+    expect(sourceInfo.toRecord()).toMatchObject({
+      provenanceVersion: 2,
+      sourceMovie: { displayName: 'Sample Movie .mkv' },
+      sourceFrameRange: { start: 3, end: 5, startTimeUs: 125_000, endTimeUs: 208_000 },
+      referenceFrames: [{ frameIndex: 3 }, { frameIndex: 5 }],
+    });
     await page.locator('#activityIndicatorBtn').click();
     const activity = page.locator('#activityIndicatorList > li');
     const started = activity.filter({ hasText: 'Extraction started for 1 clip.' });

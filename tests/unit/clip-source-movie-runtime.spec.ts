@@ -20,6 +20,7 @@ describe('ClipSourceMovieRuntime', () => {
     await fs.copyFile(sourceMovieFixture('tagged.mp4'), path.join(grantedFolder, 'tagged.mp4'));
     await fs.copyFile(sourceMovieFixture('untagged.mp4'), path.join(grantedFolder, 'untagged.mp4'));
     await fs.copyFile(sourceMovieFixture('tagged.mp4'), path.join(grantedFolder, 'tagged-copy.webm'));
+    await fs.copyFile(sourceMovieFixture('tagged-v2-single-reference.mp4'), path.join(grantedFolder, 'tagged-v2.mp4'));
   });
 
   afterEach(async () => {
@@ -34,13 +35,13 @@ describe('ClipSourceMovieRuntime', () => {
     },
   };
 
-  it('answers each clip with its source movie, none, or unreadable, in request order', async () => {
+  it('answers each clip with its source movie from either record version, none, or unreadable, in request order', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const runtime = new ClipSourceMovieRuntime({ folderAccess });
 
     const answer = await runtime.read(event, {
       folderPath: grantedFolder,
-      filenames: ['untagged.mp4', 'tagged.mp4', 'missing.mp4', 'tagged-copy.webm'],
+      filenames: ['untagged.mp4', 'tagged.mp4', 'missing.mp4', 'tagged-copy.webm', 'tagged-v2.mp4'],
     });
 
     expect(answer).toEqual({ clips: [
@@ -48,6 +49,7 @@ describe('ClipSourceMovieRuntime', () => {
       { filename: 'tagged.mp4', kind: 'movie', movieFileName: taggedMovieFileName },
       { filename: 'missing.mp4', kind: 'unreadable' },
       { filename: 'tagged-copy.webm', kind: 'none' },
+      { filename: 'tagged-v2.mp4', kind: 'movie', movieFileName: taggedMovieFileName },
     ] });
   });
 

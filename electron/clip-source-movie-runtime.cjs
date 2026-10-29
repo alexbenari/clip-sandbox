@@ -37,9 +37,9 @@ class ClipSourceMovieRuntime {
   async clipSourceMovie(folder, filename) {
     if (!this.provenance.canBeTagged(filename)) return { filename, kind: 'none' };
     try {
-      const record = await this.provenance.read(path.join(folder, filename));
-      return record
-        ? { filename, kind: 'movie', movieFileName: record.sourceMovie.displayName }
+      const sourceInfo = await this.provenance.read(path.join(folder, filename));
+      return sourceInfo
+        ? { filename, kind: 'movie', movieFileName: sourceInfo.movieDisplayName }
         : { filename, kind: 'none' };
     } catch {
       return { filename, kind: 'unreadable' };

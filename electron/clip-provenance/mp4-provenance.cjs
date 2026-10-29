@@ -1,5 +1,6 @@
 const path = require('node:path');
 const { Mp4MetadataTagReader } = require('./mp4-metadata-tag-reader.cjs');
+const { SourceInfo } = require('./source-info.cjs');
 
 const KEY = 'clip-sandbox.prov.v1';
 const MAX_BYTES = 4096;
@@ -9,25 +10,8 @@ class Mp4Provenance {
     this.tagReader = tagReader;
   }
 
-  create(source, start, end) {
-    const identity = source.identity;
-    const fingerprint = {
-      fingerprintVersion: 1,
-      sourceSampleDigest: identity.sourceSampleDigest,
-      sourceBytes: identity.sourceBytes,
-      sourceDurationUs: identity.sourceDurationUs,
-      signatureProfileVersion: identity.signatureProfileVersion,
-      selectedStream: identity.selectedStream,
-      streamMetadataDigest: identity.streamMetadataDigest,
-    };
-    const endpoint = frame => ({ frameIndex: frame.frameIndex, frameInfoHash: frame.frameInfoHash });
-    const record = {
-      provenanceVersion: 1,
-      sourceMovie: { displayName: path.basename(source.sourcePath), fingerprint },
-      sourceFrameRange: { start: endpoint(start), end: endpoint(end), endInclusive: true },
-    };
-    this.validate(record);
-    const serialized = JSON.stringify(record);
+  tagValueOf(sourceInfo) {
+    const serialized = JSON.stringify(sourceInfo.toRecord());
     if (Buffer.byteLength(serialized, 'utf8') > MAX_BYTES) throw new Error('Clip provenance exceeds the MP4 metadata limit.');
     return serialized;
   }
@@ -38,8 +22,7 @@ class Mp4Provenance {
 
   async readBack(outputPath) {
     const serialized = await this.tagReader.read(outputPath, KEY);
-    const record = this.parsedRecord(serialized);
-    if (!record) throw new Error('Clip provenance is missing or invalid.');
+    if (!this.sourceInfoOf(serialized)) throw new Error('Clip provenance is missing or invalid.');
     return serialized;
   }
 
@@ -48,38 +31,15 @@ class Mp4Provenance {
   }
 
   async read(clipPath) {
-    return this.parsedRecord(await this.tagReader.read(clipPath, KEY));
+    return this.sourceInfoOf(await this.tagReader.read(clipPath, KEY));
   }
 
-  parsedRecord(serialized) {
+  sourceInfoOf(serialized) {
     if (typeof serialized !== 'string' || Buffer.byteLength(serialized, 'utf8') > MAX_BYTES) return null;
     try {
-      const record = JSON.parse(serialized);
-      this.validate(record);
-      return record;
+      return SourceInfo.fromRecord(JSON.parse(serialized));
     } catch {
       return null;
-    }
-  }
-
-  validate(record) {
-    const fingerprint = record?.sourceMovie?.fingerprint;
-    const range = record?.sourceFrameRange;
-    const validEndpoint = frame => frame && Number.isSafeInteger(frame.frameIndex) && frame.frameIndex >= 0
-      && typeof frame.frameInfoHash === 'string' && /^[a-f0-9]{16}$/.test(frame.frameInfoHash);
-    if (record?.provenanceVersion !== 1 || typeof record.sourceMovie?.displayName !== 'string'
-      || record.sourceMovie.displayName.length < 1 || record.sourceMovie.displayName.length > 512
-      || /[\\/]/.test(record.sourceMovie.displayName)
-      || fingerprint?.fingerprintVersion !== 1
-      || typeof fingerprint.sourceSampleDigest !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint.sourceSampleDigest)
-      || typeof fingerprint.streamMetadataDigest !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint.streamMetadataDigest)
-      || typeof fingerprint.sourceBytes !== 'string' || !/^(0|[1-9]\d{0,19})$/.test(fingerprint.sourceBytes)
-      || typeof fingerprint.sourceDurationUs !== 'string' || !/^(0|[1-9]\d{0,19})$/.test(fingerprint.sourceDurationUs)
-      || typeof fingerprint.signatureProfileVersion !== 'string' || !/^[a-zA-Z0-9._-]{1,100}$/.test(fingerprint.signatureProfileVersion)
-      || !Number.isSafeInteger(fingerprint.selectedStream) || fingerprint.selectedStream < 0
-      || !validEndpoint(range?.start) || !validEndpoint(range?.end)
-      || range.end.frameIndex < range.start.frameIndex || range.endInclusive !== true) {
-      throw new Error('Clip provenance is invalid or unsupported.');
     }
   }
 }

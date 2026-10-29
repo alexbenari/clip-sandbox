@@ -1,12 +1,13 @@
 // @vitest-environment node
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-import { sourceMovieFixture, sourceMovieTag } from '../support/source-movie-fixtures.js';
+import { sourceMovieFixture, sourceMovieTag, sourceMovieTagsV2 } from '../support/source-movie-fixtures.js';
 
 const require = createRequire(import.meta.url);
 const { KEY, Mp4Provenance } = require('../../electron/clip-provenance/mp4-provenance.cjs');
+const { SourceInfo } = require('../../electron/clip-provenance/source-info.cjs');
 const fingerprint = {
-  sourceSampleDigest: 'a'.repeat(64), sourceBytes: '123', sourceDurationUs: '1000000',
+  fingerprintVersion: 1, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '123', sourceDurationUs: '1000000',
   signatureProfileVersion: 'sampled-packets-3m-3m-3x1m-v1', selectedStream: 0,
   streamMetadataDigest: 'b'.repeat(64),
 };
@@ -14,22 +15,18 @@ const fingerprint = {
 describe('Mp4Provenance', () => {
   const provenance = new Mp4Provenance();
 
+  const sourceInfo = SourceInfo.forMovieRange(
+    SourceInfo.movieOf('D:\\private\\Movie.mkv', fingerprint),
+    { start: 2, end: 4 },
+    [{ frameIndex: 2, frameInfoHash: '0000000000000002' }, { frameIndex: 4, frameInfoHash: '0000000000000004' }],
+  );
+
   function createRecord(): string {
-    return provenance.create(
-      { sourcePath: 'D:\\private\\Movie.mkv', identity: fingerprint },
-      { frameIndex: 2, frameInfoHash: '0000000000000002' },
-      { frameIndex: 4, frameInfoHash: '0000000000000004' },
-    );
+    return provenance.tagValueOf(sourceInfo);
   }
 
-  it('creates a source record without an absolute path', () => {
-    const serialized = createRecord();
-    expect(JSON.parse(serialized)).toMatchObject({
-      provenanceVersion: 1,
-      sourceMovie: { displayName: 'Movie.mkv', fingerprint: { fingerprintVersion: 1 } },
-      sourceFrameRange: { start: { frameIndex: 2 }, end: { frameIndex: 4 }, endInclusive: true },
-    });
-    expect(serialized).not.toContain('private');
+  it('stores the source info record as the tag value', () => {
+    expect(JSON.parse(createRecord())).toEqual(sourceInfo.toRecord());
   });
 
   it('muxes the record under its metadata key', () => {
@@ -37,16 +34,34 @@ describe('Mp4Provenance', () => {
     expect(provenance.muxArguments(serialized)).toContain(`${KEY}=${serialized}`);
   });
 
-  it('refuses a record whose movie name is too long before muxing', () => {
-    expect(() => provenance.create(
-      { sourcePath: `D:\\private\\${'x'.repeat(5000)}.mkv`, identity: fingerprint },
-      { frameIndex: 2, frameInfoHash: '0000000000000002' },
-      { frameIndex: 4, frameInfoHash: '0000000000000004' },
-    )).toThrow('Clip provenance is invalid or unsupported.');
+  it('refuses a record larger than the MP4 metadata limit before muxing', () => {
+    const oversized = { toRecord: () => ({ provenanceVersion: 2, padding: 'x'.repeat(5000) }) };
+
+    expect(() => provenance.tagValueOf(oversized)).toThrow('Clip provenance exceeds the MP4 metadata limit.');
   });
 
-  it('reads the source record of a tagged clip', async () => {
-    await expect(provenance.read(sourceMovieFixture('tagged.mp4'))).resolves.toEqual(JSON.parse(sourceMovieTag.value));
+  it('reads a version 1 tagged clip as a range whose reference frames are its ends', async () => {
+    const sourceInfo = await provenance.read(sourceMovieFixture('tagged.mp4'));
+
+    const tagged = JSON.parse(sourceMovieTag.value);
+    expect(sourceInfo.toRecord()).toEqual({
+      provenanceVersion: 2,
+      sourceMovie: tagged.sourceMovie,
+      sourceFrameRange: { start: 1200, end: 1260, endInclusive: true },
+      referenceFrames: [tagged.sourceFrameRange.start, tagged.sourceFrameRange.end],
+    });
+  });
+
+  it('reads a version 2 tagged clip with both ends as reference frames and their times', async () => {
+    const sourceInfo = await provenance.read(sourceMovieFixture('tagged-v2.mp4'));
+
+    expect(sourceInfo.toRecord()).toEqual(JSON.parse(sourceMovieTagsV2.bothEnds));
+  });
+
+  it('reads a version 2 tagged clip whose single reference frame is not an end of its range', async () => {
+    const sourceInfo = await provenance.read(sourceMovieFixture('tagged-v2-single-reference.mp4'));
+
+    expect(sourceInfo.toRecord()).toEqual(JSON.parse(sourceMovieTagsV2.singleReference));
   });
 
   it('reads no source record from an untagged clip', async () => {

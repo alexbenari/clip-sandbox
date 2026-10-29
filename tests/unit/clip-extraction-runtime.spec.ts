@@ -4,6 +4,18 @@ import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 
+const movieIdentity = {
+  sourceSampleDigest: 'a'.repeat(64), sourceBytes: '123', sourceDurationUs: '1000000',
+  signatureProfileVersion: 'sampled-packets-3m-3m-3x1m-v1', selectedStream: 0, streamMetadataDigest: 'b'.repeat(64),
+};
+
+function exactFrame(frameIndex: number, pts: number) {
+  return {
+    frameIndex, originalFrameIndex: frameIndex, pts: BigInt(pts), duration: 40n,
+    timebaseNumerator: 1n, timebaseDenominator: 1000n, frameInfoHash: frameIndex.toString(16).padStart(16, '0'),
+  };
+}
+
 /** The value that follows a command-line flag, such as `-c:v` -> `libx264`. */
 function argumentAfter(args: readonly string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
@@ -127,22 +139,13 @@ describe('clip extraction runtime', () => {
     expect(fs.copyFile).toHaveBeenCalledOnce();
   });
 
-  it('publishes media with a warning when provenance muxing fails', async () => {
+  function provenanceTestRuntime(runCommand: ReturnType<typeof vi.fn>, provenance: unknown) {
     const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     const fs = {
       mkdir: vi.fn(async () => undefined), readdir: vi.fn(async () => []),
       mkdtemp: vi.fn(async () => 'D:\\pipelines\\extraction-tmp\\.clip-extraction-op'),
       rm: vi.fn(async () => undefined), copyFile: vi.fn(async () => undefined),
       stat: vi.fn(async () => ({ isFile: () => true, size: 100, mtimeMs: 123 })),
-    };
-    const runCommand = vi.fn(async (_command: string, args: string[]) => ({
-      ok: !args.includes('clip-sandbox.prov.v1=record'),
-      code: args.includes('clip-sandbox.prov.v1=record') ? 'process-failed' : 'completed',
-    }));
-    const provenance = {
-      create: vi.fn(() => 'record'),
-      muxArguments: vi.fn(() => ['-movflags', '+faststart+use_metadata_tags', '-metadata', 'clip-sandbox.prov.v1=record']),
-      readBack: vi.fn(),
     };
     const runtime = createClipExtractionRuntime({
       fs,
@@ -152,17 +155,33 @@ describe('clip extraction runtime', () => {
       verifyMedia: vi.fn(async () => undefined), runCommand, provenance,
       randomId: vi.fn(() => 'opaque12345678'),
     });
-    const destination = await runtime.openDestination(7);
-    const result = await runtime.extract(7, {
-      prepareExtractionSource: vi.fn(async () => ({ sourcePath: 'D:\\movies\\Movie.mp4', selectedStream: 0, identity: {} })),
-      extractionFrameIdentities: vi.fn(async () => [
-        { frameIndex: 2, originalFrameIndex: 2 }, { frameIndex: 4, originalFrameIndex: 4 },
-      ]),
-    }, {
-      operationId: 'extract_12345678', destinationHandle: destination.result.destinationHandle,
-      sourceHandle: 'source_12345678', reviewSessionId: 'session_12345678', sourceGeneration: 1,
-      collectionName: 'Movie', startFrameIndex: 2, endFrameIndex: 4,
-    });
+    const extractFramesTwoToFour = async () => {
+      const destination = await runtime.openDestination(7);
+      return runtime.extract(7, {
+        prepareExtractionSource: vi.fn(async () => ({ sourcePath: 'D:\\movies\\Movie.mp4', selectedStream: 0, identity: movieIdentity })),
+        extractionFrameIdentities: vi.fn(async () => [exactFrame(2, 80), exactFrame(4, 160)]),
+      }, {
+        operationId: 'extract_12345678', destinationHandle: destination.result.destinationHandle,
+        sourceHandle: 'source_12345678', reviewSessionId: 'session_12345678', sourceGeneration: 1,
+        collectionName: 'Movie', startFrameIndex: 2, endFrameIndex: 4,
+      });
+    };
+    return { fs, extractFramesTwoToFour };
+  }
+
+  it('publishes media with a warning when provenance muxing fails', async () => {
+    const runCommand = vi.fn(async (_command: string, args: string[]) => ({
+      ok: !args.includes('clip-sandbox.prov.v1=record'),
+      code: args.includes('clip-sandbox.prov.v1=record') ? 'process-failed' : 'completed',
+    }));
+    const provenance = {
+      tagValueOf: vi.fn(() => 'record'),
+      muxArguments: vi.fn(() => ['-movflags', '+faststart+use_metadata_tags', '-metadata', 'clip-sandbox.prov.v1=record']),
+      readBack: vi.fn(),
+    };
+    const { fs, extractFramesTwoToFour } = provenanceTestRuntime(runCommand, provenance);
+
+    const result = await extractFramesTwoToFour();
 
     expect(result).toMatchObject({ ok: true, result: { filename: 'Movie-001.mp4', warning: expect.stringContaining('metadata writer failed') } });
     expect(runCommand).toHaveBeenCalledTimes(3);
@@ -170,6 +189,23 @@ describe('clip extraction runtime', () => {
     expect(fs.copyFile).toHaveBeenCalledOnce();
   });
 
+  it('tags the clip with a version 2 record naming both ends as reference frames, with their movie times', async () => {
+    const { Mp4Provenance } = require('../../electron/clip-provenance/mp4-provenance.cjs');
+    const runCommand = vi.fn(async (_command: string, _args: string[]) => ({ ok: true, code: 'completed', stderr: '' }));
+    const muxedTag = () => runCommand.mock.calls.flatMap(call => call[1])
+      .find(value => value.startsWith('clip-sandbox.prov.v1='))?.slice('clip-sandbox.prov.v1='.length);
+    const { extractFramesTwoToFour } = provenanceTestRuntime(runCommand, new Mp4Provenance({ tagReader: { read: async () => muxedTag() } }));
+
+    const result = await extractFramesTwoToFour();
+
+    expect(result).toMatchObject({ ok: true, result: { warning: undefined } });
+    expect(JSON.parse(muxedTag()!)).toEqual({
+      provenanceVersion: 2,
+      sourceMovie: { displayName: 'Movie.mp4', fingerprint: { fingerprintVersion: 1, ...movieIdentity } },
+      sourceFrameRange: { start: 2, end: 4, endInclusive: true, startTimeUs: 80_000, endTimeUs: 160_000 },
+      referenceFrames: [{ frameIndex: 2, frameInfoHash: '0000000000000002' }, { frameIndex: 4, frameInfoHash: '0000000000000004' }],
+    });
+  });
   it('aborts active media work and finishes disposal only after its temporary workspace is removed', async () => {
     const { createClipExtractionRuntime } = require('../../electron/clip-extraction-runtime.cjs');
     let commandSignal: AbortSignal | undefined;
