@@ -89,16 +89,6 @@ describe('RangeRefinement', () => {
     expect(status.message).toBe('Exact frame review is not ready for this range.');
   });
 
-  it('blocks extraction of the range being refined until its refinement is locked', async () => {
-    const range = readyRange(1);
-    const other = readyRange(2);
-    const { refinement } = rangeRefinement([range, other]);
-    await refinement.beginRefinement(range.id);
-
-    expect(refinement.blocksExtraction(range.id)).toBe(true);
-    expect(refinement.blocksExtraction(other.id)).toBe(false);
-  });
-
   it('ends only when its own range is removed', async () => {
     const range = readyRange(1);
     const other = readyRange(2);

@@ -604,19 +604,6 @@ describe('GifExtractionSession saved captures, refinement and extraction outcome
     expect(session.snapshot.ranges.map(range => range.extraction?.kind)).toEqual(['completed', 'completed']);
   });
 
-  it('with a destination set, does not extract a range whose refinement is not locked yet', async () => {
-    const session = new GifExtractionSession(movieService(), thumbnailService(),
-      { extractionService: extractionService(vi.fn()) });
-    await session.openMovie();
-    const range = await lockExact(session, 3, 6);
-    session.setExtractionDestination({ kind: 'folder', folderPath: 'C:/pipelines/camera' });
-    expect(session.canExtractRange(range.id)).toBe(true);
-
-    expect((await session.beginRefinement(range.id)).kind).toBe('started');
-
-    expect(session.canExtractRange(range.id)).toBe(false);
-  });
-
   it('previews the draft, then the selected locked range, and advances the revision only on a real change', async () => {
     const session = new GifExtractionSession(movieService(), thumbnailService());
     await session.openMovie();
@@ -656,23 +643,6 @@ describe('GifExtractionSession saved captures, refinement and extraction outcome
 
     expect(session.markStart(exactCapture(3))).toEqual({ kind: 'rejected', message: 'Saved captures are still loading.' });
     finishAttach({ movieRef: 'capture_12345678', fingerprint, data: { schemaVersion: 1, nextRangeSequence: 1, ranges: [] } });
-  });
-
-  it('refuses to change the extraction destination while a batch runs', async () => {
-    let finish: (media: ReturnType<typeof createdMedia>) => void = () => undefined;
-    const extract = vi.fn(() => new Promise<ReturnType<typeof createdMedia>>(resolve => { finish = resolve; }));
-    const session = new GifExtractionSession(movieService(), thumbnailService(),
-      { extractionService: extractionService(extract) });
-    await session.openMovie();
-    const range = await lockExact(session, 3, 6);
-
-    const extracting = session.extractRange(range.id);
-    await vi.waitFor(() => expect(extract).toHaveBeenCalledOnce());
-
-    expect(() => session.setExtractionDestination({ kind: 'folder', folderPath: 'C:/pipelines/camera' }))
-      .toThrow('Wait for the current extraction to finish.');
-    finish(createdMedia('Sample Movie-001.mp4'));
-    await extracting;
   });
 
   it('releases the movie and its thumbnails when disposed, then neither writes nor publishes', async () => {

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ElectronClipCapturesStoreService } from '../../src/adapters/electron/electron-clip-captures-store-service.js';
 import { ElectronClipExtractionService } from '../../src/adapters/electron/electron-clip-extraction-service.js';
-import { ElectronCollectionClipRefinementService } from '../../src/adapters/electron/electron-collection-clip-refinement-service.js';
 import { ElectronFrameReviewService } from '../../src/adapters/electron/electron-frame-review-service.js';
 import { ElectronGifSessionServices } from '../../src/adapters/electron/electron-gif-session-services.js';
 import { ElectronThumbnailCacheService } from '../../src/adapters/electron/electron-thumbnail-cache-service.js';
@@ -41,12 +40,6 @@ const optionalAdapters = [
     tryCreate: (win: Window) => ElectronClipCapturesStoreService.tryCreate(win),
     adapter: ElectronClipCapturesStoreService,
     api: { clipCaptures: { attach: vi.fn(), save: vi.fn() } },
-  },
-  {
-    name: 'collection refinement',
-    tryCreate: (win: Window) => ElectronCollectionClipRefinementService.tryCreate(win),
-    adapter: ElectronCollectionClipRefinementService,
-    api: { collectionRefine: { inspect: vi.fn(), resolve: vi.fn() } },
   },
 ];
 

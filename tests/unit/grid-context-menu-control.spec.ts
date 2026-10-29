@@ -51,7 +51,7 @@ describe('grid context menu control', () => {
   test('puts Move selected to Recycle Bin last, after a separator, as a destructive item with an icon', () => {
     const control = new GridContextMenuControl();
 
-    const items = control.buildItems({ hasSelection: true, hasPipeline: true, hasClip: true, targetCollections: [subset] });
+    const items = control.buildItems({ hasSelection: true, hasPipeline: true, targetCollections: [subset] });
 
     expect(items.at(-2)).toEqual({ separator: true });
     expect(items.at(-1)).toMatchObject({ id: 'trash-selected', label: 'Move selected to Recycle Bin…', tone: 'destructive' });
@@ -87,36 +87,5 @@ describe('grid context menu control', () => {
     control.open({ point: { x: 12, y: 24 }, hasSelection: true, hasPipeline: true, focusFirstItem: true });
 
     expect(contextMenu.open.mock.calls[0][0].focusFirst).toBe(true);
-  });
-
-  test('offers Refine for a collection clip the source movie is known for', () => {
-    const control = new GridContextMenuControl();
-    const onRefine = vi.fn();
-
-    const refine = control.buildItems({ hasClip: true, refineAvailability: 'available', onRefine })
-      .find(item => item.id === 'refine-clip');
-
-    expect(refine).toMatchObject({ label: 'Refine', disabled: false });
-    expect(refine.detail).toBeUndefined();
-    refine.onSelect();
-    expect(onRefine).toHaveBeenCalledOnce();
-  });
-
-  test('disables Refine and says why when the clip has no source movie info', () => {
-    const control = new GridContextMenuControl();
-
-    const refine = control.buildItems({ hasClip: true, refineAvailability: 'no-source-info' })
-      .find(item => item.id === 'refine-clip');
-
-    expect(refine).toMatchObject({ label: 'Refine', detail: 'No source movie info', disabled: true });
-  });
-
-  test('disables Refine and says the source movie info could not be read when checking failed', () => {
-    const control = new GridContextMenuControl();
-
-    const refine = control.buildItems({ hasClip: true, refineAvailability: 'source-info-unreadable' })
-      .find(item => item.id === 'refine-clip');
-
-    expect(refine).toMatchObject({ label: 'Refine', detail: 'Couldn’t read source movie info', disabled: true });
   });
 });

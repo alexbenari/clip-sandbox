@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { vi } from 'vitest';
 
-export function installGifDesktopApiFakes(desktop, { collectionRefine = null } = {}) {
+export function installGifDesktopApiFakes(desktop) {
   desktop.frameReview = {
     chooseSource: vi.fn(async () => ({ ok: true, result: { canceled: true } })),
     open: vi.fn(),
@@ -24,14 +24,6 @@ export function installGifDesktopApiFakes(desktop, { collectionRefine = null } =
   desktop.clipCaptures = {
     attach: vi.fn(),
     save: vi.fn(async () => undefined),
-  };
-  if (collectionRefine) desktop.collectionRefine = collectionRefine;
-}
-
-export function collectionRefineApi({ resolve }) {
-  return {
-    inspect: vi.fn(async () => ({ available: true })),
-    resolve: vi.fn(resolve),
   };
 }
 

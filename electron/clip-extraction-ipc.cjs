@@ -7,14 +7,13 @@ const CHANNELS = Object.freeze({
 });
 
 class ClipExtractionIpcBoundary {
-  constructor({ ipcMain, runtime, hostForEvent, folderAccess }) {
+  constructor({ ipcMain, runtime, hostForEvent }) {
     if (!ipcMain?.handle || !runtime || typeof hostForEvent !== 'function') {
       throw new Error('Clip-extraction IPC dependencies are invalid.');
     }
     this.ipcMain = ipcMain;
     this.runtime = runtime;
     this.hostForEvent = hostForEvent;
-    this.folderAccess = folderAccess;
   }
 
   register() {
@@ -30,9 +29,7 @@ class ClipExtractionIpcBoundary {
     let operationId = 'invalid-operation';
     try {
       operationId = this.operationId(payload?.operationId, 'destination');
-      const folderPath = payload?.folderPath === undefined ? undefined
-        : this.folderAccess.requireKnownPath(event.sender, payload.folderPath);
-      return this.envelope(operationId, await this.runtime.openDestination(event.sender.id, folderPath));
+      return this.envelope(operationId, await this.runtime.openDestination(event.sender.id));
     } catch (error) {
       return this.failure(operationId, error);
     }

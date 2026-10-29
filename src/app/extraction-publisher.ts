@@ -8,13 +8,9 @@ import type {
 
 export interface IExtractionDestinationPublication {
   readonly folderPath: string;
-  readonly collectionFilename: string | null;
+  readonly collectionFilename: string;
   readonly media: ICreatedExtractionMedia;
 }
-
-export type ExtractionDestination =
-  | Readonly<{ kind: 'collection'; folderPath: string; collectionFilename: string }>
-  | Readonly<{ kind: 'folder'; folderPath: string }>;
 
 export interface IOpenedExtractionDestination {
   readonly destinationHandle: string;
@@ -26,7 +22,6 @@ export interface IOpenedExtractionDestination {
 type ExtractionPublisherOptions = {
   readonly onPublished?: (publication: IExtractionDestinationPublication) => Promise<void> | void;
   readonly onPublishError?: (error: unknown) => void;
-  readonly destination?: ExtractionDestination;
   readonly collectionFormat?: Pick<CollectionTextFormat, 'read' | 'write'>;
 };
 
@@ -47,13 +42,9 @@ export class ExtractionPublisher {
   }
 
   async open({ movieName }: { movieName: string }): Promise<IOpenedExtractionDestination> {
-    const collectionFilename = (this.options.destination?.kind === 'collection'
-      ? this.options.destination.collectionFilename : null)
-      ?? Collection.filenameFromCollectionName(this.movieStem(movieName));
-    const destination = await this.service.openExtractionDestination(
-      this.options.destination ? { folderPath: this.options.destination.folderPath } : undefined);
-    // A folder destination never writes its collection file, so that file's content must not block it.
-    const collection = (this.options.destination?.kind === 'folder' ? null : this.existingCollection(destination, collectionFilename))
+    const collectionFilename = Collection.filenameFromCollectionName(this.movieStem(movieName));
+    const destination = await this.service.openExtractionDestination();
+    const collection = this.existingCollection(destination, collectionFilename)
       ?? Collection.fromFilename({ filename: collectionFilename, orderedClipNames: [] });
     this.destinationHandle = destination.destinationHandle;
     this.folderPath = destination.folderPath;
@@ -79,17 +70,12 @@ export class ExtractionPublisher {
   private async persist(mediaHandle: string): Promise<void> {
     const media = this.pendingPublications.get(mediaHandle);
     if (!media) throw new Error('There is no collection publication to persist.');
-    if (this.options.destination?.kind === 'folder') {
-      this.forgetPending(mediaHandle);
-      await this.publishCommitted(media, null);
-      return;
-    }
     // The collection changes only after its file is saved, so a failed save can be retried as is.
     const collection = this.collection!.withExtractionOutput(media.filename);
     await this.service.saveCollection(this.destinationHandle, this.collectionFilename, this.collectionFormat.write(collection));
     this.collection = collection;
     this.forgetPending(mediaHandle);
-    await this.publishCommitted(media, this.collectionFilename);
+    await this.publishCommitted(media);
   }
 
   private forgetPending(mediaHandle: string): void {
@@ -97,11 +83,11 @@ export class ExtractionPublisher {
     if (this.latestPendingMediaHandle === mediaHandle) this.latestPendingMediaHandle = null;
   }
 
-  private async publishCommitted(media: ICreatedExtractionMedia, collectionFilename: string | null): Promise<void> {
+  private async publishCommitted(media: ICreatedExtractionMedia): Promise<void> {
     try {
       await this.options.onPublished?.(Object.freeze({
         folderPath: this.folderPath,
-        collectionFilename,
+        collectionFilename: this.collectionFilename,
         media,
       }));
     } catch (error) {

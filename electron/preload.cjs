@@ -77,10 +77,8 @@ const desktopApi = {
       ipcRenderer.on('clip-sandbox:clip-extraction-progress', handler);
       return () => ipcRenderer.removeListener('clip-sandbox:clip-extraction-progress', handler);
     },
-    openDestination(request) {
-      return invokeClipExtraction('clip-sandbox:clip-extraction-open-destination', 'destination', {
-        folderPath: request?.folderPath,
-      });
+    openDestination() {
+      return invokeClipExtraction('clip-sandbox:clip-extraction-open-destination', 'destination', {});
     },
     extract(request) {
       return invokeClipExtraction(
@@ -101,10 +99,6 @@ const desktopApi = {
   },
   clipSourceMovies: {
     read(request) { return ipcRenderer.invoke('clip-sandbox:clip-source-movies-read', request); },
-  },
-  collectionRefine: {
-    inspect(request) { return ipcRenderer.invoke('clip-sandbox:collection-refine-inspect', request); },
-    resolve(request) { return ipcRenderer.invoke('clip-sandbox:collection-refine-resolve', request); },
   },
   loadAppSettings() { return ipcRenderer.invoke('clip-sandbox:load-app-settings'); },
   saveAppSettings(settings) { return ipcRenderer.invoke('clip-sandbox:save-app-settings', settings); },

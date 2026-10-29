@@ -85,7 +85,7 @@ describe('RangeExtraction', () => {
     expect(warnings).toHaveLength(1);
   });
 
-  it('refuses a destination change while a batch runs, and refuses a second start of the same range', async () => {
+  it('refuses a second start of a range while its extraction runs', async () => {
     const first = readyRange(1, 3, 6);
     let finish: (value: ReturnType<typeof media>) => void = () => undefined;
     const extract = vi.fn(() => new Promise<ReturnType<typeof media>>(resolve => { finish = resolve; }));
@@ -94,8 +94,6 @@ describe('RangeExtraction', () => {
     const running = extraction.extractOne(movie, first, () => [first.id]);
     await vi.waitFor(() => expect(extract).toHaveBeenCalledOnce());
 
-    expect(() => extraction.setDestination({ kind: 'folder', folderPath: 'C:/pipelines/camera' }))
-      .toThrow('Wait for the current extraction to finish.');
     expect(extraction.canStart(first.id)).toBe(false);
     finish(media('Sample Movie-001.mp4'));
     await running;

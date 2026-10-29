@@ -5,10 +5,9 @@ import { PipelineCatalogRefresher } from '../../src/app/pipeline-catalog-refresh
 
 function refresher() {
   const gifExtraction = new EventSource<{ clipsPublished: void }>();
-  const collectionRefinement = new EventSource<{ clipsPublished: void }>();
   const catalog = { load: vi.fn(async () => undefined) };
-  const component = new PipelineCatalogRefresher({ publishers: [gifExtraction, collectionRefinement, null], catalog });
-  return { component, gifExtraction, collectionRefinement, catalog };
+  const component = new PipelineCatalogRefresher({ publishers: [gifExtraction, null], catalog });
+  return { component, gifExtraction, catalog };
 }
 
 describe('PipelineCatalogRefresher', () => {
@@ -16,14 +15,6 @@ describe('PipelineCatalogRefresher', () => {
     const { gifExtraction, catalog } = refresher();
 
     gifExtraction.emit('clipsPublished');
-
-    expect(catalog.load).toHaveBeenCalledOnce();
-  });
-
-  it('reloads the Pipelines catalog after Collection Refine publishes a clip', () => {
-    const { collectionRefinement, catalog } = refresher();
-
-    collectionRefinement.emit('clipsPublished');
 
     expect(catalog.load).toHaveBeenCalledOnce();
   });

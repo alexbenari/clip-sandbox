@@ -1,4 +1,4 @@
-import type { IScreenNavigation } from './collection-refinement-workflow.js';
+import type { IScreenNavigation } from './screen-navigation.js';
 import type { IEventSource } from './event-source.js';
 import type { UnlockedEndpointChange } from './range-refinement-draft.js';
 import type { IScreenIdentity, RefineScreenLeavePolicy } from './refine-screen-leave-policy.js';
@@ -19,7 +19,7 @@ export interface IScreenChanges extends IEventSource<{
 }> {}
 
 type RefineLeaveDependencies = Readonly<{
-  policy: Pick<RefineScreenLeavePolicy, 'holdOn' | 'unlockedChangesOn'>;
+  policy: Pick<RefineScreenLeavePolicy, 'canLeave' | 'unlockedChangesOn'>;
   prompt: IDiscardRefinementPrompt;
   refineScreens: readonly Readonly<{ id: string; session: Readonly<{ abandonRefinement(): unknown }> | null }>[];
   navigation: Pick<IScreenNavigation, 'activate' | 'activeScreen'>;
@@ -61,7 +61,7 @@ export class RefineLeaveWorkflow {
   }
 
   private async completeHeldScreenChange({ from, to }: IScreenChangeRequest): Promise<void> {
-    if (this.deps.policy.holdOn(from)?.kind !== 'unlocked-changes') return;
+    if (this.deps.policy.canLeave(from)) return;
     if (await this.confirmDiscard(from) && this.deps.navigation.activeScreen.id === from.id) {
       this.deps.navigation.activate(to.id);
     }

@@ -1,10 +1,10 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { DesktopAppTestEnvironment, desktopFile, waitFor } from './app-controller-harness.js';
-import { collectionRefineApi, installGifDesktopApiFakes, installPipelineCatalogFakes } from './desktop-api-fakes.js';
+import { installGifDesktopApiFakes, installPipelineCatalogFakes } from './desktop-api-fakes.js';
 
 // Records what AppController does today for flows the other app-level tests do not reach.
-// Both GIF sessions are replaced so these tests can observe AppController's wiring around them.
+// The GIF session is replaced so these tests can observe AppController's wiring around it.
 const { FakeGifSession } = vi.hoisted(() => {
   const emptySnapshot = Object.freeze({
     lifecycle: 'empty', source: null, reviewState: null, capture: null,
@@ -17,11 +17,7 @@ const { FakeGifSession } = vi.hoisted(() => {
     constructor(kind, options = {}) {
       this.kind = kind;
       this.options = options;
-      this.destinations = [];
-      this.openCollectionSource = vi.fn(async () => undefined);
-      this.importCollectionRange = vi.fn(async () => ({ kind: 'started' }));
       this.publishedHandlers = new Set();
-      this.staged = null;
       FakeGifSession.instances.push(this);
     }
     on(name, handler) {
@@ -32,10 +28,9 @@ const { FakeGifSession } = vi.hoisted(() => {
     finishPublishingRun() { for (const handler of [...this.publishedHandlers]) handler(); }
     get snapshot() { return emptySnapshot; }
     get reviewSession() { return null; }
-    get refinementDraft() { return this.staged ? { unlockedChanges: this.staged } : null; }
+    get refinementDraft() { return null; }
     subscribe(listener) { listener(emptySnapshot); return () => undefined; }
-    setExtractionDestination(destination) { this.destinations.push(destination); }
-    abandonRefinement() { this.staged = null; return null; }
+    abandonRefinement() { return null; }
     async beginRefinement() { return { kind: 'rejected', message: 'Not used by these tests.' }; }
     canExtractRange() { return false; }
     canRemoveRange() { return false; }
@@ -46,9 +41,6 @@ const { FakeGifSession } = vi.hoisted(() => {
 });
 vi.mock('../../../src/app/gif-extraction-session.js', () => ({
   GifExtractionSession: class extends FakeGifSession { constructor(frameReview, thumbnails, options) { super('gif-extraction', options); } },
-}));
-vi.mock('../../../src/app/collection-clip-refinement-session.js', () => ({
-  CollectionClipRefinementSession: class extends FakeGifSession { constructor(frameReview, thumbnails, options) { super('collection-refinement', options); } },
 }));
 class FakeFolder {
   constructor(folderPath, entries) {
@@ -113,16 +105,6 @@ function removeFirstClipFromView() {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
 }
 
-function openContextMenuOnFirstClip() {
-  const card = document.querySelector('#grid .thumb');
-  card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 50, clientY: 60 }));
-}
-
-function contextMenuItem(label) {
-  return Array.from(document.querySelectorAll('#clipContextMenu [role="menuitem"]')).find(item => item.textContent === label);
-}
-
 describe('AppController characterization', () => {
   const environment = new DesktopAppTestEnvironment();
   let folder;
@@ -157,7 +139,6 @@ describe('AppController characterization', () => {
 
     return {
       extraction: FakeGifSession.instances.findLast(session => session.kind === 'gif-extraction'),
-      collectionRefinement: FakeGifSession.instances.findLast(session => session.kind === 'collection-refinement'),
     };
   }
 
@@ -298,9 +279,7 @@ describe('AppController characterization', () => {
 
     beforeEach(() => {
       entries = [];
-      installGifDesktopApiFakes(window.clipSandboxDesktop, {
-        collectionRefine: collectionRefineApi({ resolve: async () => ({ kind: 'cancelled' }) }),
-      });
+      installGifDesktopApiFakes(window.clipSandboxDesktop);
       installPipelineCatalogFakes(window.clipSandboxDesktop, { entries: [], openEntry: () => null });
       window.clipSandboxDesktop.listPipelineCatalog = vi.fn(async () => ({ kind: 'available', entries }));
     });
@@ -321,162 +300,5 @@ describe('AppController characterization', () => {
       await waitFor(() => expect(document.querySelector('[aria-label="Load extraction-tmp"]')).not.toBeNull());
     });
 
-    test('Collection Refine publishing its clip shows the new pipeline in the Pipelines panel', async () => {
-      await startWithEmptyCatalog();
-      const { collectionRefinement } = await gifSessions();
-
-      createExtractionTmpFolder();
-      collectionRefinement.finishPublishingRun();
-
-      await waitFor(() => expect(document.querySelector('[aria-label="Load extraction-tmp"]')).not.toBeNull());
-    });
-  });
-
-  describe('starting to refine a collection clip', () => {
-    let resolveSource;
-
-    beforeEach(() => {
-      const lookups = [];
-      resolveSource = result => lookups.shift()(result);
-      installGifDesktopApiFakes(window.clipSandboxDesktop, {
-        collectionRefine: collectionRefineApi({ resolve: () => new Promise(resolve => lookups.push(resolve)) }),
-      });
-    });
-
-    async function chooseRefineOnFirstClip() {
-      openContextMenuOnFirstClip();
-      await waitFor(() => expect(contextMenuItem('Refine')?.disabled).toBe(false));
-      contextMenuItem('Refine').click();
-    }
-
-    test('is refused while the view has unsaved changes', async () => {
-      await startCollectionScreen();
-      await openFolder(['alpha.mp4', 'bravo.mp4']);
-      saveViewAsCollection('subset');
-      await waitFor(() => expect(document.getElementById('activeCollectionName').value).toBe('subset.txt'));
-      removeFirstClipFromView();
-      await waitFor(() => expect(gridClipNames()).toEqual(['bravo.mp4']));
-
-      await chooseRefineOnFirstClip();
-
-      await waitFor(() => expect(activityText()).toContain('Save or discard the current changes before refining a clip.'));
-      expect(window.clipSandboxDesktop.collectionRefine.resolve).not.toHaveBeenCalled();
-      expect(document.querySelector('#appScreenSelector').value).toBe('collection');
-    });
-
-    test('works without the saved-captures desktop API, which only GIF Extraction uses', async () => {
-      delete window.clipSandboxDesktop.clipCaptures;
-      await startCollectionScreen();
-      await openFolder(['alpha.mp4', 'bravo.mp4']);
-
-      await chooseRefineOnFirstClip();
-
-      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection-refine'));
-    });
-
-    test('returns to Collection when the source lookup is cancelled', async () => {
-      await startCollectionScreen();
-      await openFolder(['alpha.mp4', 'bravo.mp4']);
-      const { collectionRefinement } = await gifSessions();
-
-      await chooseRefineOnFirstClip();
-      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection-refine'));
-      resolveSource({ kind: 'cancelled' });
-
-      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection'));
-      expect(collectionRefinement.destinations).toEqual([]);
-      expect(collectionRefinement.openCollectionSource).not.toHaveBeenCalled();
-    });
-
-    test('returns to Collection without opening the movie when the selected collection changes during the source lookup', async () => {
-      folder.write('subset.txt', 'alpha.mp4\n');
-      await startCollectionScreen();
-      await openFolder(['alpha.mp4', 'bravo.mp4']);
-      const { collectionRefinement } = await gifSessions();
-      const selector = document.getElementById('activeCollectionName');
-
-      await chooseRefineOnFirstClip();
-      await waitFor(() => expect(window.clipSandboxDesktop.collectionRefine.resolve).toHaveBeenCalledOnce());
-      selector.value = 'subset.txt';
-      selector.dispatchEvent(new Event('change', { bubbles: true }));
-      await waitFor(() => expect(gridClipNames()).toEqual(['alpha.mp4']));
-      resolveSource({
-        kind: 'resolved',
-        source: { name: 'Movie.mkv', sourceHandle: 'source_0123456789abcdef' },
-        range: { start: { frameIndex: 1, frameInfoHash: '0000000000000001' }, end: { frameIndex: 2, frameInfoHash: '0000000000000002' }, endInclusive: true },
-      });
-
-      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection'));
-      expect(collectionRefinement.openCollectionSource).not.toHaveBeenCalled();
-      expect(collectionRefinement.destinations).toEqual([]);
-    });
-  });
-
-  describe('leaving Collection Refine with a staged endpoint that is not locked', () => {
-    beforeEach(() => {
-      installGifDesktopApiFakes(window.clipSandboxDesktop, {
-        collectionRefine: collectionRefineApi({ resolve: () => new Promise(() => undefined) }),
-      });
-    });
-
-    const discardDialog = () => document.getElementById('discardRefinementDialog');
-    const dialogButton = name => [...discardDialog().querySelectorAll('button')].find(button => button.textContent === name);
-    const backButton = () => [...document.querySelectorAll('#screenCommandHost button')]
-      .find(button => button.textContent === 'Back to Collection');
-
-    async function stageEndOnCollectionRefine() {
-      await startCollectionScreen();
-      await openFolder(['alpha.mp4', 'bravo.mp4']);
-      openContextMenuOnFirstClip();
-      await waitFor(() => expect(contextMenuItem('Refine')?.disabled).toBe(false));
-      contextMenuItem('Refine').click();
-      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection-refine'));
-      const { collectionRefinement } = await gifSessions();
-      collectionRefinement.staged = [{ endpoint: 'end', frameIndex: 7 }];
-      return collectionRefinement;
-    }
-
-    test('Back asks whether to discard the staged end', async () => {
-      await stageEndOnCollectionRefine();
-
-      backButton().click();
-
-      await waitFor(() => expect(discardDialog().open).toBe(true));
-      expect(discardDialog().querySelector('h2').textContent).toBe('Discard the staged end (frame 7)?');
-    });
-
-    test('Keep editing after Back stays on Refine with the staged end', async () => {
-      const session = await stageEndOnCollectionRefine();
-      backButton().click();
-      await waitFor(() => expect(discardDialog().open).toBe(true));
-
-      dialogButton('Keep editing').click();
-
-      expect(discardDialog().open).toBe(false);
-      expect(document.querySelector('#appScreenSelector').value).toBe('collection-refine');
-      expect(session.staged).toEqual([{ endpoint: 'end', frameIndex: 7 }]);
-    });
-
-    test('Back then Discard drops the staged end and shows Collection', async () => {
-      const session = await stageEndOnCollectionRefine();
-
-      backButton().click();
-      await waitFor(() => expect(discardDialog().open).toBe(true));
-      dialogButton('Discard').click();
-
-      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('collection'));
-      expect(session.staged).toBeNull();
-    });
-
-    test('choosing another workspace asks too, and Discard completes the switch', async () => {
-      await stageEndOnCollectionRefine();
-
-      activateScreen('gif-extraction');
-      expect(document.querySelector('#appScreenSelector').value).toBe('collection-refine');
-      await waitFor(() => expect(discardDialog().open).toBe(true));
-      dialogButton('Discard').click();
-
-      await waitFor(() => expect(document.querySelector('#appScreenSelector').value).toBe('gif-extraction'));
-    });
   });
 });

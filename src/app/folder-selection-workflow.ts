@@ -7,7 +7,7 @@ import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { AppText } from './app-text.js';
 import type { FolderAccess, FolderContents } from './folder-access.js';
-import type { IScreenNavigation } from './collection-refinement-workflow.js';
+import type { IScreenNavigation } from './screen-navigation.js';
 import type { CollectionSaveWorkflow } from './collection-save-workflow.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { IEventSource } from './event-source.js';

@@ -17,7 +17,6 @@ import type { ICaptureStorage } from './capture-storage.js';
 import type { ClipExtractionEntryState, IExtractionBatchProgress } from './clip-extraction-workflow.js';
 import { CurrentMovie } from './current-movie.js';
 import { EventSource, type EventHandler, type IEventSource } from './event-source.js';
-import type { ExtractionDestination } from './extraction-publisher.js';
 import type { GifThumbnailState } from './capture-thumbnails.js';
 import { GifSessionStatus } from './gif-session-status.js';
 import { RangeExtraction, type IExtractionMovie, type IExtractionPublicationListener } from './range-extraction.js';
@@ -68,16 +67,14 @@ export type MovieRangeSessionOptions = {
   readonly rejectionText?: CaptureRejectionText;
   readonly extractionService?: IClipExtractionService;
   readonly publications?: IExtractionPublicationListener;
-  readonly destination?: ExtractionDestination;
 };
 
 export interface IMovieRangeSessionEvents {
   clipsPublished: void;
 }
 
-// What GIF Extraction and Collection Refine share: one opened movie, its ranges, their refinement and
-// extraction, and the snapshot both GIF screens and the Clips panel read. The two sessions add the ways
-// a movie and its ranges arrive.
+// One opened movie, its ranges, their refinement and extraction, and the snapshot both GIF screens and
+// the Clips panel read. The subclass adds the way a movie and its ranges arrive.
 export abstract class MovieRangeSession implements IEventSource<IMovieRangeSessionEvents> {
   private readonly events = new EventSource<IMovieRangeSessionEvents>();
   private readonly listeners = new Set<(snapshot: IGifExtractionSessionSnapshot) => void>();
@@ -103,7 +100,6 @@ export abstract class MovieRangeSession implements IEventSource<IMovieRangeSessi
     });
     this.extraction = new RangeExtraction({
       extractionService: options.extractionService,
-      destination: options.destination,
       publications: options.publications,
       status: this.status, reporter, activityLog: options.activityLog, failures,
     });
@@ -165,10 +161,6 @@ export abstract class MovieRangeSession implements IEventSource<IMovieRangeSessi
     return this.events.on(name, handler);
   }
 
-  setExtractionDestination(destination: ExtractionDestination): void {
-    this.extraction.setDestination(destination);
-  }
-
   retryThumbnail(rangeId: CapturedRangeId): Promise<void> { return this.queue.retryThumbnail(rangeId); }
   selectRange(rangeId: CapturedRangeId): void { this.queue.selectRange(rangeId); }
   removeRange(rangeId: CapturedRangeId): boolean { return this.queue.removeRange(rangeId); }
@@ -178,7 +170,6 @@ export abstract class MovieRangeSession implements IEventSource<IMovieRangeSessi
 
   canExtractRange(rangeId: CapturedRangeId): boolean {
     const range = this.queue.range(rangeId);
-    if (this.extraction.destination && this.refinement.blocksExtraction(rangeId)) return false;
     if (!range || this.movie.lifecycle !== 'open' || this.queue.isStale(rangeId)
       || (range.kind !== 'ready-to-extract' && range.kind !== 'saved-exact-range')) return false;
     return this.extraction.canStart(rangeId);
@@ -249,12 +240,6 @@ export abstract class MovieRangeSession implements IEventSource<IMovieRangeSessi
     this.movie.followReview();
     this.publish();
     if (previous) await previous.dispose();
-  }
-
-  protected rejectRefinement(message: string): BeginRefinementResult {
-    this.status.show(message);
-    this.publish();
-    return Object.freeze({ kind: 'rejected', message });
   }
 
   protected publish(): void {

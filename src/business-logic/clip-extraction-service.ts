@@ -40,7 +40,7 @@ export interface IClipExtractionProgress {
 }
 
 export interface IClipExtractionService {
-  openExtractionDestination(request?: Readonly<{ folderPath: string }>): Promise<IExtractionDestinationSnapshot>;
+  openExtractionDestination(): Promise<IExtractionDestinationSnapshot>;
   extract(request: IExactClipExtractionRequest, onProgress?: (progress: IClipExtractionProgress) => void): Promise<ICreatedExtractionMedia>;
   saveCollection(destinationHandle: string, filename: string, text: string): Promise<void>;
   cancelCurrent?(): Promise<void>;

@@ -67,8 +67,8 @@ function extractionSnapshot(refinement: IRangeRefinementDraftSnapshot): IGifExtr
 
 function activeRefineScreen(
   refinement: IRangeRefinementDraftSnapshot,
-  { use = 'gif', player = moviePlayer(), canExtract = false }: {
-    use?: 'gif' | 'collection'; player?: FrameReviewPlayerControl; canExtract?: boolean;
+  { player = moviePlayer(), canExtract = false }: {
+    player?: FrameReviewPlayerControl; canExtract?: boolean;
   } = {},
 ) {
   let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
@@ -86,7 +86,7 @@ function activeRefineScreen(
   };
   vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
   vi.spyOn(player, 'enterExactScrubAt').mockResolvedValue({} as never);
-  const screen = RefineGifScreen[use === 'gif' ? 'forGifExtraction' : 'forCollectionRefinement']({
+  const screen = RefineGifScreen.forGifExtraction({
     player, keyboard: new GifWorkflowKeyboard(), session: session as never, document });
   document.body.replaceChildren(screen.commands, screen.root);
   screen.onActivate();
@@ -101,15 +101,6 @@ describe('RefineGifScreen', () => {
     expect(hint()).toBe('Scrub to the exact start frame, then set it with Q.');
     expect(screen.commands.textContent).not.toContain('start');
     expect(screen.commands.querySelector('[role="status"]')).toBeNull();
-  });
-
-  it('names a refined collection clip by its own filename, with its movie as secondary text', () => {
-    const { screen } = activeRefineScreen(refinementSnapshot(), { use: 'collection' });
-
-    screen.showRefinedClip('Feature-004.mp4');
-
-    expect(screen.commands.querySelector('[data-refine-command-title]')?.textContent).toBe('Refine clip · Feature-004.mp4');
-    expect(screen.commands.querySelector('.gif-workflow-source span')?.textContent).toBe('From Feature.mp4');
   });
 
   it('names a refined GIF range by its number, with its movie as secondary text', () => {
@@ -186,46 +177,6 @@ describe('RefineGifScreen', () => {
     }) }));
 
     expect(hint()).toBe('Cancelling extraction…');
-  });
-
-  it('shows its own wording for each use', () => {
-    const player = moviePlayer();
-    const keyboard = new GifWorkflowKeyboard();
-    const fromExtraction = RefineGifScreen.forGifExtraction({ player, keyboard, document });
-    const fromCollection = RefineGifScreen.forCollectionRefinement({ player, keyboard, document });
-
-    expect([fromExtraction.id, fromExtraction.label]).toEqual(['refine-gif', 'Refine Gif']);
-    expect(fromExtraction.commands.querySelector('[data-command="back"]')?.textContent).toBe('Back to GIF Extraction');
-    expect(fromExtraction.root.querySelector<HTMLButtonElement>('[data-command="next-inexact"]')?.hidden).toBe(false);
-    expect([fromCollection.id, fromCollection.label]).toEqual(['collection-refine', 'Refine clip']);
-    expect(fromCollection.commands.querySelector('[data-command="back"]')?.textContent).toBe('Back to Collection');
-    expect(fromCollection.root.querySelector('.gif-workflow-empty-copy h1')?.textContent).toBe('Preparing source movie');
-    expect(fromCollection.root.querySelector<HTMLButtonElement>('[data-command="next-inexact"]')?.hidden).toBe(true);
-  });
-
-  it('shows source lookup on the Refine screen before the review session opens', () => {
-    const session = {
-      reviewSession: {} as never,
-      subscribe: (listener: (snapshot: IGifExtractionSessionSnapshot) => void) => {
-        listener(Object.freeze({ ...extractionSnapshot(refinementSnapshot('committed')), refinement: null }));
-        return vi.fn();
-      },
-      abandonRefinement: vi.fn(),
-    };
-    const player = moviePlayer();
-    const attach = vi.spyOn(player, 'attachSession').mockImplementation(() => undefined);
-    const screen = RefineGifScreen.forCollectionRefinement({
-      player, keyboard: new GifWorkflowKeyboard(), session: session as never, document });
-    document.body.append(screen.commands, screen.root);
-    screen.showPreparation('Finding the original movie…');
-    screen.onActivate();
-    expect(attach).toHaveBeenCalledWith(null);
-    expect(screen.commands.querySelector('.gif-workflow-source span')?.textContent).toBe('Original movie');
-    expect(screen.root.textContent).toContain('Finding the original movie');
-    screen.showPreparation('Preparing exact frames…');
-    expect(screen.root.textContent).toContain('Preparing exact frames');
-    screen.showPreparation(null);
-    expect(attach).toHaveBeenLastCalledWith(session.reviewSession);
   });
 
   it('enters exact review, routes Q/W/X, enables exact-only E, and preserves contextual continuation', async () => {

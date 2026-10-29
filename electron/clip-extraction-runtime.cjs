@@ -164,19 +164,14 @@ class ClipExtractionRuntime {
     return resolved?.ownerId === ownerId ? resolved : null;
   }
 
-  async openDestination(ownerId, requestedFolderPath) {
-    let folderPath = requestedFolderPath;
-    if (!folderPath) {
-      const settingsResult = await this.getSettings();
-      const root = settingsResult?.ok === true ? settingsResult.settings?.pipelinesRootPath : null;
-      if (typeof root !== 'string' || !path.isAbsolute(root)) {
-        return errorResult('missing-pipeline-root', 'Choose a Pipelines root in Settings before extracting.');
-      }
-      folderPath = path.join(path.resolve(root), 'extraction-tmp');
-      await this.fs.mkdir(folderPath, { recursive: true });
-    } else if (!path.isAbsolute(folderPath) || !(await this.fs.stat(folderPath)).isDirectory()) {
-      return errorResult('invalid-destination', 'The selected collection folder is unavailable.');
+  async openDestination(ownerId) {
+    const settingsResult = await this.getSettings();
+    const root = settingsResult?.ok === true ? settingsResult.settings?.pipelinesRootPath : null;
+    if (typeof root !== 'string' || !path.isAbsolute(root)) {
+      return errorResult('missing-pipeline-root', 'Choose a Pipelines root in Settings before extracting.');
     }
+    const folderPath = path.join(path.resolve(root), 'extraction-tmp');
+    await this.fs.mkdir(folderPath, { recursive: true });
     const handle = `destination_${this.randomId()}`;
     this.destinations.set(handle, { ownerId, folderPath });
     const entries = [];

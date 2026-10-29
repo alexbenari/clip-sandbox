@@ -49,15 +49,6 @@ export class RangeCaptureModel {
     }
   }
 
-  // One exact range and no draft, such as a collection clip whose source frames are known.
-  static withExactRange(start: IExactFrameEndpoint, end: IExactFrameEndpoint, sourceGeneration: number): RangeCaptureModel {
-    const model = new RangeCaptureModel(sourceGeneration);
-    model.assertCurrentSource(start);
-    model.assertCurrentSource(end);
-    model.ranges.push(CapturedRanges.lock(CapturedRanges.id(++model.sequence), start, end));
-    return model;
-  }
-
   // Rebuilds a queue from ranges and a draft kept between runs. Range numbers must be unique, and the
   // next number must not reuse one of them.
   static restore({ ranges, draft, nextRangeSequence }: Readonly<{

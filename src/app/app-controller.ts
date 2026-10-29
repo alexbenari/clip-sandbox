@@ -27,7 +27,6 @@ import { AddToCollectionWorkflow } from './add-to-collection-workflow.js';
 import { FolderSelectionWorkflow } from './folder-selection-workflow.js';
 import { TrashClipsWorkflow } from './trash-clips-workflow.js';
 import { ZoomWorkflow } from './zoom-workflow.js';
-import { CollectionRefinementWorkflow } from './collection-refinement-workflow.js';
 import { GridContextMenuWorkflow } from './grid-context-menu-workflow.js';
 import { GifRangeRefinementWorkflow } from './gif-range-refinement-workflow.js';
 import { FullScreenChangeWorkflow } from './full-screen-change-workflow.js';
@@ -50,11 +49,9 @@ import { CaptureRejectionText } from './capture-rejection-text.js';
 import { GifRangesPanelControl } from '../ui/gif-ranges-panel-control.js';
 import { ElectronGifSessionServices } from '../adapters/electron/electron-gif-session-services.js';
 import { ElectronClipCapturesStoreService } from '../adapters/electron/electron-clip-captures-store-service.js';
-import { ElectronCollectionClipRefinementService } from '../adapters/electron/electron-collection-clip-refinement-service.js';
 import { ElectronClipSourceMovieService } from '../adapters/electron/electron-clip-source-movie-service.js';
 import { ClipSourceMovieRefresher } from './clip-source-movie-refresher.js';
 import { GifExtractionSession } from './gif-extraction-session.js';
-import { CollectionClipRefinementSession } from './collection-clip-refinement-session.js';
 import { SavedCaptureStorage } from './capture-storage.js';
 import { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 import { AppSettingsService } from './app-settings-service.js';
@@ -103,7 +100,6 @@ export class AppController {
     const pipelineCatalog = ElectronPipelineCatalogService.fromWindow(window, folders);
     const folderFiles = ElectronFolderFileService.fromWindow(window);
     const collectionFileWriter = new CollectionFileWriter(folderFiles, state);
-    const collectionRefinementService = ElectronCollectionClipRefinementService.tryCreate(window);
     const clipSourceMovieService = ElectronClipSourceMovieService.tryCreate(window);
     const clipEditor = new ClipEditor({ runtimeEditingService: ElectronVideoEditService.fromWindow(window), videoEditCatalog });
     const activityLogger = new ActivityLogger({ clock: window });
@@ -118,10 +114,8 @@ export class AppController {
       getCurrentFolderAccess: () => state.currentFolderAccess,
     });
     // Non-Electron DOM tests and unsupported hosts keep the shell available without native movie opening.
-    // GIF Extraction keeps its captures in the desktop store; Collection Refine saves none.
     const captureStore = ElectronClipCapturesStoreService.tryCreate(window);
     const gifExtractionServices = captureStore ? ElectronGifSessionServices.tryCreate(window) : null;
-    const collectionRefinementGifServices = collectionRefinementService ? ElectronGifSessionServices.tryCreate(window) : null;
 
     // Controls.
     const zoomOverlay = ZoomOverlayControl.fromDocument(document, {
@@ -176,7 +170,6 @@ export class AppController {
     const collectionScreen = CollectionScreen.fromDocument(document, { grid, toolbar: mainToolbarControl });
     const frameReviewPlayer = new FrameReviewPlayerControl({ document, fullScreen: fullscreenAdapter });
     const gifWorkflowKeyboard = new GifWorkflowKeyboard();
-    const hasClipsPanel = ApplicationShellControl.sidePanelsIn(document).some(panel => panel.id === 'clips');
     // Saving refreshes the open folder through folder selection, which itself saves first; the callback below closes that loop.
     const openFolderRefresher = new OpenFolderRefresher({
       folders,
@@ -202,18 +195,8 @@ export class AppController {
         capturePositioning: frameReviewPlayer,
       })
       : null;
-    const collectionRefinementSession = collectionRefinementGifServices
-      ? new CollectionClipRefinementSession(collectionRefinementGifServices.frameReview, collectionRefinementGifServices.thumbnails, {
-        ...sessionReporting,
-        extractionService: collectionRefinementGifServices.extractionService,
-      })
-      : null;
     const gifRangesPanelControl = gifExtractionSession
       ? GifRangesPanelControl.fromDocument(document, gifExtractionSession, { player: frameReviewPlayer })
-      : null;
-    // The refined-clip panel mounts into the shell's Clips panel, so it exists only where that panel does.
-    const collectionRangesPanelControl = collectionRefinementSession && hasClipsPanel
-      ? GifRangesPanelControl.forCollectionRefinement(collectionRefinementSession, { document, player: frameReviewPlayer })
       : null;
     const gifExtractionScreen = new GifExtractionScreen({
       player: frameReviewPlayer,
@@ -229,23 +212,11 @@ export class AppController {
       rangesPanel: gifRangesPanelControl ?? undefined,
       document,
     });
-    const collectionRefineScreen = RefineGifScreen.forCollectionRefinement({
-      player: frameReviewPlayer,
-      keyboard: gifWorkflowKeyboard,
-      session: collectionRefinementSession ?? undefined,
-      rangesPanel: collectionRangesPanelControl ?? undefined,
-      document,
-    });
-    const refineScreens = [
-      { id: refineGifScreen.id, session: gifExtractionSession },
-      { id: collectionRefineScreen.id, session: collectionRefinementSession },
-    ];
-    const refineScreenLeavePolicy = new RefineScreenLeavePolicy({
-      refineScreens, collectionRefineScreenId: collectionRefineScreen.id, reporter: activityReporter,
-    });
+    const refineScreens = [{ id: refineGifScreen.id, session: gifExtractionSession }];
+    const refineScreenLeavePolicy = new RefineScreenLeavePolicy({ refineScreens });
     const shell = ApplicationShellControl.fromDocument(document, {
       initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
-      screens: [gifExtractionScreen, collectionScreen, refineGifScreen, collectionRefineScreen, settingsScreen],
+      screens: [gifExtractionScreen, collectionScreen, refineGifScreen, settingsScreen],
       leavePolicy: refineScreenLeavePolicy,
     });
     shell.on('screenChanged', screen => keyboardMap?.render(screen));
@@ -271,7 +242,7 @@ export class AppController {
       screenChanges: shell,
     });
     const pipelineCatalogRefresher = new PipelineCatalogRefresher({
-      publishers: [gifExtractionSession, collectionRefinementSession],
+      publishers: [gifExtractionSession],
       catalog: pipelineCatalogControl,
     });
     const collectionView = new CollectionViewWorkflow({
@@ -381,32 +352,14 @@ export class AppController {
       reporter: activityReporter,
       appText,
     });
-    const collectionRefinement = new CollectionRefinementWorkflow({
-      refinementSession: collectionRefinementSession,
-      sourceLookup: collectionRefinementService,
-      refineScreen: collectionRefineScreen,
-      refinedClipList: collectionRangesPanelControl,
-      navigation: shell,
-      collectionScreenId: collectionScreen.id,
-      pipelineWorkingCopy,
-      openFolder: state,
-      diagnostics,
-      stagedChanges: refineLeave,
-      reporter: activityReporter,
-    });
     const gridContextMenu = new GridContextMenuWorkflow({
       pipelineWorkingCopy,
-      openFolder: state,
-      refinementAvailability: collectionRefinementService,
       grid,
       menu: gridContextMenuControl,
-      navigation: shell,
-      collectionScreenId: collectionScreen.id,
       zoom: zoomOverlay,
       fullScreen: fullscreenAdapter,
       addToCollection,
       trashClips,
-      collectionRefinement,
     });
     const gifRangeRefinement = new GifRangeRefinementWorkflow({
       session: gifExtractionSession,
@@ -472,17 +425,15 @@ export class AppController {
       },
       disposeWorkflow: async () => {
         for (const workflow of [collectionView, collectionSave, addToCollection, folderSelection, trashClips,
-          zoom, collectionRefinement, gridContextMenu, gifRangeRefinement, refineLeave, pipelineCatalogRefresher, settingsWorkflow,
+          zoom, gridContextMenu, gifRangeRefinement, refineLeave, pipelineCatalogRefresher, settingsWorkflow,
           controlFailureReporting, clipSourceMovies]) workflow.dispose();
-        await Promise.all([gifExtractionSession?.dispose(), collectionRefinementSession?.dispose()]);
+        await gifExtractionSession?.dispose();
       },
       destroyControls: () => {
         grid.dispose();
         gifExtractionScreen.destroy();
         refineGifScreen.destroy();
-        collectionRefineScreen.destroy();
         gifRangesPanelControl?.destroy();
-        collectionRangesPanelControl?.destroy();
         frameReviewPlayer.destroy();
         utilities?.destroy();
         activityIndicatorControl.destroy();

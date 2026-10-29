@@ -60,6 +60,25 @@ function captureQueue({ storage = new UnsavedCaptureStorage() as ICaptureStorage
   return { queue, status, movie };
 }
 
+function savedDraftStorage(): ICaptureStorage {
+  let restoring = true;
+  return {
+    get restoring() { return restoring; },
+    loading: false,
+    hasStaleRanges: false,
+    startForMovie() {},
+    endRestore() { restoring = false; },
+    stopShowingLoading() {},
+    attach: async () => savedDraftModel(),
+    save() {},
+    isStale: () => false,
+    markStale() {},
+    forgetRange() {},
+    canRemoveCaptures: movieOpen => movieOpen,
+    invalidate() {},
+  };
+}
+
 function savedDraftModel(): RangeCaptureModel {
   const saved = (frameIndex: number) => CaptureEndpoints.savedExact(frameIndex, frame(frameIndex).frameInfoHash, BigInt(frameIndex * 1_000), 1);
   return RangeCaptureModel.restore({ ranges: [], draft: { start: saved(3), end: null }, nextRangeSequence: 1 }, 1);
@@ -133,10 +152,10 @@ describe('CaptureQueue', () => {
   });
 
   it('says why a saved draft cannot be locked before exact frames are ready', async () => {
-    const { queue, status, movie } = captureQueue();
+    const { queue, status, movie } = captureQueue({ storage: savedDraftStorage() });
     movie.reviewState = FrameReviewState.create('indexing', 1);
     movie.review = { id: 'session_12345678', state: () => movie.reviewState } as unknown as IFrameReviewSession;
-    queue.useModel(savedDraftModel());
+    await queue.restore(movie.review);
 
     const result = await queue.lockRange();
 
@@ -145,14 +164,14 @@ describe('CaptureQueue', () => {
   });
 
   it('says that a saved draft changed while its frames were being checked, instead of locking it', async () => {
-    const { queue, status, movie } = captureQueue();
+    const { queue, status, movie } = captureQueue({ storage: savedDraftStorage() });
     let answer: (identity: ReturnType<typeof frame>) => void = () => undefined;
     movie.review = {
       id: 'session_12345678',
       state: () => movie.reviewState,
       frameIdentity: vi.fn(() => new Promise(resolve => { answer = resolve; })),
     } as unknown as IFrameReviewSession;
-    queue.useModel(savedDraftModel());
+    await queue.restore(movie.review);
 
     const locking = queue.lockRange();
     queue.markStart(exactCapture(4));
@@ -165,14 +184,14 @@ describe('CaptureQueue', () => {
   });
 
   it('stops without a word on the status line when the movie was replaced while the saved frames were checked', async () => {
-    const { queue, status, movie } = captureQueue();
+    const { queue, status, movie } = captureQueue({ storage: savedDraftStorage() });
     let answer: (identity: ReturnType<typeof frame>) => void = () => undefined;
     movie.review = {
       id: 'session_12345678',
       state: () => movie.reviewState,
       frameIdentity: vi.fn(() => new Promise(resolve => { answer = resolve; })),
     } as unknown as IFrameReviewSession;
-    queue.useModel(savedDraftModel());
+    await queue.restore(movie.review);
 
     const locking = queue.lockRange();
     status.show('Opening Next.mkv');

@@ -2,7 +2,7 @@ import type { ActivityErrorOptions } from './activity-logger.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { IAppSettings } from './app-settings.js';
 import type { AppSettingsService, SettingsResult } from './app-settings-service.js';
-import type { IScreenNavigation } from './collection-refinement-workflow.js';
+import type { IScreenNavigation } from './screen-navigation.js';
 import type { IEventSource } from './event-source.js';
 
 export interface ISettingsView extends IEventSource<{

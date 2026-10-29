@@ -16,7 +16,7 @@ interface IWireResponse {
 
 interface IElectronClipExtractionApi {
   subscribeProgress(listener: (value: unknown) => void): () => void;
-  openDestination(request?: Readonly<{ folderPath: string }>): Promise<IWireResponse>;
+  openDestination(): Promise<IWireResponse>;
   extract(request: unknown): Promise<IWireResponse>;
   saveCollection(request: unknown): Promise<IWireResponse>;
   cancel(extractionOperationId: string): Promise<IWireResponse>;
@@ -45,8 +45,8 @@ export class ElectronClipExtractionService implements IClipExtractionService {
     this.api = api;
   }
 
-  async openExtractionDestination(request?: Readonly<{ folderPath: string }>): Promise<IExtractionDestinationSnapshot> {
-    const result = this.record(this.response(await this.api.openDestination(request)), 'extraction destination');
+  async openExtractionDestination(): Promise<IExtractionDestinationSnapshot> {
+    const result = this.record(this.response(await this.api.openDestination()), 'extraction destination');
     const destinationHandle = this.opaqueId(result.destinationHandle, 'destination');
     const folderPath = this.absolutePath(result.folderPath);
     if (!Array.isArray(result.entries)) throw new Error('The extraction destination entries are invalid.');

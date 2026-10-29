@@ -101,15 +101,6 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     this.selected = null;
   }
 
-  // Replaces the queue with a model built elsewhere, such as the one range of a collection clip.
-  useModel(model: RangeCaptureModel): void {
-    this.model = model;
-    const review = this.deps.movie.review;
-    if (!review) return;
-    for (const range of model.snapshot.ranges) this.captureThumbnails.markMissing(range.id);
-    void this.drawImportedThumbnails(review, this.deps.movie.sourceGeneration);
-  }
-
   endRestore(): void { this.deps.storage.endRestore(); }
   stopShowingLoading(): void { this.deps.storage.stopShowingLoading(); }
 
@@ -419,15 +410,6 @@ export class CaptureQueue implements IEventSource<ICaptureQueueEvents> {
     failures += await this.drawRangeThumbnails(review, generation);
     if (failures > 0 && current()) {
       this.deps.failures.report(`${failures} saved start thumbnails could not be recreated. Retry them from Clips.`);
-    }
-  }
-
-  private async drawImportedThumbnails(review: IFrameReviewSession, generation: number): Promise<void> {
-    const failures = await this.drawRangeThumbnails(review, generation);
-    if (failures > 0 && this.reviewIsCurrent(review, generation)) {
-      this.deps.failures.report(failures === 1
-        ? 'A start thumbnail could not be drawn. Retry it from Clips.'
-        : `${failures} start thumbnails could not be drawn. Retry them from Clips.`);
     }
   }
 

@@ -78,11 +78,6 @@ export class RangeRefinement implements IRangeRefinementDraftOwner {
     this.lastSeenRevision = null;
   }
 
-  // With a fixed destination, a range being refined is extracted only after its refinement is locked.
-  blocksExtraction(rangeId: CapturedRangeId): boolean {
-    return this.refinement?.snapshot.rangeId === rangeId && this.refinement.snapshot.status !== 'committed';
-  }
-
   currentSourceGeneration(): number | null {
     return this.deps.queue.hasModel ? this.deps.movie.sourceGeneration : null;
   }

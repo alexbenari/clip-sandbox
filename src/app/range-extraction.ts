@@ -10,7 +10,7 @@ import {
   type IExtractionBatchProgress,
 } from './clip-extraction-workflow.js';
 import { EventSource, type EventHandler, type IEventSource } from './event-source.js';
-import { ExtractionPublisher, type ExtractionDestination } from './extraction-publisher.js';
+import { ExtractionPublisher } from './extraction-publisher.js';
 import type { GifSessionStatus } from './gif-session-status.js';
 import type { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 
@@ -41,7 +41,6 @@ export interface IRangeExtractionEvents {
 
 type RangeExtractionDependencies = Readonly<{
   extractionService?: IClipExtractionService;
-  destination?: ExtractionDestination;
   publications?: IExtractionPublicationListener;
   status: Pick<GifSessionStatus, 'show' | 'changed'>;
   reporter?: Pick<ActivityReporter, 'progress' | 'success'>;
@@ -55,25 +54,16 @@ const PENDING: ClipExtractionEntryState = Object.freeze({ kind: 'pending' });
 export class RangeExtraction implements IExtractionProgressQuery, IEventSource<IRangeExtractionEvents> {
   private readonly events = new EventSource<IRangeExtractionEvents>();
   private workflow: ClipExtractionWorkflow | null = null;
-  private target: ExtractionDestination | undefined;
   private readonly reportedWarnings = new Set<string>();
   private publishedInRun = false;
 
-  constructor(private readonly deps: RangeExtractionDependencies) {
-    this.target = deps.destination;
-  }
+  constructor(private readonly deps: RangeExtractionDependencies) {}
 
   get available(): boolean { return this.workflow !== null; }
   get batchProgress(): IExtractionBatchProgress | null { return this.workflow?.batchProgress ?? null; }
-  get destination(): ExtractionDestination | undefined { return this.target; }
 
   on<TName extends keyof IRangeExtractionEvents>(name: TName, handler: EventHandler<IRangeExtractionEvents[TName]>): () => void {
     return this.events.on(name, handler);
-  }
-
-  setDestination(destination: ExtractionDestination): void {
-    if (this.workflow?.batchProgress) throw new Error('Wait for the current extraction to finish.');
-    this.target = destination;
   }
 
   // Starts afresh for a newly opened movie; earlier extraction states belonged to the previous movie.
@@ -84,7 +74,6 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
       ? new ClipExtractionWorkflow(
         new ClipExtractor(service),
         new ExtractionPublisher(service, {
-          destination: this.target,
           onPublished: publication => {
             this.publishedInRun = true;
             return this.deps.publications?.onFolderContentsPublished(publication.folderPath);
@@ -165,8 +154,7 @@ export class RangeExtraction implements IExtractionProgressQuery, IEventSource<I
       status.show(failed ? 'Some clips need attention' : cancelled ? 'Extraction cancelled' : 'Extraction complete');
       if (failed) this.deps.failures.report('Some clips could not be completed. Retry them from Clips.');
       else if (cancelled) this.deps.reporter?.progress('Extraction stopped. Completed clips were saved.');
-      else this.deps.reporter?.success(`Exact clips were added to ${this.target?.kind === 'collection'
-        ? this.target.collectionFilename : this.target?.folderPath ?? 'extraction-tmp'}.`);
+      else this.deps.reporter?.success('Exact clips were added to extraction-tmp.');
       for (const rangeId of rangeIds) this.reportWarningOnce(rangeId);
       this.events.emit('extractionStateChanged');
     } catch (error) {

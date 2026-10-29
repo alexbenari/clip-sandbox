@@ -8,7 +8,6 @@ import { flushPendingWork } from '../support/flush-pending-work.js';
 
 const stagedEnd: readonly UnlockedEndpointChange[] = [{ endpoint: 'end', frameIndex: 7 }];
 const refineGif = { id: 'refine-gif' };
-const collectionRefine = { id: 'collection-refine' };
 const extractionScreen = { id: 'gif-extraction' };
 
 class FakeDiscardPrompt extends EventSource<{ confirmed: void; cancelled: void }> {
@@ -18,25 +17,20 @@ class FakeDiscardPrompt extends EventSource<{ confirmed: void; cancelled: void }
 
 class FakeRefineSession {
   unlockedChanges: readonly UnlockedEndpointChange[];
-  extractionBatch: unknown = null;
   constructor(staged: readonly UnlockedEndpointChange[]) { this.unlockedChanges = staged; }
-  get snapshot() { return { extractionBatch: this.extractionBatch }; }
   get refinementDraft() { return { unlockedChanges: this.unlockedChanges }; }
   abandonRefinement = vi.fn(() => { this.unlockedChanges = []; return null; });
 }
 
-function leaveWorkflow({ staged = stagedEnd, activeScreen = refineGif } = {}) {
+function leaveWorkflow({ staged = stagedEnd } = {}) {
   const session = new FakeRefineSession(staged);
-  const collectionSession = new FakeRefineSession(staged);
-  const refineScreens = [{ id: refineGif.id, session }, { id: collectionRefine.id, session: collectionSession }];
-  const policy = new RefineScreenLeavePolicy({
-    refineScreens, collectionRefineScreenId: collectionRefine.id, reporter: { progress: vi.fn() },
-  });
+  const refineScreens = [{ id: refineGif.id, session }];
+  const policy = new RefineScreenLeavePolicy({ refineScreens });
   const prompt = new FakeDiscardPrompt();
-  const navigation = { activeScreen: activeScreen as { id: string }, activate: vi.fn((id: string) => { navigation.activeScreen = { id }; }) };
+  const navigation = { activeScreen: refineGif as { id: string }, activate: vi.fn((id: string) => { navigation.activeScreen = { id }; }) };
   const screenChanges = new EventSource<{ screenChangeRefused: IScreenChangeRequest; screenChanged: { id: string } }>();
   const workflow = new RefineLeaveWorkflow({ policy, prompt, refineScreens, navigation, screenChanges });
-  return { workflow, session, collectionSession, prompt, navigation, screenChanges };
+  return { workflow, session, prompt, navigation, screenChanges };
 }
 
 describe('RefineLeaveWorkflow', () => {
@@ -86,17 +80,6 @@ describe('RefineLeaveWorkflow', () => {
     await flushPendingWork();
 
     expect(navigation.activeScreen).toEqual(refineGif);
-  });
-
-  it('does not ask about a Collection Refine screen change held while its clip is still being saved', async () => {
-    const { prompt, collectionSession, screenChanges } = leaveWorkflow({ activeScreen: collectionRefine });
-    collectionSession.extractionBatch = { total: 1, completed: 0 };
-
-    screenChanges.emit('screenChangeRefused', { from: collectionRefine, to: { id: 'collection' } });
-    await flushPendingWork();
-
-    expect(prompt.open).not.toHaveBeenCalled();
-    expect(collectionSession.unlockedChanges).toEqual(stagedEnd);
   });
 
   it('withdraws an open question when another screen becomes active', async () => {

@@ -1,6 +1,6 @@
 import type { CapturedRangeId } from '../domain/captured-range.js';
 import type { ActivityReporter } from './activity-reporter.js';
-import type { IScreenNavigation } from './collection-refinement-workflow.js';
+import type { IScreenNavigation } from './screen-navigation.js';
 import type { IEventSource } from './event-source.js';
 import type { GifExtractionSession } from './gif-extraction-session.js';
 import type { RefineLeaveWorkflow } from './refine-leave-workflow.js';
