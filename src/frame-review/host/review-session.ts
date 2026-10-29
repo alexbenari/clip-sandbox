@@ -7,7 +7,7 @@ import { BackendError } from '../model/backend-error.js';
 import { FrameReviewState, type IFrameReviewState } from '../model/frame-review-state.js';
 import { ScrubRequestScheduler } from '../scrub-request-scheduler.js';
 import type { IExactFrameReader, IHostExactFrame } from './bestsource-frame-reader.js';
-import type { IHostPlaybackFrame, IReviewPlaybackEngine } from './libvlc-playback-engine.js';
+import type { IHostPlaybackFrame, IPlaybackOpenOptions, IReviewPlaybackEngine } from './libvlc-playback-engine.js';
 import type { IExactReviewProxyHostResult, IReviewPreparationUpdate } from './review-preparation-service.js';
 import type { IPlaybackProxyEntry } from './playback-proxy-cache.js';
 import { ProxyPlaybackClock, type IProxyLoopTimes } from './proxy-playback-clock.js';
@@ -33,6 +33,7 @@ export interface IReviewSessionOptions {
   readonly id: string;
   readonly sourcePath: string;
   readonly previewBounds: Readonly<{ maxWidth: number; maxHeight: number }>;
+  readonly muted: boolean;
   readonly playback: IReviewPlaybackEngine;
   readonly exact: IExactFrameReader;
   readonly prepare: (
@@ -103,11 +104,7 @@ export class ReviewSession {
     if (this.opened) throw new BackendError('invalid-state', 'Frame-review session is already open.', true);
     this.opened = true;
     this.publishState('opening');
-    const playbackStatus = await this.options.playback.open(this.options.sourcePath, {
-      muted: false,
-      maxWidth: this.options.previewBounds.maxWidth,
-      maxHeight: this.options.previewBounds.maxHeight,
-    });
+    const playbackStatus = await this.options.playback.open(this.options.sourcePath, this.playbackOpenOptions());
     this.playbackDurationUs = playbackStatus.lengthUs;
     if (this.disposed) return;
     this.publishState('playback-ready');
@@ -384,11 +381,7 @@ export class ReviewSession {
           const playbackStatus = await this.options.playback.status();
           const wasPlaying = playbackStatus.state === 'playing';
           if (wasPlaying) await this.options.playback.pause();
-          await this.options.playback.open(prepared.proxyPath, {
-            muted: false,
-            maxWidth: this.options.previewBounds.maxWidth,
-            maxHeight: this.options.previewBounds.maxHeight,
-          });
+          await this.options.playback.open(prepared.proxyPath, this.playbackOpenOptions());
           const target = this.pendingPlaybackTargetUs ?? playbackStatus.timestampUs;
           this.pendingPlaybackTargetUs = target;
           await this.options.playback.seek(target);
@@ -495,15 +488,16 @@ export class ReviewSession {
     });
   }
 
+  private playbackOpenOptions(): IPlaybackOpenOptions {
+    const { muted, previewBounds } = this.options;
+    return { muted, maxWidth: previewBounds.maxWidth, maxHeight: previewBounds.maxHeight };
+  }
+
   private async recoverPlaybackAt(frameIndex: number): Promise<void> {
     const proxyPath = this.preparedProxyPath;
     if (!proxyPath) { this.playbackDisabled = true; return; }
     try {
-      await this.options.playback.open(proxyPath, {
-        muted: false,
-        maxWidth: this.options.previewBounds.maxWidth,
-        maxHeight: this.options.previewBounds.maxHeight,
-      });
+      await this.options.playback.open(proxyPath, this.playbackOpenOptions());
       this.abLoopArmed = false;
       await this.options.playback.seek(this.requireProxyClock().at(frameIndex));
       await this.options.playback.pause();
@@ -526,11 +520,7 @@ export class ReviewSession {
       const playbackStatus = await this.options.playback.status();
       const wasPlaying = playbackStatus.state === 'playing';
       if (wasPlaying) await this.options.playback.pause();
-      await this.options.playback.open(proxy.proxyPath, {
-        muted: false,
-        maxWidth: this.options.previewBounds.maxWidth,
-        maxHeight: this.options.previewBounds.maxHeight,
-      });
+      await this.options.playback.open(proxy.proxyPath, this.playbackOpenOptions());
       const target = this.pendingPlaybackTargetUs ?? playbackStatus.timestampUs;
       this.pendingPlaybackTargetUs = target;
       await this.options.playback.seek(target);

@@ -67,6 +67,7 @@ export class ElectronFrameReviewService implements IFrameReviewService {
     const response = this.response(await this.api.open({
       sourceHandle: request.sourceHandle,
       previewBounds: request.previewBounds,
+      muted: request.muted,
     }));
     const result = FrameReviewWire.record(response, 'frame-review open result');
     const sessionId = FrameReviewOpaqueId.sessionId(result.sessionId);

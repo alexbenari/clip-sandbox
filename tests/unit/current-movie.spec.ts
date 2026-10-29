@@ -19,14 +19,14 @@ function review(phase: Parameters<typeof FrameReviewState.create>[0] = 'playback
   return { session, emit: (event: FrameReviewEvent) => listener(event) };
 }
 
-function currentMovie(frameReview: Partial<IFrameReviewService> = {}) {
+function currentMovie(frameReview: Partial<IFrameReviewService> = {}, muted = false) {
   const status = new GifSessionStatus();
   const reporter = { progress: vi.fn(), success: vi.fn() };
   const failures = { report: vi.fn() };
   const movie = new CurrentMovie({
     frameReview: { chooseSource: vi.fn(async () => source), open: vi.fn(), ...frameReview } as IFrameReviewService,
     previewBounds: { maxWidth: 1280, maxHeight: 720 },
-    status, reporter, failures,
+    muted, status, reporter, failures,
   });
   return { movie, status, reporter, failures };
 }
@@ -70,6 +70,17 @@ describe('CurrentMovie', () => {
     expect(reporter.success).toHaveBeenCalledWith('Exact capture is ready for Sample Movie.mkv.');
     expect(ready).toHaveBeenCalledOnce();
     expect(status.message).toBe('Exact capture ready');
+  });
+
+  it('opens the movie muted when its owner asks for silence', async () => {
+    const open = vi.fn(async () => review().session);
+    const { movie } = currentMovie({ open }, true);
+
+    await movie.openCandidate(source);
+
+    expect(open).toHaveBeenCalledWith({
+      sourceHandle: source.sourceHandle, previewBounds: { maxWidth: 1280, maxHeight: 720 }, muted: true,
+    });
   });
 
   it('reports at once that a cached movie is ready', async () => {

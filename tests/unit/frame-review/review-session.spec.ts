@@ -61,14 +61,17 @@ class PlaybackFake implements IReviewPlaybackEngine {
   shutdownCount = 0;
   readonly requestedPlayAtTimes: bigint[] = [];
   readonly openedPaths: string[] = [];
+  readonly openedSound: string[] = [];
   readonly loopCalls: string[] = [];
   failReset = false;
   failRecovery = false;
   setFrameListener(listener: ((frame: IHostPlaybackFrame) => void) | undefined) { this.listener = listener; }
   setEndedListener(listener: (() => void) | undefined) { this.endedListener = listener; }
-  async open(path: string, _options: IPlaybackOpenOptions) {
+  async open(path: string, options: IPlaybackOpenOptions) {
     if (this.failRecovery && this.openedPaths.length > 0) throw new Error('reopen failed');
-    this.openedPaths.push(path); return this.status();
+    this.openedPaths.push(path);
+    this.openedSound.push(`${path}:${options.muted ? 'muted' : 'sound'}`);
+    return this.status();
   }
   async play() { this.stateValue = 'playing'; }
   async playAt(timestampUs: bigint) {
@@ -112,7 +115,7 @@ describe('review session', () => {
   it('jumps from the live playback clock, clamps to the end, and keeps playback running', async () => {
     const playback = new PlaybackFake();
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact: new ExactFake(),
       prepare: async () => prepared, emit: vi.fn() });
     await session.open();
     await session.whenPrepared();
@@ -131,6 +134,56 @@ describe('review session', () => {
     await session.dispose();
   });
 
+  it('plays the source and its prepared proxy muted when the movie was opened muted', async () => {
+    const playback = new PlaybackFake();
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: true, playback, exact: new ExactFake(),
+      prepare: async () => prepared, emit: vi.fn() });
+
+    await session.open();
+    await session.whenPrepared();
+
+    expect(playback.openedSound).toEqual(['C:/movie.mp4:muted', 'C:/cache/proxy.mkv:muted']);
+    await session.dispose();
+  });
+
+  it('keeps a muted movie muted when playback moves to an early proxy and when it recovers', async () => {
+    const preparation = deferred<IExactReviewProxyHostResult>();
+    const playback = new PlaybackFake();
+    let report: ((update: IReviewPreparationUpdate) => void) | undefined;
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: true, playback, exact: new ExactFake(),
+      prepare: (_path, emit) => { report = emit; return preparation.promise; }, emit: () => undefined });
+    await session.open();
+    report?.({
+      phase: 'proxy-ready', progressPercent: null,
+      proxy: { cacheKey: 'a'.repeat(64), cacheHit: false, proxyPath: 'C:/early/proxy.mkv', normalizedSourcePath: null },
+    });
+    await vi.waitFor(() => expect(playback.openedPaths).toContain('C:/early/proxy.mkv'));
+    preparation.resolve(previewPrepared);
+    await session.whenPrepared();
+    await session.startExactPreview({ startFrameIndex: 1, endFrameIndex: 2 });
+    playback.failReset = true;
+
+    await expect(session.pauseExactPreview()).rejects.toThrow('reset failed');
+
+    expect(playback.openedSound).toEqual(['C:/movie.mp4:muted', 'C:/early/proxy.mkv:muted', 'C:/cache/proxy.mkv:muted']);
+    await session.dispose();
+  });
+
+  it('keeps the sound of a movie opened with sound', async () => {
+    const playback = new PlaybackFake();
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact: new ExactFake(),
+      prepare: async () => prepared, emit: vi.fn() });
+
+    await session.open();
+    await session.whenPrepared();
+
+    expect(playback.openedSound).toEqual(['C:/movie.mp4:sound', 'C:/cache/proxy.mkv:sound']);
+    await session.dispose();
+  });
+
   it('resolves exact time by the index and uses indexed boundary frames', async () => {
     const exact = new ExactFake();
     const atTime = vi.fn(async () => exactFrame);
@@ -139,7 +192,7 @@ describe('review session', () => {
     exact.atTime = atTime;
     exact.scrub = scrub;
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback: new PlaybackFake(), exact,
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback: new PlaybackFake(), exact,
       prepare: async () => prepared, emit: vi.fn() });
     await session.open();
     await session.whenPrepared();
@@ -157,7 +210,7 @@ describe('review session', () => {
     const status = playback.status.bind(playback);
     playback.status = async () => Object.freeze({ ...await status(), timestampUs: 0n, lengthUs: 0n });
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact: new ExactFake(),
       prepare: async () => prepared, emit: vi.fn() });
     await session.open();
     await session.whenPrepared();
@@ -174,7 +227,7 @@ describe('review session', () => {
     exact.scrub = async index => Object.freeze({ ...exactFrame,
       identity: Object.freeze({ ...exactFrame.identity, frameIndex: index }) });
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact,
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact,
       prepare: async () => previewPrepared, emit: vi.fn() });
     await session.open();
     await session.whenPrepared();
@@ -195,7 +248,7 @@ describe('review session', () => {
     exact.scrub = async index => Object.freeze({ ...exactFrame,
       identity: Object.freeze({ ...exactFrame.identity, frameIndex: index }) });
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact,
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact,
       prepare: async () => previewPrepared, emit: vi.fn() });
     await session.open();
     await session.whenPrepared();
@@ -214,7 +267,7 @@ describe('review session', () => {
   it('keeps exact scrub available when reset and player reopening both fail', async () => {
     const playback = new PlaybackFake();
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact: new ExactFake(),
       prepare: async () => previewPrepared, emit: vi.fn() });
     await session.open();
     await session.whenPrepared();
@@ -230,7 +283,7 @@ describe('review session', () => {
   it('rejects a one-frame loop without changing the existing player state', async () => {
     const playback = new PlaybackFake();
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact: new ExactFake(),
       prepare: async () => previewPrepared, emit: vi.fn() });
     await session.open();
     await session.whenPrepared();
@@ -245,7 +298,7 @@ describe('review session', () => {
       proxyTimeline: Object.freeze({ ...previewPrepared.proxyTimeline!,
         pts: Object.freeze([1n, 1001n, 2001n, 3001n]), durationPts: 4001n }) });
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback: new PlaybackFake(), exact: new ExactFake(),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback: new PlaybackFake(), exact: new ExactFake(),
       prepare: async () => unsupported, emit: vi.fn() });
     await session.open();
     await session.whenPrepared();
@@ -267,7 +320,7 @@ describe('review session', () => {
       if (armCount === 1) await firstArm.promise;
     };
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact: new ExactFake(),
       prepare: async () => previewPrepared, emit: vi.fn() });
     await session.open();
     await session.whenPrepared();
@@ -287,7 +340,7 @@ describe('review session', () => {
     const exact = new ExactFake();
     const session = new ReviewSession({
       id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact,
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact,
       prepare: async () => prepared, emit: vi.fn(),
     });
     await session.open();
@@ -307,7 +360,7 @@ describe('review session', () => {
     exact.stepAdjacent = step;
     const emit = vi.fn();
     const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback: new PlaybackFake(), exact,
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback: new PlaybackFake(), exact,
       prepare: async () => prepared, emit });
     await session.open();
     await session.whenPrepared();
@@ -328,7 +381,7 @@ describe('review session', () => {
     const session = new ReviewSession({
       id: 'session_12345678',
       sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 },
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false,
       playback,
       exact,
       prepare: (_path: string, _emit: (update: IReviewPreparationUpdate) => void) => preparation.promise,
@@ -360,7 +413,7 @@ describe('review session', () => {
     const emit = vi.fn();
     const session = new ReviewSession({
       id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact,
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact,
       prepare: () => preparation.promise, emit,
     });
     await session.open();
@@ -379,7 +432,7 @@ describe('review session', () => {
     let report: ((update: IReviewPreparationUpdate) => void) | undefined;
     const session = new ReviewSession({
       id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact: new ExactFake(),
       prepare: (_path, emit) => { report = emit; return preparation.promise; }, emit: () => undefined,
     });
 
@@ -413,7 +466,7 @@ describe('review session', () => {
     let report: ((update: IReviewPreparationUpdate) => void) | undefined;
     const session = new ReviewSession({
       id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact: new ExactFake(),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact: new ExactFake(),
       prepare: (_path, emit) => { report = emit; return preparation.promise; }, emit: () => undefined,
     });
     await session.open();
@@ -435,7 +488,7 @@ describe('review session', () => {
     exact.scrub = async () => Object.freeze({ ...exactFrame, reviewTimeUs: 2_750_000n });
     const session = new ReviewSession({
       id: 'session_12345678', sourcePath: 'C:/movie.mp4',
-      previewBounds: { maxWidth: 960, maxHeight: 540 }, playback, exact,
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact,
       prepare: async () => prepared, emit: () => undefined,
     });
     await session.open();

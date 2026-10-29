@@ -69,6 +69,7 @@ export interface IExactFrameReader {
 export interface IFrameReviewHostOpenRequest {
   readonly sourceHandle: string;
   readonly previewBounds: Readonly<{ maxWidth: number; maxHeight: number }>;
+  readonly muted: boolean;
   readonly emit: (event: HostFrameReviewEvent) => void;
 }
 
@@ -217,6 +218,7 @@ export class FrameReviewHost {
       id,
       sourcePath,
       previewBounds: request.previewBounds,
+      muted: request.muted,
       playback,
       exact,
       prepare: (source, emit, signal) => this.preparation.prepare(source, emit, signal),

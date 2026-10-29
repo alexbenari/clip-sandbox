@@ -69,6 +69,19 @@ function thumbnailService(): IThumbnailCacheService {
 }
 
 describe('GifExtractionSession', () => {
+  it('opens the chosen movie with its sound on', async () => {
+    const open = vi.fn(async () => reviewSession());
+    const service: IFrameReviewService = {
+      chooseSource: vi.fn(async () => ({ name: 'Movie.mp4', sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789') })),
+      open,
+    };
+    const session = new GifExtractionSession(service, thumbnailService());
+
+    expect(await session.openMovie()).toBe('opened');
+
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ muted: false }));
+  });
+
   it('positions an explicitly opened movie after its last saved capture', async () => {
     const review = reviewSession();
     const capturePositioning = { showFrameAfterCapture: vi.fn(async () => undefined) };

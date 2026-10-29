@@ -48,6 +48,7 @@ const frameReviewApi = {
     return invokeFrameReview('clip-sandbox:frame-review-open', {
       sourceHandle: request?.sourceHandle,
       previewBounds: request?.previewBounds,
+      muted: request?.muted,
     });
   },
   command(sessionId, command, args = {}) {

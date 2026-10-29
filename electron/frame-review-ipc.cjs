@@ -73,6 +73,7 @@ class FrameReviewIpcBoundary {
       const session = await host.open({
         sourceHandle: request.sourceHandle,
         previewBounds: request.previewBounds,
+        muted: request.muted,
         emit,
       });
       sessionId = session.id;
@@ -156,7 +157,13 @@ class FrameReviewIpcBoundary {
     if (maxWidth > 16384 || maxHeight > 16384 || maxWidth * maxHeight * 4 > 256 * 1024 * 1024) {
       throw this.invalid('Frame-review preview bounds exceed the bridge limit.');
     }
-    return { operationId, sourceHandle, previewBounds: { maxWidth, maxHeight } };
+    return { operationId, sourceHandle, previewBounds: { maxWidth, maxHeight }, muted: this.muted(record.muted) };
+  }
+
+  muted(value) {
+    if (value === undefined) return false;
+    if (typeof value !== 'boolean') throw this.invalid('Frame-review muted must be true or false.');
+    return value;
   }
 
   commandRequest(payload) {

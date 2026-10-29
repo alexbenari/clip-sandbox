@@ -44,7 +44,7 @@ The roles below cover the classes found in an application's UI and the layers ju
 
 ## Controls
 
-- A control finds or creates its own elements. Give it a factory such as `MainToolbarControl.fromDocument(document, { appText })`. When the same control is used more than once, give each use a named factory (`GifRangesPanelControl.forCollectionRefinement(session, options)`) rather than a parameter that selects behavior.
+- A control finds or creates its own elements. Give it a factory such as `MainToolbarControl.fromDocument(document, { appText })`. When the same control is used in more than one place, give each use a named factory or method (`player.mountInGifScreen(host, emptyMessage)` and `player.mountInZoomEdit(host)`) rather than a parameter that selects behavior.
 - The composition root passes the document, or a root element, plus behavior: validators, a text service, callbacks. It never passes a control's inner elements, attributes or labels.
 - The factory decides which parts are required. A missing required part fails at once with a message that names it; a missing optional part disables only what depends on it.
 - A control decides which text it shows and where, including accessible labels. Wording used only by that control lives in the control. Wording shared across the application (counts, product terms, messages several parts use) comes from a text service injected into the control. The composition root passes the text service, never the text itself.

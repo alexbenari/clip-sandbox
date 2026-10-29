@@ -16,7 +16,7 @@ function loadPreload(invoke: (channel: string, payload: Record<string, unknown>)
   } as unknown as NodeJS.Module;
   delete require.cache[preloadPath];
   require(preloadPath);
-  return { zoomEdit: exposed.clipSandboxDesktop.zoomEdit, ipcRenderer };
+  return { zoomEdit: exposed.clipSandboxDesktop.zoomEdit, frameReview: exposed.clipSandboxDesktop.frameReview, ipcRenderer };
 }
 
 const cachedModules: Array<[string, NodeJS.Module | undefined]> = [];
@@ -75,5 +75,17 @@ describe('preload zoom edit save', () => {
     expect(channel).toBe('clip-sandbox:zoom-edit-save-progress');
     expect(listener.mock.calls).toEqual([[{ operationId: 'refine_12345678', stage: 'saving-media' }]]);
     expect(ipcRenderer.removeListener).toHaveBeenCalledWith('clip-sandbox:zoom-edit-save-progress', handler);
+  });
+});
+
+describe('preload frame review', () => {
+  it('opens a movie muted when the renderer asks for it', async () => {
+    const { frameReview, ipcRenderer } = loadPreload(echo);
+
+    await frameReview.open({ sourceHandle: 'source_12345678', previewBounds: { maxWidth: 640, maxHeight: 360 }, muted: true });
+
+    expect(ipcRenderer.invoke.mock.calls[0]).toEqual(['clip-sandbox:frame-review-open', {
+      operationId: expect.any(String), sourceHandle: 'source_12345678', previewBounds: { maxWidth: 640, maxHeight: 360 }, muted: true,
+    }]);
   });
 });

@@ -118,7 +118,7 @@ export class GifExtractionScreen implements IAppScreen {
 
   onActivate(): void {
     this.active = true;
-    this.options.player.mount(this.playerHost);
+    this.options.player.mountInGifScreen(this.playerHost);
     this.attachCurrentSession();
     this.options.keyboard.activate({
       player: this.options.player,
@@ -137,6 +137,7 @@ export class GifExtractionScreen implements IAppScreen {
         canExtractCurrent: () => this.canExtractCurrent(),
       },
     });
+    if (this.snapshot) this.render(this.snapshot);
   }
 
   onDeactivate(): void {
@@ -279,7 +280,7 @@ export class GifExtractionScreen implements IAppScreen {
     this.snapshot = snapshot;
     if (this.previewRevision !== null && snapshot.previewRevision !== this.previewRevision) {
       this.previewOperation += 1;
-      if (this.options.player.exactPreviewPhase() !== 'inactive') {
+      if (this.active && this.options.player.exactPreviewPhase() !== 'inactive') {
         this.pendingPreviewStop = this.options.player.stopExactPreview().catch(() => null);
       }
     }
@@ -311,7 +312,7 @@ export class GifExtractionScreen implements IAppScreen {
     this.loopButton.title = this.loopButton.disabled
       ? 'Select a two-frame or longer exact range and enter frame scrub to loop.' : 'Loop the exact range';
     this.openMovie.disabled = snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening';
-    this.options.player.setJumpUnavailable(this.openMovie.disabled);
+    if (this.active) this.options.player.setJumpUnavailable(this.openMovie.disabled);
     this.attachCurrentSession();
   }
 

@@ -47,6 +47,7 @@ export async function openPrepared(host: FrameReviewHost, movie: string) {
   const session = await host.open({
     sourceHandle: host.registerSource(movie),
     previewBounds: { maxWidth: 320, maxHeight: 240 },
+    muted: false,
     emit: (event: HostFrameReviewEvent) => {
       if (event.type === 'state') phases.push(event.state.phase);
       if (event.type === 'display-frame' && event.frame.kind === 'playback-frame') playbackFrames += 1;

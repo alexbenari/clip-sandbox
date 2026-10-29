@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { IGifExtractionSessionSnapshot } from '../../../src/app/gif-extraction-session.js';
 import type { IRangeCaptureSnapshot } from '../../../src/domain/range-capture-model.js';
+import type { IFrameReviewSession } from '../../../src/frame-review/frame-review-api.js';
 import { GifExtractionScreen } from '../../../src/ui/gif-extraction-screen.js';
 import type { FrameReviewPlayerControl } from '../../../src/ui/frame-review-player-control.js';
 import { GifWorkflowKeyboard } from '../../../src/ui/gif-workflow-keyboard.js';
-import { captureTransportListener, moviePlayer } from '../../support/movie-player.js';
+import { flushPendingWork } from '../../support/flush-pending-work.js';
+import { captureTransportListener, moviePlayer, playingReview } from '../../support/movie-player.js';
 
 function snapshot(ready: boolean): IGifExtractionSessionSnapshot {
   const capture: IRangeCaptureSnapshot = Object.freeze({
@@ -42,10 +44,12 @@ const stagedDraft: IGifExtractionSessionSnapshot = Object.freeze({
   }),
 });
 
-function activeExtractionScreen(player: FrameReviewPlayerControl, initial: IGifExtractionSessionSnapshot) {
+function activeExtractionScreen(
+  player: FrameReviewPlayerControl, initial: IGifExtractionSessionSnapshot, reviewSession: IFrameReviewSession | null = null,
+) {
   let publish = (_snapshot: IGifExtractionSessionSnapshot): void => undefined;
   const session = {
-    reviewSession: null,
+    reviewSession,
     subscribe: vi.fn((listener: (value: IGifExtractionSessionSnapshot) => void) => {
       publish = listener;
       listener(initial);
@@ -100,6 +104,52 @@ describe('GifExtractionScreen', () => {
     notifyTransport();
 
     expect([command('mark-start').disabled, command('mark-end').disabled]).toEqual([true, true]);
+  });
+
+  it('leaves the player as Zoom edit mode set it while the screen is inactive', async () => {
+    const player = moviePlayer();
+    vi.spyOn(player, 'exactPreviewPhase').mockReturnValue('running');
+    const stopLoop = vi.spyOn(player, 'stopExactPreview').mockResolvedValue(null);
+    const notifyTransport = captureTransportListener(player);
+    const { screen, publish } = activeExtractionScreen(player, stagedDraft);
+    screen.onDeactivate();
+    const zoomEditHost = document.createElement('div');
+    document.body.append(zoomEditHost);
+    player.mountInZoomEdit(zoomEditHost);
+    const clip = playingReview();
+    player.attachSession(clip.session);
+    stopLoop.mockClear();
+
+    publish({ ...stagedDraft, lifecycle: 'opening', previewRevision: 2 });
+    notifyTransport();
+    await flushPendingWork();
+    player.jumpBySeconds(2);
+
+    expect(zoomEditHost.contains(player.root)).toBe(true);
+    await vi.waitFor(() => expect(clip.jumpPlaybackBy).toHaveBeenCalledWith(2_000_000n));
+    expect(stopLoop).not.toHaveBeenCalled();
+  });
+
+  it('keeps jumping unavailable while a movie opens when the screen becomes active again', () => {
+    const player = moviePlayer();
+    const { screen } = activeExtractionScreen(player, { ...stagedDraft, lifecycle: 'opening' }, playingReview().session);
+    screen.onDeactivate();
+    player.mountInZoomEdit(document.createElement('div'));
+
+    screen.onActivate();
+
+    expect(player.root.querySelector<HTMLButtonElement>('[data-command="jump-seconds"]')?.disabled).toBe(true);
+  });
+
+  it('takes the player back into its own host when it becomes active again', () => {
+    const player = moviePlayer();
+    const { screen } = activeExtractionScreen(player, stagedDraft);
+    screen.onDeactivate();
+    player.mountInZoomEdit(document.createElement('div'));
+
+    screen.onActivate();
+
+    expect(screen.root.querySelector('.gif-workflow-player-host')?.contains(player.root)).toBe(true);
   });
 
   it('makes Lock range available only once the draft has a start and an end', () => {

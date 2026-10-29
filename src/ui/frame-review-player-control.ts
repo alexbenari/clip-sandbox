@@ -168,11 +168,23 @@ export class FrameReviewPlayerControl {
     this.renderState();
   }
 
-  mount(host: HTMLElement, emptyMessage = 'Open a movie to begin'): void {
+  mountInGifScreen(host: HTMLElement, emptyMessage = 'Open a movie to begin'): void {
+    this.mountWithLook(host, false);
+    this.emptyState.textContent = emptyMessage;
+  }
+
+  // Zoom edit mode shows only the picture; its hint line reports readiness and refusals.
+  mountInZoomEdit(host: HTMLElement): void {
+    this.mountWithLook(host, true);
+  }
+
+  private mountWithLook(host: HTMLElement, inZoomEdit: boolean): void {
     if (this.destroyed) throw new Error('Frame-review player is destroyed.');
     if (this.isMovieFullScreen()) void this.exitMovieFullScreen();
-    this.emptyState.textContent = emptyMessage;
+    this.root.classList.toggle('zoom-edit-look', inZoomEdit);
+    this.jumpUnavailable = false;
     host.replaceChildren(this.root);
+    this.renderState();
   }
 
   attachSession(session: IFrameReviewSession | null): void {

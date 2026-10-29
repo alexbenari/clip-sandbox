@@ -5,7 +5,8 @@ import type { IRangeRefinementDraftSnapshot } from '../../../src/app/range-refin
 import type { FrameReviewPlayerControl } from '../../../src/ui/frame-review-player-control.js';
 import { GifWorkflowKeyboard } from '../../../src/ui/gif-workflow-keyboard.js';
 import { RefineGifScreen } from '../../../src/ui/refine-gif-screen.js';
-import { captureTransportListener, moviePlayer } from '../../support/movie-player.js';
+import { flushPendingWork } from '../../support/flush-pending-work.js';
+import { captureTransportListener, moviePlayer, playingReview } from '../../support/movie-player.js';
 
 const identity = (frameIndex: number) => Object.freeze({
   frameIndex, originalFrameIndex: frameIndex, pts: BigInt(frameIndex * 1_000), duration: 1_000n,
@@ -120,6 +121,31 @@ describe('RefineGifScreen', () => {
 
     expect(screen.root.querySelector<HTMLSelectElement>('select[aria-label="Jump by seconds"]')?.value).toBe('7');
     expect(screen.root.querySelector('[data-command="jump-seconds"]')?.textContent).toBe('Jump +7s');
+  });
+
+  it('leaves the player as Zoom edit mode set it while the screen is inactive', async () => {
+    const player = moviePlayer();
+    vi.spyOn(player, 'exactPreviewPhase').mockReturnValue('running');
+    const stopLoop = vi.spyOn(player, 'stopExactPreview').mockResolvedValue(null);
+    const notifyTransport = captureTransportListener(player);
+    const { screen, publish } = activeRefineScreen(refinementSnapshot(), { player });
+    screen.onDeactivate();
+    vi.mocked(player.attachSession).mockRestore();
+    const zoomEditHost = document.createElement('div');
+    document.body.append(zoomEditHost);
+    player.mountInZoomEdit(zoomEditHost);
+    const clip = playingReview();
+    player.attachSession(clip.session);
+    stopLoop.mockClear();
+
+    publish({ ...extractionSnapshot(refinementSnapshot()), lifecycle: 'opening', previewRevision: 2 });
+    notifyTransport();
+    await flushPendingWork();
+    player.jumpBySeconds(2);
+
+    expect(zoomEditHost.contains(player.root)).toBe(true);
+    await vi.waitFor(() => expect(clip.jumpPlaybackBy).toHaveBeenCalledWith(2_000_000n));
+    expect(stopLoop).not.toHaveBeenCalled();
   });
 
   it('makes Extract unavailable while the locked range loops', () => {

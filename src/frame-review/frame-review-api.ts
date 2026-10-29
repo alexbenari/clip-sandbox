@@ -12,6 +12,7 @@ export type FrameReviewSessionId = string & { readonly [frameReviewSessionIdBran
 export interface IFrameReviewOpenRequest {
   readonly sourceHandle: FrameReviewSourceHandle;
   readonly previewBounds: Readonly<{ maxWidth: number; maxHeight: number }>;
+  readonly muted: boolean;
 }
 
 export interface IFrameReviewSourceSelection {

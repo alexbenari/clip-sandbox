@@ -56,6 +56,39 @@ describe('frame review IPC', () => {
     expect(JSON.stringify(response)).not.toContain('D:\\\\Movies');
   });
 
+  function openThroughIpc(extra: object) {
+    const handlers = new Map<string, Function>();
+    const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
+    const open = vi.fn(async (_request: { muted: boolean }) => ({ id: 'session_12345678', state: () => ({ phase: 'opening' }) }));
+    const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
+    registerFrameReviewIpc({ ipcMain, hostForEvent: () => ({ open }), chooseSourcePath: vi.fn(async () => null) });
+    const response = handlers.get('clip-sandbox:frame-review-open')!({ sender: { send: vi.fn() } }, {
+      operationId: 'operation_123456', sourceHandle: 'source_123456789', previewBounds: { maxWidth: 960, maxHeight: 540 }, ...extra,
+    });
+    return { open, response };
+  }
+
+  it('opens a review muted when the renderer asks for it', async () => {
+    const { open, response } = openThroughIpc({ muted: true });
+    await response;
+
+    expect(open.mock.calls[0]?.[0].muted).toBe(true);
+  });
+
+  it('opens a review with sound when the renderer does not say', async () => {
+    const { open, response } = openThroughIpc({});
+    await response;
+
+    expect(open.mock.calls[0]?.[0].muted).toBe(false);
+  });
+
+  it('refuses a muted value that is not true or false before opening a review', async () => {
+    const { open, response } = openThroughIpc({ muted: 'yes' });
+
+    expect(await response).toMatchObject({ ok: false, error: { category: 'invalid-request', message: 'Frame-review muted must be true or false.' } });
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it('validates jump duration and exact target time before calling the session', async () => {
     const handlers = new Map<string, Function>();
     const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };

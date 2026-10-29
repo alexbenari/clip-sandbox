@@ -19,7 +19,8 @@ export interface ICurrentMovieEvents {
 type CurrentMovieDependencies = Readonly<{
   frameReview: IFrameReviewService;
   previewBounds: Readonly<{ maxWidth: number; maxHeight: number }>;
-  status: Pick<GifSessionStatus, 'show' | 'changed'>;
+  muted: boolean;
+  status?: Pick<GifSessionStatus, 'show' | 'changed'>;
   reporter?: Pick<ActivityReporter, 'progress' | 'success'>;
   failures: Pick<RuntimeFailureReporter, 'report'>;
 }>;
@@ -60,8 +61,8 @@ export class CurrentMovie implements IEventSource<ICurrentMovieEvents> {
 
   async chooseSource(): Promise<IFrameReviewSourceSelection | null> {
     this.state = 'choosing';
-    this.deps.status.show('Choose a movie');
-    this.deps.status.changed();
+    this.deps.status?.show('Choose a movie');
+    this.deps.status?.changed();
     const selected = await this.deps.frameReview.chooseSource();
     if (!selected) this.restoreLifecycle();
     return selected;
@@ -69,9 +70,11 @@ export class CurrentMovie implements IEventSource<ICurrentMovieEvents> {
 
   openCandidate(selected: IFrameReviewSourceSelection): Promise<IFrameReviewSession> {
     this.state = 'opening';
-    this.deps.status.show(`Opening ${selected.name}`);
-    this.deps.status.changed();
-    return this.deps.frameReview.open({ sourceHandle: selected.sourceHandle, previewBounds: this.deps.previewBounds });
+    this.deps.status?.show(`Opening ${selected.name}`);
+    this.deps.status?.changed();
+    return this.deps.frameReview.open({
+      sourceHandle: selected.sourceHandle, previewBounds: this.deps.previewBounds, muted: this.deps.muted,
+    });
   }
 
   // Stops reacting to the current movie's review events while the session prepares a replacement.
@@ -96,7 +99,7 @@ export class CurrentMovie implements IEventSource<ICurrentMovieEvents> {
     const candidate = this.activeReview;
     if (!candidate) return;
     this.state = 'open';
-    this.deps.status.show(this.latestReviewState?.captureEnabled ? 'Exact capture ready' : 'Preparing exact frames');
+    this.deps.status?.show(this.latestReviewState?.captureEnabled ? 'Exact capture ready' : 'Preparing exact frames');
     let exactReadinessAnnounced = false;
     this.unsubscribeReview = candidate.subscribe(event => {
       if (this.state === 'disposed' || this.activeReview !== candidate) return;
@@ -104,7 +107,7 @@ export class CurrentMovie implements IEventSource<ICurrentMovieEvents> {
         const becameReady = !this.latestReviewState?.captureEnabled && event.state.captureEnabled;
         this.latestReviewState = event.state;
         if (event.state.phase === 'failed' || event.state.phase === 'closed') this.events.emit('reviewEnded');
-        this.deps.status.show(event.state.captureEnabled ? 'Exact capture ready' : event.state.message);
+        this.deps.status?.show(event.state.captureEnabled ? 'Exact capture ready' : event.state.message);
         const preparationMessage = this.preparationProgressMessage(event.state);
         if (preparationMessage) this.deps.reporter?.progress(preparationMessage);
         if (becameReady && !exactReadinessAnnounced) {
@@ -112,7 +115,7 @@ export class CurrentMovie implements IEventSource<ICurrentMovieEvents> {
           this.announceExactReadiness(event.state);
         }
         if (becameReady) this.events.emit('exactCaptureReady');
-        this.deps.status.changed();
+        this.deps.status?.changed();
       } else if (event.type === 'error') {
         this.deps.failures.report(event.message);
       }
@@ -135,16 +138,16 @@ export class CurrentMovie implements IEventSource<ICurrentMovieEvents> {
 
   failOpening(error: unknown): void {
     this.state = this.selected ? 'open' : 'failed';
-    this.deps.status.show(error instanceof Error ? error.message : 'The movie could not be opened.');
+    this.deps.status?.show(error instanceof Error ? error.message : 'The movie could not be opened.');
     this.deps.failures.report('The movie could not be opened.', error);
   }
 
   restoreLifecycle(): void {
     this.state = this.selected ? 'open' : 'empty';
-    this.deps.status.show(this.selected
+    this.deps.status?.show(this.selected
       ? (this.latestReviewState?.captureEnabled ? 'Exact capture ready' : 'Preparing exact frames')
       : null);
-    this.deps.status.changed();
+    this.deps.status?.changed();
   }
 
   // Ends the current movie's life and returns its review for the session to dispose.

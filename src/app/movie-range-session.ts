@@ -96,6 +96,7 @@ export abstract class MovieRangeSession implements IEventSource<IMovieRangeSessi
     this.movie = new CurrentMovie({
       frameReview,
       previewBounds: options.previewBounds ?? Object.freeze({ maxWidth: 1280, maxHeight: 720 }),
+      muted: false,
       status: this.status, reporter, failures,
     });
     this.extraction = new RangeExtraction({

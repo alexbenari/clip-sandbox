@@ -8,15 +8,9 @@ import type {
 } from '../../src/frame-review/frame-review-api.js';
 import { FrameReviewState, type IFrameReviewState } from '../../src/frame-review/model/frame-review-state.js';
 import { FrameReviewPlayerControl, type IPlayerFullScreen } from '../../src/ui/frame-review-player-control.js';
+import { deferred } from '../support/deferred.js';
+import { shippedPageStyles } from '../support/page-markup.js';
 
-type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(error: Error): void };
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (error: Error) => void;
-  const promise = new Promise<T>((complete, fail) => { resolve = complete; reject = fail; });
-  return { promise, resolve, reject };
-}
 
 const exactIdentity = Object.freeze({
   frameIndex: 12,
@@ -119,7 +113,7 @@ describe('FrameReviewPlayerControl', () => {
     };
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
-    control.mount(document.body);
+    control.mountInGifScreen(document.body);
     control.toggleMovieFullScreen();
     expect(fullScreen.enterElementFullScreen).not.toHaveBeenCalled();
     control.attachSession(session().value);
@@ -134,7 +128,7 @@ describe('FrameReviewPlayerControl', () => {
     const rejected = new FrameReviewPlayerControl({ document, frameRenderer: renderer, fullScreen: {
       ...fullScreen, enterElementFullScreen: vi.fn(async () => { throw new Error('Denied by browser'); }),
     } });
-    rejected.mount(document.body);
+    rejected.mountInGifScreen(document.body);
     rejected.attachSession(session().value);
     rejected.toggleMovieFullScreen();
     await vi.waitFor(() => expect(rejected.root.querySelector('.frame-review-error')?.textContent).toContain('Denied by browser'));
@@ -151,7 +145,7 @@ describe('FrameReviewPlayerControl', () => {
     };
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
-    control.mount(document.body);
+    control.mountInGifScreen(document.body);
     const old = session();
     const replacement = session();
     control.attachSession(old.value);
@@ -178,7 +172,7 @@ describe('FrameReviewPlayerControl', () => {
     };
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
-    control.mount(document.body);
+    control.mountInGifScreen(document.body);
     control.attachSession(session().value);
     await vi.waitFor(() => expect(renderer.render).toHaveBeenCalled());
     renderer.render.mockClear();
@@ -203,7 +197,7 @@ describe('FrameReviewPlayerControl', () => {
     };
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
-    control.mount(document.body);
+    control.mountInGifScreen(document.body);
     control.attachSession(session().value);
     await vi.waitFor(() => expect(renderer.render).toHaveBeenCalled());
     renderer.render.mockClear();
@@ -230,7 +224,7 @@ describe('FrameReviewPlayerControl', () => {
       const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
       const review = session();
       const control = new FrameReviewPlayerControl({ document, fullScreen, frameRenderer: renderer });
-      control.mount(document.body);
+      control.mountInGifScreen(document.body);
       control.attachSession(review.value);
       control.toggleMovieFullScreen();
       control.onFullScreenChange();
@@ -269,7 +263,7 @@ describe('FrameReviewPlayerControl', () => {
       };
       const control = new FrameReviewPlayerControl({ document, fullScreen,
         frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
-      control.mount(document.body);
+      control.mountInGifScreen(document.body);
       control.attachSession(session().value);
       control.toggleMovieFullScreen();
       await vi.advanceTimersByTimeAsync(0);
@@ -327,15 +321,75 @@ describe('FrameReviewPlayerControl', () => {
     const secondHost = document.createElement('section');
     document.body.append(firstHost, secondHost);
 
-    control.mount(firstHost);
+    control.mountInGifScreen(firstHost);
     const root = control.root;
-    control.mount(secondHost);
+    control.mountInGifScreen(secondHost);
 
     expect(control.root).toBe(root);
     expect(firstHost.contains(root)).toBe(false);
     expect(secondHost.contains(root)).toBe(true);
     expect(root.querySelectorAll('input[type="range"]').length).toBe(1);
     expect(root.querySelector('[aria-label="Playback speed"]')).toBeNull();
+  });
+
+  describe('looks', () => {
+    afterEach(() => { document.head.replaceChildren(); });
+
+    const partsShown = (control: FrameReviewPlayerControl) => Object.fromEntries(
+      [['picture', '.frame-review-canvas'], ['progress row', '.frame-review-progress-row'], ['transport', '.frame-review-transport'],
+        ['readiness', '.frame-review-readiness'], ['readout', '.frame-review-identity']].map(([part, selector]) => {
+        let element: Element | null = control.root.querySelector(selector);
+        let shown = true;
+        while (element && element !== control.root.parentElement) {
+          if (element instanceof HTMLElement && (element.hidden || getComputedStyle(element).display === 'none')) shown = false;
+          element = element.parentElement;
+        }
+        return [part, shown];
+      }));
+
+    function preparingPlayer() {
+      document.head.innerHTML = shippedPageStyles();
+      const control = new FrameReviewPlayerControl({ document, frameRenderer: { render: vi.fn(async () => undefined), clear: vi.fn() } });
+      const review = session(state('indexing', false));
+      control.attachSession(review.value);
+      const zoomEditHost = document.createElement('div');
+      const gifScreenHost = document.createElement('div');
+      document.body.append(zoomEditHost, gifScreenHost);
+      return { control, review, zoomEditHost, gifScreenHost };
+    }
+
+    it('shows only the picture when mounted in Zoom edit mode', () => {
+      const { control, zoomEditHost } = preparingPlayer();
+
+      control.mountInZoomEdit(zoomEditHost);
+
+      expect(partsShown(control)).toEqual({
+        picture: true, 'progress row': false, transport: false, readiness: false, readout: false,
+      });
+    });
+
+    it('shows its progress row, transport, readiness and readout again when mounted back in a GIF screen', () => {
+      const { control, zoomEditHost, gifScreenHost } = preparingPlayer();
+      control.mountInGifScreen(gifScreenHost);
+      control.mountInZoomEdit(zoomEditHost);
+
+      control.mountInGifScreen(gifScreenHost);
+
+      expect(partsShown(control)).toEqual({
+        picture: true, 'progress row': true, transport: true, readiness: true, readout: true,
+      });
+    });
+
+    it('lets Zoom edit mode jump although the GIF screen had made jumping unavailable', async () => {
+      const { control, review, zoomEditHost, gifScreenHost } = preparingPlayer();
+      control.mountInGifScreen(gifScreenHost);
+      control.setJumpUnavailable(true);
+
+      control.mountInZoomEdit(zoomEditHost);
+      control.jumpBySeconds(2);
+
+      await vi.waitFor(() => expect(review.jumpPlaybackBy).toHaveBeenCalledWith(2_000_000n));
+    });
   });
 
   it('resets position and elapsed time when a different movie session attaches', async () => {

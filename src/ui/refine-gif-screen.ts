@@ -196,7 +196,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
   onActivate(): void {
     this.active = true;
     this.lastSeekKey = null;
-    this.options.player.mount(this.playerHost, 'Select a captured range to refine');
+    this.options.player.mountInGifScreen(this.playerHost, 'Select a captured range to refine');
     this.options.player.attachSession(this.options.session?.reviewSession ?? null);
     this.options.keyboard.activate(this.keyboardTarget);
     const refinement = this.snapshot?.refinement;
@@ -341,12 +341,12 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
 
   private render(snapshot: IGifExtractionSessionSnapshot): void {
     this.snapshot = snapshot;
-    this.options.player.setJumpUnavailable(snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening');
+    if (this.active) this.options.player.setJumpUnavailable(snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening');
     this.cancelExtraction.hidden = !snapshot.extractionBatch;
     this.cancelExtraction.disabled = snapshot.extractionBatch?.cancelling === true;
     if (this.previewRevision !== null && snapshot.previewRevision !== this.previewRevision) {
       this.previewOperation += 1;
-      if (this.options.player.exactPreviewPhase() !== 'inactive') {
+      if (this.active && this.options.player.exactPreviewPhase() !== 'inactive') {
         this.pendingPreviewStop = this.options.player.stopExactPreview().catch(() => null);
       }
     }

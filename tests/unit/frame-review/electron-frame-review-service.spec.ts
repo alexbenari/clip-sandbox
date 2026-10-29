@@ -25,7 +25,7 @@ describe('Electron frame review service', () => {
     const service = new ElectronFrameReviewService({ clipSandboxDesktop: { frameReview: api } } as unknown as Window);
     const session = await service.open({
       sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789'),
-      previewBounds: { maxWidth: 960, maxHeight: 540 },
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false,
     });
     const listener = vi.fn();
     expect(session.state().playbackDurationUs).toBe(1_000n);
@@ -66,8 +66,23 @@ describe('Electron frame review service', () => {
     const service = new ElectronFrameReviewService({ clipSandboxDesktop: { frameReview: api } } as unknown as Window);
     await expect(service.open({
       sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789'),
-      previewBounds: { maxWidth: 960, maxHeight: 540 },
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false,
     })).rejects.toMatchObject({ category: 'cache-unavailable', recoverable: false });
+  });
+
+  it('asks the desktop to open the movie muted when the request says so', async () => {
+    const open = vi.fn(async () => ({ ok: true, result: { sessionId: 'session_12345678', state: readyState } }));
+    const api: IElectronFrameReviewApi = {
+      chooseSource: vi.fn(), open, command: vi.fn(), close: vi.fn(), subscribe: vi.fn(() => () => undefined),
+    };
+    const service = new ElectronFrameReviewService({ clipSandboxDesktop: { frameReview: api } } as unknown as Window);
+
+    await service.open({ sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789'),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: true });
+
+    expect(open).toHaveBeenCalledWith({
+      sourceHandle: 'source_123456789', previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: true,
+    });
   });
 
   it('accepts a selected source without exposing a filesystem path', async () => {
@@ -98,7 +113,7 @@ describe('Electron frame review service', () => {
     };
     const service = new ElectronFrameReviewService({ clipSandboxDesktop: { frameReview: api } } as unknown as Window);
     const session = await service.open({ sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789'),
-      previewBounds: { maxWidth: 960, maxHeight: 540 } });
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false });
 
     await expect(session.jumpPlaybackBy(2_000_000n)).resolves.toBe(3_500_000n);
     expect(command).toHaveBeenCalledWith(session.id, 'jump-playback-by', { deltaUs: '2000000' });
