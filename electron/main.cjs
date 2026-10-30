@@ -24,6 +24,7 @@ const { registerZoomEditSaveIpc } = require('./zoom-edit-save-ipc.cjs');
 const { MovieWindowPlacement } = require('./movie-window-placement.cjs');
 const { NativeProductLocator } = require('./native-product-locator.cjs');
 const { ThumbnailCacheRuntime } = require('./thumbnail-cache-runtime.cjs');
+const { TestRecycleBin } = require('./test-recycle-bin.cjs');
 
 const WINDOWS_INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000]/;
 const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
@@ -109,6 +110,11 @@ function validateTopLevelFilename(filename) {
 
 function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
   const nativeEnvironment = nativeProducts.environment();
+  // End-to-end tests keep moved files in their own profile, so they never touch the real Recycle Bin.
+  const testRecycleBin = process.env.CLIP_SANDBOX_E2E === '1'
+    ? new TestRecycleBin(path.join(app.getPath('userData'), 'test-recycle-bin'))
+    : null;
+  const trashItem = itemPath => (testRecycleBin ? testRecycleBin.trashItem(itemPath) : shell.trashItem(itemPath));
   const videoEditRuntime = createVideoEditRuntime({
     resolveBinary: () => nativeProducts.ffmpeg(),
     processEnvironment: nativeEnvironment,
@@ -153,7 +159,7 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     hostForEvent: frameReviewRuntime.hostForEvent,
     sources: zoomEditSources,
     encoder: exactRangeEncoder,
-    placement: new RefinedClipPlacement({ trashItem: itemPath => shell.trashItem(itemPath) }),
+    placement: new RefinedClipPlacement({ trashItem }),
   });
   ipcMain.handle('clip-sandbox:clip-source-movies-read', (event, request) =>
     clipSourceMovieRuntime.read(event, request));
@@ -236,7 +242,7 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
 
     for (const filename of filenames) {
       try {
-        await shell.trashItem(path.join(folderPath, filename));
+        await trashItem(path.join(folderPath, filename));
         results.push({ filename, ok: true });
       } catch (error) {
         results.push({

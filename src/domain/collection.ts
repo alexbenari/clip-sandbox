@@ -21,6 +21,11 @@ export type CollectionRemovalResult = {
   isNoOp: boolean;
 };
 
+export type CollectionRenameResult = {
+  collection: Collection;
+  isNoOp: boolean;
+};
+
 type RequestedNameAnalysis = {
   collectionName: string;
   existingNamesInOrder: string[];
@@ -208,6 +213,14 @@ export class Collection {
       removedCount: removedClipNames.length,
       isNoOp: removedClipNames.length === 0,
     };
+  }
+
+  // A clip listed under both names keeps only its first place.
+  withClipRenamed(previousName: string, nextName: string): CollectionRenameResult {
+    const names = this.#orderedClipNames;
+    if (!names.includes(previousName)) return { collection: this, isNoOp: true };
+    const renamed = names.map(name => (name === previousName ? nextName : name));
+    return { collection: this.withOrderedClipNames(new Set(renamed)), isNoOp: false };
   }
 
   // Matches the listed clip names against the clips that exist, keeping the collection's order.

@@ -82,6 +82,9 @@ import { ZoomEditModeLeavePolicy } from './zoom-edit-mode-leave-policy.js';
 import { ZoomEditModeSessionStarter } from './zoom-edit-mode-session-starter.js';
 import { ZoomEditModeText } from './zoom-edit-mode-text.js';
 import { ZoomEditModeWorkflow } from './zoom-edit-mode-workflow.js';
+import { RefinedClipSaveWorkflow } from './refined-clip-save-workflow.js';
+import { CreatedClipInsertion } from './created-clip-insertion.js';
+import { ClipFileReplacement } from './clip-file-replacement.js';
 import { ZoomEditModeKeyboard } from '../ui/zoom-edit-mode-keyboard.js';
 import { SaveRefinementDialogControl } from '../ui/save-refinement-dialog-control.js';
 
@@ -348,16 +351,33 @@ export class AppController {
       reporter: activityReporter,
       appText,
     });
-    const zoomEditMode = zoomEditServices
+    const zoomEditModeText = new ZoomEditModeText();
+    const refinedClipSave = zoomEditServices
+      ? new RefinedClipSaveWorkflow({
+        saves: zoomEditServices.saves,
+        saveDialog: saveRefinementDialog,
+        savedClipSources: folders,
+        createdClips: new CreatedClipInsertion({
+          pipelineWorkingCopy, openFolder: state, grid, collectionView, sourceMovies: clipSourceMovies, zoom,
+        }),
+        replacements: new ClipFileReplacement({
+          pipelineWorkingCopy, fileWriter: collectionFileWriter, grid, collectionView, sourceMovies: clipSourceMovies, zoom,
+        }),
+        reporter: activityReporter,
+        diagnostics,
+        text: zoomEditModeText,
+      })
+      : null;
+    const zoomEditMode = zoomEditServices && refinedClipSave
       ? new ZoomEditModeWorkflow({
-        ...zoomEditServices,
+        sessions: zoomEditServices.sessions,
+        saveWorkflow: refinedClipSave,
         activeEdit: activeZoomEdit,
         pipelineWorkingCopy,
         openFolder: state,
         zoom: zoomOverlay,
         zoomClips: zoom,
         keys: zoomEditModeKeyboard,
-        saveDialog: saveRefinementDialog,
         discardPrompt: discardZoomEditDialog,
         screens: shell,
         navigation: shell,
@@ -365,9 +385,7 @@ export class AppController {
         collectionScreenId: collectionScreen.id,
         fullScreen: fullscreenAdapter,
         folderRefresh: openFolderRefresher,
-        reporter: activityReporter,
-        diagnostics,
-        text: new ZoomEditModeText(),
+        text: zoomEditModeText,
       })
       : null;
     const folderSelection = new FolderSelectionWorkflow({
@@ -492,6 +510,7 @@ export class AppController {
           zoom, gridContextMenu, gifRangeRefinement, refineLeave, pipelineCatalogRefresher, settingsWorkflow,
           controlFailureReporting, clipSourceMovies]) workflow.dispose();
         await zoomEditMode?.dispose();
+        refinedClipSave?.dispose();
         await gifExtractionSession?.dispose();
       },
       destroyControls: () => {

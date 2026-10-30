@@ -324,6 +324,36 @@ describe('ZoomEditModeSession', () => {
       ]);
     });
 
+    it.each<[string, boolean, (edit: ReturnType<typeof zoomEdit>) => Promise<void>]>([
+      ['the movie is being found', true, async () => undefined],
+      ['the window is being prepared', true, async edit => { await edit.windowPrepared(); }],
+      ['the movie lookup was cancelled', false, async edit => {
+        await vi.waitFor(() => expect(edit.windowAnswers).toHaveLength(1));
+        edit.windowAnswers[0].resolve({ kind: 'cancelled' });
+        await flushPendingWork();
+      }],
+      ['the window is shown', false, async edit => {
+        await edit.windowPrepared();
+        edit.anchorAnswers[0].resolve(anchored);
+        await vi.waitFor(() => expect(edit.session.snapshot.extension).toBe('ready'));
+      }],
+    ])('says whether extending is still pending when %s', async (_scenario, pending, reach) => {
+      const edit = zoomEdit();
+      await edit.clipReady();
+
+      await reach(edit);
+
+      expect(edit.session.snapshot.extensionPending).toBe(pending);
+    });
+
+    it('says extending is not pending for a clip without source info', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+
+      await edit.clipReady();
+
+      expect(edit.session.snapshot.extensionPending).toBe(false);
+    });
+
     it('tells its listeners when the movie lookup is cancelled', async () => {
       const edit = zoomEdit();
       await edit.clipReady();

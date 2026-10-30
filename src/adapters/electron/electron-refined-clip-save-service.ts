@@ -115,11 +115,18 @@ export class ElectronRefinedClipSaveService implements IRefinedClipSaveService {
   }
 
   private entryOf(value: unknown, filename: string): ISavedClipEntry {
-    const { name, type, size, lastModifiedMs } = this.objectOf(value, 'saved clip entry');
-    if (name !== filename || type !== 'video/mp4' || !this.isNonnegative(size) || !this.isNonnegative(lastModifiedMs)) {
+    const { name, path, mediaSource, type, size, lastModifiedMs } = this.objectOf(value, 'saved clip entry');
+    if (name !== filename || typeof path !== 'string' || !this.isPathOf(path, filename)
+      || typeof mediaSource !== 'string' || !mediaSource.startsWith('file:')
+      || type !== 'video/mp4' || !this.isNonnegative(size) || !this.isNonnegative(lastModifiedMs)) {
       throw this.invalidAnswer('saved clip entry');
     }
-    return Object.freeze({ name: filename, type, size, lastModifiedMs });
+    return Object.freeze({ name: filename, path, mediaSource, type, size, lastModifiedMs });
+  }
+
+  private isPathOf(path: string, filename: string): boolean {
+    const folderSeparator = path.charAt(path.length - filename.length - 1);
+    return path.endsWith(filename) && (folderSeparator === '\\' || folderSeparator === '/');
   }
 
   private resultOrThrow(response: IWireResponse): unknown {

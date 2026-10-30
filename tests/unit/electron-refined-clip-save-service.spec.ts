@@ -10,7 +10,9 @@ const request: IRefinedClipSaveRequest = Object.freeze({
   folder: Object.freeze({ folderPath: 'D:\\clips' }), filename: 'Sample Feature-001.mp4', source: Object.freeze({ kind: 'window', windowId }),
   sessionId, startFrame: 1870, endFrame: 1940, outcome: 'replace',
 });
-const entry = (name: string) => ({ name, type: 'video/mp4', size: 2048, lastModifiedMs: 1_700_000_000_000 });
+const entry = (name: string) => ({
+  name, path: `D:\\clips\\${name}`, mediaSource: `file:///D:/clips/${encodeURIComponent(name)}`, type: 'video/mp4', size: 2048, lastModifiedMs: 1_700_000_000_000,
+});
 const replaced = { filename: 'Sample Feature-001.mp4', entry: entry('Sample Feature-001.mp4'), outcome: 'replaced' };
 
 function serviceAnswering(response: (payload: Record<string, unknown>) => unknown) {
@@ -68,6 +70,8 @@ describe('ElectronRefinedClipSaveService', () => {
     ['an entry for another file', { ...replaced, entry: entry('Other.mp4') }],
     ['an entry that is not an MP4 video', { ...replaced, entry: { ...entry('Sample Feature-001.mp4'), type: 'video/webm' } }],
     ['a negative size', { ...replaced, entry: { ...entry('Sample Feature-001.mp4'), size: -1 } }],
+    ['an entry whose path names another file', { ...replaced, entry: { ...entry('Sample Feature-001.mp4'), path: 'D:\\clips\\Other Sample Feature-001.mp4' } }],
+    ['an entry without a file address', { ...replaced, entry: { ...entry('Sample Feature-001.mp4'), mediaSource: 'https://example.com/clip.mp4' } }],
     ['an unknown notice', { ...replaced, outcome: 'kept-both', notice: 'disk-full' }],
     ['a notice on a replaced clip that names no replaced file', { ...replaced, notice: 'name-taken' }],
     ['a Recycle Bin notice on a replaced clip', { ...replaced, replacedFilename: 'Sample Feature-001.webm', notice: 'recycle-bin-refused' }],

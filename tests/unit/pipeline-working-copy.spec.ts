@@ -133,3 +133,47 @@ test('dirty state reflects mutations through an escaped active sequence', () => 
   sequence.remove('clip_1');
   expect(session.hasDirtyClipSequenceChanges).toBe(true);
 });
+
+describe('PipelineWorkingCopy replacing a clip’s file', () => {
+  function workingCopyIn(collection, names = ['alpha.mp4', 'bravo.webm', 'charlie.mp4']) {
+    const picks = Collection.fromFilename({ filename: 'picks.txt', orderedClipNames: ['charlie.mp4', 'bravo.webm', 'alpha.mp4'] });
+    const pipeline = new Pipeline({ folderName: 'clips', videoSources: names.map(videoFile), collections: [picks] });
+    const session = new PipelineWorkingCopy();
+    session.loadPipeline(pipeline);
+    if (collection) {
+      const { selection, materialization } = session.materializeSelection(pipeline.getCollectionByFilename(collection));
+      session.activateSelection({ collection: selection, sequence: materialization.sequence });
+    }
+    const clip = name => session.currentClipSequence.orderedClips().find(candidate => candidate.name === name);
+    return { session, pipeline, clip };
+  }
+
+  test('a renamed clip leaves a saved collection’s view saved, in its place', () => {
+    const { session, clip } = workingCopyIn('picks.txt');
+
+    session.replaceClipFile(clip('bravo.webm'), videoFile('bravo.mp4'));
+
+    expect(session.currentClipSequence.clipNamesInOrder()).toEqual(['charlie.mp4', 'bravo.mp4', 'alpha.mp4']);
+    expect(session.hasDirtyClipSequenceChanges).toBe(false);
+  });
+
+  test('a renamed clip moves to where its new name sorts in the folder’s full list, which stays saved', () => {
+    const { session, clip } = workingCopyIn(null, ['alpha.mp4', 'bravo.mp4', 'charlie.webm']);
+
+    session.replaceClipFile(clip('charlie.webm'), videoFile('aardvark.mp4'));
+
+    expect(session.currentClipSequence.clipNamesInOrder()).toEqual(['aardvark.mp4', 'alpha.mp4', 'bravo.mp4']);
+    expect(session.hasDirtyClipSequenceChanges).toBe(false);
+  });
+
+  test('a collection restored to its saved version shows the view as unsaved', () => {
+    const { session, pipeline, clip } = workingCopyIn('picks.txt');
+    const saved = pipeline.getCollectionByFilename('picks.txt');
+    session.replaceClipFile(clip('bravo.webm'), videoFile('bravo.mp4'));
+
+    session.restoreSavedCollection(saved);
+
+    expect(session.activeCollection).toBe(saved);
+    expect(session.hasDirtyClipSequenceChanges).toBe(true);
+  });
+});

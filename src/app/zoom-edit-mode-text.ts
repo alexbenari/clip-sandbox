@@ -15,6 +15,16 @@ const WHY_NOT_EXTENDED: Readonly<Record<ExtensionLimit, string>> = Object.freeze
   'failed': 'The source movie could not be prepared, so this clip can be trimmed but not extended.',
 });
 
+const EXTENSION_STATUS: Readonly<Record<ZoomEditExtension, string | null>> = Object.freeze({
+  'finding-movie': 'Finding the source movie…',
+  'preparing-window': 'Preparing the movie around this clip…',
+  'none': null,
+  'ready': null,
+  'cancelled': WHY_NOT_EXTENDED.cancelled,
+  'not-found': WHY_NOT_EXTENDED['not-found'],
+  'failed': WHY_NOT_EXTENDED.failed,
+});
+
 const REFUSALS: Readonly<Record<Exclude<ZoomEditRefusal['reason'], 'extension-unavailable'>, string>> = Object.freeze({
   'clip-preparing': 'The clip is still being prepared. Try again in a moment.',
   'source-failed': 'This clip could not be opened for editing. Press Esc to leave.',
@@ -50,10 +60,7 @@ export class ZoomEditModeText {
   }
 
   extensionStatus(extension: ZoomEditExtension): string | null {
-    if (extension === 'finding-movie') return 'Finding the source movie…';
-    if (extension === 'preparing-window') return 'Preparing the movie around this clip…';
-    if (extension === 'none' || extension === 'ready') return null;
-    return WHY_NOT_EXTENDED[extension];
+    return EXTENSION_STATUS[extension];
   }
 
   refusal(refusal: ZoomEditRefusal): string {
@@ -113,5 +120,26 @@ export class ZoomEditModeText {
     }
     if (saved.filename !== originalFilename) return `Replaced ${originalFilename} with the refined clip ${saved.filename}.`;
     return `Replaced ${originalFilename} with the refined clip.`;
+  }
+
+  sourceInfoNotSaved(filename: string): string {
+    return `The source movie info of ${filename} could not be saved or checked, so it may be missing.`;
+  }
+
+  savedClipNotShown(filename: string): string {
+    return `Saved ${filename}, but the Collection view could not show it.`;
+  }
+
+  savedClipNotShownRecovery(): string {
+    return 'Open the folder again to see the saved clip.';
+  }
+
+  collectionsNotRenamed(previousFilename: string, filename: string, collectionCount: number): string {
+    const collections = collectionCount === 1 ? '1 collection' : `${collectionCount} collections`;
+    return `Could not change ${previousFilename} to ${filename} in ${collections}.`;
+  }
+
+  collectionsNotRenamedRecovery(filename: string): string {
+    return `Add ${filename} to those collections again.`;
   }
 }

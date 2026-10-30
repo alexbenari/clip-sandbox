@@ -26,6 +26,8 @@ export interface IRefinedClipSaveProgress {
 
 export interface ISavedClipEntry {
   readonly name: string;
+  readonly path: string;
+  readonly mediaSource: string;
   readonly type: string;
   readonly size: number;
   readonly lastModifiedMs: number;

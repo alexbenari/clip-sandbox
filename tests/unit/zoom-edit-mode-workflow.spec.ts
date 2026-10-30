@@ -18,6 +18,9 @@ import type {
 } from '../../src/app/zoom-edit-mode-session.js';
 import { ZoomEditModeText } from '../../src/app/zoom-edit-mode-text.js';
 import { ZoomEditModeWorkflow, type ZoomEditHint } from '../../src/app/zoom-edit-mode-workflow.js';
+import { RefinedClipSaveWorkflow } from '../../src/app/refined-clip-save-workflow.js';
+import type { Clip } from '../../src/domain/clip.js';
+import type { ClipSource } from '../../src/domain/clip-source.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 import { RefineRange } from '../../src/domain/refine-range.js';
 import { SourceMovie } from '../../src/domain/source-movie.js';
@@ -34,7 +37,7 @@ const KEYS = 'Q start · W end · A/S jump · Z loop · X save · Esc leave';
 const CLIP_FRAMES = 48;
 
 class FakeEditSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
-  snapshot: IZoomEditModeSnapshot = { picture: 'preparing', extension: 'none', range: null };
+  snapshot: IZoomEditModeSnapshot = { picture: 'preparing', extension: 'none', extensionPending: false, range: null };
   readonly answers: ZoomEditCommandAnswer[] = [];
   readonly dispose = vi.fn(async () => undefined);
   private readonly answer = () => Promise.resolve(this.answers.shift() ?? DONE);
@@ -117,16 +120,26 @@ function zoomEditMode({ fullScreen = false } = {}) {
   const navigation = { activeScreen: { id: 'collection' }, activate: vi.fn((id: string) => { navigation.activeScreen = { id }; }) };
   const folderRefresh = { afterZoomEditModeEnded: vi.fn(async () => undefined) };
   const activityLog = recordedActivityLog();
+  const createdClips = { insert: vi.fn((_original: Clip, _created: ClipSource): Clip | null => null) };
+  const saveWorkflow = new RefinedClipSaveWorkflow({
+    saves,
+    saveDialog,
+    savedClipSources: { clipSourceOf: entry => clipSource(entry.name) },
+    createdClips,
+    replacements: { replace: vi.fn(async () => null) },
+    reporter: new ActivityReporter(activityLog),
+    diagnostics: { logRuntimeError: vi.fn(async () => undefined) },
+    text: new ZoomEditModeText(),
+  });
   const workflow = new ZoomEditModeWorkflow({
     sessions,
-    saves,
+    saveWorkflow,
     activeEdit,
     pipelineWorkingCopy,
     openFolder,
     zoom,
     zoomClips,
     keys,
-    saveDialog,
     discardPrompt,
     screens,
     navigation,
@@ -134,8 +147,6 @@ function zoomEditMode({ fullScreen = false } = {}) {
     collectionScreenId: 'collection',
     fullScreen: { isDocumentFullScreen: () => fullScreen },
     folderRefresh,
-    reporter: new ActivityReporter(activityLog),
-    diagnostics: { logRuntimeError: vi.fn(async () => undefined) },
     text: new ZoomEditModeText(),
   });
   const press = async (command: ZoomEditModeCommand) => {
@@ -144,7 +155,7 @@ function zoomEditMode({ fullScreen = false } = {}) {
   };
   return {
     workflow, session, sessions, saves, saveAnswers, saveProgress, activeEdit, zoom, zoomClips, saveDialog,
-    discardPrompt, screens, navigation, folderRefresh, entries: activityLog.entries, alpha, bravo, folder, press,
+    discardPrompt, screens, navigation, folderRefresh, createdClips, keys, entries: activityLog.entries, alpha, bravo, folder, press,
   };
 }
 
@@ -164,7 +175,10 @@ async function withStagedStart() {
 const savedAsKeepBoth: SavedRefinedClip = {
   outcome: 'kept-both',
   filename: 'alpha-refined.mp4',
-  entry: { name: 'alpha-refined.mp4', type: 'video/mp4', size: 1024, lastModifiedMs: 1 },
+  entry: {
+    name: 'alpha-refined.mp4', path: 'C:/clips/alpha-refined.mp4', mediaSource: 'file:///C:/clips/alpha-refined.mp4',
+    type: 'video/mp4', size: 1024, lastModifiedMs: 1,
+  },
 };
 
 describe('ZoomEditModeWorkflow', () => {
@@ -336,6 +350,22 @@ describe('ZoomEditModeWorkflow', () => {
       expect(zoom.hint?.status).toBe('Nothing to save yet. Set a new start with Q or a new end with W.');
     });
 
+    it('pressed while an earlier key is still acting, saves the range that key leaves', async () => {
+      const { session, saveDialog, zoom, keys } = await editingReadyClip();
+      const marking = deferred<ZoomEditCommandAnswer>();
+      session.markStart.mockImplementationOnce(() => marking.promise);
+      keys.emit('commandRequested', { kind: 'mark-start' });
+      keys.emit('commandRequested', { kind: 'save' });
+      await settled();
+      expect(saveDialog.open).not.toHaveBeenCalled();
+
+      session.stageStart(6);
+      marking.resolve(DONE);
+
+      await vi.waitFor(() => expect(saveDialog.open).toHaveBeenCalledWith('alpha.mp4'));
+      expect(zoom.hint?.status).toBeNull();
+    });
+
     it('asks Keep both or Replace for the clip, and saves nothing when cancelled', async () => {
       const { saveDialog, saves, activeEdit, press } = await withStagedStart();
 
@@ -362,20 +392,40 @@ describe('ZoomEditModeWorkflow', () => {
       expect(zoom.hint).toEqual({ keys: 'Esc cancel saving', status: 'Saving: encoded 12 of 42 frames…' });
     });
 
-    it('after saving ends the mode, shows the clip in Zoom and reports the saved clip', async () => {
-      const { saveDialog, saveAnswers, session, zoom, zoomClips, activeEdit, entries, alpha, press } = await withStagedStart();
+    it('after saving ends the mode before the saved clip is shown, then lets the folder refresh', async () => {
+      const { saveDialog, saveAnswers, session, zoom, activeEdit, createdClips, folderRefresh, alpha, press } = await withStagedStart();
       await press({ kind: 'save' });
       saveDialog.emit('confirmed', 'keep-both');
       await vi.waitFor(() => expect(saveAnswers).toHaveLength(1));
+      let whenShown = { modeEnded: false, folderRefreshed: true };
+      createdClips.insert.mockImplementation(() => {
+        whenShown = {
+          modeEnded: !activeEdit.isActive && !zoom.editing && session.dispose.mock.calls.length === 1,
+          folderRefreshed: folderRefresh.afterZoomEditModeEnded.mock.calls.length > 0,
+        };
+        return null;
+      });
 
-      zoomClips.openClip.mockClear();
       saveAnswers[0].resolve(savedAsKeepBoth);
 
-      await vi.waitFor(() => expect(activeEdit.isActive).toBe(false));
-      expect(zoom.editing).toBe(false);
-      expect(session.dispose).toHaveBeenCalledOnce();
-      expect(zoomClips.openClip.mock.calls).toEqual([[alpha]]);
-      expect(entries.at(-1)).toMatchObject({ kind: 'success', message: 'Saved the refined clip as alpha-refined.mp4.' });
+      await vi.waitFor(() => expect(folderRefresh.afterZoomEditModeEnded).toHaveBeenCalledOnce());
+      expect(createdClips.insert.mock.calls.map(([original, created]) => [original, created.name])).toEqual([[alpha, 'alpha-refined.mp4']]);
+      expect(whenShown).toEqual({ modeEnded: true, folderRefreshed: false });
+    });
+
+    it('that finishes after the mode ended for another screen leaves the folder refreshed once, by the ending', async () => {
+      const { saveDialog, saveAnswers, saves, screens, folderRefresh, createdClips, press } = await withStagedStart();
+      saves.cancelSave.mockImplementation(async () => undefined);
+      await press({ kind: 'save' });
+      saveDialog.emit('confirmed', 'keep-both');
+      await vi.waitFor(() => expect(saveAnswers).toHaveLength(1));
+      screens.emit('screenChanged', { id: 'settings' });
+
+      saveAnswers[0].resolve(savedAsKeepBoth);
+      await settled();
+
+      expect(folderRefresh.afterZoomEditModeEnded).toHaveBeenCalledOnce();
+      expect(createdClips.insert).not.toHaveBeenCalled();
     });
 
     it('that fails reports to Activity and keeps editing with the staged range', async () => {
@@ -407,26 +457,26 @@ describe('ZoomEditModeWorkflow', () => {
 
     it('waits for the movie around the clip while it is prepared, then saves', async () => {
       const { saveDialog, saves, session, zoom, press } = await withStagedStart();
-      session.change({ extension: 'preparing-window' });
+      session.change({ extension: 'preparing-window', extensionPending: true });
       await press({ kind: 'save' });
       saveDialog.emit('confirmed', 'keep-both');
       await vi.waitFor(() => expect(zoom.hint?.status).toBe('Saving waits for the movie around this clip…'));
       expect(saves.save).not.toHaveBeenCalled();
 
-      session.change({ extension: 'ready' });
+      session.change({ extension: 'ready', extensionPending: false });
 
       await vi.waitFor(() => expect(saves.save).toHaveBeenCalledOnce());
     });
 
     it('stops waiting for the movie when Escape is pressed, saving nothing', async () => {
       const { saveDialog, saves, session, zoom, activeEdit, press } = await withStagedStart();
-      session.change({ extension: 'finding-movie' });
+      session.change({ extension: 'finding-movie', extensionPending: true });
       await press({ kind: 'save' });
       saveDialog.emit('confirmed', 'keep-both');
       await vi.waitFor(() => expect(zoom.hint?.status).toBe('Saving waits for the movie around this clip…'));
 
       await press({ kind: 'leave' });
-      session.change({ extension: 'ready' });
+      session.change({ extension: 'ready', extensionPending: false });
       await press({ kind: 'mark-end' });
 
       expect(saves.save).not.toHaveBeenCalled();

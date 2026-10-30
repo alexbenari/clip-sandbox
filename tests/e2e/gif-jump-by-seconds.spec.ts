@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -10,6 +9,7 @@ import {
   toolEnvironment,
 } from '../support/frame-review-dependencies.js';
 import { launchApp, openMovieForExactReview, seekToFrame } from './support/app.js';
+import { runTool } from './support/media-tools.js';
 
 const vfrMovie = generatedMovieFixture('vfr-audio.mkv');
 const unavailable = nativeFrameReviewUnavailableReason(path.join(nativeBinaryFolder, 'bestsource_media_service.exe'), vfrMovie);
@@ -93,7 +93,7 @@ async function createCountingMovie(directory: string): Promise<string> {
     }
   }
   await Promise.all([fs.writeFile(rawVideo, pixels), fs.writeFile(rawAudio, Buffer.alloc(MOVIE_SECONDS * 48_000 * 2 * 2))]);
-  await run(dependencies.ffmpeg.path, [
+  await runTool(dependencies.ffmpeg.path, [
     '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
     '-f', 'rawvideo', '-pixel_format', 'rgb24', '-video_size', '160x90', '-framerate', String(FRAMES_PER_SECOND), '-i', rawVideo,
     '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', rawAudio,
@@ -155,12 +155,3 @@ async function expectTimeWithin(page: Page, seconds: number, tolerance: number):
   }, { timeout: 5_000 }).toBeLessThan(tolerance);
 }
 
-function run(executable: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { env, windowsHide: true, shell: false });
-    let stderr = '';
-    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
-    child.on('error', reject);
-    child.on('close', code => code === 0 ? resolve() : reject(new Error(stderr)));
-  });
-}

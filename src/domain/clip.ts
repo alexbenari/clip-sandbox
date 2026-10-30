@@ -97,6 +97,16 @@ export class Clip {
     this.#source = Clip.#requiredSource(source);
   }
 
+  // A new file under this clip: what was learned from the previous file no longer holds.
+  replaceFile(source: ClipSource): void {
+    this.#source = Clip.#requiredSource(source);
+    this.#durationSec = null;
+    this.#videoWidth = null;
+    this.#videoHeight = null;
+    this.#metadataFailed = false;
+    this.#sourceMovie = null;
+  }
+
   static #requiredSource(source: ClipSource): ClipSource {
     if (!(source instanceof ClipSource)) throw new Error('Clip source is required.');
     return source;

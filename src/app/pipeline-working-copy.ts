@@ -2,7 +2,7 @@ import type { Clip } from '../domain/clip.js';
 import type { ClipSource } from '../domain/clip-source.js';
 import type { ClipSequence } from '../domain/clip-sequence.js';
 import type { Collection } from '../domain/collection.js';
-import type { Pipeline, PipelineMaterialization, RemoveVideosResult } from '../domain/pipeline.js';
+import type { Pipeline, PipelineMaterialization, RemoveVideosResult, ReplaceVideoFileResult } from '../domain/pipeline.js';
 
 type CreatedClipInsertResult =
   | { ok: false; code: 'missing-pipeline' | 'invalid-file' | 'missing-context' | 'missing-source-clip' }
@@ -156,6 +156,30 @@ export class PipelineWorkingCopy {
       clip,
       sequence: this.#currentClipSequence,
     };
+  }
+
+  // A rename alone leaves the view saved: the folder's list sorts the new name again, and a collection
+  // view follows the pipeline's renamed copy of its collection.
+  replaceClipFile(clip: Clip, source: ClipSource): ReplaceVideoFileResult | null {
+    const pipeline = this.#pipeline;
+    const previousName = clip.name;
+    const result = pipeline?.replaceVideoFile(clip, source) ?? null;
+    if (!pipeline || !result) return null;
+    if (!this.isPipelineMode()) this.#followSavedActiveCollection();
+    else if (previousName !== source.name) {
+      this.#currentClipSequence = pipeline.materializePipeline({ nextClipId: () => this.nextClipId() }).sequence;
+    }
+    return result;
+  }
+
+  restoreSavedCollection(collection: Collection): void {
+    this.#pipeline?.upsertCollection(collection);
+    this.#followSavedActiveCollection();
+  }
+
+  #followSavedActiveCollection(): void {
+    const filename = this.#activeCollection?.filename;
+    if (filename) this.#activeCollection = this.#pipeline?.getCollectionByFilename(filename) ?? this.#activeCollection;
   }
 
   removeVideos(videoNames: Iterable<string>): RemoveVideosResult {

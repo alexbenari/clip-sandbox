@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const { constants: { COPYFILE_EXCL } } = require('node:fs');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
+const { mediaSourceOf } = require('./folder-entry.cjs');
 
 const MAX_KEEP_BOTH_NAMES = 1000;
 const MAX_TEMPORARY_NAMES = 8;
@@ -147,8 +148,10 @@ class RefinedClipPlacement {
   }
 
   async #saved(folder, filename, details) {
-    const stat = await this.#fs.stat(path.join(folder, filename));
-    return { filename, entry: { name: filename, type: 'video/mp4', size: stat.size, lastModifiedMs: stat.mtimeMs }, ...details };
+    const filePath = path.join(folder, filename);
+    const stat = await this.#fs.stat(filePath);
+    const entry = { name: filename, path: filePath, mediaSource: mediaSourceOf(filePath, stat.mtimeMs), type: 'video/mp4', size: stat.size, lastModifiedMs: stat.mtimeMs };
+    return { filename, entry, ...details };
   }
 }
 

@@ -1,20 +1,13 @@
 import type { Clip } from '../domain/clip.js';
+import type { RefineRangeEndChange } from '../domain/refine-range.js';
 import type { ActiveZoomEdit } from './active-zoom-edit.js';
-import type { ActivityReporter } from './activity-reporter.js';
-import type { AppDiagnostics } from './app-diagnostics.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { IEventSource } from './event-source.js';
 import type { FolderAccess } from './folder-access.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
-import type { UnlockedEndpointChange } from './range-refinement-draft.js';
+import type { IRefinedClipSaveView, RefinedClipSaveEnd, RefinedClipSaveWorkflow, RefinedClipSaveStatus } from './refined-clip-save-workflow.js';
 import type { IScreenChangeRequest } from './refine-leave-workflow.js';
 import type { IScreenIdentity } from './refine-screen-leave-policy.js';
-import type {
-  IRefinedClipSaveProgress,
-  IRefinedClipSaveService,
-  RefinedClipSaveOutcome,
-  SavedRefinedClip,
-} from './refined-clip-save-service.js';
 import type { IScreenNavigation } from './screen-navigation.js';
 import type { ZoomEditModeCommand } from './zoom-edit-mode-keys.js';
 import type { ZoomEditModeLeavePolicy } from './zoom-edit-mode-leave-policy.js';
@@ -23,7 +16,6 @@ import type {
   IZoomEditModeSnapshot,
   IZoomEditStagedSelection,
   ZoomEditCommandAnswer,
-  ZoomEditExtension,
   ZoomEditJumpSeconds,
 } from './zoom-edit-mode-session.js';
 import type { ZoomEditModeText } from './zoom-edit-mode-text.js';
@@ -60,13 +52,8 @@ export interface IZoomClipView {
   close(): void;
 }
 
-export interface ISaveRefinementPrompt extends IEventSource<{ confirmed: RefinedClipSaveOutcome; cancelled: void }> {
-  open(filename: string): void;
-  close(): void;
-}
-
 export interface IDiscardZoomEditPrompt extends IEventSource<{ confirmed: void; cancelled: void }> {
-  open(changes: readonly UnlockedEndpointChange[]): void;
+  open(changes: readonly RefineRangeEndChange[]): void;
   close(): void;
 }
 
@@ -77,14 +64,13 @@ export interface IZoomEditScreenChanges extends IEventSource<{
 
 type ZoomEditModeDependencies = Readonly<{
   sessions: IZoomEditSessions;
-  saves: IRefinedClipSaveService;
+  saveWorkflow: Pick<RefinedClipSaveWorkflow, 'save' | 'stop'>;
   activeEdit: Pick<ActiveZoomEdit, 'begin' | 'end'>;
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'resolveClip'>;
   openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   zoom: IZoomEditSurface;
   zoomClips: IZoomClipView;
   keys: IEventSource<{ commandRequested: ZoomEditModeCommand }>;
-  saveDialog: ISaveRefinementPrompt;
   discardPrompt: IDiscardZoomEditPrompt;
   screens: IZoomEditScreenChanges;
   navigation: Pick<IScreenNavigation, 'activate' | 'activeScreen'>;
@@ -92,17 +78,8 @@ type ZoomEditModeDependencies = Readonly<{
   collectionScreenId: string;
   fullScreen: { isDocumentFullScreen(): boolean };
   folderRefresh: { afterZoomEditModeEnded(): Promise<void> };
-  reporter: Pick<ActivityReporter, 'success' | 'failure' | 'technicalDetailsOf'>;
-  diagnostics: Pick<AppDiagnostics, 'logRuntimeError'>;
   text: ZoomEditModeText;
 }>;
-
-type Saving = {
-  waitingForMovie: boolean;
-  progress: IRefinedClipSaveProgress | null;
-  cancelled: boolean;
-  stopWaiting: (() => void) | null;
-};
 
 type EditMode = {
   readonly clip: Clip;
@@ -111,12 +88,12 @@ type EditMode = {
   unsubscribe: () => void;
   shown: IZoomEditModeSnapshot;
   notice: string | null;
-  saving: Saving | null;
+  saving: RefinedClipSaveStatus | null;
+  lastCommand: Promise<unknown>;
 };
 
 export class ZoomEditModeWorkflow {
   private mode: EditMode | null = null;
-  private pendingSave: ((outcome: RefinedClipSaveOutcome | null) => void) | null = null;
   private pendingDiscard: ((discard: boolean) => void) | null = null;
   private disposed = false;
   private readonly unsubscribes: (() => void)[];
@@ -125,8 +102,6 @@ export class ZoomEditModeWorkflow {
     this.unsubscribes = [
       deps.keys.on('commandRequested', command => { void this.perform(command); }),
       deps.zoom.on('closeRequested', () => { void this.closeZoom(); }),
-      deps.saveDialog.on('confirmed', outcome => this.settleSave(outcome)),
-      deps.saveDialog.on('cancelled', () => this.settleSave(null)),
       deps.discardPrompt.on('confirmed', () => this.settleDiscard(true)),
       deps.discardPrompt.on('cancelled', () => this.settleDiscard(false)),
       deps.screens.on('screenChangeRefused', request => { void this.completeHeldScreenChange(request); }),
@@ -158,7 +133,7 @@ export class ZoomEditModeWorkflow {
   async dispose(): Promise<void> {
     this.disposed = true;
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe();
-    this.closeQuestions();
+    this.closeDiscardQuestion();
     const mode = this.mode;
     if (mode) await this.end(mode);
   }
@@ -171,7 +146,7 @@ export class ZoomEditModeWorkflow {
     if (!zoom.showEditSurface()) return;
     const session = sessions.begin({ folder, filename: clip.name, hasSourceInfo: clip.sourceMovie !== null, muted });
     const mode: EditMode = {
-      clip, folder, session, unsubscribe: () => undefined, shown: session.snapshot, notice: null, saving: null,
+      clip, folder, session, unsubscribe: () => undefined, shown: session.snapshot, notice: null, saving: null, lastCommand: Promise.resolve(),
     };
     mode.unsubscribe = session.on('changed', snapshot => this.onSessionChanged(mode, snapshot));
     this.mode = mode;
@@ -183,7 +158,7 @@ export class ZoomEditModeWorkflow {
     const mode = this.mode;
     if (!mode) return;
     if (mode.saving) {
-      if (command.kind === 'leave') this.cancelSaving(mode);
+      if (command.kind === 'leave') this.deps.saveWorkflow.stop();
       else this.showNotice(mode, this.deps.text.stillSaving());
       return;
     }
@@ -195,7 +170,9 @@ export class ZoomEditModeWorkflow {
       await this.save(mode);
       return;
     }
-    const answer = await this.sessionCommand(mode.session, command);
+    const pending = this.sessionCommand(mode.session, command);
+    mode.lastCommand = pending;
+    const answer = await pending;
     if (this.mode === mode) this.showNotice(mode, this.noticeFor(answer));
   }
 
@@ -237,7 +214,7 @@ export class ZoomEditModeWorkflow {
   private endForAnotherScreen(): void {
     const mode = this.mode;
     if (!mode) return;
-    this.closeQuestions();
+    this.closeDiscardQuestion();
     void this.end(mode);
   }
 
@@ -247,141 +224,74 @@ export class ZoomEditModeWorkflow {
     return true;
   }
 
-  // Disposing the session also detaches it from the shared player.
   private end(mode: EditMode): Promise<void> {
-    const { activeEdit, zoom, folderRefresh } = this.deps;
+    const disposed = this.endWithoutFolderRefresh(mode);
+    void this.deps.folderRefresh.afterZoomEditModeEnded();
+    return disposed;
+  }
+
+  // Disposing the session also detaches it from the shared player.
+  private endWithoutFolderRefresh(mode: EditMode): Promise<void> {
+    const { activeEdit, zoom, saveWorkflow } = this.deps;
     this.mode = null;
     mode.unsubscribe();
     activeEdit.end();
-    if (mode.saving) this.cancelSaving(mode);
+    saveWorkflow.stop();
     zoom.hideEditSurface();
-    void folderRefresh.afterZoomEditModeEnded();
     return mode.session.dispose();
   }
 
+  // Saving acts on the range the keys pressed before it leave, so it waits for them to finish.
   private async save(mode: EditMode): Promise<void> {
-    const { text, saves } = this.deps;
+    await mode.lastCommand;
+    if (this.mode !== mode || mode.saving) return;
     if (!this.hasStagedEdits(mode)) {
-      this.showNotice(mode, text.nothingToSave());
+      this.showNotice(mode, this.deps.text.nothingToSave());
       return;
     }
-    const outcome = await this.askSaveOutcome(mode);
-    if (!outcome || this.mode !== mode || mode.saving) return;
-    const saving: Saving = { waitingForMovie: false, progress: null, cancelled: false, stopWaiting: null };
-    mode.saving = saving;
-    mode.notice = null;
-    if (!(await this.movieSettled(mode, saving))) {
-      if (this.mode === mode) this.finishSaving(mode, text.saveCancelled());
-      return;
-    }
-    try {
-      const selection = mode.session.stagedSelection();
-      if (!selection) throw new Error('Zoom edit mode has no staged range to save.');
-      const saved = await saves.save({
-        folder: mode.folder,
-        filename: mode.clip.name,
-        source: selection.source,
-        sessionId: selection.sessionId,
-        startFrame: selection.startFrame,
-        endFrame: selection.endFrame,
-        outcome,
-      }, progress => {
-        if (mode.saving !== saving) return;
-        saving.progress = progress;
+    let savedClipShown = false;
+    const view: IRefinedClipSaveView = {
+      statusChanged: status => {
+        if (this.mode !== mode) return;
+        mode.saving = status;
         mode.notice = null;
         this.render(mode);
-      });
-      this.reportSaved(mode.clip, saved);
-      if (this.mode === mode) this.showSavedClip(mode);
-    } catch (error) {
-      if (this.mode !== mode) return;
-      if (saving.cancelled) {
-        this.finishSaving(mode, text.saveCancelled());
-        return;
-      }
-      this.reportSaveFailure(mode.clip, error);
-      this.finishSaving(mode, text.saveFailedHint());
-    }
-  }
-
-  // A save waits while the source movie is still being found or prepared, so it can use the movie's frames.
-  private async movieSettled(mode: EditMode, saving: Saving): Promise<boolean> {
-    if (this.isPreparingMovie(mode.session.snapshot.extension)) {
-      saving.waitingForMovie = true;
-      this.render(mode);
-      await new Promise<void>(resolve => { saving.stopWaiting = resolve; });
-      saving.waitingForMovie = false;
-      saving.stopWaiting = null;
-    }
-    this.render(mode);
-    return !saving.cancelled && this.mode === mode;
-  }
-
-  private showSavedClip(mode: EditMode): void {
-    void this.end(mode);
-    this.deps.zoomClips.openClip(mode.clip);
-  }
-
-  private reportSaved(original: Clip, saved: SavedRefinedClip): void {
-    this.deps.reporter.success(this.deps.text.saved(original.name, saved));
-  }
-
-  private reportSaveFailure(clip: Clip, error: unknown): void {
-    const { reporter, diagnostics, text } = this.deps;
-    const problem = text.saveFailed(clip.name);
-    reporter.failure(problem, {
-      affected: clip.name,
-      recovery: text.saveFailedHint(),
-      technicalDetails: reporter.technicalDetailsOf(error),
-    });
-    void diagnostics.logRuntimeError(problem, error);
-  }
-
-  private cancelSaving(mode: EditMode): void {
-    const saving = mode.saving;
-    if (!saving || saving.cancelled) return;
-    saving.cancelled = true;
-    if (saving.stopWaiting) {
-      saving.stopWaiting();
-      return;
-    }
-    void this.deps.saves.cancelSave().catch(error => this.deps.diagnostics.logRuntimeError('Cancelling a refined clip save failed.', error));
-  }
-
-  private finishSaving(mode: EditMode, notice: string): void {
+      },
+      endEdit: () => {
+        if (this.mode !== mode) return false;
+        void this.endWithoutFolderRefresh(mode);
+        savedClipShown = true;
+        return true;
+      },
+    };
+    const end = await this.deps.saveWorkflow.save(mode, view);
+    // A refresh waits until the saved clip is in the views, so a re-listing cannot drop it from an unsaved collection view.
+    if (end === 'saved' && savedClipShown) void this.deps.folderRefresh.afterZoomEditModeEnded();
+    if (this.mode !== mode) return;
     mode.saving = null;
-    this.showNotice(mode, notice);
+    this.showNotice(mode, this.noticeAfterSave(end));
   }
 
-  private askSaveOutcome(mode: EditMode): Promise<RefinedClipSaveOutcome | null> {
-    this.settleSave(null);
-    return new Promise(settle => {
-      this.pendingSave = settle;
-      this.deps.saveDialog.open(mode.clip.name);
-    });
+  private noticeAfterSave(end: RefinedClipSaveEnd): string | null {
+    if (end === 'cancelled') return this.deps.text.saveCancelled();
+    if (end === 'failed') return this.deps.text.saveFailedHint();
+    return null;
+  }
+
+  private hasStagedEdits(mode: EditMode): boolean {
+    return mode.session.snapshot.range?.isChanged === true;
+  }
+
+  private stagedChanges(mode: EditMode): readonly RefineRangeEndChange[] {
+    return mode.session.snapshot.range?.changedEnds() ?? [];
   }
 
   private askToDiscard(mode: EditMode): Promise<boolean> {
     this.settleDiscard(false);
     return new Promise(settle => {
       this.pendingDiscard = settle;
-      this.deps.discardPrompt.open(this.changedEnds(mode));
+      this.deps.discardPrompt.open(this.stagedChanges(mode));
     });
-  }
-
-  private changedEnds(mode: EditMode): UnlockedEndpointChange[] {
-    const range = mode.session.snapshot.range;
-    if (!range) return [];
-    const changes: UnlockedEndpointChange[] = [];
-    if (range.start !== 0) changes.push(Object.freeze({ endpoint: 'start', frameIndex: range.start }));
-    if (range.end !== range.lastClipFrame) changes.push(Object.freeze({ endpoint: 'end', frameIndex: range.end }));
-    return changes;
-  }
-
-  private settleSave(outcome: RefinedClipSaveOutcome | null): void {
-    const pending = this.pendingSave;
-    this.pendingSave = null;
-    pending?.(outcome);
   }
 
   private settleDiscard(discard: boolean): void {
@@ -390,10 +300,8 @@ export class ZoomEditModeWorkflow {
     pending?.(discard);
   }
 
-  private closeQuestions(): void {
-    if (this.pendingSave) this.deps.saveDialog.close();
+  private closeDiscardQuestion(): void {
     if (this.pendingDiscard) this.deps.discardPrompt.close();
-    this.settleSave(null);
     this.settleDiscard(false);
   }
 
@@ -401,16 +309,7 @@ export class ZoomEditModeWorkflow {
     if (this.mode !== mode) return;
     if (snapshot.picture !== mode.shown.picture || snapshot.extension !== mode.shown.extension) mode.notice = null;
     mode.shown = snapshot;
-    if (mode.saving?.waitingForMovie && !this.isPreparingMovie(snapshot.extension)) mode.saving.stopWaiting?.();
     this.render(mode);
-  }
-
-  private hasStagedEdits(mode: EditMode): boolean {
-    return mode.session.snapshot.range?.isChanged === true;
-  }
-
-  private isPreparingMovie(extension: ZoomEditExtension): boolean {
-    return extension === 'finding-movie' || extension === 'preparing-window';
   }
 
   private showNotice(mode: EditMode, notice: string | null): void {
@@ -426,7 +325,7 @@ export class ZoomEditModeWorkflow {
   private statusOf(mode: EditMode): string | null {
     const { text } = this.deps;
     if (mode.notice) return mode.notice;
-    if (mode.saving) return mode.saving.waitingForMovie ? text.waitingForMovie() : text.saveProgress(mode.saving.progress);
+    if (mode.saving) return mode.saving.kind === 'waiting-for-movie' ? text.waitingForMovie() : text.saveProgress(mode.saving.progress);
     const { picture, extension } = mode.session.snapshot;
     return text.pictureStatus(picture) ?? text.extensionStatus(extension);
   }

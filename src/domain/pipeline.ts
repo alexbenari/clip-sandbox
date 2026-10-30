@@ -37,6 +37,18 @@ export type RemoveVideosResult = {
   changedCollections: RemovedCollectionChange[];
 };
 
+export type RenamedCollectionChange = {
+  filename: string;
+  collectionName: string;
+  previousCollection: Collection;
+  collection: Collection;
+};
+
+export type ReplaceVideoFileResult = {
+  clip: Clip;
+  changedCollections: RenamedCollectionChange[];
+};
+
 export class Pipeline {
   #folderName: string;
   #videoSourcesByName: Map<string, ClipSource>;
@@ -265,6 +277,32 @@ export class Pipeline {
       removedVideoNames,
       changedCollections,
     };
+  }
+
+  replaceVideoFile(clip: Clip, source: ClipSource): ReplaceVideoFileResult | null {
+    const previousName = clip.name;
+    if (this.#clipsByName.get(previousName) !== clip) return null;
+    const nextSource = Pipeline.#requiredSource(source);
+    const changedCollections = previousName === nextSource.name ? [] : this.#renameInCollections(previousName, nextSource.name);
+    this.#videoSourcesByName.delete(previousName);
+    this.#clipsByName.delete(previousName);
+    this.#clipsByName.set(nextSource.name, clip);
+    clip.replaceFile(nextSource);
+    this.setVideoSources([...this.#videoSourcesByName.values(), nextSource]);
+    return { clip, changedCollections };
+  }
+
+  #renameInCollections(previousName: string, nextName: string): RenamedCollectionChange[] {
+    const changes: RenamedCollectionChange[] = [];
+    for (const collection of this.collections()) {
+      const renamed = collection.withClipRenamed(previousName, nextName);
+      if (renamed.isNoOp) continue;
+      this.upsertCollection(renamed.collection);
+      if (collection.filename) {
+        changes.push({ filename: collection.filename, collectionName: collection.collectionName, previousCollection: collection, collection: renamed.collection });
+      }
+    }
+    return changes;
   }
 
   savedCollectionEntriesContainingClipNames(clipNames: Iterable<string>): { collection: Collection; filename: string }[] {

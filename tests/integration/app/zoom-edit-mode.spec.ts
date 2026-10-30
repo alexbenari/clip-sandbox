@@ -6,11 +6,11 @@ import { installGifDesktopApiFakes } from './desktop-api-fakes.js';
 // The edit session is replaced so these tests drive entering, keys and leaving through the shipped page,
 // with a staged edit set by the test rather than by exact frames from the native player.
 const { FakeEditSession } = vi.hoisted(() => {
-  const unchanged = Object.freeze({ start: 0, end: 47, lastClipFrame: 47, isChanged: false });
+  const unchanged = Object.freeze({ start: 0, end: 47, lastClipFrame: 47, isChanged: false, changedEnds: () => [] });
   class FakeEditSession {
     static instances = [];
     handlers = new Set();
-    snapshot = { picture: 'ready', extension: 'none', range: unchanged };
+    snapshot = { picture: 'ready', extension: 'none', extensionPending: false, range: unchanged };
     commands = [];
     disposed = false;
 
@@ -26,11 +26,15 @@ const { FakeEditSession } = vi.hoisted(() => {
     }
 
     stageStart(frame) {
-      this.snapshot = { ...this.snapshot, range: Object.freeze({ ...unchanged, start: frame, isChanged: true }) };
+      const changedEnds = () => [{ endpoint: 'start', frameIndex: frame }];
+      this.snapshot = { ...this.snapshot, range: Object.freeze({ ...unchanged, start: frame, isChanged: true, changedEnds }) };
       for (const handler of [...this.handlers]) handler(this.snapshot);
     }
 
-    stagedSelection() { return null; }
+    stagedSelection() {
+      const { start, end } = this.snapshot.range;
+      return { source: { kind: 'clip' }, sessionId: 'session_clip_0001', startFrame: start, endFrame: end };
+    }
     async dispose() { this.disposed = true; }
     record(name) { this.commands.push(name); return Promise.resolve({ kind: 'done' }); }
     togglePlayback() { return this.record('togglePlayback'); }
@@ -225,5 +229,146 @@ describe('Zoom edit mode in the Collection view', () => {
 
     expect(screenSelector().value).toBe('collection');
     expect(document.getElementById('zoomEditSurface')).not.toBeNull();
+  });
+});
+
+describe('Saving in Zoom edit mode', () => {
+  const environment = new DesktopAppTestEnvironment();
+  const savedAt = 1_700_000_000_000;
+  const clipNames = () => [...document.querySelectorAll('#grid .thumb')].map(card => card.dataset.name);
+  const card = name => document.querySelector(`#grid .thumb[data-name="${name}"]`);
+  const isShown = id => !document.getElementById(id).hidden;
+  const savedEntry = name => ({
+    name, path: `C:/clips/${name}`, mediaSource: `file:///C:/clips/${name}?modified=${savedAt}`, type: 'video/mp4', size: 2048, lastModifiedMs: savedAt,
+  });
+
+  beforeEach(() => {
+    environment.setUp();
+    FakeEditSession.instances = [];
+    installGifDesktopApiFakes(window.clipSandboxDesktop);
+    installZoomEditDesktopApi(window.clipSandboxDesktop);
+  });
+  afterEach(() => environment.tearDown());
+
+  function folderWith(files) {
+    const folder = { canceled: false, folderPath: 'C:/clips', folderName: 'clips', files };
+    window.clipSandboxDesktop.pickFolder = vi.fn(async () => folder);
+    window.clipSandboxDesktop.refreshFolder = vi.fn(async () => folder);
+  }
+
+  function saveAnswers(result) {
+    window.clipSandboxDesktop.zoomEdit.save.mockImplementation(async ({ operationId }) => ({ ok: true, operationId, result }));
+  }
+
+  async function openFolder(expectedNames, { collection = null } = {}) {
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
+    activateScreen('collection');
+    document.getElementById('pickBtn').click();
+    await waitFor(() => expect(clipNames()).toEqual(expectedNames));
+    if (!collection) return;
+    document.getElementById('activeCollectionName').value = collection;
+    document.getElementById('activeCollectionName').dispatchEvent(new Event('change', { bubbles: true }));
+    await waitFor(() => expect(document.getElementById('activeCollectionName').value).toBe(collection));
+  }
+
+  async function refineAndSave(name, choice) {
+    await refineFromClipMenu(name);
+    session().stageStart(6);
+    press('x');
+    await waitFor(() => expect(document.getElementById('saveRefinementDialog').open).toBe(true));
+    document.getElementById(choice === 'Keep both' ? 'keepBothRefinedClipBtn' : 'replaceRefinedClipBtn').click();
+  }
+
+  test('Keep both in a saved collection’s view adds the refined clip right after its original and marks the view unsaved', async () => {
+    folderWith([desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.mp4' }), desktopFile({ name: 'charlie.mp4' }),
+      desktopFile({ name: 'picks.txt', text: 'charlie.mp4\nbravo.mp4\nalpha.mp4\n' })]);
+    saveAnswers({ outcome: 'kept-both', filename: 'bravo-refined.mp4', entry: savedEntry('bravo-refined.mp4') });
+    await openFolder(['alpha.mp4', 'bravo.mp4', 'charlie.mp4'], { collection: 'picks.txt' });
+    await waitFor(() => expect(clipNames()).toEqual(['charlie.mp4', 'bravo.mp4', 'alpha.mp4']));
+
+    await refineAndSave('bravo.mp4', 'Keep both');
+
+    await waitFor(() => expect(clipNames()).toEqual(['charlie.mp4', 'bravo.mp4', 'bravo-refined.mp4', 'alpha.mp4']));
+    expect(isShown('unsavedChangesMarker')).toBe(true);
+    expect(document.getElementById('zoomVideo').dataset.name).toBe('bravo-refined.mp4');
+    expect(window.clipSandboxDesktop.saveTextFile).not.toHaveBeenCalled();
+  });
+
+  test('Keep both in the folder’s full list adds the refined clip where its name sorts, leaving the list saved', async () => {
+    folderWith([desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.mp4' }), desktopFile({ name: 'charlie.mp4' })]);
+    saveAnswers({ outcome: 'kept-both', filename: 'bravo-refined.mp4', entry: savedEntry('bravo-refined.mp4') });
+    await openFolder(['alpha.mp4', 'bravo.mp4', 'charlie.mp4']);
+
+    await refineAndSave('bravo.mp4', 'Keep both');
+
+    await waitFor(() => expect(clipNames()).toEqual(['alpha.mp4', 'bravo-refined.mp4', 'bravo.mp4', 'charlie.mp4']));
+    expect(isShown('unsavedChangesMarker')).toBe(false);
+  });
+
+  test('Replace shows the new file under the same name in the grid and in Zoom', async () => {
+    folderWith([desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.mp4' })]);
+    saveAnswers({ outcome: 'replaced', filename: 'bravo.mp4', entry: savedEntry('bravo.mp4') });
+    await openFolder(['alpha.mp4', 'bravo.mp4']);
+
+    await refineAndSave('bravo.mp4', 'Replace');
+
+    const newAddress = `file:///C:/clips/bravo.mp4?modified=${savedAt}`;
+    await waitFor(() => expect(card('bravo.mp4').dataset.mediaSource).toBe(newAddress));
+    expect(clipNames()).toEqual(['alpha.mp4', 'bravo.mp4']);
+    expect(document.getElementById('zoomVideo').getAttribute('src')).toBe(newAddress);
+  });
+
+  test('Replace rebuilds a view kept from earlier, so it shows the new file too', async () => {
+    folderWith([desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.mp4' }), desktopFile({ name: 'picks.txt', text: 'bravo.mp4\n' })]);
+    saveAnswers({ outcome: 'replaced', filename: 'bravo.mp4', entry: savedEntry('bravo.mp4') });
+    await openFolder(['alpha.mp4', 'bravo.mp4'], { collection: 'picks.txt' });
+    await waitFor(() => expect(clipNames()).toEqual(['bravo.mp4']));
+    await refineAndSave('bravo.mp4', 'Replace');
+    await waitFor(() => expect(card('bravo.mp4').dataset.mediaSource).toBe(`file:///C:/clips/bravo.mp4?modified=${savedAt}`));
+    document.getElementById('zoomOverlay').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    window.clipSandboxDesktop.refreshFolder = vi.fn(async () => ({
+      canceled: false, folderPath: 'C:/clips', folderName: 'clips',
+      files: [desktopFile({ name: 'alpha.mp4' }), savedEntry('bravo.mp4'), desktopFile({ name: 'picks.txt', text: 'bravo.mp4\n' })],
+    }));
+
+    document.getElementById('activeCollectionName').value = '__pipeline__';
+    document.getElementById('activeCollectionName').dispatchEvent(new Event('change', { bubbles: true }));
+
+    await waitFor(() => expect(clipNames()).toEqual(['alpha.mp4', 'bravo.mp4']));
+    expect(card('bravo.mp4').querySelector('video').getAttribute('src')).toBe(`file:///C:/clips/bravo.mp4?modified=${savedAt}`);
+  });
+
+  test('Replace reads the source movie of the new file again', async () => {
+    folderWith([desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.mp4' })]);
+    const movies = { 'bravo.mp4': 'Sample Feature.mkv' };
+    window.clipSandboxDesktop.clipSourceMovies = {
+      read: vi.fn(async ({ filenames }) => ({
+        clips: filenames.map(filename => (movies[filename] ? { filename, kind: 'movie', movieFileName: movies[filename] } : { filename, kind: 'none' })),
+      })),
+    };
+    saveAnswers({ outcome: 'replaced', filename: 'bravo.mp4', entry: savedEntry('bravo.mp4') });
+    await openFolder(['alpha.mp4', 'bravo.mp4']);
+    await waitFor(() => expect(card('bravo.mp4').querySelector('.source-glyph')?.title).toBe('From Sample Feature'));
+    movies['bravo.mp4'] = 'Other Feature.mkv';
+
+    await refineAndSave('bravo.mp4', 'Replace');
+
+    await waitFor(() => expect(card('bravo.mp4').querySelector('.source-glyph')?.title).toBe('From Other Feature'));
+  });
+
+  test('Replacing a .webm clip renames it in the view and in every collection that listed it', async () => {
+    folderWith([desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.webm', type: 'video/webm' }),
+      desktopFile({ name: 'picks.txt', text: 'bravo.webm\nalpha.mp4\n' }), desktopFile({ name: 'others.txt', text: 'alpha.mp4\n' })]);
+    saveAnswers({ outcome: 'replaced', filename: 'bravo.mp4', replacedFilename: 'bravo.webm', entry: savedEntry('bravo.mp4') });
+    await openFolder(['alpha.mp4', 'bravo.webm']);
+
+    await refineAndSave('bravo.webm', 'Replace');
+
+    await waitFor(() => expect(clipNames()).toEqual(['alpha.mp4', 'bravo.mp4']));
+    await waitFor(() => expect(window.clipSandboxDesktop.saveTextFile.mock.calls).toEqual([
+      [{ folderPath: 'C:/clips', filename: 'picks.txt', text: 'bravo.mp4\nalpha.mp4\n' }],
+    ]));
+    expect(isShown('unsavedChangesMarker')).toBe(false);
   });
 });

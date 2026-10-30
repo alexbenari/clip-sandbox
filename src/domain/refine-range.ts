@@ -4,6 +4,8 @@ export type RefineRangeChange =
   | Readonly<{ kind: 'changed'; range: RefineRange }>
   | Readonly<{ kind: 'refused'; reason: RefineRangeRefusal }>;
 
+export type RefineRangeEndChange = Readonly<{ endpoint: 'start' | 'end'; frameIndex: number }>;
+
 type ExtensionLimits = Readonly<{ earliest: number; latest: number }>;
 
 // A staged start and end in clip-relative frame numbers: frame 0 is the clip's first frame, and numbers
@@ -29,6 +31,13 @@ export class RefineRange {
 
   get isChanged(): boolean {
     return this.start !== 0 || this.end !== this.lastClipFrame;
+  }
+
+  changedEnds(): readonly RefineRangeEndChange[] {
+    const changes: RefineRangeEndChange[] = [];
+    if (this.start !== 0) changes.push(Object.freeze({ endpoint: 'start', frameIndex: this.start }));
+    if (this.end !== this.lastClipFrame) changes.push(Object.freeze({ endpoint: 'end', frameIndex: this.end }));
+    return Object.freeze(changes);
   }
 
   get extendsClip(): boolean {

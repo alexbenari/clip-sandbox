@@ -7,6 +7,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
+const { createFolderEntry } = require('../../electron/folder-entry.cjs');
 const { RefinedClipPlacement } = require('../../electron/refined-clip-placement.cjs');
 
 let root: string;
@@ -113,11 +114,16 @@ describe('RefinedClipPlacement', () => {
       const whileTrashing = { files: folderFiles(), original: contentOf('Feature-002.mp4'), temporary: contentOf('Feature-002.a1b2c3.refining') };
       releaseTrash();
       const saved = await replacing;
+      // The saved clip is addressed as a folder listing addresses the same file.
+      const listed = await createFolderEntry(path.join(folder, 'Feature-002.mp4'));
 
       expect(whileTrashing).toEqual({ files: ['Feature-002.a1b2c3.refining', 'Feature-002.mp4'], original: 'original', temporary: 'refined' });
       expect(saved).toEqual({
         filename: 'Feature-002.mp4', outcome: 'replaced',
-        entry: { name: 'Feature-002.mp4', type: 'video/mp4', size: 'refined'.length, lastModifiedMs: expect.any(Number) },
+        entry: {
+          name: 'Feature-002.mp4', path: path.join(folder, 'Feature-002.mp4'), mediaSource: listed.mediaSource,
+          type: 'video/mp4', size: 'refined'.length, lastModifiedMs: expect.any(Number),
+        },
       });
       expect([folderFiles(), contentOf('Feature-002.mp4'), readdirSync(recycleBin)]).toEqual([['Feature-002.mp4'], 'refined', ['Feature-002.mp4']]);
     });

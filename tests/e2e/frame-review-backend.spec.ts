@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,6 +7,7 @@ import {
   nativeBinaryFolder, nativeFrameReviewUnavailableReason, readFrameReviewDependencies, toolEnvironment,
 } from '../support/frame-review-dependencies.js';
 import { closeAppWithin, launchApp } from './support/app.js';
+import { runTool } from './support/media-tools.js';
 
 const unavailable = nativeFrameReviewUnavailableReason(path.join(nativeBinaryFolder, 'bestsource_media_service.exe'));
 
@@ -131,7 +131,7 @@ async function createFiveFrameMovie(movie: string, root: string): Promise<void> 
   const rawVideo = path.join(root, 'source.rgb');
   const rawAudio = path.join(root, 'source.pcm');
   await Promise.all([fs.writeFile(rawVideo, bytes), fs.writeFile(rawAudio, Buffer.alloc(48_000 * 2 * 2))]);
-  await run(dependencies.ffmpeg.path, [
+  await runTool(dependencies.ffmpeg.path, [
     '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
     '-f', 'rawvideo', '-pixel_format', 'rgb24', '-video_size', '64x48', '-framerate', '5', '-i', rawVideo,
     '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', rawAudio,
@@ -139,12 +139,3 @@ async function createFiveFrameMovie(movie: string, root: string): Promise<void> 
   ], toolEnvironment(dependencies));
 }
 
-function run(executable: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { env, windowsHide: true, shell: false });
-    let stderr = '';
-    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
-    child.on('error', reject);
-    child.on('close', code => code === 0 ? resolve() : reject(new Error(stderr)));
-  });
-}

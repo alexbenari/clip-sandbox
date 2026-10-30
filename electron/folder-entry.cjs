@@ -18,6 +18,12 @@ function isVideoFilename(filename) {
   return VIDEO_EXT_TO_MIME.has(path.extname(filename).toLowerCase());
 }
 
+// The address names the file's version, so a file replaced under the same name is not shown from the
+// renderer's media cache of the previous one.
+function mediaSourceOf(absolutePath, lastModifiedMs) {
+  return `${pathToFileURL(absolutePath).href}?modified=${Math.round(lastModifiedMs)}`;
+}
+
 function isTopLevelFile(dirent) {
   return dirent?.isFile?.() === true;
 }
@@ -30,7 +36,7 @@ async function createFolderEntry(absolutePath) {
     name,
     path: absolutePath,
     relativePath: name,
-    mediaSource: pathToFileURL(absolutePath).href,
+    mediaSource: mediaSourceOf(absolutePath, stat.mtimeMs),
     type: ext === '.txt' ? 'text/plain' : (VIDEO_EXT_TO_MIME.get(ext) || ''),
     lastModifiedMs: stat.mtimeMs,
     size: stat.size,
@@ -58,6 +64,7 @@ async function readFolderEntries(folderPath) {
 module.exports = {
   createFolderEntry,
   isVideoFilename,
+  mediaSourceOf,
   readFolderEntries,
 };
 

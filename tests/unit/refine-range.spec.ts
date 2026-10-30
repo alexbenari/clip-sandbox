@@ -82,4 +82,18 @@ describe('RefineRange', () => {
   it('refuses extension limits that do not include the clip', () => {
     expect(() => clip().withExtension(3, 1559)).toThrow('Extension limits must include the clip and the staged range.');
   });
+
+  it('names no changed end while the range is the whole clip', () => {
+    expect(clip().changedEnds()).toEqual([]);
+  });
+
+  it('names each changed end with its frame, including an end moved into the movie', () => {
+    const range = changed(changed(clip().withExtension(-50, 170).withStart(12)).withEnd(140));
+
+    expect(range.changedEnds()).toEqual([{ endpoint: 'start', frameIndex: 12 }, { endpoint: 'end', frameIndex: 140 }]);
+  });
+
+  it('names only the end that changed', () => {
+    expect(changed(clip().withEnd(80)).changedEnds()).toEqual([{ endpoint: 'end', frameIndex: 80 }]);
+  });
 });

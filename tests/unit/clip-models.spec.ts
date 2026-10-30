@@ -420,3 +420,65 @@ test('clip sources carry no frame-review session capability', () => {
 
   expect(Object.hasOwn(source, 'frameReviewSourceHandle')).toBe(false);
 });
+
+describe('replacing a clip’s file', () => {
+  const sourceMovie = { fileName: 'Sample Feature.mkv' };
+
+  function pipelineWith(names, collections = []) {
+    const pipeline = new Pipeline({ folderName: 'clips', videoSources: names.map(name => clipSource(name)), collections });
+    let nextId = 0;
+    const clips = pipeline.materializePipeline({ nextClipId: () => `clip_${++nextId}` }).sequence.orderedClips();
+    return { pipeline, clips };
+  }
+
+  test('a clip given a new file forgets the duration, size and source movie of the previous one', () => {
+    const clip = new Clip({ id: 'clip_1', source: clipSource('alpha.mp4'), durationSec: 4, videoWidth: 720, videoHeight: 390 });
+    clip.recordSourceMovie(sourceMovie);
+    const replacement = clipSource('alpha.mp4', { mediaSource: 'file:///clips/alpha.mp4?modified=2' });
+
+    clip.replaceFile(replacement);
+
+    expect([clip.id, clip.source, clip.durationSec, clip.videoWidth, clip.videoHeight, clip.sourceMovie])
+      .toEqual(['clip_1', replacement, null, null, null, null]);
+  });
+
+  test('a file replaced under the same name keeps the clip and changes no collection', () => {
+    const picks = Collection.fromFilename({ filename: 'picks.txt', orderedClipNames: ['bravo.mp4', 'alpha.mp4'] });
+    const { pipeline, clips: [alpha] } = pipelineWith(['alpha.mp4', 'bravo.mp4'], [picks]);
+    const replacement = clipSource('alpha.mp4', { mediaSource: 'file:///clips/alpha.mp4?modified=2' });
+
+    const result = pipeline.replaceVideoFile(alpha, replacement);
+
+    expect(result).toEqual({ clip: alpha, changedCollections: [] });
+    expect(pipeline.clipMap().get('alpha.mp4')).toBe(alpha);
+    expect(pipeline.videoSources().find(source => source.name === 'alpha.mp4')).toBe(replacement);
+  });
+
+  test('a file replaced under a new name renames the clip in the folder and in every collection that lists it', () => {
+    const picks = Collection.fromFilename({ filename: 'picks.txt', orderedClipNames: ['bravo.webm', 'alpha.mp4'] });
+    const others = Collection.fromFilename({ filename: 'others.txt', orderedClipNames: ['alpha.mp4'] });
+    const { pipeline, clips: [, bravo] } = pipelineWith(['alpha.mp4', 'bravo.webm'], [picks, others]);
+
+    const result = pipeline.replaceVideoFile(bravo, clipSource('bravo.mp4'));
+
+    expect(result.clip).toBe(bravo);
+    expect(result.changedCollections.map(change => [change.filename, change.collection.orderedClipNames, change.previousCollection]))
+      .toEqual([['picks.txt', ['bravo.mp4', 'alpha.mp4'], picks]]);
+    expect(pipeline.videoNames()).toEqual(['alpha.mp4', 'bravo.mp4']);
+    expect(pipeline.getCollectionByFilename('picks.txt').orderedClipNames).toEqual(['bravo.mp4', 'alpha.mp4']);
+    expect(pipeline.clipMap().get('bravo.mp4')).toBe(bravo);
+  });
+
+  test('a collection that already lists the new name keeps the clip only once, in its first place', () => {
+    const picks = Collection.fromFilename({ filename: 'picks.txt', orderedClipNames: ['bravo.webm', 'alpha.mp4', 'bravo.mp4'] });
+
+    expect(picks.withClipRenamed('bravo.webm', 'bravo.mp4').collection.orderedClipNames).toEqual(['bravo.mp4', 'alpha.mp4']);
+  });
+
+  test('a clip the pipeline does not hold is not replaced', () => {
+    const { pipeline } = pipelineWith(['alpha.mp4']);
+    const stranger = new Clip({ id: 'clip_9', source: clipSource('alpha.mp4') });
+
+    expect(pipeline.replaceVideoFile(stranger, clipSource('alpha.mp4'))).toBeNull();
+  });
+});

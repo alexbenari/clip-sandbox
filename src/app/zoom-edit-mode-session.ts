@@ -53,6 +53,7 @@ export interface IZoomEditStagedSelection {
 export interface IZoomEditModeSnapshot {
   readonly picture: ZoomEditPictureReadiness;
   readonly extension: ZoomEditExtension;
+  readonly extensionPending: boolean;
   readonly range: RefineRange | null;
 }
 
@@ -112,7 +113,9 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
   }
 
   get snapshot(): IZoomEditModeSnapshot {
-    return Object.freeze({ picture: this.picture, extension: this.extension, range: this.range });
+    const extension = this.extension;
+    const extensionPending = extension === 'finding-movie' || extension === 'preparing-window';
+    return Object.freeze({ picture: this.picture, extension, extensionPending, range: this.range });
   }
 
   on<TName extends keyof IZoomEditModeSessionEvents>(name: TName, handler: EventHandler<IZoomEditModeSessionEvents[TName]>): () => void {
