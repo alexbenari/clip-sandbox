@@ -1,6 +1,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
+const { ENCODED_OUTPUT } = require('./exact-range-encoder.cjs');
+const { OperationResult } = require('./operation-result.cjs');
 const { RefinedClipKeptUnderTemporaryName } = require('./refined-clip-placement.cjs');
 const { StagedEditRefusal } = require('./staged-edit-resolver.cjs');
 
@@ -33,7 +35,7 @@ class RefinedClipSaver {
   save(event, request = {}, report = () => undefined) {
     const { operationId } = request;
     if (typeof operationId !== 'string' || this.#operations.has(operationId)) {
-      return Promise.resolve(this.#failure('invalid-operation', 'The save operation is invalid.'));
+      return Promise.resolve(OperationResult.failure('invalid-operation', 'The save operation is invalid.'));
     }
     const controller = new AbortController();
     const operation = this.#save(event, request, { signal: controller.signal, report })
@@ -44,7 +46,7 @@ class RefinedClipSaver {
 
   async cancel(ownerId, operationId) {
     const operation = this.#operations.get(operationId);
-    if (!operation || operation.ownerId !== ownerId) return this.#failure('invalid-operation', 'The save operation is unavailable.');
+    if (!operation || operation.ownerId !== ownerId) return OperationResult.failure('invalid-operation', 'The save operation is unavailable.');
     operation.controller.abort();
     return { ok: true, result: null };
   }
@@ -53,10 +55,6 @@ class RefinedClipSaver {
     const operations = [...this.#operations.values()];
     for (const { controller } of operations) controller.abort();
     await Promise.allSettled(operations.map(({ operation }) => operation));
-  }
-
-  #failure(code, message) {
-    return { ok: false, code, error: { message } };
   }
 
   async #save(event, request, operation) {
@@ -70,11 +68,16 @@ class RefinedClipSaver {
       return await this.#encodeAndPlace({ ...staged, outcome: request.outcome, sourceInfo }, operation);
     } catch (error) {
       if (error instanceof SaveRefusal || error instanceof StagedEditRefusal
-        || error instanceof RefinedClipKeptUnderTemporaryName) return this.#failure(error.code, error.message);
-      if (signal.aborted) return this.#failure('cancelled', 'Saving was cancelled.');
+        || error instanceof RefinedClipKeptUnderTemporaryName) return OperationResult.failure(error.code, error.message);
+      if (signal.aborted) return OperationResult.failure('cancelled', 'Saving was cancelled.');
       console.warn('[zoom-edit-save] save-failed', { kind: error instanceof Error ? error.name : 'unknown', code: error?.code });
-      return this.#failure('save-failed', 'The refined clip could not be saved.');
+      return OperationResult.failure('save-failed', 'The refined clip could not be saved.');
     }
+  }
+
+  #encodedOutput(composition) {
+    if (composition.playsBackward) return ENCODED_OUTPUT.forwardThenBackward;
+    return composition.keepsAudio ? ENCODED_OUTPUT.cutWithSound : ENCODED_OUTPUT.silentCut;
   }
 
   async #encodeAndPlace({ host, clip, cut, composition, outcome, sourceInfo }, { signal, report }) {
@@ -82,7 +85,7 @@ class RefinedClipSaver {
     try {
       preparedSource = await host.prepareExtractionSource(cut.sourceHandle, signal);
     } catch {
-      if (signal.aborted) return this.#failure('cancelled', 'Saving was cancelled.');
+      if (signal.aborted) return OperationResult.failure('cancelled', 'Saving was cancelled.');
       throw new SaveRefusal('The source of the refined clip is unavailable.', 'invalid-source');
     }
     // The record comes from the clip's own tag or from the anchored window, never from the renderer.
@@ -97,11 +100,10 @@ class RefinedClipSaver {
         workspace,
         signal,
         report,
-        audio: composition.keepsAudio,
-        forwardThenBackward: composition.playsBackward,
+        output: this.#encodedOutput(composition),
       });
-      if (signal.aborted) return this.#failure('cancelled', 'Saving was cancelled.');
-      if (!encoded.ok) return this.#failure(encoded.code, 'The refined clip could not be encoded.');
+      if (signal.aborted) return OperationResult.failure('cancelled', 'Saving was cancelled.');
+      if (!encoded.ok) return OperationResult.failure(encoded.code, 'The refined clip could not be encoded.');
       report({ stage: 'saving-media' });
       const placed = outcome === 'replace'
         ? await this.#placement.replace(clip, encoded.mediaPath, composition.filenameSuffix)

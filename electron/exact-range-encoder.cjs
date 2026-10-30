@@ -4,67 +4,20 @@ const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
 const { runProcess } = require('./process-runner.cjs');
 const { FrameTime } = require('./frame-time.cjs');
 const { ForwardThenBackwardFilter } = require('./forward-then-backward-filter.cjs');
+const { ExactRangeProbe } = require('./exact-range-probe.cjs');
+const { OperationResult } = require('./operation-result.cjs');
 
-function errorResult(code, message = code) {
-  return { ok: false, code, error: { message } };
-}
-
-async function defaultProbeFrameTimes(ffprobe, sourcePath, selectedStream, startFrameIndex, endFrameIndex, {
-  runCommand = runProcess,
-  signal,
-  environment = process.env,
-} = {}) {
-  const result = await runCommand(ffprobe, [
-    '-v', 'error',
-    '-select_streams', String(selectedStream),
-    '-show_frames',
-    '-show_entries', 'frame=best_effort_timestamp_time,pkt_duration_time',
-    '-of', 'json',
-    sourcePath,
-  ], { signal, env: environment });
-  if (!result.ok) throw Object.assign(new Error('Could not inspect original-source frame times.'), { code: result.code });
-  const document = JSON.parse(String(result.stdout || '').replace(/^\uFEFF/, ''));
-  const frames = Array.isArray(document.frames) ? document.frames : [];
-  const start = frames[startFrameIndex];
-  const end = frames[endFrameIndex];
-  const following = frames[endFrameIndex + 1];
-  const secondsToUs = value => BigInt(Math.round(Number(value) * 1_000_000));
-  if (!start || !end || !Number.isFinite(Number(start.best_effort_timestamp_time))
-    || !Number.isFinite(Number(end.best_effort_timestamp_time))) {
-    throw new Error('Original-source frame boundaries are unavailable.');
-  }
-  const startUs = secondsToUs(start.best_effort_timestamp_time);
-  const endUs = following && Number.isFinite(Number(following.best_effort_timestamp_time))
-    ? secondsToUs(following.best_effort_timestamp_time)
-    : secondsToUs(end.best_effort_timestamp_time) + secondsToUs(end.pkt_duration_time || 0.04);
-  if (endUs <= startUs) throw new Error('Original-source frame boundaries are invalid.');
-  return { startUs, endUs };
-}
-
-async function defaultVerifyMedia(ffprobe, outputPath, { runCommand = runProcess, signal, environment = process.env,
-  expectedFrames } = {}) {
-  const result = await runCommand(ffprobe, [
-    '-v', 'error', '-count_frames', '-show_entries', 'stream=codec_type,codec_name,width,height,nb_read_frames',
-    '-of', 'json', outputPath,
-  ], { signal, env: environment });
-  if (!result.ok) throw new Error('Could not verify the encoded media.');
-  const document = JSON.parse(String(result.stdout || '').replace(/^\uFEFF/, ''));
-  const video = Array.isArray(document.streams) && document.streams.find(stream => stream.codec_type === 'video');
-  if (!video) {
-    throw new Error('The encoded media has no video stream.');
-  }
-  if (expectedFrames !== undefined && Number(video.nb_read_frames) !== expectedFrames) {
-    throw new Error('The encoded media has the wrong number of frames.');
-  }
-}
+const ENCODED_OUTPUT = Object.freeze({
+  cutWithSound: 'cut-with-sound',
+  silentCut: 'silent-cut',
+  forwardThenBackward: 'forward-then-backward',
+});
 
 class ExactRangeEncoder {
   #fs;
   #resolveFfmpeg;
-  #resolveFfprobe;
   #runCommand;
-  #probeFrameTimes;
-  #verifyMedia;
+  #probe;
   #environment;
   #provenance;
 
@@ -73,31 +26,25 @@ class ExactRangeEncoder {
     resolveFfmpeg,
     resolveFfprobe,
     runCommand = runProcess,
-    probeFrameTimes = defaultProbeFrameTimes,
-    verifyMedia = defaultVerifyMedia,
     environment = process.env,
+    probe = new ExactRangeProbe({ resolveFfprobe, runCommand, environment }),
     provenance = new Mp4Provenance(),
   } = {}) {
-    if (typeof resolveFfmpeg !== 'function' || typeof resolveFfprobe !== 'function') {
-      throw new Error('Exact-range encoder dependencies are invalid.');
-    }
+    if (typeof resolveFfmpeg !== 'function') throw new Error('Exact-range encoder dependencies are invalid.');
     this.#fs = fs;
     this.#resolveFfmpeg = resolveFfmpeg;
-    this.#resolveFfprobe = resolveFfprobe;
     this.#runCommand = runCommand;
-    this.#probeFrameTimes = probeFrameTimes;
-    this.#verifyMedia = verifyMedia;
+    this.#probe = probe;
     this.#environment = environment;
     this.#provenance = provenance;
   }
 
   async encode({ host, source, range, tagValue, workspace, signal, report = () => undefined,
-    audio = true, forwardThenBackward = false }) {
-    if (forwardThenBackward && audio) throw new Error('A forward-then-backward clip has no sound.');
+    output = ENCODED_OUTPUT.cutWithSound }) {
+    if (!Object.values(ENCODED_OUTPUT).includes(output)) throw new Error('Encoded output is unknown.');
     const job = {
-      host, source, range, tagValue, workspace, signal, report, audio, forwardThenBackward,
+      host, source, range, tagValue, workspace, signal, report, output,
       ffmpeg: this.#resolveFfmpeg(),
-      ffprobe: this.#resolveFfprobe(),
       videoPath: path.join(workspace, 'video.mp4'),
       loopedVideoPath: path.join(workspace, 'looped.mp4'),
       mediaPath: path.join(workspace, 'media.mp4'),
@@ -105,36 +52,34 @@ class ExactRangeEncoder {
     let boundary = await this.#indexedBoundary(job);
     report({ stage: boundary ? 'encoding-video' : 'exact-fallback' });
     let videoResult = boundary ? await this.#encodeIndexedVideo(job, boundary) : null;
-    if (signal.aborted) return errorResult('cancelled', 'Encoding was cancelled.');
+    if (signal.aborted) return OperationResult.failure('cancelled', 'Encoding was cancelled.');
     if (!videoResult?.ok) {
       console.info('[exact-range-encoder] exact-fallback', { reason: boundary ? videoResult?.code : 'index-unavailable' });
       ({ boundary, videoResult } = await this.#encodeByFullDecode(job));
     }
-    if (!videoResult.ok) return errorResult(videoResult.code, 'The selected frames could not be encoded.');
+    if (!videoResult.ok) return OperationResult.failure(videoResult.code, 'The selected frames could not be encoded.');
     let finalization;
     try {
       finalization = await this.#finalizeMedia(job, boundary);
     } catch (error) {
       if (!boundary?.frames || signal.aborted) throw error;
-      finalization = errorResult('unverified-media', 'The locally encoded media could not be verified.');
+      finalization = OperationResult.failure('unverified-media', 'The locally encoded media could not be verified.');
     }
     if (!finalization.ok && boundary?.frames && !signal.aborted) {
       await Promise.all([job.videoPath, job.loopedVideoPath, job.mediaPath].map(file => this.#fs.rm(file, { force: true })));
       const fallback = await this.#encodeByFullDecode(job);
-      if (!fallback.videoResult.ok) return errorResult(fallback.videoResult.code, 'The selected frames could not be encoded.');
+      if (!fallback.videoResult.ok) return OperationResult.failure(fallback.videoResult.code, 'The selected frames could not be encoded.');
       finalization = await this.#finalizeMedia(job, fallback.boundary);
     }
     if (!finalization.ok) return finalization;
-    if (signal.aborted) return errorResult('cancelled', 'Encoding was cancelled.');
+    if (signal.aborted) return OperationResult.failure('cancelled', 'Encoding was cancelled.');
     return { ok: true, mediaPath: job.mediaPath, warning: finalization.warning };
   }
 
   async #encodeByFullDecode(job) {
-    const { ffprobe, source, range, signal } = job;
+    const { source, range, signal } = job;
     job.report({ stage: 'exact-fallback' });
-    const boundary = await this.#probeFrameTimes(
-      ffprobe, source.sourcePath, source.selectedStream, range.startFrameIndex, range.endFrameIndex,
-      { runCommand: this.#runCommand, signal, environment: this.#environment });
+    const boundary = await this.#probe.frameBoundaries(source, range, signal);
     return { boundary, videoResult: await this.#encodeVideo(job) };
   }
 
@@ -200,18 +145,18 @@ class ExactRangeEncoder {
     const selected = [...String(result.stderr || '').matchAll(/Parsed_showinfo[^\r\n]*\bn:\s*\d+\s+pts:\s*(-?\d+)/g)];
     if (!timebase || selected.length < count || selected.length > count + 1) {
       console.warn('[exact-range-encoder] local-frame-check', { expected: count, selected: selected.length, hasTimebase: !!timebase });
-      return errorResult('unverified-seek', 'The seeked frames could not be verified.');
+      return OperationResult.failure('unverified-seek', 'The seeked frames could not be verified.');
     }
     const outputNumerator = BigInt(timebase[1]);
     const outputDenominator = BigInt(timebase[2]);
-    if (outputNumerator <= 0n || outputDenominator <= 0n) return errorResult('unverified-seek');
+    if (outputNumerator <= 0n || outputDenominator <= 0n) return OperationResult.failure('unverified-seek');
     for (let index = 0; index < count; index += 1) {
       const actual = BigInt(selected[index][1]);
       const expected = boundary.frames[index].pts;
       if (actual * outputNumerator * boundary.denominator
         !== expected * boundary.numerator * outputDenominator) {
         console.warn('[exact-range-encoder] local-frame-check', { mismatchAt: index, expectedPts: String(expected), actualPts: String(actual) });
-        return errorResult('unverified-seek', 'The seeked frames do not match the original index.');
+        return OperationResult.failure('unverified-seek', 'The seeked frames do not match the original index.');
       }
     }
     report({ stage: 'encoding-video', encodedFrames: count, totalFrames: count });
@@ -233,18 +178,19 @@ class ExactRangeEncoder {
   }
 
   async #finalizeMedia(job, boundary) {
-    const { ffmpeg, ffprobe, range, workspace, mediaPath, tagValue, signal } = job;
+    const { ffmpeg, range, workspace, mediaPath, tagValue, signal, output } = job;
     let writtenTag = tagValue;
     let warning;
     let videoPath = job.videoPath;
-    if (job.forwardThenBackward) {
+    if (output === ENCODED_OUTPUT.forwardThenBackward) {
       job.report({ stage: 'adding-backward-half' });
       const looped = await this.#encodeForwardThenBackward(job);
-      if (!looped.ok) return errorResult(looped.code, 'The backward half could not be encoded.');
+      if (!looped.ok) return OperationResult.failure(looped.code, 'The backward half could not be encoded.');
       videoPath = job.loopedVideoPath;
     }
-    if (job.audio) job.report({ stage: 'adding-audio' });
-    const muxBase = job.audio ? this.#muxWithAudio(job, videoPath, boundary)
+    const withSound = output === ENCODED_OUTPUT.cutWithSound;
+    if (withSound) job.report({ stage: 'adding-audio' });
+    const muxBase = withSound ? this.#muxWithAudio(job, videoPath, boundary)
       : ['-hide_banner', '-nostdin', '-y', '-i', videoPath, '-map', '0:v:0', '-c:v', 'copy'];
     let muxResult = await this.#runCommand(ffmpeg, [
       ...muxBase,
@@ -258,12 +204,10 @@ class ExactRangeEncoder {
         ...muxBase, '-movflags', '+faststart', mediaPath,
       ], { cwd: workspace, signal, env: this.#environment });
     }
-    if (!muxResult.ok) return errorResult(muxResult.code, 'The encoded media could not be finalized.');
+    if (!muxResult.ok) return OperationResult.failure(muxResult.code, 'The encoded media could not be finalized.');
     const cutFrames = range.endFrameIndex - range.startFrameIndex + 1;
-    await this.#verifyMedia(ffprobe, mediaPath, {
-      runCommand: this.#runCommand, signal, environment: this.#environment,
-      expectedFrames: job.forwardThenBackward ? 2 * cutFrames : cutFrames,
-    });
+    const expectedFrames = output === ENCODED_OUTPUT.forwardThenBackward ? 2 * cutFrames : cutFrames;
+    await this.#probe.verifyEncoded(mediaPath, expectedFrames, signal);
     if (writtenTag) {
       try {
         const readBack = await this.#provenance.readBack(mediaPath);
@@ -297,4 +241,4 @@ class ExactRangeEncoder {
   }
 }
 
-module.exports = { ExactRangeEncoder };
+module.exports = { ENCODED_OUTPUT, ExactRangeEncoder };

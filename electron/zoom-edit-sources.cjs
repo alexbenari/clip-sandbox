@@ -44,10 +44,11 @@ class ZoomEditSources {
     const widen = request?.widen;
     if (!Number.isSafeInteger(widen) || widen < 0 || widen > MAX_WIDEN) throw new Error('Movie window request is invalid.');
     const clipPath = await this.#clipPath(event, request);
-    const previous = widen > 0 ? this.#widenedRecord(event, request.previousWindowId, clipPath, widen) : null;
-    const sourceInfo = this.#provenance.canBeTagged(clipPath) ? await this.#provenance.read(clipPath) : null;
-    if (!sourceInfo) return { kind: 'no-source-info' };
-    if (!sourceInfo.hasRange) return { kind: 'movie-only' };
+    const previous = widen > 0 ? this.#widenedRecord(event, request, clipPath) : null;
+    const ownSourceInfo = this.#provenance.canBeTagged(clipPath) ? await this.#provenance.read(clipPath) : null;
+    if (!ownSourceInfo) return { kind: 'no-source-info' };
+    const sourceInfo = ownSourceInfo.ranged();
+    if (!sourceInfo) return { kind: 'movie-only' };
     const moviePath = await this.#moviePath(event, sourceInfo.sourceMovie);
     if (!moviePath) return { kind: 'cancelled' };
     const host = this.#hostForEvent(event);
@@ -85,7 +86,7 @@ class ZoomEditSources {
     return (await this.#grantedClips.resolve(event.sender, request)).path;
   }
 
-  #widenedRecord(event, previousWindowId, clipPath, widen) {
+  #widenedRecord(event, { previousWindowId, widen }, clipPath) {
     const previous = this.#windowRecord(event, previousWindowId);
     if (previous.clipPath !== clipPath || previous.widen !== widen - 1) throw new Error('Movie window request is invalid.');
     return previous;

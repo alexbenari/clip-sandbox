@@ -4,16 +4,13 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
 const { SourceInfo } = require('./clip-provenance/source-info.cjs');
+const { OperationResult } = require('./operation-result.cjs');
 
 const COLLECTION_NAME = /^[^<>:"/\\|?*\u0000]{1,180}$/;
 const OPAQUE_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 
 function publicEntry(name, stat, type = '') {
   return Object.freeze({ name, type, size: stat.size, lastModifiedMs: stat.mtimeMs });
-}
-
-function errorResult(code, message = code) {
-  return { ok: false, code, error: { message } };
 }
 
 function validCollectionName(value) {
@@ -62,7 +59,7 @@ class ClipExtractionRuntime {
     const settingsResult = await this.getSettings();
     const root = settingsResult?.ok === true ? settingsResult.settings?.pipelinesRootPath : null;
     if (typeof root !== 'string' || !path.isAbsolute(root)) {
-      return errorResult('missing-pipeline-root', 'Choose a Pipelines root in Settings before extracting.');
+      return OperationResult.failure('missing-pipeline-root', 'Choose a Pipelines root in Settings before extracting.');
     }
     const folderPath = path.join(path.resolve(root), 'extraction-tmp');
     await this.fs.mkdir(folderPath, { recursive: true });
@@ -85,20 +82,20 @@ class ClipExtractionRuntime {
 
   async allocateAndExtract(ownerId, host, request, signal, report = () => undefined) {
     const target = this.destination(ownerId, request.destinationHandle);
-    if (!target) return errorResult('invalid-destination', 'The extraction destination is unavailable.');
+    if (!target) return OperationResult.failure('invalid-destination', 'The extraction destination is unavailable.');
     if (!OPAQUE_ID.test(String(request.sourceHandle || '').replace(/^source_/, ''))
       || !Number.isSafeInteger(request.sourceGeneration) || request.sourceGeneration < 1
       || !validCollectionName(request.collectionName)
       || !Number.isSafeInteger(request.startFrameIndex) || request.startFrameIndex < 0
       || !Number.isSafeInteger(request.endFrameIndex) || request.endFrameIndex < request.startFrameIndex) {
-      return errorResult('invalid-request', 'The exact extraction request is invalid.');
+      return OperationResult.failure('invalid-request', 'The exact extraction request is invalid.');
     }
     let source;
     try {
       report({ stage: 'checking-source' });
       source = await host.prepareExtractionSource(request.sourceHandle, signal);
     } catch (error) {
-      return errorResult(error?.code === 'ABORT_ERR' ? 'cancelled' : 'invalid-source', 'The original source is unavailable.');
+      return OperationResult.failure(error?.code === 'ABORT_ERR' ? 'cancelled' : 'invalid-source', 'The original source is unavailable.');
     }
     const workspace = await this.fs.mkdtemp(path.join(target.folderPath, '.clip-extraction-'));
     try {
@@ -109,7 +106,7 @@ class ClipExtractionRuntime {
         host, source, range: { reviewSessionId, sourceHandle, startFrameIndex, endFrameIndex },
         tagValue: provenance.serializedProvenance, workspace, signal, report,
       });
-      if (signal.aborted) return errorResult('cancelled', 'Extraction was cancelled.');
+      if (signal.aborted) return OperationResult.failure('cancelled', 'Extraction was cancelled.');
       if (!encoded.ok) return encoded;
       report({ stage: 'saving-media' });
       const { filename, stat } = await this.publishMedia(target, request.collectionName, encoded.mediaPath);
@@ -123,7 +120,7 @@ class ClipExtractionRuntime {
         },
       };
     } catch (error) {
-      return errorResult(signal.aborted ? 'cancelled' : 'extraction-failed', error instanceof Error ? error.message : 'Extraction failed.');
+      return OperationResult.failure(signal.aborted ? 'cancelled' : 'extraction-failed', error instanceof Error ? error.message : 'Extraction failed.');
     } finally {
       try {
         await this.fs.rm(workspace, { recursive: true, force: true });
@@ -143,13 +140,13 @@ class ClipExtractionRuntime {
         request.reviewSessionId, request.sourceHandle, request.startFrameIndex, request.endFrameIndex,
         source.identity);
     } catch {
-      return errorResult('invalid-source', 'Exact frame identity could not be verified for extraction.');
+      return OperationResult.failure('invalid-source', 'Exact frame identity could not be verified for extraction.');
     }
     const [start, end] = endpoints;
     if (start.frameIndex !== request.startFrameIndex || end.frameIndex !== request.endFrameIndex
       || start.originalFrameIndex !== request.startFrameIndex
       || end.originalFrameIndex !== request.endFrameIndex) {
-      return errorResult('invalid-source', 'Exact frame ordinals changed before extraction.');
+      return OperationResult.failure('invalid-source', 'Exact frame ordinals changed before extraction.');
     }
     try {
       const sourceInfo = SourceInfo.forMovieRange(
@@ -186,7 +183,7 @@ class ClipExtractionRuntime {
   extract(ownerId, host, request = {}, report = () => undefined) {
     const operationId = String(request.operationId || '');
     if (!/^extract_[a-zA-Z0-9_-]{8,120}$/.test(operationId) || this.operations.has(operationId)) {
-      return Promise.resolve(errorResult('invalid-operation', 'The extraction operation is invalid.'));
+      return Promise.resolve(OperationResult.failure('invalid-operation', 'The extraction operation is invalid.'));
     }
     const controller = new AbortController();
     this.operations.set(operationId, { ownerId, controller });
@@ -204,11 +201,11 @@ class ClipExtractionRuntime {
 
   async saveCollection(ownerId, request = {}) {
     const target = this.destination(ownerId, request.destinationHandle);
-    if (!target) return errorResult('invalid-destination', 'The extraction destination is unavailable.');
+    if (!target) return OperationResult.failure('invalid-destination', 'The extraction destination is unavailable.');
     if (!validTopLevelFilename(request.filename, '.txt') || typeof request.text !== 'string'
       || Buffer.byteLength(request.text, 'utf8') > 4 * 1024 * 1024
       || request.text.split(/\r?\n/).filter(Boolean).some(name => !validTopLevelFilename(name, '.mp4'))) {
-      return errorResult('invalid-request', 'The collection publication request is invalid.');
+      return OperationResult.failure('invalid-request', 'The collection publication request is invalid.');
     }
     const temporary = path.join(target.folderPath, `.${request.filename}.${this.randomId()}.tmp`);
     try {
@@ -223,13 +220,13 @@ class ClipExtractionRuntime {
           message: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
         });
       }
-      return errorResult('publication-failed', error instanceof Error ? error.message : 'Collection publication failed.');
+      return OperationResult.failure('publication-failed', error instanceof Error ? error.message : 'Collection publication failed.');
     }
   }
 
   async cancel(ownerId, operationId) {
     const operation = this.operations.get(operationId);
-    if (!operation || operation.ownerId !== ownerId) return errorResult('invalid-operation', 'The extraction operation is unavailable.');
+    if (!operation || operation.ownerId !== ownerId) return OperationResult.failure('invalid-operation', 'The extraction operation is unavailable.');
     operation.controller.abort();
     return { ok: true, result: null };
   }

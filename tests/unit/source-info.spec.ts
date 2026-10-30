@@ -51,10 +51,10 @@ describe('SourceInfo', () => {
     expect(SourceInfo.fromRecord(versionTwoRecord()).toRecord()).toEqual(versionTwoRecord());
   });
 
-  it('names the movie and its range for its readers', () => {
+  it('names the movie and offers its range to readers that need one', () => {
     const info = SourceInfo.fromRecord(versionTwoRecord());
 
-    expect([info.movieDisplayName, info.sourceMovie, info.range]).toEqual([
+    expect([info.movieDisplayName, info.sourceMovie, info.ranged().range]).toEqual([
       'Sample Feature.2001.mkv', sourceMovie, { start: 1300, end: 1340, startTimeUs: 54_221_000, endTimeUs: 55_889_000 },
     ]);
   });
@@ -154,7 +154,7 @@ describe('SourceInfo', () => {
     it('reads and writes the movie without a range or reference frames', () => {
       const info = SourceInfo.fromRecord(movieOnlyRecord);
 
-      expect([info.movieDisplayName, info.hasRange, info.toRecord()]).toEqual(['Sample Feature.2001.mkv', false, movieOnlyRecord]);
+      expect([info.movieDisplayName, info.toRecord()]).toEqual(['Sample Feature.2001.mkv', movieOnlyRecord]);
     });
 
     it.each([
@@ -181,8 +181,19 @@ describe('SourceInfo', () => {
       expect(SourceInfo.fromRecord(movieOnlyRecord).limitedTo('movie-range').toRecord()).toEqual(movieOnlyRecord);
     });
 
-    it('answers no exact time', () => {
-      expect(SourceInfo.fromRecord(movieOnlyRecord).exactTimeUsOf(0)).toBeUndefined();
+    it('offers no range to readers that need one', () => {
+      expect(SourceInfo.fromRecord(movieOnlyRecord).ranged()).toBeNull();
+    });
+
+    it.each([
+      ['a range record', versionTwoRecord()],
+      ['a movie-only record', movieOnlyRecord],
+    ])('refuses to limit %s to a kind of source info it does not know', (_case, record) => {
+      expect(() => SourceInfo.fromRecord(record).limitedTo('movie-and-audio')).toThrow('Source info kind is unknown.');
+    });
+
+    it('offers no range once a range record is limited to the movie', () => {
+      expect(SourceInfo.fromRecord(versionTwoRecord()).limitedTo('movie-only').ranged()).toBeNull();
     });
   });
 

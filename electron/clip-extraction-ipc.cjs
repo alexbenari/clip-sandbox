@@ -1,3 +1,6 @@
+const { CorrelatedIpcReplies } = require('./correlated-ipc-replies.cjs');
+const { OperationResult } = require('./operation-result.cjs');
+
 const CHANNELS = Object.freeze({
   open: 'clip-sandbox:clip-extraction-open-destination',
   extract: 'clip-sandbox:clip-extraction-extract',
@@ -7,6 +10,10 @@ const CHANNELS = Object.freeze({
 });
 
 class ClipExtractionIpcBoundary {
+  #replies = new CorrelatedIpcReplies({
+    label: 'Clip-extraction', failureCode: 'extraction-failed', failureMessage: 'Clip extraction failed.', logPrefix: 'clip-extraction',
+  });
+
   constructor({ ipcMain, runtime, hostForEvent }) {
     if (!ipcMain?.handle || !runtime || typeof hostForEvent !== 'function') {
       throw new Error('Clip-extraction IPC dependencies are invalid.');
@@ -28,8 +35,8 @@ class ClipExtractionIpcBoundary {
   async open(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      operationId = this.operationId(payload?.operationId, 'destination');
-      return this.envelope(operationId, await this.runtime.openDestination(event.sender.id));
+      operationId = this.#replies.operationId(payload?.operationId, 'destination');
+      return this.#replies.envelope(operationId, await this.runtime.openDestination(event.sender.id));
     } catch (error) {
       return this.failure(operationId, error);
     }
@@ -38,7 +45,7 @@ class ClipExtractionIpcBoundary {
   async extract(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      operationId = this.operationId(payload?.operationId, 'extract');
+      operationId = this.#replies.operationId(payload?.operationId, 'extract');
       const result = await this.runtime.extract(event.sender.id, this.hostForEvent(event), {
         operationId,
         destinationHandle: payload?.destinationHandle,
@@ -48,16 +55,8 @@ class ClipExtractionIpcBoundary {
         startFrameIndex: payload?.startFrameIndex,
         endFrameIndex: payload?.endFrameIndex,
         reviewSessionId: payload?.reviewSessionId,
-      }, progress => {
-        try {
-          if (!event.sender.isDestroyed?.()) event.sender.send(CHANNELS.progress, { operationId, ...progress });
-        } catch (error) {
-          console.warn('[clip-extraction] progress-delivery-failed', {
-            kind: error instanceof Error ? error.name : 'unknown',
-          });
-        }
-      });
-      return this.envelope(operationId, result);
+      }, progress => this.#replies.sendProgress(event.sender, CHANNELS.progress, { operationId, ...progress }));
+      return this.#replies.envelope(operationId, result);
     } catch (error) {
       return this.failure(operationId, error);
     }
@@ -66,13 +65,13 @@ class ClipExtractionIpcBoundary {
   async saveCollection(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      operationId = this.operationId(payload?.operationId, 'publication');
+      operationId = this.#replies.operationId(payload?.operationId, 'publication');
       const result = await this.runtime.saveCollection(event.sender.id, {
         destinationHandle: payload?.destinationHandle,
         filename: payload?.filename,
         text: payload?.text,
       });
-      return this.envelope(operationId, result);
+      return this.#replies.envelope(operationId, result);
     } catch (error) {
       return this.failure(operationId, error);
     }
@@ -81,42 +80,17 @@ class ClipExtractionIpcBoundary {
   async cancel(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      operationId = this.operationId(payload?.operationId, 'cancel');
+      operationId = this.#replies.operationId(payload?.operationId, 'cancel');
       const result = await this.runtime.cancel(event.sender.id, payload?.extractionOperationId);
-      return this.envelope(operationId, result);
+      return this.#replies.envelope(operationId, result);
     } catch (error) {
       return this.failure(operationId, error);
     }
   }
 
-  operationId(value, prefix) {
-    if (typeof value !== 'string' || !new RegExp(`^${prefix}_[a-zA-Z0-9_-]{8,120}$`).test(value)) {
-      const error = new Error('Clip-extraction operation id is invalid.');
-      error.code = 'invalid-operation';
-      throw error;
-    }
-    return value;
-  }
-
-  envelope(operationId, result) {
-    return result?.ok === true
-      ? { ok: true, operationId, result: result.result }
-      : {
-        ok: false,
-        operationId,
-        error: {
-          code: String(result?.code || 'extraction-failed'),
-          message: String(result?.error?.message || 'Clip extraction failed.').slice(0, 1024),
-        },
-      };
-  }
-
   failure(operationId, error) {
-    return this.envelope(operationId, {
-      ok: false,
-      code: error?.code || 'invalid-request',
-      error: { message: error instanceof Error ? error.message : 'Clip-extraction request is invalid.' },
-    });
+    return this.#replies.envelope(operationId, OperationResult.failure(
+      error?.code || 'invalid-request', error instanceof Error ? error.message : 'Clip-extraction request is invalid.'));
   }
 }
 

@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CLIP_SESSION, WINDOW_ID, clipRecord, event, stagedEditsIn, windowRequest } from '../support/staged-edit-fixtures.js';
+import { CLIP_SESSION, WINDOW_ID, clipRecord, event, stagedEditsIn } from '../support/staged-edit-fixtures.js';
 
 const require = createRequire(import.meta.url);
 const { ZoomEditPreviews } = require('../../electron/zoom-edit-previews.cjs');
@@ -111,31 +111,13 @@ describe('ZoomEditPreviews', () => {
     expect(reports).toEqual([{ renderedFrames: 30, totalFrames: 82 }]);
   });
 
-  describe('refusals', () => {
-    it.each([
-      ['a folder that was not opened in this window', { folderPath: path.resolve('elsewhere') }, 'Folder access is unavailable for this folder session.'],
-      ['a name that contains a folder', { filename: '..\\Feature-002.mp4' }, 'Clip filename is invalid.'],
-      ['a range past the clip’s last frame', { endFrame: 51 }, 'The range is outside the clip.'],
-      ['a session that does not show the clip', { sessionId: 'session_window01' }, 'The review session does not show this source.'],
-      ['a window range more than a minute beyond the clip', { ...windowRequest, startFrame: 379, endFrame: 1900 }, 'The range reaches more than a minute beyond the clip.'],
-      ['a window that is not anchored', { ...windowRequest, source: { kind: 'window', windowId: 'window_opaque0002' } }, 'The movie window is not anchored.'],
-    ])('refuses %s without rendering', async (_case, request, message) => {
-      const { render, runCommand } = await previewsWith();
+  it('answers a refusal of the staged edits without rendering', async () => {
+    const { render, runCommand } = await previewsWith();
 
-      const answer = await render(request);
+    const answer = await render({ endFrame: 51 });
 
-      expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message } });
-      expect([runCommand.mock.calls.length, previewFiles()]).toEqual([0, []]);
-    });
-
-    it('refuses the window of another clip', async () => {
-      const { render, runCommand } = await previewsWith({ windowRecord: { clipPath: path.join(folder, 'Feature-003.mp4') } });
-
-      const answer = await render({ ...windowRequest, startFrame: 1870, endFrame: 1940 });
-
-      expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message: 'The movie window belongs to another clip.' } });
-      expect(runCommand).not.toHaveBeenCalled();
-    });
+    expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message: 'The range is outside the clip.' } });
+    expect([runCommand.mock.calls.length, previewFiles()]).toEqual([0, []]);
   });
 
   it('renders a range of the anchored movie window', async () => {

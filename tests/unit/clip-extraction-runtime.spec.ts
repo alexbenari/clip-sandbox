@@ -26,6 +26,11 @@ function runtimeWith({ fs, getSettings, randomId, provenance, ...encoding }: Rec
   });
 }
 
+// A probe that answers the cut's boundary times and accepts every encoded media.
+function probeTiming(startUs: bigint, endUs: bigint, verifyEncoded = vi.fn(async () => undefined)) {
+  return { frameBoundaries: vi.fn(async () => ({ startUs, endUs })), verifyEncoded };
+}
+
 /** The value that follows a command-line flag, such as `-c:v` -> `libx264`. */
 function argumentAfter(args: readonly string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
@@ -49,11 +54,11 @@ describe('clip extraction runtime', () => {
           + '[Parsed_showinfo_1] n: 2 pts: 55080 pts_time:55.08\n'
         : '',
     }));
-    const probeFrameTimes = vi.fn(async () => { throw new Error('whole-source probe used'); });
+    const probe = { frameBoundaries: vi.fn(async () => { throw new Error('whole-source probe used'); }), verifyEncoded: vi.fn(async () => undefined) };
     const runtime = runtimeWith({
       fs, getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
-      resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'),
-      probeFrameTimes, verifyMedia: vi.fn(async () => undefined), runCommand,
+      resolveFfmpeg: vi.fn(() => 'ffmpeg'),
+      probe, runCommand,
       randomId: vi.fn(() => 'opaque12345678'),
     });
     const destination = await runtime.openDestination(7);
@@ -75,7 +80,7 @@ describe('clip extraction runtime', () => {
     });
 
     expect(result).toMatchObject({ ok: true, result: { filename: 'Movie-001.mp4' } });
-    expect(probeFrameTimes).not.toHaveBeenCalled();
+    expect(probe.frameBoundaries).not.toHaveBeenCalled();
     const videoArguments = runCommand.mock.calls[0][1];
     expect(Number(argumentAfter(videoArguments, '-ss'))).toBeLessThanOrEqual(55);
     expect(videoArguments.join(' ')).toContain('gte(pts,55000)');
@@ -98,12 +103,12 @@ describe('clip extraction runtime', () => {
           + '[Parsed_showinfo_1] n: 0 pts: 55000 pts_time:55\n'
           + '[Parsed_showinfo_1] n: 1 pts: 55040 pts_time:55.04\n' : '',
     }));
-    const verifyMedia = vi.fn().mockRejectedValueOnce(new Error('The encoded media has the wrong number of frames.'))
+    const verifyEncoded = vi.fn().mockRejectedValueOnce(new Error('The encoded media has the wrong number of frames.'))
       .mockResolvedValue(undefined);
     const runtime = runtimeWith({
       fs, getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
-      resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'),
-      probeFrameTimes: vi.fn(async () => ({ startUs: 55_000_000n, endUs: 55_080_000n })), verifyMedia, runCommand,
+      resolveFfmpeg: vi.fn(() => 'ffmpeg'),
+      probe: probeTiming(55_000_000n, 55_080_000n, verifyEncoded), runCommand,
       randomId: vi.fn(() => 'opaque12345678'),
     });
     const identity = (frameIndex: number, pts: number) => ({
@@ -139,9 +144,8 @@ describe('clip extraction runtime', () => {
     const runtime = runtimeWith({
       fs,
       getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
-      resolveFfmpeg: vi.fn(() => 'ffmpeg'), resolveFfprobe: vi.fn(() => 'ffprobe'),
-      probeFrameTimes: vi.fn(async () => ({ startUs: 0n, endUs: 100_000n })),
-      verifyMedia: vi.fn(async () => undefined), runCommand, provenance,
+      resolveFfmpeg: vi.fn(() => 'ffmpeg'),
+      probe: probeTiming(0n, 100_000n), runCommand, provenance,
       randomId: vi.fn(() => 'opaque12345678'),
     });
     const extractFramesTwoToFour = async () => {
@@ -245,8 +249,7 @@ describe('clip extraction runtime', () => {
       fs,
       getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
       resolveFfmpeg: vi.fn(() => 'D:\\products\\ffmpeg.exe'),
-      resolveFfprobe: vi.fn(() => 'D:\\products\\ffprobe.exe'),
-      probeFrameTimes: vi.fn(async () => ({ startUs: 1_000_000n, endUs: 2_000_000n })),
+      probe: probeTiming(1_000_000n, 2_000_000n),
       runCommand,
       randomId: vi.fn(() => 'opaque12345678'),
     });
@@ -297,14 +300,12 @@ describe('clip extraction runtime', () => {
       fs,
       getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
       resolveFfmpeg: vi.fn(() => 'D:\\products\\ffmpeg.exe'),
-      resolveFfprobe: vi.fn(() => 'D:\\products\\ffprobe.exe'),
-      probeFrameTimes: vi.fn(async () => ({ startUs: 1_000_000n, endUs: 2_000_000n })),
+      probe: probeTiming(1_000_000n, 2_000_000n),
       runCommand: vi.fn(async (_command: string, args: string[]) => {
         const output = args.at(-1)!;
         if (output.endsWith('.mp4')) await fs.writeFile(output, 'media');
         return { ok: true, exitCode: 0 };
       }),
-      verifyMedia: vi.fn(async () => undefined),
       randomId: vi.fn(() => 'opaque12345678'),
     });
     const destination = await runtime.openDestination(7);
@@ -342,10 +343,8 @@ describe('clip extraction runtime', () => {
       fs,
       getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
       resolveFfmpeg: vi.fn(() => 'D:\\products\\ffmpeg.exe'),
-      resolveFfprobe: vi.fn(() => 'D:\\products\\ffprobe.exe'),
-      probeFrameTimes: vi.fn(async () => ({ startUs: 1_000_000n, endUs: 2_000_000n })),
+      probe: probeTiming(1_000_000n, 2_000_000n),
       runCommand,
-      verifyMedia: vi.fn(async () => undefined),
       randomId: vi.fn(() => 'opaque12345678'),
     });
     const destination = await runtime.openDestination(7);

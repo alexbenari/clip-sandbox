@@ -4,12 +4,13 @@ const { EXTENSION_LIMIT_US } = require('./movie-window-placement.cjs');
 
 // Window frame numbers come from finding a reference frame by its check value, never from times.
 class MovieWindowAnchor {
-  async find({ host, sessionId, window: { sourceHandle, sourceInfo, placement, previousWindow } }) {
+  async find({ host, sessionId, window }) {
+    const { sourceHandle, sourceInfo, placement, previousWindow } = window;
     const reader = host.exactFrameReader(sessionId, sourceHandle);
     const { range, referenceFrames } = sourceInfo;
     const frameUs = this.#frameDurationUs(await reader.frameIdentity(0));
     for (const reference of referenceFrames) {
-      const estimate = (this.#referenceTimeUs(range, placement.clip, reference, frameUs) - placement.window.startUs) / frameUs;
+      const estimate = this.#estimatedWindowFrame(window, reference, frameUs);
       const order = previousWindow
         ? AnchorSearchOrder.widened(estimate, reader.frameCount,
           this.#frameAt(placement.window, previousWindow.startUs, frameUs),
@@ -34,9 +35,10 @@ class MovieWindowAnchor {
     return null;
   }
 
-  #referenceTimeUs(range, clip, reference, frameUs) {
-    if (reference.frameIndex === range.end) return clip.endUs;
-    return clip.startUs + (reference.frameIndex - range.start) * frameUs;
+  #estimatedWindowFrame({ sourceInfo: { range }, placement }, reference, frameUs) {
+    const referenceUs = reference.frameIndex === range.end
+      ? placement.clip.endUs : placement.clip.startUs + (reference.frameIndex - range.start) * frameUs;
+    return (referenceUs - placement.window.startUs) / frameUs;
   }
 
   #frameAt(window, timeUs, frameUs) {

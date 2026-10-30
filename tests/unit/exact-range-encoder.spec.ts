@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { ExactRangeEncoder } = require('../../electron/exact-range-encoder.cjs');
+const { ENCODED_OUTPUT, ExactRangeEncoder } = require('../../electron/exact-range-encoder.cjs');
 
 function identity(frameIndex: number, pts: number) {
   return {
@@ -21,7 +21,7 @@ const SEEKED_FRAMES = '[Parsed_showinfo_1] config in time_base: 1/1000\n'
   + '[Parsed_showinfo_1] n: 1 pts: 55040 pts_time:55.04\n';
 
 // An encoder whose FFmpeg runs succeed, recording the video filter of each video encode.
-function recordingEncoder({ verifyMedia = vi.fn(async () => undefined), events = [] as string[] } = {}) {
+function recordingEncoder({ verifyEncoded = vi.fn(async () => undefined), events = [] as string[] } = {}) {
   const commands: string[][] = [];
   const runCommand = vi.fn(async (_command: string, args: string[]) => {
     commands.push(args);
@@ -32,18 +32,18 @@ function recordingEncoder({ verifyMedia = vi.fn(async () => undefined), events =
   });
   const fs = { rm: vi.fn(async (target: string) => { events.push(`remove ${path.basename(target)}`); }) };
   const encoder = new ExactRangeEncoder({
-    fs, resolveFfmpeg: () => 'ffmpeg', resolveFfprobe: () => 'ffprobe', runCommand, verifyMedia,
-    probeFrameTimes: vi.fn(async () => ({ startUs: 55_000_000n, endUs: 55_080_000n })),
+    fs, resolveFfmpeg: () => 'ffmpeg', runCommand,
+    probe: { frameBoundaries: vi.fn(async () => ({ startUs: 55_000_000n, endUs: 55_080_000n })), verifyEncoded },
   });
-  const encode = (host: object, encodedSource = source, shape: object = {}) => encoder.encode({
-    host, source: encodedSource, range, tagValue: null, workspace, signal: new AbortController().signal, ...shape,
+  const encode = (host: object, encodedSource = source, output?: string) => encoder.encode({
+    host, source: encodedSource, range, tagValue: null, workspace, signal: new AbortController().signal, output,
   });
   // The last FFmpeg run writes the saved media.
   const mediaInputs = () => {
     const mux = commands[commands.length - 1];
     return mux.flatMap((argument, index) => (argument === '-i' ? [path.basename(mux[index + 1])] : []));
   };
-  return { encode, events, verifyMedia, mediaInputs };
+  return { encode, events, verifyEncoded, mediaInputs };
 }
 
 const timeline = (...frames: ReturnType<typeof identity>[]) => ({ extractionFrameTimeline: vi.fn(async () => frames) });
@@ -76,8 +76,22 @@ describe('ExactRangeEncoder', () => {
     expect(mediaInputs()).toEqual(['video.mp4', 'Movie.mp4']);
   });
 
+  it('makes the saved media from the cut frames alone for a silent cut', async () => {
+    const { encode, mediaInputs } = recordingEncoder();
+
+    await encode(timeline(identity(10, 55000), identity(11, 55040), identity(12, 55080)), source, ENCODED_OUTPUT.silentCut);
+
+    expect(mediaInputs()).toEqual(['video.mp4']);
+  });
+
+  it('refuses an output it does not know', async () => {
+    const { encode } = recordingEncoder();
+
+    await expect(encode(timeline(), source, 'backward-only')).rejects.toThrow('Encoded output is unknown.');
+  });
+
   describe('forward then backward', () => {
-    const loop = { forwardThenBackward: true, audio: false };
+    const loop = ENCODED_OUTPUT.forwardThenBackward;
 
     it('makes the saved media from the cut frames played forward then backward, without the source’s sound', async () => {
       const { encode, mediaInputs } = recordingEncoder();
@@ -88,24 +102,18 @@ describe('ExactRangeEncoder', () => {
     });
 
     it('checks that the saved media holds twice the cut frames', async () => {
-      const { encode, verifyMedia } = recordingEncoder();
+      const { encode, verifyEncoded } = recordingEncoder();
 
       await encode(timeline(identity(10, 55000), identity(11, 55040), identity(12, 55080)), source, loop);
 
-      expect(verifyMedia).toHaveBeenCalledWith('ffprobe', path.join(workspace, 'media.mp4'), expect.objectContaining({ expectedFrames: 4 }));
-    });
-
-    it('refuses to keep sound for frames that play backward', async () => {
-      const { encode } = recordingEncoder();
-
-      await expect(encode(timeline(), source, { forwardThenBackward: true })).rejects.toThrow('A forward-then-backward clip has no sound.');
+      expect(verifyEncoded).toHaveBeenCalledWith(path.join(workspace, 'media.mp4'), 4, expect.anything());
     });
   });
 
   it('discards the locally seeked media that failed verification before encoding again by full decode', async () => {
-    const verifyMedia = vi.fn().mockRejectedValueOnce(new Error('The encoded media has the wrong number of frames.'))
+    const verifyEncoded = vi.fn().mockRejectedValueOnce(new Error('The encoded media has the wrong number of frames.'))
       .mockResolvedValue(undefined);
-    const { encode, events } = recordingEncoder({ verifyMedia });
+    const { encode, events } = recordingEncoder({ verifyEncoded });
 
     const result = await encode(timeline(identity(10, 55000), identity(11, 55040), identity(12, 55080)));
 

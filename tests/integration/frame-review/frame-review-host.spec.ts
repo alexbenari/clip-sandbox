@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -111,6 +111,24 @@ describe.skipIf(unavailable !== null)('FrameReviewHost with a prepared movie', (
     await writeFile(changing, Buffer.concat([await readFile(movie), Buffer.alloc(16)]));
 
     await expect(host.sourceMatchesFingerprint(changing, fingerprint)).resolves.toBe(false);
+  }, 120_000);
+
+  it('matches an unchanged movie to its fingerprint in a later app session without the native inspection tools', async () => {
+    const host = startHost();
+    const { session } = await openPrepared(host, movie);
+    const fingerprint = session.captureContext()!.fingerprint;
+    expect(await host.sourceMatchesFingerprint(movie, fingerprint)).toBe(true);
+    await host.dispose();
+    const laterApplicationFolder = path.join(root, 'later-app');
+    await cp(path.join(root, 'source-measurement-cache'), path.join(laterApplicationFolder, 'source-measurement-cache'), { recursive: true });
+    const emptyToolFolder = path.join(root, 'no-tools');
+    await mkdir(emptyToolFolder, { recursive: true });
+    const laterHost = new FrameReviewHost({
+      ...runtimeConfiguration(laterApplicationFolder, readFrameReviewDependencies()), nativeBinaryFolder: emptyToolFolder,
+    });
+    hosts.push(laterHost);
+
+    await expect(laterHost.sourceMatchesFingerprint(movie, fingerprint)).resolves.toBe(true);
   }, 120_000);
 
   it('forgets every prepared-review cache entry of a source', async () => {

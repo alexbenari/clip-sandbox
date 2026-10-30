@@ -16,6 +16,19 @@ export interface ISourceInspection {
   readonly requiresTimestampNormalization: boolean;
 }
 
+// What the native tools report about a movie file; the inspection adds the tool versions it was read with.
+export interface ISourceMeasurement {
+  readonly sourceSampleDigest: string;
+  readonly sourceBytes: string;
+  readonly sourceDurationUs: string;
+  readonly signatureProfileVersion: string;
+  readonly selectedStream: number;
+  readonly streamMetadataDigest: string;
+  readonly sourceWidth: number;
+  readonly sourceHeight: number;
+  readonly requiresTimestampNormalization: boolean;
+}
+
 export interface ISourceInspectorConfiguration {
   readonly sampleSignatureExecutable: string;
   readonly packetScanExecutable: string;
@@ -33,8 +46,12 @@ export class SourceInspector {
   }
 
   async inspect(sourcePath: string, signal?: AbortSignal): Promise<ISourceInspection> {
-    if (!path.isAbsolute(sourcePath)) throw new Error('Movie source path must be absolute.');
-    const source = path.resolve(sourcePath);
+    const source = this.absolutePath(sourcePath);
+    return this.inspectionOf(source, await this.measure(source, signal));
+  }
+
+  async measure(sourcePath: string, signal?: AbortSignal): Promise<ISourceMeasurement> {
+    const source = this.absolutePath(sourcePath);
     const details = await stat(source);
     if (!details.isFile()) throw new Error('Movie source is not a file.');
     const [signatureResult, scanResult, probeResult] = await Promise.all([
@@ -48,21 +65,49 @@ export class SourceInspector {
     const scan = this.event(scanResult.stdout, 'packet-scan');
     const probe = JSON.parse(probeResult.stdout.replace(/^\uFEFF/, '')) as { streams?: Array<{ width?: number; height?: number }> };
     const stream = probe.streams?.[0];
-    const sourceWidth = Number(stream?.width);
-    const sourceHeight = Number(stream?.height);
-    if (!Number.isSafeInteger(sourceWidth) || sourceWidth < 1 || !Number.isSafeInteger(sourceHeight) || sourceHeight < 1) {
-      throw new Error('FFprobe returned invalid source dimensions.');
-    }
-    const selectedStream = this.nonnegativeInteger(signature.streamIndex, 'selected stream');
+    return SourceInspector.parseMeasurement({
+      sourceSampleDigest: signature.sampleDigest,
+      sourceBytes: String(signature.sourceBytes),
+      sourceDurationUs: String(signature.durationUs),
+      signatureProfileVersion: signature.profileVersion,
+      selectedStream: signature.streamIndex,
+      streamMetadataDigest: signature.streamMetadataDigest,
+      sourceWidth: stream?.width,
+      sourceHeight: stream?.height,
+      requiresTimestampNormalization: Number(scan.keyPacketCount) > 0 && Number(scan.keyPacketsWithPts) === 0,
+    });
+  }
+
+  // Measurements come from the native tools or from an earlier app session's cache, so both are checked here.
+  static parseMeasurement(value: unknown): ISourceMeasurement {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Source measurement is invalid.');
+    const record = value as Record<string, unknown>;
+    const sourceWidth = SourceInspector.positiveInteger(record.sourceWidth, 'source width');
+    const sourceHeight = SourceInspector.positiveInteger(record.sourceHeight, 'source height');
+    if (typeof record.requiresTimestampNormalization !== 'boolean') throw new Error('timestamp normalization is invalid.');
+    return Object.freeze({
+      sourceSampleDigest: SourceInspector.text(record.sourceSampleDigest, 'sample digest'),
+      sourceBytes: SourceInspector.decimal(record.sourceBytes, 'source bytes'),
+      sourceDurationUs: SourceInspector.decimal(record.sourceDurationUs, 'source duration'),
+      signatureProfileVersion: SourceInspector.text(record.signatureProfileVersion, 'signature profile version'),
+      selectedStream: SourceInspector.nonnegativeInteger(record.selectedStream, 'selected stream'),
+      streamMetadataDigest: SourceInspector.text(record.streamMetadataDigest, 'stream metadata digest'),
+      sourceWidth,
+      sourceHeight,
+      requiresTimestampNormalization: record.requiresTimestampNormalization,
+    });
+  }
+
+  inspectionOf(sourcePath: string, measurement: ISourceMeasurement): ISourceInspection {
     const identity: IExactReviewProxyIdentity = Object.freeze({
       schemaVersion: 1,
-      sourceSampleDigest: this.string(signature.sampleDigest, 'sample digest'),
-      sourceBytes: String(this.nonnegativeInteger(signature.sourceBytes, 'source bytes')),
-      sourceDurationUs: String(this.nonnegativeInteger(signature.durationUs, 'source duration')),
-      signatureProfileVersion: this.string(signature.profileVersion, 'signature profile version'),
+      sourceSampleDigest: measurement.sourceSampleDigest,
+      sourceBytes: measurement.sourceBytes,
+      sourceDurationUs: measurement.sourceDurationUs,
+      signatureProfileVersion: measurement.signatureProfileVersion,
       preparationContractVersion: 'prepared-review-v1',
-      selectedStream,
-      streamMetadataDigest: this.string(signature.streamMetadataDigest, 'stream metadata digest'),
+      selectedStream: measurement.selectedStream,
+      streamMetadataDigest: measurement.streamMetadataDigest,
       nativeProtocolVersion: FRAME_REVIEW_PROTOCOL_VERSION,
       bestSourceVersion: this.configuration.bestSourceVersion,
       ffmpegVersion: this.configuration.ffmpegVersion,
@@ -71,14 +116,19 @@ export class SourceInspector {
       indexingOptions: Object.freeze({ decoderInstances: 2, seekPreroll: 20, maxCacheBytes: 268_435_456 }),
     });
     return Object.freeze({
-      sourcePath: source,
+      sourcePath: this.absolutePath(sourcePath),
       identity,
-      sourceWidth,
-      sourceHeight,
+      sourceWidth: measurement.sourceWidth,
+      sourceHeight: measurement.sourceHeight,
       durationUs: identity.sourceDurationUs,
-      selectedStream,
-      requiresTimestampNormalization: Number(scan.keyPacketCount) > 0 && Number(scan.keyPacketsWithPts) === 0,
+      selectedStream: measurement.selectedStream,
+      requiresTimestampNormalization: measurement.requiresTimestampNormalization,
     });
+  }
+
+  private absolutePath(sourcePath: string): string {
+    if (!path.isAbsolute(sourcePath)) throw new Error('Movie source path must be absolute.');
+    return path.resolve(sourcePath);
   }
 
   private event(stdout: string, type: string): Record<string, unknown> {
@@ -90,13 +140,23 @@ export class SourceInspector {
     throw new Error(`Native inspector produced no ${type} result.`);
   }
 
-  private nonnegativeInteger(value: unknown, label: string): number {
+  private static nonnegativeInteger(value: unknown, label: string): number {
     const number = Number(value);
     if (!Number.isSafeInteger(number) || number < 0) throw new Error(`${label} is invalid.`);
     return number;
   }
 
-  private string(value: unknown, label: string): string {
+  private static positiveInteger(value: unknown, label: string): number {
+    const number = SourceInspector.nonnegativeInteger(value, label);
+    if (number < 1) throw new Error(`${label} is invalid.`);
+    return number;
+  }
+
+  private static decimal(value: unknown, label: string): string {
+    return String(SourceInspector.nonnegativeInteger(value, label));
+  }
+
+  private static text(value: unknown, label: string): string {
     if (typeof value !== 'string' || !value) throw new Error(`${label} is invalid.`);
     return value;
   }

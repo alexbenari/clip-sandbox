@@ -3,16 +3,16 @@ const { FrameTime } = require('../frame-time.cjs');
 
 const INVALID = 'Clip provenance is invalid or unsupported.';
 const MAX_REFERENCE_FRAMES = 4;
+const SOURCE_INFO_KINDS = new Set(['movie-range', 'movie-only']);
 
+// A record that names only the movie. A record with a range is a RangedSourceInfo, reached through ranged().
 class SourceInfo {
   static #creating = false;
 
-  constructor(sourceMovie, range, referenceFrames) {
+  constructor(sourceMovie) {
     if (!SourceInfo.#creating) throw new Error('Source info is built only through its factories.');
     this.sourceMovie = sourceMovie;
-    this.range = range;
-    this.referenceFrames = referenceFrames;
-    Object.freeze(this);
+    if (new.target === SourceInfo) Object.freeze(this);
   }
 
   static fromRecord(record) {
@@ -23,6 +23,11 @@ class SourceInfo {
 
   static forMovieRange(sourceMovie, range, referenceFrames) {
     return SourceInfo.#validated(sourceMovie, range, referenceFrames);
+  }
+
+  static forMovie(sourceMovie) {
+    if (!SourceInfo.#isValidMovie(sourceMovie)) throw new Error(INVALID);
+    return SourceInfo.#created(sourceMovie, null, []);
   }
 
   static movieOf(sourcePath, identity) {
@@ -54,16 +59,11 @@ class SourceInfo {
   // A record with neither a range nor reference frames keeps only the movie.
   static #fromVersionTwo(record) {
     if (record.sourceFrameRange === undefined && record.referenceFrames === undefined) {
-      return SourceInfo.#movieOnly(record.sourceMovie);
+      return SourceInfo.forMovie(record.sourceMovie);
     }
     const { start, end, endInclusive, startTimeUs, endTimeUs } = record.sourceFrameRange ?? {};
     if (endInclusive !== true) throw new Error(INVALID);
     return SourceInfo.#validated(record.sourceMovie, { start, end, startTimeUs, endTimeUs }, record.referenceFrames);
-  }
-
-  static #movieOnly(sourceMovie) {
-    if (!SourceInfo.#isValidMovie(sourceMovie)) throw new Error(INVALID);
-    return SourceInfo.#created(sourceMovie, null, []);
   }
 
   // Reference frames need not lie inside the range: a clip trimmed without its movie keeps its old anchors.
@@ -82,11 +82,13 @@ class SourceInfo {
 
   static #created(sourceMovie, range, referenceFrames) {
     const { displayName, fingerprint } = sourceMovie;
+    const movie = Object.freeze({ displayName, fingerprint: Object.freeze({ ...fingerprint }) });
     SourceInfo.#creating = true;
     try {
-      return new SourceInfo(
-        Object.freeze({ displayName, fingerprint: Object.freeze({ ...fingerprint }) }),
-        range === null ? null : Object.freeze(range),
+      if (range === null) return new SourceInfo(movie);
+      return new RangedSourceInfo(
+        movie,
+        Object.freeze(range),
         Object.freeze(referenceFrames.map(({ frameIndex, frameInfoHash }) => Object.freeze({ frameIndex, frameInfoHash }))),
       );
     } finally {
@@ -128,20 +130,44 @@ class SourceInfo {
     return this.sourceMovie.displayName;
   }
 
-  get hasRange() {
-    return this.range !== null;
+  ranged() {
+    return null;
   }
 
   limitedTo(sourceInfoKind) {
-    if (sourceInfoKind === 'movie-range') return this;
-    if (sourceInfoKind === 'movie-only') return this.hasRange ? SourceInfo.#movieOnly(this.sourceMovie) : this;
-    throw new Error('Source info kind is unknown.');
+    if (!SOURCE_INFO_KINDS.has(sourceInfoKind)) throw new Error('Source info kind is unknown.');
+    return this;
+  }
+
+  trimmed() {
+    return this;
+  }
+
+  toRecord() {
+    return { provenanceVersion: 2, sourceMovie: { displayName: this.sourceMovie.displayName, fingerprint: { ...this.sourceMovie.fingerprint } } };
+  }
+}
+
+// A record with the movie range a clip shows and the reference frames that find it in the movie.
+class RangedSourceInfo extends SourceInfo {
+  constructor(sourceMovie, range, referenceFrames) {
+    super(sourceMovie);
+    this.range = range;
+    this.referenceFrames = referenceFrames;
+    Object.freeze(this);
+  }
+
+  ranged() {
+    return this;
+  }
+
+  limitedTo(sourceInfoKind) {
+    return sourceInfoKind === 'movie-only' ? SourceInfo.forMovie(this.sourceMovie) : super.limitedTo(sourceInfoKind);
   }
 
   // A trim keeps the times of the original ends, so a stored time is exact only while the reference
   // frames are the range's two ends.
   exactTimeUsOf(frameIndex) {
-    if (!this.hasRange) return undefined;
     const [first, second] = this.referenceFrames;
     const untrimmed = this.referenceFrames.length === 2
       && first.frameIndex === this.range.start && second.frameIndex === this.range.end;
@@ -154,19 +180,15 @@ class SourceInfo {
   // The stored times stay those of the original ends: they only place the movie window, whose margin
   // covers the shift.
   trimmed(startOffset, endOffset) {
-    if (!this.hasRange) return this;
     const start = this.range.start + startOffset;
     const end = this.range.end + endOffset;
     if (startOffset < 0 || endOffset > 0 || end < start) throw new Error('A trim must keep at least one frame of the clip.');
-    return SourceInfo.#validated(this.sourceMovie, { ...this.range, start, end }, this.referenceFrames);
+    return SourceInfo.forMovieRange(this.sourceMovie, { ...this.range, start, end }, this.referenceFrames);
   }
 
   toRecord() {
-    const sourceMovie = { displayName: this.sourceMovie.displayName, fingerprint: { ...this.sourceMovie.fingerprint } };
-    if (!this.hasRange) return { provenanceVersion: 2, sourceMovie };
     return {
-      provenanceVersion: 2,
-      sourceMovie,
+      ...super.toRecord(),
       sourceFrameRange: { ...this.range, endInclusive: true },
       referenceFrames: this.referenceFrames.map(frame => ({ ...frame })),
     };

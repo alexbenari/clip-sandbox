@@ -13,6 +13,7 @@ const { registerClipCapturesIpc } = require('./clip-captures-ipc.cjs');
 const { createClipExtractionRuntime } = require('./clip-extraction-runtime.cjs');
 const { ClipSourceMovieRuntime } = require('./clip-source-movie-runtime.cjs');
 const { SourceMovieLocator } = require('./source-movie-locator.cjs');
+const { LocatedMovieStore } = require('./located-movie-store.cjs');
 const { MovieWindowCache } = require('./movie-window-cache.cjs');
 const { MovieFrameRateProbe } = require('./movie-frame-rate-probe.cjs');
 const { ZoomEditSources } = require('./zoom-edit-sources.cjs');
@@ -145,6 +146,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
     locator: new SourceMovieLocator({
       folderAccess,
       capturesStore: clipCapturesStore,
+      locatedMovies: new LocatedMovieStore(app.getPath('userData')),
       hostForEvent: frameReviewRuntime.hostForEvent,
       chooseSourcePath: event => pickMovieFromDialog(BrowserWindow.fromWebContents(event.sender)),
     }),

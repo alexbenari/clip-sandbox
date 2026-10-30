@@ -91,7 +91,7 @@ class StagedEditResolver {
     const range = this.#rangeOf(request);
     const clip = await this.#grantedClip(event, request);
     const host = this.#hostForEvent(event);
-    const cut = range.shownSource.kind === 'clip' ? this.#clipCut(host, clip, range) : this.#windowCut(event, host, clip, range);
+    const cut = range.shownSource.kind === 'clip' ? this.#clipCut(host, clip, range) : this.#windowCut(event, clip, range);
     const composition = this.#composition.of([...(cut.changesRange ? ['refine'] : []), ...(range.loopify ? ['loopify'] : [])]);
     return Object.freeze({ clip, host, cut, composition });
   }
@@ -122,7 +122,7 @@ class StagedEditResolver {
     return new ClipCut({ clip, sourceHandle, sessionId, reader, startFrame, endFrame, provenance: this.#provenance });
   }
 
-  #windowCut(event, host, clip, { shownSource, sessionId, startFrame, endFrame }) {
+  #windowCut(event, clip, { shownSource, sessionId, startFrame, endFrame }) {
     let window;
     try {
       window = this.#sources.anchoredWindow(event, shownSource.windowId);
@@ -131,7 +131,7 @@ class StagedEditResolver {
     }
     if (window.clipPath !== clip.path) throw new StagedEditRefusal('The movie window belongs to another clip.');
     if (!window.isWithinExtensionLimit(startFrame, endFrame)) throw new StagedEditRefusal('The range reaches more than a minute beyond the clip.');
-    const reader = this.#exactFrames(host, sessionId, window.sourceHandle);
+    const reader = this.#exactFrames(this.#hostForEvent(event), sessionId, window.sourceHandle);
     return new WindowCut({ window, sessionId, reader, startFrame, endFrame });
   }
 

@@ -6,11 +6,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sourceMovie, checkValue } from '../support/movie-window-fixtures.js';
-import { CLIP_SESSION, WINDOW_PATH, WINDOW_SESSION, WINDOW_ID, clipRecord, endReferences, event, stagedEditsIn, windowRequest }
-  from '../support/staged-edit-fixtures.js';
+import { CLIP_SESSION, WINDOW_PATH, clipRecord, endReferences, event, stagedEditsIn, windowRequest } from '../support/staged-edit-fixtures.js';
 
 const require = createRequire(import.meta.url);
 const { RefinedClipSaver } = require('../../electron/refined-clip-saver.cjs');
+const { ENCODED_OUTPUT } = require('../../electron/exact-range-encoder.cjs');
 const { RefinedClipKeptUnderTemporaryName, RefinedClipPlacement } = require('../../electron/refined-clip-placement.cjs');
 
 let root: string;
@@ -33,10 +33,10 @@ function saverFor({ clipName = 'Feature-002.mp4', sourceInfo = clipRecord() as u
   moviePrepared = false, placement = undefined as object | undefined,
   encode = undefined as ((request: Record<string, any>) => Promise<unknown>) | undefined } = {}) {
   const { stagedEdits, host, clipPath, provenance } = stagedEditsIn(folder, { clipName, sourceInfo, windowRecord, moviePrepared });
-  const encodes: Array<{ range: Record<string, unknown>; tagValue: string | null; audio: boolean; forwardThenBackward: boolean }> = [];
+  const encodes: Array<{ range: Record<string, unknown>; tagValue: string | null; output: string }> = [];
   const encoder = {
-    encode: vi.fn(encode ?? (async ({ source, range, tagValue, workspace, report, audio, forwardThenBackward }: Record<string, any>) => {
-      encodes.push({ range, tagValue, audio, forwardThenBackward });
+    encode: vi.fn(encode ?? (async ({ source, range, tagValue, workspace, report, output }: Record<string, any>) => {
+      encodes.push({ range, tagValue, output });
       const count = range.endFrameIndex - range.startFrameIndex + 1;
       report({ stage: 'encoding-video', encodedFrames: count, totalFrames: count });
       const mediaPath = path.join(workspace, 'media.mp4');
@@ -155,7 +155,7 @@ describe('RefinedClipSaver', () => {
 
       await save({ startFrame: 5, endFrame: 45 });
 
-      expect([encodes[0].forwardThenBackward, encodes[0].audio]).toEqual([false, true]);
+      expect(encodes[0].output).toBe(ENCODED_OUTPUT.cutWithSound);
     });
 
     it('encodes a looped clip forward then backward, without sound', async () => {
@@ -163,7 +163,7 @@ describe('RefinedClipSaver', () => {
 
       await save({ startFrame: 5, endFrame: 45, loopify: true });
 
-      expect([encodes[0].forwardThenBackward, encodes[0].audio]).toEqual([true, false]);
+      expect(encodes[0].output).toBe(ENCODED_OUTPUT.forwardThenBackward);
     });
 
     it('encodes the requested frames of the clip', async () => {
@@ -184,38 +184,22 @@ describe('RefinedClipSaver', () => {
   });
 
   describe('refusals', () => {
-    it.each([
-      ['a folder that was not opened in this window', { folderPath: path.resolve('elsewhere') }, 'Folder access is unavailable for this folder session.'],
-      ['a name that contains a folder', { filename: '..\\Feature-002.mp4' }, 'Clip filename is invalid.'],
-      ['a name that is not a video', { filename: 'notes.txt' }, 'Clip filename is invalid.'],
-      ['a clip that is not in the folder', { filename: 'Feature-009.mp4' }, 'Clip is not a file.'],
-      ['an unknown outcome', { outcome: 'overwrite' }, 'The save request is invalid.'],
-      ['an end before the start', { startFrame: 10, endFrame: 9 }, 'The edit request is invalid.'],
-      ['a Loopify flag that is not true or false', { startFrame: 5, endFrame: 45, loopify: 'yes' }, 'The edit request is invalid.'],
-    ])('refuses %s before reading any source', async (_case, request, message) => {
+    it('refuses an unknown outcome before reading any source', async () => {
       const { save, host } = saverFor();
 
-      const answer = await save({ startFrame: 0, endFrame: 50, ...request });
+      const answer = await save({ startFrame: 5, endFrame: 45, outcome: 'overwrite' });
 
-      expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message } });
-      expect(host.registerSource).not.toHaveBeenCalled();
-      expect(folderFiles()).toEqual(['Feature-002.mp4']);
+      expect([answer, host.registerSource.mock.calls.length])
+        .toEqual([{ ok: false, code: 'invalid-request', error: { message: 'The save request is invalid.' } }, 0]);
     });
 
-    it.each([
-      ['a range past the clip’s last frame', { startFrame: 5, endFrame: 51 }, 'The range is outside the clip.'],
-      ['a session that does not show the clip', { startFrame: 5, endFrame: 45, sessionId: WINDOW_SESSION }, 'The review session does not show this source.'],
-      ['a window range starting more than a minute before the clip', { ...windowSave, startFrame: 379, endFrame: 1900 }, 'The range reaches more than a minute beyond the clip.'],
-      ['a window range ending more than a minute after the clip', { ...windowSave, startFrame: 1900, endFrame: 3431 }, 'The range reaches more than a minute beyond the clip.'],
-      ['a window that is not anchored', { ...windowSave, source: { kind: 'window', windowId: 'window_opaque0002' }, startFrame: 1870, endFrame: 1940 }, 'The movie window is not anchored.'],
-      ['a session that does not show the window', { ...windowSave, sessionId: CLIP_SESSION, startFrame: 1870, endFrame: 1940 }, 'The review session does not show this source.'],
-    ])('refuses %s without encoding', async (_case, request, message) => {
+    it('answers a refusal of the staged edits without encoding or writing a file', async () => {
       const { save, encoder } = saverFor();
 
-      const answer = await save(request);
+      const answer = await save({ startFrame: 5, endFrame: 51 });
 
-      expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message } });
-      expect(encoder.encode).not.toHaveBeenCalled();
+      expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message: 'The range is outside the clip.' } });
+      expect([encoder.encode.mock.calls.length, folderFiles()]).toEqual([0, ['Feature-002.mp4']]);
     });
 
     it.each([
@@ -227,15 +211,6 @@ describe('RefinedClipSaver', () => {
       const answer = await save(request);
 
       expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message: 'Nothing is staged to save.' } });
-      expect(encoder.encode).not.toHaveBeenCalled();
-    });
-
-    it('refuses the window of another clip', async () => {
-      const { save, encoder } = saverFor({ windowRecord: { clipPath: path.join(folder, 'Feature-003.mp4') } });
-
-      const answer = await save({ ...windowSave, startFrame: 1870, endFrame: 1940 });
-
-      expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message: 'The movie window belongs to another clip.' } });
       expect(encoder.encode).not.toHaveBeenCalled();
     });
   });

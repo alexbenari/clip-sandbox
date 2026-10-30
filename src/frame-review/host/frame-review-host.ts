@@ -1,5 +1,4 @@
 import { randomBytes } from 'node:crypto';
-import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { AdjacentDirection } from '../adjacent-step-scheduler.js';
@@ -21,6 +20,7 @@ import { ProxyFrameTimelineCache } from './proxy-frame-timeline-cache.js';
 import { ReviewPreparationService } from './review-preparation-service.js';
 import type { IExactReviewProxyHostResult } from './review-preparation-service.js';
 import { ReviewSession, type HostFrameReviewEvent, type IExactPreviewRange } from './review-session.js';
+import { SourceMeasurementCache } from './source-measurement-cache.js';
 import { SourceInspector, type ISourceInspection } from './source-inspector.js';
 import { SourceNormalizer } from './source-normalizer.js';
 
@@ -76,12 +76,13 @@ export interface IFrameReviewHostOpenRequest {
 export class FrameReviewHost {
   private static readonly exactReviewProxyCaches = new Map<string, ExactReviewProxyCache>();
   private static readonly playbackProxyCaches = new Map<string, PlaybackProxyCache>();
+  private static readonly sourceMeasurementCaches = new Map<string, SourceMeasurementCache>();
   private readonly sources = new Map<string, string>();
   private readonly sessions = new Map<string, ReviewSession>();
-  private readonly inspections = new Map<string, Readonly<{ size: number; mtimeMs: number; inspection: Promise<ISourceInspection> }>>();
   private readonly paths: FrameReviewPaths;
   private readonly preparation: ReviewPreparationService;
   private readonly inspector: SourceInspector;
+  private readonly measurements: SourceMeasurementCache;
   private readonly indexer: BestSourceFrameIndexer;
   private readonly exactReviewProxyCache: ExactReviewProxyCache;
   private readonly playbackProxyCache: PlaybackProxyCache;
@@ -109,6 +110,12 @@ export class FrameReviewHost {
       environment: this.environment,
     });
     this.inspector = inspector;
+    let measurements = FrameReviewHost.sourceMeasurementCaches.get(this.paths.sourceMeasurementCacheFile);
+    if (!measurements) {
+      measurements = new SourceMeasurementCache(inspector, this.paths.sourceMeasurementCacheFile);
+      FrameReviewHost.sourceMeasurementCaches.set(this.paths.sourceMeasurementCacheFile, measurements);
+    }
+    this.measurements = measurements;
     const indexer = new BestSourceFrameIndexer(
       path.join(configuration.nativeBinaryFolder, 'bestsource_gate.exe'), commandProcess);
     this.indexer = indexer;
@@ -298,21 +305,11 @@ export class FrameReviewHost {
     const sessions = [...this.sessions.values()];
     this.sessions.clear();
     this.sources.clear();
-    await Promise.allSettled(sessions.map((session) => session.dispose()));
+    await Promise.allSettled([...sessions.map((session) => session.dispose()), this.measurements.flush()]);
   }
 
-  // Inspecting a feature film takes seconds, so an unchanged file is inspected once per host.
   private async inspectUnchanged(sourcePath: string): Promise<ISourceInspection> {
-    const resolved = path.resolve(sourcePath);
-    const { size, mtimeMs } = await stat(resolved);
-    const known = this.inspections.get(resolved);
-    if (known && known.size === size && known.mtimeMs === mtimeMs) return known.inspection;
-    const inspection = this.inspector.inspect(resolved);
-    this.inspections.delete(resolved);
-    this.inspections.set(resolved, { size, mtimeMs, inspection });
-    if (this.inspections.size > 8) this.inspections.delete(this.inspections.keys().next().value!);
-    inspection.catch(() => { if (this.inspections.get(resolved)?.inspection === inspection) this.inspections.delete(resolved); });
-    return inspection;
+    return this.inspector.inspectionOf(sourcePath, await this.measurements.measurementOf(sourcePath));
   }
 
   private sessionShowing(sessionId: string, sourceHandleValue: string, refusal: string)

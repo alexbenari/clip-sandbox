@@ -6,6 +6,7 @@ const { FrameTime } = require('./frame-time.cjs');
 const { ForwardThenBackwardFilter } = require('./forward-then-backward-filter.cjs');
 const { runProcess } = require('./process-runner.cjs');
 const { StagedEditRefusal } = require('./staged-edit-resolver.cjs');
+const { OperationResult } = require('./operation-result.cjs');
 
 const PREVIEW_WIDTH = 960;
 const SEEK_MARGIN_SECONDS = 5;
@@ -45,10 +46,10 @@ class ZoomEditPreviews {
 
   async render(event, request, report = () => undefined) {
     const senderId = event.sender.id;
-    const preview = { controller: new AbortController(), filePath: null, done: null };
+    const preview = { controller: new AbortController(), report, filePath: null, done: null };
     const previous = this.#previews.get(senderId);
     this.#previews.set(senderId, preview);
-    preview.done = this.#releasing(previous).then(() => this.#rendered(event, request, preview, report));
+    preview.done = this.#releasing(previous).then(() => this.#rendered(event, request, preview));
     return preview.done;
   }
 
@@ -72,10 +73,10 @@ class ZoomEditPreviews {
     await this.#removed(preview);
   }
 
-  async #rendered(event, request, preview, report) {
-    const { signal } = preview.controller;
+  async #rendered(event, request, preview) {
+    const { controller: { signal }, report } = preview;
     try {
-      if (signal.aborted) return this.#failure('cancelled', 'The preview was replaced.');
+      if (signal.aborted) return OperationResult.failure('cancelled', 'The preview was replaced.');
       const { host, cut } = await this.#stagedEdits.resolve(event, { ...request, loopify: true });
       const source = await host.prepareExtractionSource(cut.sourceHandle, signal);
       const [start, end] = await cut.endIdentities();
@@ -88,16 +89,16 @@ class ZoomEditPreviews {
         cwd: this.#folder, signal, env: this.#environment,
         onProgress: frame => report({ renderedFrames: Math.min(frame, totalFrames), totalFrames }),
       });
-      if (signal.aborted) return this.#failure('cancelled', 'The preview was replaced.');
+      if (signal.aborted) return OperationResult.failure('cancelled', 'The preview was replaced.');
       if (!result.ok) throw Object.assign(new Error('The preview could not be encoded.'), { code: result.code });
       const stat = await this.#fs.stat(preview.filePath);
       return { ok: true, result: { mediaSource: mediaSourceOf(preview.filePath, stat.mtimeMs) } };
     } catch (error) {
       await this.#removed(preview);
-      if (error instanceof StagedEditRefusal) return this.#failure(error.code, error.message);
-      if (signal.aborted) return this.#failure('cancelled', 'The preview was replaced.');
+      if (error instanceof StagedEditRefusal) return OperationResult.failure(error.code, error.message);
+      if (signal.aborted) return OperationResult.failure('cancelled', 'The preview was replaced.');
       console.warn('[zoom-edit-preview] preview-failed', { kind: error instanceof Error ? error.name : 'unknown', code: error?.code });
-      return this.#failure('preview-failed', 'The preview could not be made.');
+      return OperationResult.failure('preview-failed', 'The preview could not be made.');
     }
   }
 
@@ -126,10 +127,6 @@ class ZoomEditPreviews {
     } catch (error) {
       console.warn('[zoom-edit-preview] preview-cleanup-failed', { code: error?.code });
     }
-  }
-
-  #failure(code, message) {
-    return { ok: false, code, error: { message } };
   }
 }
 
