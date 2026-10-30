@@ -78,6 +78,16 @@ export class SourceInspector {
     });
   }
 
+  // A rebuilt tool can measure the same movie differently, so a remembered measurement holds only while this matches.
+  async toolsVersion(): Promise<string> {
+    const { sampleSignatureExecutable, packetScanExecutable, ffprobeExecutable } = this.configuration;
+    const versions = await Promise.all([sampleSignatureExecutable, packetScanExecutable, ffprobeExecutable].map(async executable => {
+      const { size, mtimeMs } = await stat(executable);
+      return `${size}:${mtimeMs}`;
+    }));
+    return versions.join('|');
+  }
+
   // Measurements come from the native tools or from an earlier app session's cache, so both are checked here.
   static parseMeasurement(value: unknown): ISourceMeasurement {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Source measurement is invalid.');

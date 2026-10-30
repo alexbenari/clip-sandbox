@@ -1,12 +1,12 @@
+import { HELD_STEP_TIMING } from '../frame-review/adjacent-step-scheduler.js';
+
 export type StepDirection = -1 | 1;
 
 type Hold = Readonly<{ direction: StepDirection }>;
 
 // A held key steps once at once, then again after a pause and faster from then on, until it is released,
-// another key is held, or a step answers that it cannot go on. The timing matches the movie player's held steps.
+// another key is held, or a step answers that it cannot go on.
 export class HeldStepRepeat<TAnswer> {
-  private static readonly repeatDelayMs = 250;
-  private static readonly repeatIntervalMs = 38;
   private held: Hold | null = null;
   private stopWaiting: (() => void) | null = null;
 
@@ -22,12 +22,12 @@ export class HeldStepRepeat<TAnswer> {
     this.held = hold;
     const pressedAtMs = Date.now();
     let answer = await this.step(direction);
-    let delayMs = HeldStepRepeat.repeatDelayMs - (Date.now() - pressedAtMs);
+    let delayMs = HELD_STEP_TIMING.holdRepeatDelayMs - (Date.now() - pressedAtMs);
     while (this.held === hold && this.goesOn(answer)) {
       await this.wait(delayMs);
       if (this.held !== hold) break;
       answer = await this.step(direction);
-      delayMs = HeldStepRepeat.repeatIntervalMs;
+      delayMs = HELD_STEP_TIMING.repeatIntervalMs;
     }
     if (this.held === hold) this.held = null;
     return answer;

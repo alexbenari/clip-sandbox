@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -14,11 +14,6 @@ describe.skipIf(unavailable !== null)('FrameReviewHost with a prepared movie', (
   let root = '';
   let movie = '';
   const hosts: FrameReviewHost[] = [];
-  const startHost = () => {
-    const host = new FrameReviewHost(runtimeConfiguration(root, readFrameReviewDependencies()));
-    hosts.push(host);
-    return host;
-  };
 
   beforeAll(async () => {
     root = await mkdtemp(path.join(os.tmpdir(), 'clip-sandbox-host-'));
@@ -29,6 +24,26 @@ describe.skipIf(unavailable !== null)('FrameReviewHost with a prepared movie', (
     await Promise.allSettled(hosts.map(host => host.dispose()));
     await rm(root, { recursive: true, force: true });
   });
+
+  const hostWith = (applicationFolder: string, toolFolder: string) => {
+    const host = new FrameReviewHost({ ...runtimeConfiguration(applicationFolder, readFrameReviewDependencies()), nativeBinaryFolder: toolFolder });
+    hosts.push(host);
+    return host;
+  };
+  const startHost = () => hostWith(root, nativeBinaryFolder);
+
+  const toolsBuilt = new Date('2026-01-05T10:00:00Z');
+  async function setBuildTime(folder: string) {
+    for (const name of await readdir(folder)) await utimes(path.join(folder, name), toolsBuilt, toolsBuilt);
+  }
+
+  // Files of each tool's size and modification time that cannot run, so only a remembered measurement can answer.
+  async function unrunnableCopiesOf(tools: string, folder: string) {
+    await mkdir(folder, { recursive: true });
+    for (const name of await readdir(tools)) await writeFile(path.join(folder, name), Buffer.alloc((await stat(path.join(tools, name))).size));
+    await setBuildTime(folder);
+    return folder;
+  }
 
   async function preparedMovie() {
     const host = startHost();
@@ -113,20 +128,19 @@ describe.skipIf(unavailable !== null)('FrameReviewHost with a prepared movie', (
     await expect(host.sourceMatchesFingerprint(changing, fingerprint)).resolves.toBe(false);
   }, 120_000);
 
-  it('matches an unchanged movie to its fingerprint in a later app session without the native inspection tools', async () => {
-    const host = startHost();
+  it('matches an unchanged movie to its fingerprint in a later app session with the same tools without measuring it again', async () => {
+    const tools = path.join(root, 'tools');
+    await cp(nativeBinaryFolder, tools, { recursive: true });
+    await setBuildTime(tools);
+    const earlierApplicationFolder = path.join(root, 'earlier-app');
+    const host = hostWith(earlierApplicationFolder, tools);
     const { session } = await openPrepared(host, movie);
     const fingerprint = session.captureContext()!.fingerprint;
     expect(await host.sourceMatchesFingerprint(movie, fingerprint)).toBe(true);
     await host.dispose();
     const laterApplicationFolder = path.join(root, 'later-app');
-    await cp(path.join(root, 'source-measurement-cache'), path.join(laterApplicationFolder, 'source-measurement-cache'), { recursive: true });
-    const emptyToolFolder = path.join(root, 'no-tools');
-    await mkdir(emptyToolFolder, { recursive: true });
-    const laterHost = new FrameReviewHost({
-      ...runtimeConfiguration(laterApplicationFolder, readFrameReviewDependencies()), nativeBinaryFolder: emptyToolFolder,
-    });
-    hosts.push(laterHost);
+    await cp(path.join(earlierApplicationFolder, 'source-measurement-cache'), path.join(laterApplicationFolder, 'source-measurement-cache'), { recursive: true });
+    const laterHost = hostWith(laterApplicationFolder, await unrunnableCopiesOf(tools, path.join(root, 'unrunnable-tools')));
 
     await expect(laterHost.sourceMatchesFingerprint(movie, fingerprint)).resolves.toBe(true);
   }, 120_000);

@@ -21,19 +21,21 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-function measurementOf(sampleDigest: string): ISourceMeasurement {
+function measurementOf(sampleDigest: string, signatureProfileVersion: string): ISourceMeasurement {
   return {
-    sourceSampleDigest: sampleDigest, sourceBytes: '7', sourceDurationUs: '2000000', signatureProfileVersion: 'profile-1',
+    sourceSampleDigest: sampleDigest, sourceBytes: '7', sourceDurationUs: '2000000', signatureProfileVersion,
     selectedStream: 0, streamMetadataDigest: 'stream-digest', sourceWidth: 64, sourceHeight: 48, requiresTimestampNormalization: false,
   };
 }
 
-// One app session's cache; each file measures as a digest naming its contents.
-function appSession() {
-  const measure = vi.fn(async (sourcePath: string) => measurementOf(`digest of ${await readFile(sourcePath, 'utf8')}`));
-  const cache = new SourceMeasurementCache({ measure }, cacheFile);
+// One app session's cache; each file measures as a digest naming its contents, with the profile of the current tools.
+function appSession(signatureProfile = 'profile-1') {
+  const tools = { signatureProfile };
+  const measure = vi.fn(async (sourcePath: string) =>
+    measurementOf(`digest of ${await readFile(sourcePath, 'utf8')}`, tools.signatureProfile));
+  const cache = new SourceMeasurementCache({ measure, toolsVersion: async () => `tools of ${tools.signatureProfile}` }, cacheFile);
   sessions.push(cache);
-  return { cache, measure };
+  return { cache, measure, tools };
 }
 
 // Measures the movies in an app session that then ends.
@@ -51,7 +53,7 @@ async function movie(name: string, contents = name) {
 }
 
 describe('SourceMeasurementCache', () => {
-  it('reuses the measurement of an unchanged movie from an earlier app session without measuring it again', async () => {
+  it('reuses the measurement of an unchanged movie taken by the same tools in an earlier app session', async () => {
     const feature = await movie('Feature.mkv', 'feature');
     await earlierSession(feature);
     const later = appSession();
@@ -70,6 +72,27 @@ describe('SourceMeasurementCache', () => {
     const measured = await later.cache.measurementOf(feature);
 
     expect(measured.sourceSampleDigest).toBe('digest of feature, re-encoded');
+  });
+
+  it('measures an unchanged movie again in a later app session once the measuring tools changed', async () => {
+    const feature = await movie('Feature.mkv', 'feature');
+    await earlierSession(feature);
+    const later = appSession('profile-2');
+
+    const measured = await later.cache.measurementOf(feature);
+
+    expect(measured.signatureProfileVersion).toBe('profile-2');
+  });
+
+  it('measures an unchanged movie again once the measuring tools change during an app session', async () => {
+    const feature = await movie('Feature.mkv', 'feature');
+    const session = appSession('profile-1');
+    await session.cache.measurementOf(feature);
+    session.tools.signatureProfile = 'profile-2';
+
+    const measured = await session.cache.measurementOf(feature);
+
+    expect(measured.signatureProfileVersion).toBe('profile-2');
   });
 
   it('measures an unchanged movie once within an app session', async () => {

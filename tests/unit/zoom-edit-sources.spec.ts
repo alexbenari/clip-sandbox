@@ -66,13 +66,13 @@ function sources({ sourceInfo = storedTimesInfo() as unknown, located = { kind: 
   const probeFrameRate = vi.fn(async () => framesPerSecond);
   const provenance = { canBeTagged: (name: string) => name.endsWith('.mp4'), read: vi.fn(async () => sourceInfo) };
   let ids = 0;
-  const fileSystem = { stat: vi.fn(async (_filePath: string) => ({ isFile: () => true })) };
+  const fileSystem = { stat: async () => ({ isFile: () => true }) };
   const zoomEditSources = new ZoomEditSources({
     folderAccess, hostForEvent: () => host, locator, windowCache, placement: new MovieWindowPlacement({ probeFrameRate }), provenance,
     fileSystem,
     randomId: () => `opaque${String(++ids).padStart(4, '0')}`,
   });
-  return { zoomEditSources, host, locator, windowCache, probeFrameRate, window, fileSystem };
+  return { zoomEditSources, host, locator, windowCache, probeFrameRate, window };
 }
 
 const placementOf = (windowCache: { window: ReturnType<typeof vi.fn> }, call = 0) => {
@@ -217,29 +217,6 @@ describe('ZoomEditSources', () => {
         .rejects.toThrow('The selected movie does not match this clip’s original source.');
     });
 
-    it('looks for the movie once and reuses it when the window widens', async () => {
-      const { zoomEditSources, locator } = sources();
-
-      const first = await zoomEditSources.openWindow(event, { ...clipRequest, widen: 0 });
-      await zoomEditSources.openWindow(event, { ...clipRequest, widen: 1, previousWindowId: first.windowId });
-
-      expect(locator.locate).toHaveBeenCalledOnce();
-    });
-
-    it('looks for the movie again when the remembered file is gone', async () => {
-      const { zoomEditSources, locator, fileSystem, windowCache } = sources();
-      await zoomEditSources.openWindow(event, { ...clipRequest, widen: 0 });
-      fileSystem.stat.mockImplementation(async (filePath: string) => {
-        if (filePath === 'D:\\movies\\Feature.mkv') throw Object.assign(new Error('missing'), { code: 'ENOENT' });
-        return { isFile: () => true };
-      });
-
-      locator.locate.mockResolvedValueOnce({ kind: 'located', moviePath: 'E:\\moved\\Feature.mkv' });
-      await zoomEditSources.openWindow(event, { ...clipRequest, widen: 0 });
-
-      expect(windowCache.window.mock.calls[1][0]).toMatchObject({ moviePath: 'E:\\moved\\Feature.mkv' });
-    });
-
     it('forgets the windows of an app window that closed', async () => {
       const { zoomEditSources } = sources();
       const { windowId } = await zoomEditSources.openWindow(event, { ...clipRequest, widen: 0 });
@@ -247,16 +224,6 @@ describe('ZoomEditSources', () => {
       zoomEditSources.forgetAppWindow(event.sender.id);
 
       await expect(zoomEditSources.anchorWindow(event, { windowId, sessionId: 'session_window01' })).rejects.toThrow('Movie window is unknown.');
-    });
-
-    it('looks for the movie again after its app window closed', async () => {
-      const { zoomEditSources, locator } = sources();
-      await zoomEditSources.openWindow(event, { ...clipRequest, widen: 0 });
-
-      zoomEditSources.forgetAppWindow(event.sender.id);
-      await zoomEditSources.openWindow(event, { ...clipRequest, widen: 0 });
-
-      expect(locator.locate).toHaveBeenCalledTimes(2);
     });
   });
 

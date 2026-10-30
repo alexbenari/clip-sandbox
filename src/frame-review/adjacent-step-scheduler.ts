@@ -9,9 +9,9 @@ export interface IAdjacentStepSchedulerOptions {
   readonly repeatIntervalMs?: number;
 }
 
+export const HELD_STEP_TIMING = Object.freeze({ holdRepeatDelayMs: 250, repeatIntervalMs: 38 });
+
 export class AdjacentStepScheduler<TFrame> {
-  private static readonly holdRepeatDelayMs = 250;
-  private static readonly acceleratedRepeatIntervalMs = 38;
   private heldDirection: AdjacentDirection | null = null;
   private unsteppedPress: AdjacentDirection | null = null;
   private wakeFromRepeatDelay: (() => void) | null = null;
@@ -87,8 +87,8 @@ export class AdjacentStepScheduler<TFrame> {
           this.onFrame(frame);
           this.completedStepsInHold += 1;
           const delayMs = this.completedStepsInHold === 1
-            ? (this.options.holdRepeatDelayMs ?? AdjacentStepScheduler.holdRepeatDelayMs) - (Date.now() - this.heldSinceMs)
-            : this.options.repeatIntervalMs ?? AdjacentStepScheduler.acceleratedRepeatIntervalMs;
+            ? (this.options.holdRepeatDelayMs ?? HELD_STEP_TIMING.holdRepeatDelayMs) - (Date.now() - this.heldSinceMs)
+            : this.options.repeatIntervalMs ?? HELD_STEP_TIMING.repeatIntervalMs;
           if (this.heldDirection !== null && delayMs > 0) await this.waitToRepeat(delayMs);
         }
       }

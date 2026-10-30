@@ -6,6 +6,7 @@ import { SourceInspector, type ISourceMeasurement } from './source-inspector.js'
 
 export interface ISourceMeasurer {
   measure(sourcePath: string): Promise<ISourceMeasurement>;
+  toolsVersion(): Promise<string>;
 }
 
 interface IFileVersion {
@@ -21,11 +22,12 @@ interface IRememberedMeasurement extends IFileVersion {
 const SCHEMA_VERSION = 1;
 const MAX_FILE_BYTES = 256 * 1024;
 
-// Measuring a feature film takes seconds, so an unchanged file (same size and modification time) is measured
-// once and remembered across app sessions. Files are keyed by a hash of their path, so no movie path is stored.
+// Measuring a feature film takes seconds, so a measurement is reused while the file and the measuring tools are
+// unchanged. Files are keyed by a hash of their path, so no movie path is stored.
 export class SourceMeasurementCache {
   static readonly capacity = 64;
   private readonly entries = new Map<string, IRememberedMeasurement>();
+  private entriesToolsVersion: string | null = null;
   private loading: Promise<void> | null = null;
   private writing: Promise<void> = Promise.resolve();
 
@@ -36,9 +38,10 @@ export class SourceMeasurementCache {
   async measurementOf(sourcePath: string): Promise<ISourceMeasurement> {
     if (!path.isAbsolute(sourcePath)) throw new Error('Movie source path must be absolute.');
     const resolved = path.resolve(sourcePath);
-    const { size, mtimeMs } = await stat(resolved);
+    const [{ size, mtimeMs }, toolsVersion] = await Promise.all([stat(resolved), this.measurer.toolsVersion()]);
     this.loading ??= this.load();
     await this.loading;
+    this.forgetMeasurementsOfOtherTools(toolsVersion);
     const key = this.keyOf(resolved);
     const known = this.entries.get(key);
     const entry = known && known.size === size && known.mtimeMs === mtimeMs
@@ -53,6 +56,12 @@ export class SourceMeasurementCache {
   async flush(): Promise<void> {
     await Promise.allSettled([...this.entries.values()].map(entry => entry.measurement));
     await this.writing;
+  }
+
+  private forgetMeasurementsOfOtherTools(toolsVersion: string): void {
+    if (toolsVersion === this.entriesToolsVersion) return;
+    this.entries.clear();
+    this.entriesToolsVersion = toolsVersion;
   }
 
   private measured(key: string, resolved: string, version: IFileVersion): IRememberedMeasurement {
@@ -82,17 +91,19 @@ export class SourceMeasurementCache {
     }
     try {
       if (Buffer.byteLength(text, 'utf8') > MAX_FILE_BYTES) throw new Error('Source measurement cache is too large.');
-      for (const [key, entry] of this.parsedEntries(JSON.parse(text.replace(/^\uFEFF/, '')))) this.entries.set(key, entry);
+      const { toolsVersion, entries } = this.parsedDocument(JSON.parse(text.replace(/^\uFEFF/, '')));
+      for (const [key, entry] of entries) this.entries.set(key, entry);
+      this.entriesToolsVersion = toolsVersion;
     } catch (error) {
       this.entries.clear();
       this.warn('unreadable', error);
     }
   }
 
-  private parsedEntries(document: unknown): Array<[string, IRememberedMeasurement]> {
-    const { schemaVersion, measurements } = (document ?? {}) as { schemaVersion?: unknown; measurements?: unknown };
+  private parsedDocument(document: unknown): { toolsVersion: string | null; entries: Array<[string, IRememberedMeasurement]> } {
+    const { schemaVersion, toolsVersion, measurements } = (document ?? {}) as Record<string, unknown>;
     if (schemaVersion !== SCHEMA_VERSION || !Array.isArray(measurements)) throw new Error('Source measurement cache schema is unsupported.');
-    return measurements.map((item: unknown) => {
+    const entries = measurements.map((item: unknown): [string, IRememberedMeasurement] => {
       const { pathKey, size, mtimeMs, measurement } = (item ?? {}) as Record<string, unknown>;
       if (typeof pathKey !== 'string' || !/^[a-f0-9]{64}$/.test(pathKey)
         || !Number.isSafeInteger(size) || (size as number) < 0 || typeof mtimeMs !== 'number' || !Number.isFinite(mtimeMs)) {
@@ -101,6 +112,7 @@ export class SourceMeasurementCache {
       const measured = SourceInspector.parseMeasurement(measurement);
       return [pathKey, { size: size as number, mtimeMs, measurement: Promise.resolve(measured), measured }];
     });
+    return { toolsVersion: typeof toolsVersion === 'string' ? toolsVersion : null, entries };
   }
 
   private persist(): void {
@@ -115,7 +127,8 @@ export class SourceMeasurementCache {
     const temporary = path.join(folder, `.${path.basename(this.cacheFile)}.${randomUUID()}.tmp`);
     await mkdir(folder, { recursive: true });
     try {
-      await writeFile(temporary, `${JSON.stringify({ schemaVersion: SCHEMA_VERSION, measurements })}\n`, { encoding: 'utf8', flag: 'wx' });
+      const document = { schemaVersion: SCHEMA_VERSION, toolsVersion: this.entriesToolsVersion, measurements };
+      await writeFile(temporary, `${JSON.stringify(document)}\n`, { encoding: 'utf8', flag: 'wx' });
       await rename(temporary, this.cacheFile);
     } catch (error) {
       await rm(temporary, { force: true }).catch(() => undefined);

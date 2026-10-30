@@ -96,6 +96,22 @@ describe('SourceMovieLocator', () => {
     await expect(f.locator.locate(event, sourceMovie)).resolves.toEqual({ kind: 'located', moviePath: lastLocated });
   });
 
+  it('finds a movie chosen earlier in the same app session without asking again', async () => {
+    const userData = await mkdtemp(path.join(os.tmpdir(), 'source-movie-locator-'));
+    try {
+      const selected = path.resolve('elsewhere', 'source.mkv');
+      const f = fixture([selected], { locatedMovies: new LocatedMovieStore(userData) });
+      f.chooseSourcePath.mockResolvedValueOnce(selected);
+      await f.locator.locate(event, sourceMovie);
+
+      const located = await f.locator.locate(event, sourceMovie);
+
+      expect([located, f.chooseSourcePath.mock.calls.length]).toEqual([{ kind: 'located', moviePath: selected }, 1]);
+    } finally {
+      await rm(userData, { recursive: true, force: true });
+    }
+  });
+
   it('finds a movie chosen in an earlier app session without asking again', async () => {
     const userData = await mkdtemp(path.join(os.tmpdir(), 'source-movie-locator-'));
     try {

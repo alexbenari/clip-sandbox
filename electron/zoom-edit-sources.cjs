@@ -16,11 +16,9 @@ class ZoomEditSources {
   #placement;
   #anchor;
   #provenance;
-  #fs;
   #randomId;
   #grantedClips;
   #windows = new Map();
-  #locatedMovies = new Map();
 
   constructor({ folderAccess, hostForEvent, locator, windowCache, placement,
     provenance = new Mp4Provenance(), fileSystem = fs, randomId = () => randomBytes(18).toString('base64url') }) {
@@ -31,7 +29,6 @@ class ZoomEditSources {
     this.#placement = placement;
     this.#anchor = new MovieWindowAnchor();
     this.#provenance = provenance;
-    this.#fs = fileSystem;
     this.#randomId = randomId;
   }
 
@@ -79,7 +76,6 @@ class ZoomEditSources {
 
   forgetAppWindow(senderId) {
     for (const [windowId, record] of this.#windows) if (record.senderId === senderId) this.#windows.delete(windowId);
-    this.#locatedMovies.delete(senderId);
   }
 
   async #clipPath(event, request) {
@@ -93,19 +89,8 @@ class ZoomEditSources {
   }
 
   async #moviePath(event, sourceMovie) {
-    const movieKey = JSON.stringify(sourceMovie.fingerprint);
-    const appWindowMovies = this.#locatedMovies.get(event.sender.id) ?? new Map();
-    this.#locatedMovies.set(event.sender.id, appWindowMovies);
-    const remembered = appWindowMovies.get(movieKey);
-    if (remembered && await this.#isFile(remembered)) return remembered;
     const located = await this.#locator.locate(event, sourceMovie);
-    if (located.kind !== 'located') return null;
-    appWindowMovies.set(movieKey, located.moviePath);
-    return located.moviePath;
-  }
-
-  async #isFile(filePath) {
-    try { return (await this.#fs.stat(filePath)).isFile(); } catch { return false; }
+    return located.kind === 'located' ? located.moviePath : null;
   }
 
   #windowRecord(event, windowId) {
