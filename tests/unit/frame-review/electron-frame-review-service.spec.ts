@@ -139,4 +139,30 @@ describe('Electron frame review service', () => {
     expect(command).toHaveBeenCalledWith(session.id, 'jump-playback-by', { deltaUs: '2000000' });
     await session.dispose();
   });
+
+  it('goes to a frame through the desktop and answers with that exact frame', async () => {
+    const command = vi.fn(async () => ({ ok: true, result: {
+      kind: 'exact-frame', sourceGeneration: 1, frameGeneration: 4,
+      width: 1, height: 1, sourceWidth: 1, sourceHeight: 1,
+      reviewTimeUs: '291666', pixels: new Uint8Array([1, 2, 3, 255]),
+      identity: {
+        frameIndex: 7, originalFrameIndex: 7, pts: '7', duration: '1',
+        timebaseNumerator: '1', timebaseDenominator: '24', frameInfoPts: '7', frameInfoHash: 'hash',
+      },
+    } }));
+    const api: IElectronFrameReviewApi = {
+      chooseSource: vi.fn(),
+      open: async () => ({ ok: true, result: { sessionId: 'session_12345678', state: readyState } }),
+      command, close: vi.fn(async () => ({ ok: true, result: null })), subscribe: vi.fn(() => () => undefined),
+    };
+    const service = new ElectronFrameReviewService({ clipSandboxDesktop: { frameReview: api } } as unknown as Window);
+    const session = await service.open({ sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789'),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false });
+
+    const frame = await session.goToFrame(7);
+
+    expect(command).toHaveBeenCalledWith(session.id, 'go-to-frame', { frameIndex: 7 });
+    expect(frame).toMatchObject({ kind: 'exact-frame', identity: { frameIndex: 7 } });
+    await session.dispose();
+  });
 });

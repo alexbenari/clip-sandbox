@@ -72,6 +72,7 @@ export interface IFrameReviewSession {
   stopExactPreview(): Promise<IExactDisplayFrame | null>;
   enterFrameScrub(): Promise<IExactDisplayFrame>;
   scrubToFrame(frameIndex: number): Promise<IExactDisplayFrame>;
+  goToFrame(frameIndex: number): Promise<IExactDisplayFrame>;
   scrubToTime(timestampUs: bigint): Promise<IExactDisplayFrame>;
   stepAdjacent(direction: AdjacentDirection): Promise<IExactDisplayFrame>;
   pressAdjacent(direction: AdjacentDirection): Promise<void>;

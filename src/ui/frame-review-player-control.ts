@@ -603,7 +603,7 @@ export class FrameReviewPlayerControl {
   }
 
   async enterExactScrubAtFrame(frameIndex: number): Promise<IFrameReviewDisplayedCapture | null> {
-    const capture = await this.enterExactScrub(session => session.scrubToFrame(frameIndex));
+    const capture = await this.enterExactScrub(session => session.goToFrame(frameIndex));
     if (capture) this.retainPreviewAt(frameIndex);
     return capture;
   }

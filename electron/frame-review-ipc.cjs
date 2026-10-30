@@ -9,7 +9,7 @@ const CHANNELS = Object.freeze({
 });
 
 const COMMANDS = new Set([
-  'state', 'play', 'pause', 'seek-playback', 'jump-playback-by', 'enter-scrub', 'scrub-to-frame', 'scrub-to-time',
+  'state', 'play', 'pause', 'seek-playback', 'jump-playback-by', 'enter-scrub', 'scrub-to-frame', 'go-to-frame', 'scrub-to-time',
   'step-adjacent', 'press-adjacent', 'release-adjacent', 'capture-current-point',
   'frame-identity', 'thumbnail-frame',
   'start-exact-preview', 'pause-exact-preview', 'resume-exact-preview', 'stop-exact-preview',
@@ -131,6 +131,7 @@ class FrameReviewIpcBoundary {
       case 'stop-exact-preview': return session.stopExactPreview();
       case 'enter-scrub': return session.enterFrameScrub();
       case 'scrub-to-frame': return session.scrubToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      case 'go-to-frame': return session.goToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
       case 'scrub-to-time': {
         const timestampUs = this.decimalBigInt(args.timestampUs, 'timestampUs');
         if (timestampUs > 9_223_372_036_854_775_807n) throw this.invalid('Scrub time is out of range.');

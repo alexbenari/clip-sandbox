@@ -75,7 +75,7 @@ export class ReviewSession {
     this.scrubScheduler = new ScrubRequestScheduler((frameIndex) => options.exact.scrub(frameIndex), 100);
     this.adjacentScheduler = new AdjacentStepScheduler(
       { stepAdjacent: (direction) => options.exact.stepAdjacent(direction) },
-      (frame) => this.rememberFrame(frame),
+      (frame) => this.showHeldStepFrame(frame),
       (error) => {
         if (error instanceof BackendError && error.category === 'frame-boundary') return;
         this.emitError(error);
@@ -210,13 +210,19 @@ export class ReviewSession {
     return this.rememberFrame(await this.options.exact.atTime(this.pendingPlaybackTargetUs ?? status.timestampUs));
   }
 
-  async scrubToFrame(frameIndex: number): Promise<IHostExactFrame> {
-    this.requireExactReady();
-    if (this.preview?.phase === 'running') await this.pauseExactPreview();
-    if (!this.playbackDisabled) await this.options.playback.pause();
-    const frame = this.rememberFrame(await this.scrubScheduler.submit(frameIndex));
-    this.retainPreviewIfInRange(frame.identity.frameIndex);
-    return frame;
+  scrubToFrame(frameIndex: number): Promise<IHostExactFrame> {
+    return this.moveToExactFrame(() => this.scrubScheduler.submit(frameIndex));
+  }
+
+  // A progress-bar scrub still waiting when the frame is requested is dropped, so it cannot land over this frame.
+  async goToFrame(frameIndex: number): Promise<IHostExactFrame> {
+    if (!Number.isSafeInteger(frameIndex) || frameIndex < 0) {
+      throw new BackendError('invalid-request', 'Frame ordinal is invalid.', true);
+    }
+    return this.moveToExactFrame(() => {
+      this.scrubScheduler.invalidate();
+      return this.options.exact.exact(frameIndex);
+    });
   }
 
   async scrubToTime(timestampUs: bigint): Promise<IHostExactFrame> {
@@ -237,13 +243,8 @@ export class ReviewSession {
     return frame;
   }
 
-  async stepAdjacent(direction: AdjacentDirection): Promise<IHostExactFrame> {
-    this.requireExactReady();
-    if (this.preview?.phase === 'running') await this.pauseExactPreview();
-    if (!this.playbackDisabled) await this.options.playback.pause();
-    const frame = this.rememberFrame(await this.options.exact.stepAdjacent(direction));
-    this.retainPreviewIfInRange(frame.identity.frameIndex);
-    return frame;
+  stepAdjacent(direction: AdjacentDirection): Promise<IHostExactFrame> {
+    return this.moveToExactFrame(() => this.options.exact.stepAdjacent(direction));
   }
 
   async pressAdjacent(direction: AdjacentDirection): Promise<void> {
@@ -417,11 +418,24 @@ export class ReviewSession {
     }
   }
 
+  private async moveToExactFrame(read: () => Promise<IHostExactFrame>): Promise<IHostExactFrame> {
+    this.requireExactReady();
+    if (this.preview?.phase === 'running') await this.pauseExactPreview();
+    if (!this.playbackDisabled) await this.options.playback.pause();
+    const frame = this.rememberFrame(await read());
+    this.retainPreviewIfInRange(frame.identity.frameIndex);
+    return frame;
+  }
+
   private rememberFrame(frame: IHostExactFrame): IHostExactFrame {
     if (this.disposed) throw new BackendError('stale-response', 'Frame arrived after session disposal.', true);
     this.currentExactFrame = frame;
-    this.options.emit(Object.freeze({ type: 'display-frame', frame }));
     return frame;
+  }
+
+  // Held steps answer no request, so their frames reach the window as events.
+  private showHeldStepFrame(frame: IHostExactFrame): void {
+    this.options.emit(Object.freeze({ type: 'display-frame', frame: this.rememberFrame(frame) }));
   }
 
   private requireProxyClock(): ProxyPlaybackClock {
