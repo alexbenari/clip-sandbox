@@ -95,13 +95,26 @@ class PlaybackFake implements IReviewPlaybackEngine {
 class ExactFake implements IExactFrameReader {
   shutdownCount = 0;
   async open() { return 4; }
-  async exact() { return exactFrame; }
+  async exact(_frameIndex: number) { return exactFrame; }
   async identity() { return exactFrame.identity; }
   async thumbnail() { return exactFrame; }
   async atTime() { return exactFrame; }
   async scrub(_frameIndex: number) { return exactFrame; }
   async stepAdjacent() { return exactFrame; }
   async shutdown() { this.shutdownCount += 1; }
+}
+
+function frameAt(frameIndex: number): IHostExactFrame {
+  return Object.freeze({ ...exactFrame, identity: Object.freeze({ ...exactFrame.identity, frameIndex }) });
+}
+
+async function preparedSession(exact: ExactFake, emit: (event: unknown) => void): Promise<ReviewSession> {
+  const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+    previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback: new PlaybackFake(), exact,
+    prepare: async () => prepared, emit });
+  await session.open();
+  await session.whenPrepared();
+  return session;
 }
 
 describe('review session', () => {
@@ -276,7 +289,7 @@ describe('review session', () => {
     playback.failRecovery = true;
     await expect(session.pauseExactPreview()).rejects.toThrow('reset failed');
     await expect(session.play()).rejects.toMatchObject({ category: 'invalid-state' });
-    await expect(session.scrubToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
+    await expect(session.dragToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
     await session.dispose();
   });
 
@@ -305,7 +318,7 @@ describe('review session', () => {
     expect(session.state()).toMatchObject({ phase: 'exact-ready', captureEnabled: true });
     await expect(session.startExactPreview({ startFrameIndex: 1, endFrameIndex: 2 }))
       .rejects.toThrow('unsupported playback-clock origin');
-    await expect(session.scrubToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
+    await expect(session.dragToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
     await session.dispose();
   });
 
@@ -370,6 +383,74 @@ describe('review session', () => {
     await new Promise<void>(resolve => setImmediate(resolve));
 
     expect(emit).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    await session.dispose();
+  });
+
+  it('shows the frame a jump goes to without waiting out the progress-bar scrub delay', async () => {
+    const exact = new ExactFake();
+    exact.exact = async (frameIndex: number) => frameAt(frameIndex);
+    const session = await preparedSession(exact, vi.fn());
+    let shownFrame: number | null = null;
+
+    void session.goToFrame(3).then(frame => { shownFrame = frame.identity.frameIndex; });
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    expect(shownFrame).toBe(3);
+    await session.dispose();
+  });
+
+  it('refuses a jump to a negative frame and keeps playback running', async () => {
+    const playback = new PlaybackFake();
+    const session = new ReviewSession({ id: 'session_12345678', sourcePath: 'C:/movie.mp4',
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false, playback, exact: new ExactFake(),
+      prepare: async () => prepared, emit: vi.fn() });
+    await session.open();
+    await session.whenPrepared();
+    await session.play();
+
+    await expect(session.goToFrame(-1)).rejects.toMatchObject({ category: 'invalid-request' });
+    expect(playback.stateValue).toBe('playing');
+    await session.dispose();
+  });
+
+  it('keeps the frame a jump goes to when a progress-bar scrub was still waiting', async () => {
+    const exact = new ExactFake();
+    exact.scrub = async (frameIndex: number) => frameAt(frameIndex);
+    exact.exact = async (frameIndex: number) => frameAt(frameIndex);
+    const session = await preparedSession(exact, vi.fn());
+
+    const dragged = session.dragToFrame(1);
+    await session.goToFrame(3);
+
+    await expect(dragged).rejects.toMatchObject({ category: 'stale-response' });
+    expect(await session.captureCurrentPoint()).toMatchObject({ kind: 'exact-frame', identity: { frameIndex: 3 } });
+    await session.dispose();
+  });
+
+  it('sends a requested frame to the window only as the answer to its request', async () => {
+    const emit = vi.fn();
+    const session = await preparedSession(new ExactFake(), emit);
+
+    await session.goToFrame(2);
+    await session.dragToFrame(2);
+    await session.stepAdjacent(1);
+
+    expect(emit).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'display-frame' }));
+    await session.dispose();
+  });
+
+  it('sends a held step frame to the window as a display frame', async () => {
+    const exact = new ExactFake();
+    exact.stepAdjacent = async () => frameAt(3);
+    const emit = vi.fn();
+    const session = await preparedSession(exact, emit);
+
+    await session.pressAdjacent(1);
+    await session.releaseAdjacent(1);
+
+    await vi.waitFor(() => expect(emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'display-frame', frame: expect.objectContaining({ identity: expect.objectContaining({ frameIndex: 3 }) }),
+    })));
     await session.dispose();
   });
 
@@ -494,7 +575,7 @@ describe('review session', () => {
     await session.open();
     await session.whenPrepared();
 
-    await session.scrubToFrame(3);
+    await session.dragToFrame(3);
     playback.listener?.(Object.freeze({
       kind: 'playback-frame', sourceGeneration: 1, frameGeneration: 2, playbackTimestampUs: 1_951_000n,
       width: 64, height: 48, sourceWidth: 64, sourceHeight: 48, pixels: new Uint8Array(64 * 48 * 4),

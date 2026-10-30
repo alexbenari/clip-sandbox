@@ -107,4 +107,21 @@ describe('frame review IPC', () => {
     expect(await request('scrub-to-time', { timestampUs: '9223372036854775808' })).toMatchObject({ ok: false, error: { category: 'invalid-request' } });
     expect(session.scrubToTime).not.toHaveBeenCalled();
   });
+
+  it('goes to a whole non-negative frame and refuses any other before calling the session', async () => {
+    const handlers = new Map<string, Function>();
+    const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
+    const session = { goToFrame: vi.fn(async () => null) };
+    const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
+    registerFrameReviewIpc({ ipcMain, hostForEvent: () => ({ session: () => session }), chooseSourcePath: vi.fn(async () => null) });
+    const command = handlers.get('clip-sandbox:frame-review-command')!;
+    const request = (args: object) => command({ sender: { send: vi.fn() } },
+      { operationId: 'operation_123456', sessionId: 'session_12345678', command: 'go-to-frame', args });
+
+    expect(await request({ frameIndex: -1 })).toMatchObject({ ok: false, error: { category: 'invalid-request' } });
+    expect(await request({ frameIndex: 1.5 })).toMatchObject({ ok: false, error: { category: 'invalid-request' } });
+    expect(session.goToFrame).not.toHaveBeenCalled();
+    expect(await request({ frameIndex: 7 })).toMatchObject({ ok: true });
+    expect(session.goToFrame).toHaveBeenCalledWith(7);
+  });
 });

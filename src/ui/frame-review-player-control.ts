@@ -603,7 +603,7 @@ export class FrameReviewPlayerControl {
   }
 
   async enterExactScrubAtFrame(frameIndex: number): Promise<IFrameReviewDisplayedCapture | null> {
-    const capture = await this.enterExactScrub(session => session.scrubToFrame(frameIndex));
+    const capture = await this.enterExactScrub(session => session.goToFrame(frameIndex));
     if (capture) this.retainPreviewAt(frameIndex);
     return capture;
   }
@@ -908,7 +908,7 @@ export class FrameReviewPlayerControl {
     const frameIndex = Math.round(Number(this.progress.value));
     this.scrubbingExact = true;
     try {
-      await this.requestDisplay(await session.scrubToFrame(frameIndex));
+      await this.requestDisplay(await session.dragToFrame(frameIndex));
       this.retainPreviewAt(frameIndex);
       this.clearError();
     } catch (error) {

@@ -60,7 +60,8 @@ function session(initialState = state('exact-ready')): {
   seekPlayback: ReturnType<typeof vi.fn>;
   jumpPlaybackBy: ReturnType<typeof vi.fn>;
   enterFrameScrub: ReturnType<typeof vi.fn>;
-  scrubToFrame: ReturnType<typeof vi.fn>;
+  dragToFrame: ReturnType<typeof vi.fn>;
+  goToFrame: ReturnType<typeof vi.fn>;
   scrubToTime: ReturnType<typeof vi.fn>;
   thumbnailFrame: ReturnType<typeof vi.fn>;
   pressAdjacent: ReturnType<typeof vi.fn>;
@@ -75,7 +76,8 @@ function session(initialState = state('exact-ready')): {
     seekPlayback: vi.fn(async () => undefined),
     jumpPlaybackBy: vi.fn(async (deltaUs: bigint) => deltaUs),
     enterFrameScrub: vi.fn(async () => exactFrame(12, 1)),
-    scrubToFrame: vi.fn(async (frameIndex: number) => exactFrame(frameIndex, frameIndex)),
+    dragToFrame: vi.fn(async (frameIndex: number) => exactFrame(frameIndex, frameIndex)),
+    goToFrame: vi.fn(async (frameIndex: number) => exactFrame(frameIndex, frameIndex)),
     scrubToTime: vi.fn(async (timestampUs: bigint) => exactFrame(Number(timestampUs / 333_000n), Number(timestampUs / 333_000n))),
     thumbnailFrame: vi.fn(async (frameIndex: number) => exactFrame(frameIndex, frameIndex)),
     stepAdjacent: vi.fn(async (direction: -1 | 1) => exactFrame(12 + direction, 2)),
@@ -90,7 +92,8 @@ function session(initialState = state('exact-ready')): {
     seekPlayback: value.seekPlayback as ReturnType<typeof vi.fn>,
     jumpPlaybackBy: value.jumpPlaybackBy as ReturnType<typeof vi.fn>,
     thumbnailFrame: value.thumbnailFrame as ReturnType<typeof vi.fn>,
-    enterFrameScrub: value.enterFrameScrub as ReturnType<typeof vi.fn>, scrubToFrame: value.scrubToFrame as ReturnType<typeof vi.fn>,
+    enterFrameScrub: value.enterFrameScrub as ReturnType<typeof vi.fn>, dragToFrame: value.dragToFrame as ReturnType<typeof vi.fn>,
+    goToFrame: value.goToFrame as ReturnType<typeof vi.fn>,
     scrubToTime: value.scrubToTime as ReturnType<typeof vi.fn>,
     pressAdjacent: value.pressAdjacent as ReturnType<typeof vi.fn>, releaseAdjacent: value.releaseAdjacent as ReturnType<typeof vi.fn>,
     dispose: value.dispose as ReturnType<typeof vi.fn>,
@@ -439,7 +442,7 @@ describe('FrameReviewPlayerControl', () => {
     expect(review.pause).not.toHaveBeenCalled();
   });
 
-  it('enters an exact saved frame by ordinal without seeking by timestamp', async () => {
+  it('goes straight to an exact saved frame by ordinal, not through the progress-bar scrub or a timestamp seek', async () => {
     const renderer = { render: vi.fn(async () => undefined), clear: vi.fn() };
     const review = session();
     const control = new FrameReviewPlayerControl({ document, frameRenderer: renderer });
@@ -447,7 +450,7 @@ describe('FrameReviewPlayerControl', () => {
 
     const capture = await control.enterExactScrubAtFrame(24);
 
-    expect(review.scrubToFrame).toHaveBeenCalledWith(24);
+    expect(review.goToFrame).toHaveBeenCalledWith(24);
     expect(review.seekPlayback).not.toHaveBeenCalled();
     expect(capture?.point).toMatchObject({ kind: 'exact-frame', identity: { frameIndex: 24 } });
   });
@@ -460,12 +463,12 @@ describe('FrameReviewPlayerControl', () => {
 
     await control.showFrameAfterCapture(review.value, { kind: 'saved-exact-frame', frameIndex: 24,
       frameInfoHash: '0000000000000024', reviewTimeUs: 800_000n, sourceGeneration: 7 });
-    expect(review.scrubToFrame).toHaveBeenCalledWith(25);
+    expect(review.goToFrame).toHaveBeenCalledWith(25);
     expect(control.capturePoint()).toMatchObject({ kind: 'exact-frame', identity: { frameIndex: 25 } });
 
     await control.showFrameAfterCapture(review.value, { kind: 'saved-exact-frame', frameIndex: 119,
       frameInfoHash: '0000000000000119', reviewTimeUs: 3_966_000n, sourceGeneration: 7 });
-    expect(review.scrubToFrame).toHaveBeenLastCalledWith(119);
+    expect(review.goToFrame).toHaveBeenLastCalledWith(119);
   });
 
   it('resolves a timestamp capture to its exact frame before stepping forward', async () => {
@@ -534,7 +537,7 @@ describe('FrameReviewPlayerControl', () => {
     progress.value = '42';
     progress.dispatchEvent(new Event('input', { bubbles: true }));
     await Promise.resolve();
-    expect(review.scrubToFrame).toHaveBeenCalledWith(42);
+    expect(review.dragToFrame).toHaveBeenCalledWith(42);
   });
 
   it('stops playback on the current exact frame when an arrow step begins, without stepping after a quick release', async () => {
@@ -655,7 +658,7 @@ describe('FrameReviewPlayerControl', () => {
     await Promise.resolve();
 
     expect(review.seekPlayback).toHaveBeenCalledWith(2_016_807n);
-    expect(review.scrubToFrame).not.toHaveBeenCalled();
+    expect(review.dragToFrame).not.toHaveBeenCalled();
     expect(review.pause).not.toHaveBeenCalled();
   });
 

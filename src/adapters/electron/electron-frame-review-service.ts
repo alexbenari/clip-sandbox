@@ -135,7 +135,8 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
     return result === null ? null : this.parseFrame(result, 'exact-frame') as IExactDisplayFrame;
   }
   enterFrameScrub(): Promise<IExactDisplayFrame> { return this.exactCommand('enter-scrub'); }
-  scrubToFrame(frameIndex: number): Promise<IExactDisplayFrame> { return this.exactCommand('scrub-to-frame', { frameIndex }); }
+  dragToFrame(frameIndex: number): Promise<IExactDisplayFrame> { return this.exactCommand('drag-to-frame', { frameIndex }); }
+  goToFrame(frameIndex: number): Promise<IExactDisplayFrame> { return this.exactCommand('go-to-frame', { frameIndex }); }
   scrubToTime(timestampUs: bigint): Promise<IExactDisplayFrame> {
     return this.exactCommand('scrub-to-time', { timestampUs: timestampUs.toString() });
   }

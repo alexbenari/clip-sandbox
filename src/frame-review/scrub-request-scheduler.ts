@@ -38,7 +38,7 @@ export class ScrubRequestScheduler<TFrame> {
     this.revision += 1;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    this.pending?.reject(this.stale('Scrub request invalidated by a source change.'));
+    this.pending?.reject(this.stale('Scrub request was superseded.'));
     this.pending = null;
   }
 
