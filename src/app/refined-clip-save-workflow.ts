@@ -93,7 +93,9 @@ export class RefinedClipSaveWorkflow {
     } finally {
       if (this.run === run) this.run = null;
     }
-    await this.showSaved(edit.clip, saved, edits, view);
+    const editWasOpen = view.endEdit();
+    this.reportSaved(edit.clip.name, saved, edits);
+    if (editWasOpen) await this.showInViews(edit.clip, saved);
     return 'saved';
   }
 
@@ -155,13 +157,15 @@ export class RefinedClipSaveWorkflow {
     return { folder: edit.folder, filename: edit.clip.name, source, sessionId, startFrame, endFrame, loopify: edits.includes('loopify'), outcome };
   }
 
-  private async showSaved(original: Clip, saved: SavedRefinedClip, edits: ZoomEditComposition, view: IRefinedClipSaveView): Promise<void> {
-    const { reporter, text, savedClipSources, createdClips, replacements } = this.deps;
-    const previousFilename = original.name;
-    const editWasOpen = view.endEdit();
+  private reportSaved(previousFilename: string, saved: SavedRefinedClip, edits: ZoomEditComposition): void {
+    const { reporter, text } = this.deps;
     reporter.success(text.saved(previousFilename, saved, edits));
     if (saved.warning) reporter.information(text.sourceInfoNotSaved(saved.filename));
-    if (!editWasOpen) return;
+  }
+
+  private async showInViews(original: Clip, saved: SavedRefinedClip): Promise<void> {
+    const { savedClipSources, createdClips, replacements } = this.deps;
+    const previousFilename = original.name;
     const source = savedClipSources.clipSourceOf(saved.entry);
     if (saved.outcome === 'kept-both') {
       if (!createdClips.insert(original, source)) this.reportNotShown(saved.filename);

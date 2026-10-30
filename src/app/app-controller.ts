@@ -233,8 +233,8 @@ export class AppController {
       rangesPanel: gifRangesPanelControl ?? undefined,
       document,
     });
-    const refineScreens = [{ id: refineGifScreen.id, session: gifExtractionSession }];
-    const refineScreenLeavePolicy = new RefineScreenLeavePolicy({ refineScreens });
+    const refineScreen = { id: refineGifScreen.id, session: gifExtractionSession };
+    const refineScreenLeavePolicy = new RefineScreenLeavePolicy({ refineScreen });
     const zoomEditModeLeavePolicy = new ZoomEditModeLeavePolicy({ activeEdit: activeZoomEdit, collectionScreenId: collectionScreen.id });
     const shell = ApplicationShellControl.fromDocument(document, {
       initialScreenId: settingsService.current.startupScreenId ?? DEFAULT_STARTUP_SCREEN_ID,
@@ -259,12 +259,12 @@ export class AppController {
     const refineLeave = new RefineLeaveWorkflow({
       policy: refineScreenLeavePolicy,
       prompt: discardRefinementDialog,
-      refineScreens,
+      refineScreen,
       navigation: shell,
       screenChanges: shell,
     });
     const pipelineCatalogRefresher = new PipelineCatalogRefresher({
-      publishers: [gifExtractionSession],
+      publisher: gifExtractionSession,
       catalog: pipelineCatalogControl,
     });
     const collectionView = new CollectionViewWorkflow({
@@ -527,8 +527,14 @@ export class AppController {
       window,
       onFullscreenChange: () => fullScreenChange.handleFullScreenChange(),
       onKeyDown: event => shell.handleKeyDown(event),
-      onKeyUp: event => gifWorkflowKeyboard.handleKeyUp(event),
-      onWindowBlur: () => gifWorkflowKeyboard.releaseHeldSteps(),
+      onKeyUp: event => {
+        gifWorkflowKeyboard.handleKeyUp(event);
+        zoomEditModeKeyboard.handleKeyUp(event);
+      },
+      onWindowBlur: () => {
+        gifWorkflowKeyboard.releaseHeldSteps();
+        zoomEditModeKeyboard.releaseHeldSteps();
+      },
       onPageHide: () => { void shutdown.begin(); },
     });
   }

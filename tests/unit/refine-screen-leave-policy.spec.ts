@@ -10,7 +10,7 @@ function session(unlockedChanges: readonly UnlockedEndpointChange[] = []): IRefi
 }
 
 function policy(gif: IRefineScreenSession | null = session()) {
-  return new RefineScreenLeavePolicy({ refineScreens: [{ id: 'refine-gif', session: gif }] });
+  return new RefineScreenLeavePolicy({ refineScreen: { id: 'refine-gif', session: gif } });
 }
 
 describe('RefineScreenLeavePolicy', () => {

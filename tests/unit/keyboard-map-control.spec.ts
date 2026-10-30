@@ -76,7 +76,7 @@ describe('KeyboardMapControl', () => {
       'Next clip',
       'Close Zoom',
       'Play or pause',
-      'Step one frame',
+      'Step one frame; hold to accelerate',
       'Jump by 1, 2, 5, 7 or 10 seconds',
       'Set the start or the end at this frame',
       'Go to the start or the end',

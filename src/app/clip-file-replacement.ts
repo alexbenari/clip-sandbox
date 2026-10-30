@@ -10,7 +10,7 @@ export type FailedCollectionRename = Readonly<{ filename: string; collectionName
 export type ClipFileReplacementResult = Readonly<{ clip: Clip; failedCollections: readonly FailedCollectionRename[] }>;
 
 export interface IReplacedClipSourceMovie {
-  readCreatedClip(clip: Clip): Promise<void>;
+  readClip(clip: Clip): Promise<void>;
 }
 
 export interface IReplacedClipZoom {
@@ -35,7 +35,7 @@ export class ClipFileReplacement {
     if (!replaced) return null;
     const failedCollections = await this.rewriteCollections(replaced.changedCollections);
     this.showReplacedClip(replaced.clip);
-    void sourceMovies.readCreatedClip(replaced.clip);
+    void sourceMovies.readClip(replaced.clip);
     zoom.openClip(replaced.clip);
     return Object.freeze({ clip: replaced.clip, failedCollections });
   }

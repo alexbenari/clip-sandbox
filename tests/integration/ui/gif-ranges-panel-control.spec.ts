@@ -286,4 +286,32 @@ describe('GifRangesPanelControl', () => {
     expect(root.querySelector<HTMLButtonElement>('[data-extract-all]')?.disabled).toBe(true);
     expect(root.querySelector<HTMLButtonElement>('[data-remove-range="range_1"]')?.disabled).toBe(true);
   });
+
+  it('counts exact ranges and ranges that need frames, and offers Extract all for the ranges the session can extract', () => {
+    const exact = (frameIndex: number) => ({ kind: 'exact-frame' as const, identity: { frameIndex }, reviewTimeUs: BigInt(frameIndex), sourceGeneration: 1 });
+    const locked = (id: string) => ({ id, kind: 'ready-to-extract' as const, sourceGeneration: 1, start: exact(2), end: exact(5), thumbnail: { kind: 'empty' as const } });
+    const unlocked = { id: 'range_3', kind: 'needs-exact-frames' as const, sourceGeneration: 1,
+      start: { kind: 'playback-timestamp' as const, timestampUs: 1_000n }, end: { kind: 'playback-timestamp' as const, timestampUs: 2_000n },
+      thumbnail: { kind: 'empty' as const } };
+    const session = {
+      subscribe: vi.fn((listener: (value: IGifExtractionSessionSnapshot) => void) => {
+        listener({
+          lifecycle: 'open', source: null, reviewState: null, capture: null,
+          draftThumbnail: { kind: 'empty' }, selectedRangeId: null, refinement: null,
+          previewTarget: null, previewRevision: 0, capturesLoading: false, message: null, extractionAvailable: true,
+          ranges: [locked('range_1'), locked('range_2'), unlocked] as never,
+        });
+        return vi.fn();
+      }),
+      canRemoveRange: vi.fn(() => true), canExtractRange: vi.fn((rangeId: string) => rangeId === 'range_1'),
+    };
+    const root = document.createElement('section');
+    new GifRangesPanelControl(root, session as never, { document });
+
+    const extractAll = root.querySelector<HTMLButtonElement>('[data-extract-all]');
+    const summary = root.querySelector('.gif-ranges-summary')?.textContent;
+    expect(summary).toContain('2 exact');
+    expect(summary).toContain('1 need frames');
+    expect([extractAll?.textContent, extractAll?.disabled]).toEqual(['Extract all (1)', false]);
+  });
 });

@@ -24,12 +24,12 @@ class FakeRefineSession {
 
 function leaveWorkflow({ staged = stagedEnd } = {}) {
   const session = new FakeRefineSession(staged);
-  const refineScreens = [{ id: refineGif.id, session }];
-  const policy = new RefineScreenLeavePolicy({ refineScreens });
+  const refineScreen = { id: refineGif.id, session };
+  const policy = new RefineScreenLeavePolicy({ refineScreen });
   const prompt = new FakeDiscardPrompt();
   const navigation = { activeScreen: refineGif as { id: string }, activate: vi.fn((id: string) => { navigation.activeScreen = { id }; }) };
   const screenChanges = new EventSource<{ screenChangeRefused: IScreenChangeRequest; screenChanged: { id: string } }>();
-  const workflow = new RefineLeaveWorkflow({ policy, prompt, refineScreens, navigation, screenChanges });
+  const workflow = new RefineLeaveWorkflow({ policy, prompt, refineScreen, navigation, screenChanges });
   return { workflow, session, prompt, navigation, screenChanges };
 }
 

@@ -11,7 +11,7 @@ export interface IScreenIdentity {
 export type RefineScreen = Readonly<{ id: string; session: IRefineScreenSession | null }>;
 
 type RefineScreenLeavePolicyOptions = Readonly<{
-  refineScreens: readonly RefineScreen[];
+  refineScreen: RefineScreen;
 }>;
 
 export class RefineScreenLeavePolicy {
@@ -26,6 +26,7 @@ export class RefineScreenLeavePolicy {
   }
 
   private sessionOf(screen: IScreenIdentity): IRefineScreenSession | null {
-    return this.options.refineScreens.find(refine => refine.id === screen.id)?.session ?? null;
+    const { refineScreen } = this.options;
+    return refineScreen.id === screen.id ? refineScreen.session : null;
   }
 }

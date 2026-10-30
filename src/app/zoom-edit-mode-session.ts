@@ -10,6 +10,7 @@ import { CurrentMovie } from './current-movie.js';
 import { EventSource, type EventHandler, type IEventSource } from './event-source.js';
 import type { FolderAccess } from './folder-access.js';
 import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capture.js';
+import { HeldStepRepeat, type StepDirection } from './held-step-repeat.js';
 import type { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 import { ZoomEditLoopPreview, type ZoomEditPreviewState } from './zoom-edit-loop-preview.js';
 import { ZoomEditMovieWindow, type ZoomEditMovieWindowState, type ZoomEditWindowAnchor } from './zoom-edit-movie-window.js';
@@ -33,8 +34,10 @@ export type ZoomEditPictureReadiness = 'preparing' | 'ready' | 'failed';
 
 export type ZoomEditExtension = Exclude<ZoomEditMovieWindowState, 'anchored'> | 'ready';
 
+export type ZoomEditNotReadyReason = 'clip-preparing' | 'source-failed';
+
 export type ZoomEditRefusal =
-  | Readonly<{ reason: 'clip-preparing' | 'source-failed' | 'start-after-end' | 'end-before-start' | 'beyond-extension'
+  | Readonly<{ reason: ZoomEditNotReadyReason | 'start-after-end' | 'end-before-start' | 'beyond-extension'
     | 'loop-needs-two-frames' | 'ended' }>
   | Readonly<{ reason: 'extension-unavailable'; extension: Exclude<ZoomEditExtension, 'ready'> }>;
 
@@ -98,12 +101,14 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
   private readonly clipMovie: CurrentMovie;
   private readonly movieWindow: ZoomEditMovieWindow | null;
   private readonly loopPreview: ZoomEditLoopPreview;
+  private readonly heldSteps: HeldStepRepeat<ZoomEditCommandAnswer>;
   private picture: ZoomEditPictureReadiness = 'preparing';
   private range: RefineRange | null = null;
   private loopify: boolean;
   private shown: ShownSource | null = null;
   private pendingAnchor: ZoomEditWindowAnchor | null = null;
-  private lastStepDirection: -1 | 1 = 1;
+  private lastStepDirection: StepDirection = 1;
+  private playbackToggled = false;
   private commands: Promise<unknown> = Promise.resolve();
   private disposed = false;
 
@@ -116,6 +121,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     this.loopify = request.loopify;
     this.loopPreview = new ZoomEditLoopPreview(deps.previews, deps.failures);
     this.loopPreview.on('changed', () => this.publish());
+    this.heldSteps = new HeldStepRepeat(direction => this.step(direction), answer => answer.kind === 'done');
     this.movieWindow = request.hasSourceInfo ? this.openMovieWindow() : null;
   }
 
@@ -155,15 +161,38 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     });
   }
 
+  saveRefusal(): Readonly<{ reason: ZoomEditNotReadyReason }> | null {
+    return this.stagedSelection() ? null : Object.freeze({ reason: this.notReadyReason() });
+  }
+
   togglePlayback(): Promise<ZoomEditCommandAnswer> {
+    // Noted at once, so a clip that becomes ready before this key's turn keeps the frame the key plays from.
+    if (this.shown) this.playbackToggled = true;
     return this.enqueue(async () => {
-      if (!this.shown) return this.refused(this.picture === 'failed' ? 'source-failed' : 'clip-preparing');
+      if (!this.shown) return this.refused(this.notReadyReason());
       await this.whileOpen(this.deps.player.togglePlayback());
       return DONE;
     });
   }
 
-  step(direction: -1 | 1): Promise<ZoomEditCommandAnswer> {
+  async pause(): Promise<void> {
+    this.heldSteps.release();
+    await this.enqueue(async () => {
+      if (this.shown) await this.pausePlayback();
+      return DONE;
+    });
+  }
+
+  // Answers once the key is released or a step cannot move.
+  pressStep(direction: StepDirection): Promise<ZoomEditCommandAnswer> {
+    return this.heldSteps.press(direction);
+  }
+
+  releaseStep(direction: StepDirection): void {
+    this.heldSteps.release(direction);
+  }
+
+  private step(direction: StepDirection): Promise<ZoomEditCommandAnswer> {
     return this.enqueueEdit(async range => {
       const current = await this.pauseOnExactFrame();
       if (current === null) return this.refused('clip-preparing');
@@ -257,6 +286,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     if (this.disposed) return;
     this.disposed = true;
     this.pendingAnchor = null;
+    this.heldSteps.release();
     if (this.shown) this.deps.player.attachSession(null);
     await Promise.allSettled([this.clipMovie.close()?.dispose(), this.movieWindow?.dispose(), this.loopPreview.dispose()]);
   }
@@ -316,7 +346,13 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     this.range = RefineRange.ofClip(frameCount);
     this.picture = 'ready';
     this.publish();
+    if (!this.playbackToggled) this.showFirstFrame();
     this.switchWhenAnchoredAndReady();
+  }
+
+  // Until the clip is ready the player shows its start by time, and the exact frame at that time can be the second one.
+  private showFirstFrame(): void {
+    this.runUnasked(() => this.showClipFrame(0), 'Zoom edit mode could not show the first frame of this clip.');
   }
 
   private onShownReviewEnded(source: ZoomEditShownSource['kind']): void {
@@ -338,16 +374,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     const anchor = this.pendingAnchor;
     if (!anchor || !this.range || this.picture === 'failed') return;
     this.pendingAnchor = null;
-    void this.run(async () => {
-      try {
-        await this.switchToWindow(anchor);
-      } catch (error) {
-        if (!(error instanceof ZoomEditSessionEnded)) {
-          this.deps.failures.report('Zoom edit mode could not show the movie around this clip.', error);
-        }
-      }
-      return DONE;
-    });
+    this.runUnasked(() => this.switchToWindow(anchor), 'Zoom edit mode could not show the movie around this clip.');
   }
 
   private async switchToWindow(anchor: ZoomEditWindowAnchor): Promise<void> {
@@ -389,9 +416,13 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
   }
 
   private async pauseOnExactFrame(): Promise<number | null> {
+    await this.pausePlayback();
+    return this.exactFrameOnScreen();
+  }
+
+  private async pausePlayback(): Promise<void> {
     const { player } = this.deps;
     if (player.exactPreviewPhase() === 'running' || player.ordinaryPlaybackRunning()) await this.whileOpen(player.togglePlayback());
-    return this.exactFrameOnScreen();
   }
 
   // A clip prepared while the player showed a playback frame keeps showing that frame, so it is resolved here.
@@ -497,11 +528,27 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     return answer;
   }
 
+  // Work no key asked for, queued like a key so the next key acts on the frame it leaves.
+  private runUnasked(work: () => Promise<void>, failure: string): void {
+    void this.run(async () => {
+      try {
+        await work();
+      } catch (error) {
+        if (!(error instanceof ZoomEditSessionEnded)) this.deps.failures.report(failure, error);
+      }
+      return DONE;
+    });
+  }
+
   // Work runs one step after another, so each key acts on the frame and range the previous key left.
   private run(work: () => Promise<ZoomEditCommandAnswer>): Promise<ZoomEditCommandAnswer> {
     const answer = this.commands.then(() => (this.disposed ? this.refused('ended') : work()));
     this.commands = answer;
     return answer;
+  }
+
+  private notReadyReason(): ZoomEditNotReadyReason {
+    return this.picture === 'failed' ? 'source-failed' : 'clip-preparing';
   }
 
   private refusedBy(reason: RefineRangeRefusal): ZoomEditCommandAnswer {

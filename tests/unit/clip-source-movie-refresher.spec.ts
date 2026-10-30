@@ -130,11 +130,11 @@ describe('ClipSourceMovieRefresher', () => {
     expect(context.clipNamed('alpha.mp4').sourceMovie).toBeNull();
   });
 
-  it('reads only a clip an edit created', async () => {
+  it('reads only the one clip it is given, such as a clip an edit saved', async () => {
     const context = sourceMovieRefresher();
     const folder = context.openPipeline('clips', ['alpha.mp4', 'alpha-looped.mp4']);
 
-    const reading = context.refresher.readCreatedClip(context.clipNamed('alpha-looped.mp4'));
+    const reading = context.refresher.readClip(context.clipNamed('alpha-looped.mp4'));
     context.service.requests[0].answer({ 'alpha-looped.mp4': 'Sample Feature.mkv' });
     await reading;
 

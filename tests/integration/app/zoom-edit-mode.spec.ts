@@ -49,10 +49,13 @@ const { FakeEditSession, domain } = vi.hoisted(() => {
       const { start, end } = this.snapshot.range;
       return { source: { kind: 'clip' }, sessionId: 'session_clip_0001', startFrame: start, endFrame: end };
     }
+    saveRefusal() { return null; }
     async dispose() { this.disposed = true; }
     record(name) { this.commands.push(name); return Promise.resolve({ kind: 'done' }); }
     togglePlayback() { return this.record('togglePlayback'); }
-    step() { return this.record('step'); }
+    pressStep() { return this.record('pressStep'); }
+    releaseStep() { this.commands.push('releaseStep'); }
+    async pause() { this.commands.push('pause'); }
     jump() { return this.record('jump'); }
     markStart() { return this.record('markStart'); }
     markEnd() { return this.record('markEnd'); }
@@ -200,8 +203,18 @@ describe('Zoom edit mode in the Collection view', () => {
     press('ArrowRight');
     press('q');
 
-    await waitFor(() => expect(session().commands).toEqual(['step', 'markStart']));
+    await waitFor(() => expect(session().commands).toEqual(['pressStep', 'markStart']));
     expect(document.getElementById('zoomEditSurface')).not.toBeNull();
+  });
+
+  test('releasing a held arrow key tells the session to stop stepping', async () => {
+    await startWithFolder();
+    await refineFromClipMenu('alpha.mp4');
+    press('ArrowLeft');
+
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft', bubbles: true }));
+
+    await waitFor(() => expect(session().commands).toEqual(['pressStep', 'releaseStep']));
   });
 
   test('Escape without staged edits returns to Zoom on the same clip, and a second Escape closes Zoom', async () => {

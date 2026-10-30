@@ -12,7 +12,7 @@ export interface ICreatedClipGrid {
 }
 
 export interface ICreatedClipSourceMovie {
-  readCreatedClip(clip: Clip): Promise<void>;
+  readClip(clip: Clip): Promise<void>;
 }
 
 export interface ICreatedClipZoom {
@@ -38,7 +38,7 @@ export class CreatedClipInsertion {
       : this.insertIntoCollectionView(originalClip, createdSource);
     collectionView.refreshToolbar();
     if (!createdClip) return null;
-    void sourceMovies.readCreatedClip(createdClip);
+    void sourceMovies.readClip(createdClip);
     zoom.openClip(createdClip);
     return createdClip;
   }

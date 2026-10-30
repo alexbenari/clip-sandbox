@@ -43,7 +43,7 @@ function insertionIn(collectionFilename: string | null) {
   collectionView.applySelection(sequence!, { collection: selection.selection instanceof Collection ? selection.selection : null });
   const openFolder = new AppSessionState();
   openFolder.setCurrentFolderAccess({ folderPath: 'C:/clips' });
-  const sourceMovies = { readCreatedClip: vi.fn(async (_clip: Clip) => undefined) };
+  const sourceMovies = { readClip: vi.fn(async (_clip: Clip) => undefined) };
   const zoom = { openClip: vi.fn((_clip: Clip) => true) };
   const insertion = new CreatedClipInsertion({ pipelineWorkingCopy, openFolder, grid, collectionView, sourceMovies, zoom });
   const clip = (name: string) => pipelineWorkingCopy.currentClipSequence!.orderedClips().find(candidate => candidate.name === name)!;
@@ -84,7 +84,7 @@ describe('CreatedClipInsertion', () => {
 
     expect(created?.name).toBe('bravo-refined.mp4');
     expect(grid.selectedClipId).toBe(created?.id);
-    expect(sourceMovies.readCreatedClip.mock.calls).toEqual([[created]]);
+    expect(sourceMovies.readClip.mock.calls).toEqual([[created]]);
     expect(zoom.openClip.mock.calls).toEqual([[created]]);
   });
 

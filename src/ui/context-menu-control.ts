@@ -51,17 +51,7 @@ const DEFAULT_CONTEXT_MENU_CSS = `
   justify-content:center;
   color:currentColor;
 }
-.context-menu-item-text{
-  display:flex;
-  flex-direction:column;
-  gap:2px;
-  min-width:0;
-}
-.context-menu-item-detail{
-  color:#94a3b8;
-  font-size:12px;
-  font-weight:400;
-}
+.context-menu-item-label{ min-width:0; }
 .context-menu-panel button.context-menu-item-destructive{ color:var(--danger-text, #f87171); }
 .context-menu-separator{
   flex:none;
@@ -88,7 +78,6 @@ export type ContextMenuIcon = {
 export type ContextMenuItem = {
   id?: string;
   label?: string;
-  detail?: string;
   tone?: 'destructive';
   disabled?: boolean;
   icon?: ContextMenuIcon | null;
@@ -288,19 +277,10 @@ export class ContextMenuControl {
       iconWrap.appendChild(iconEl);
       content.appendChild(iconWrap);
     }
-    const textEl = this.doc.createElement('span');
-    textEl.className = 'context-menu-item-text';
     const labelEl = this.doc.createElement('span');
     labelEl.className = 'context-menu-item-label';
     labelEl.textContent = item.label || '';
-    textEl.appendChild(labelEl);
-    if (item.detail) {
-      const detailEl = this.doc.createElement('span');
-      detailEl.className = 'context-menu-item-detail';
-      detailEl.textContent = item.detail;
-      textEl.appendChild(detailEl);
-    }
-    content.appendChild(textEl);
+    content.appendChild(labelEl);
     button.appendChild(content);
     button.disabled = !!item.disabled;
     if (item.id) button.dataset.itemId = item.id;

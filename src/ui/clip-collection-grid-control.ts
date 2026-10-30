@@ -224,7 +224,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   onDragLeave: (card: ClipCard) => void;
   onDrop: (card: ClipCard, event: DragEvent) => void;
   onLoadedMetadata: (card: ClipCard, video: HTMLVideoElement, clip: Clip, metadataToken: number) => void;
-  onMetadataError: (card: ClipCard, video: HTMLVideoElement, clip: Clip, metadataToken: number) => void;
+  onMetadataError: (video: HTMLVideoElement, clip: Clip, metadataToken: number) => void;
   metadataToken: number;
 }): ClipCard {
   const card = doc.createElement('div');
@@ -264,7 +264,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     onLoadedMetadata(card, vid, clip, metadataToken);
     this.previewPlayback.start(vid);
   });
-  vid.addEventListener('error', () => onMetadataError(card, vid, clip, metadataToken));
+  vid.addEventListener('error', () => onMetadataError(vid, clip, metadataToken));
   card.addEventListener('click', (event) => onSelect(card, event));
   card.addEventListener('focus', () => onFocus(card));
   card.addEventListener('dblclick', () => onDoubleClick?.(card));
@@ -1037,7 +1037,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     card: ClipCard,
     video: HTMLVideoElement,
     clip: Clip,
-    metadataToken = this.metadataTracker.currentToken()
+    metadataToken: number
   ): void {
     clip.setVideoMetadata({
       durationSec: video.duration,
@@ -1048,13 +1048,8 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     this.metadataTracker.markLoaded(metadataToken, clip);
   }
 
-  private onMetadataError(
-    _card: ClipCard,
-    video: HTMLVideoElement,
-    clip: Clip,
-    metadataToken = this.metadataTracker.currentToken()
-  ): void {
-    this.metadataTracker.markFailed(metadataToken, clip, video?.error || new Error('Video metadata failed to load.'));
+  private onMetadataError(video: HTMLVideoElement, clip: Clip, metadataToken: number): void {
+    this.metadataTracker.markFailed(metadataToken, clip, video.error || new Error('Video metadata failed to load.'));
   }
 
   renderCollection(collection: ClipSequence | null | undefined, { cacheKey = null }: { cacheKey?: string | null } = {}): void {
@@ -1100,7 +1095,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
         mediaSource: clip.mediaSource,
         formatLabel: this.formatClipLabel,
         onLoadedMetadata: (element, video, nextClip, token) => this.onLoadedMetadata(element, video, nextClip, token),
-        onMetadataError: (element, video, nextClip, token) => this.onMetadataError(element, video, nextClip, token),
+        onMetadataError: (video, nextClip, token) => this.onMetadataError(video, nextClip, token),
         metadataToken,
         onSelect: (element, event) => this.onSelect(element, event),
         onFocus: (element) => this.onCardFocus(element),

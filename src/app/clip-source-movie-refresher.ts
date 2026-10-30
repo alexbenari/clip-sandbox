@@ -46,7 +46,7 @@ export class ClipSourceMovieRefresher {
     await this.readAndApply({ folder, pipeline, clipNames: pipeline.videoNames(), isLatestRequest: () => revision === this.folderReadRevision });
   }
 
-  async readCreatedClip(clip: Clip): Promise<void> {
+  async readClip(clip: Clip): Promise<void> {
     const folder = this.sourceMovies.openFolder.currentFolderAccess;
     const pipeline = this.sourceMovies.pipelineWorkingCopy.pipeline;
     if (folder && pipeline) await this.readAndApply({ folder, pipeline, clipNames: [clip.name], isLatestRequest: () => true });

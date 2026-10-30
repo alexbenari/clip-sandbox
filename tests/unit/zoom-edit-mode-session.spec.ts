@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IFrameReviewDisplayedCapture } from '../../src/app/frame-review-displayed-capture.js';
+import type { StepDirection } from '../../src/app/held-step-repeat.js';
 import {
   ZoomEditModeSession,
   type IZoomEditPlayer,
@@ -150,9 +151,12 @@ function zoomEdit({ hasSourceInfo = true, muted = false, loopify = false, clipOp
     await flushPendingWork();
   }
 
-  // The real player keeps showing the paused playback frame it had while the clip was preparing.
-  async function clipReadyShowingPlaybackFrame(frame: number): Promise<void> {
+  // Played and paused while the clip was preparing, the real player keeps showing that playback frame once it is ready.
+  async function clipReadyAfterPausingAt(frame: number): Promise<void> {
     await vi.waitFor(() => expect(player.attached).toBe(clipReview.session));
+    await session.togglePlayback();
+    await session.togglePlayback();
+    player.shownFrame = null;
     player.playbackFrame = frame;
     clipReview.becomeExactReady();
     await flushPendingWork();
@@ -179,8 +183,15 @@ function zoomEdit({ hasSourceInfo = true, muted = false, loopify = false, clipOp
 
   return {
     session, player, clipReview, windowReviews, openRequests, frameReview, sources, failures, previews, renders,
-    windowAnswers, anchorAnswers, clipReady, clipReadyShowingPlaybackFrame, windowOpened, windowPrepared, windowAnchored,
+    windowAnswers, anchorAnswers, clipReady, clipReadyAfterPausingAt, windowOpened, windowPrepared, windowAnchored,
   };
+}
+
+// An arrow key pressed and released at once.
+function tap(session: ZoomEditModeSession, direction: StepDirection) {
+  const answer = session.pressStep(direction);
+  session.releaseStep(direction);
+  return answer;
 }
 
 describe('ZoomEditModeSession', () => {
@@ -194,17 +205,41 @@ describe('ZoomEditModeSession', () => {
     expect([edit.session.snapshot.range?.start, edit.session.snapshot.extension]).toEqual([12, 'finding-movie']);
   });
 
-  describe('when the clip becomes ready showing a paused playback frame', () => {
+  describe('once the clip is ready', () => {
+    // The player shows the clip's start by its time until then, and the exact frame at that time can be frame 1.
+    it('shows the clip\'s first frame', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await vi.waitFor(() => expect(edit.player.attached).toBe(edit.clipReview.session));
+      edit.player.playbackFrame = 1;
+
+      edit.clipReview.becomeExactReady();
+
+      await vi.waitFor(() => expect(edit.player.shownFrame).toBe(0));
+    });
+
+    it('shows the window at the clip\'s first frame once the window is anchored', async () => {
+      const edit = zoomEdit();
+      await vi.waitFor(() => expect(edit.player.attached).toBe(edit.clipReview.session));
+      edit.player.playbackFrame = 1;
+      edit.clipReview.becomeExactReady();
+
+      await edit.windowAnchored();
+
+      expect(edit.player.shownFrame).toBe(1800);
+    });
+  });
+
+  describe('when the clip becomes ready after it was played and paused', () => {
     it('steps from the exact frame at that position', async () => {
       const edit = zoomEdit({ hasSourceInfo: false });
-      await edit.clipReadyShowingPlaybackFrame(30);
+      await edit.clipReadyAfterPausingAt(30);
 
-      expect([await edit.session.step(1), edit.player.shownFrame]).toEqual([{ kind: 'done' }, 31]);
+      expect([await tap(edit.session, 1), edit.player.shownFrame]).toEqual([{ kind: 'done' }, 31]);
     });
 
     it('stages the exact frame at that position as the start', async () => {
       const edit = zoomEdit({ hasSourceInfo: false });
-      await edit.clipReadyShowingPlaybackFrame(30);
+      await edit.clipReadyAfterPausingAt(30);
 
       await edit.session.markStart();
 
@@ -213,7 +248,7 @@ describe('ZoomEditModeSession', () => {
 
     it('jumps from the exact frame at that position', async () => {
       const edit = zoomEdit({ hasSourceInfo: false });
-      await edit.clipReadyShowingPlaybackFrame(30);
+      await edit.clipReadyAfterPausingAt(30);
 
       await edit.session.jump(1);
 
@@ -222,7 +257,7 @@ describe('ZoomEditModeSession', () => {
 
     it('switches to the movie window at that position without waiting for a key', async () => {
       const edit = zoomEdit();
-      await edit.clipReadyShowingPlaybackFrame(30);
+      await edit.clipReadyAfterPausingAt(30);
 
       await edit.windowAnchored();
 
@@ -246,6 +281,144 @@ describe('ZoomEditModeSession', () => {
     expect(await edit.session.markStart()).toEqual({ kind: 'done' });
 
     expect([edit.player.ordinaryPlaybackRunning(), edit.session.snapshot.range?.start]).toEqual([false, 37]);
+  });
+
+  describe('with an arrow key held', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    // The real clock runs until the clip is ready, since the setup waits on it.
+    const holdTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+
+    it('steps one frame for a key pressed and released at once', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReady();
+      edit.player.shownFrame = 10;
+
+      const answer = edit.session.pressStep(1);
+      edit.session.releaseStep(1);
+
+      expect([await answer, edit.player.shownFrame]).toEqual([{ kind: 'done' }, 11]);
+    });
+
+    it('steps once for each quick tap, before a key pressed after the taps acts', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReady();
+      edit.player.shownFrame = 10;
+
+      for (let tap = 0; tap < 3; tap += 1) {
+        void edit.session.pressStep(1);
+        edit.session.releaseStep(1);
+      }
+      await edit.session.markStart();
+
+      expect(edit.session.snapshot.range?.start).toBe(13);
+    });
+
+    it('keeps stepping frame after frame while the key is held', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReady();
+      edit.player.shownFrame = 10;
+      holdTimers();
+      const shown: number[] = [];
+      const show = edit.player.enterExactScrubAtFrame.bind(edit.player);
+      edit.player.enterExactScrubAtFrame = frame => { shown.push(frame); return show(frame); };
+
+      void edit.session.pressStep(1);
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(shown.length).toBeGreaterThan(2);
+      expect(shown).toEqual(shown.map((_frame, index) => 11 + index));
+    });
+
+    it('stops stepping once the key is released', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReady();
+      edit.player.shownFrame = 10;
+      holdTimers();
+      const answer = edit.session.pressStep(1);
+      await vi.advanceTimersByTimeAsync(400);
+
+      const frameAtRelease = edit.player.shownFrame;
+      edit.session.releaseStep(1);
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect([await answer, edit.player.shownFrame]).toEqual([{ kind: 'done' }, frameAtRelease]);
+    });
+
+    it('stops stepping when asked to pause, though the key is still held', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReady();
+      edit.player.shownFrame = 10;
+      holdTimers();
+      const answer = edit.session.pressStep(1);
+      await vi.advanceTimersByTimeAsync(400);
+
+      await edit.session.pause();
+      const frameWhenPaused = edit.player.shownFrame;
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect([await answer, edit.player.shownFrame]).toEqual([{ kind: 'done' }, frameWhenPaused]);
+    });
+
+    it('stops at the clip\'s last frame and says why it cannot go on', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReady();
+      edit.player.shownFrame = CLIP_FRAMES - 4;
+      holdTimers();
+
+      const answer = edit.session.pressStep(1);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect([await answer, edit.player.shownFrame]).toEqual([
+        { kind: 'refused', refusal: { reason: 'extension-unavailable', extension: 'none' } }, CLIP_FRAMES - 1,
+      ]);
+    });
+
+    it('stops one minute before the clip start in the movie window', async () => {
+      const edit = zoomEdit();
+      await edit.clipReady();
+      await edit.windowAnchored();
+      edit.player.shownFrame = 363;
+      holdTimers();
+
+      const answer = edit.session.pressStep(-1);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect([await answer, edit.player.shownFrame]).toEqual([{ kind: 'refused', refusal: { reason: 'beyond-extension' } }, 360]);
+    });
+  });
+
+  describe('asked to pause', () => {
+    it('pauses playback on the frame it shows', async () => {
+      const edit = zoomEdit();
+      await edit.clipReady();
+      await edit.session.togglePlayback();
+      edit.player.frameShownOnPause = 37;
+
+      await edit.session.pause();
+
+      expect([edit.player.ordinaryPlaybackRunning(), edit.player.shownFrame]).toEqual([false, 37]);
+    });
+
+    it('pauses a running loop', async () => {
+      const edit = zoomEdit();
+      await edit.clipReady();
+      await edit.session.toggleLoop();
+
+      await edit.session.pause();
+
+      expect(edit.player.exactPreviewPhase()).toBe('paused');
+    });
+
+    it('stays paused when nothing plays', async () => {
+      const edit = zoomEdit();
+      await edit.clipReady();
+      edit.player.shownFrame = 12;
+
+      await edit.session.pause();
+
+      expect([edit.player.ordinaryPlaybackRunning(), edit.player.shownFrame]).toEqual([false, 12]);
+    });
   });
 
   it('starts looping the staged range when the loop is toggled during playback', async () => {
@@ -323,7 +496,7 @@ describe('ZoomEditModeSession', () => {
     const edit = zoomEdit();
     await edit.clipReady();
     edit.player.shownFrame = 100;
-    await edit.session.step(-1);
+    await tap(edit.session, -1);
 
     await edit.session.jump(2);
 
@@ -355,7 +528,7 @@ describe('ZoomEditModeSession', () => {
   describe('before the movie window is anchored', () => {
     const stepPastTheEnd = async (edit: ReturnType<typeof zoomEdit>) => {
       edit.player.shownFrame = CLIP_FRAMES - 1;
-      return edit.session.step(1);
+      return tap(edit.session, 1);
     };
 
     it.each<[string, ZoomEditExtension, (edit: ReturnType<typeof zoomEdit>) => Promise<void>]>([
@@ -492,7 +665,7 @@ describe('ZoomEditModeSession', () => {
       await edit.windowAnchored();
       edit.player.shownFrame = 1800 + CLIP_FRAMES - 1;
 
-      await edit.session.step(1);
+      await tap(edit.session, 1);
       await edit.session.markEnd();
 
       expect(edit.session.snapshot.range?.end).toBe(CLIP_FRAMES);
@@ -515,7 +688,7 @@ describe('ZoomEditModeSession', () => {
       await edit.windowAnchored();
       edit.player.shownFrame = 360;
 
-      expect(await edit.session.step(-1)).toEqual({ kind: 'refused', refusal: { reason: 'beyond-extension' } });
+      expect(await tap(edit.session, -1)).toEqual({ kind: 'refused', refusal: { reason: 'beyond-extension' } });
       expect(edit.player.shownFrame).toBe(360);
     });
 
@@ -640,6 +813,32 @@ describe('ZoomEditModeSession', () => {
     pause.resolve();
 
     expect([await jumping, edit.player.shownFrame]).toEqual([{ kind: 'refused', refusal: { reason: 'ended' } }, null]);
+  });
+
+  describe('asked whether its staged edits can be saved', () => {
+    it('answers that the clip is still being prepared', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+      await vi.waitFor(() => expect(edit.player.attached).toBe(edit.clipReview.session));
+
+      expect(edit.session.saveRefusal()).toEqual({ reason: 'clip-preparing' });
+    });
+
+    it('answers that the clip failed to open', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+      await vi.waitFor(() => expect(edit.player.attached).toBe(edit.clipReview.session));
+
+      edit.clipReview.fail();
+
+      expect(edit.session.saveRefusal()).toEqual({ reason: 'source-failed' });
+    });
+
+    it('answers nothing once the clip is ready', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+
+      await edit.clipReady();
+
+      expect(edit.session.saveRefusal()).toBeNull();
+    });
   });
 
   it('stops the movie window when the clip fails before the window is used', async () => {
@@ -823,7 +1022,19 @@ describe('ZoomEditModeSession', () => {
         edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
         await vi.waitFor(() => expect(edit.session.snapshot.preview.kind).toBe('playing'));
 
-        await edit.session.step(1);
+        await tap(edit.session, 1);
+
+        expect(edit.session.snapshot.preview).toEqual({ kind: 'hidden' });
+      });
+
+      it('hides the preview when asked to pause', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+        await vi.waitFor(() => expect(edit.session.snapshot.preview.kind).toBe('playing'));
+
+        await edit.session.pause();
 
         expect(edit.session.snapshot.preview).toEqual({ kind: 'hidden' });
       });
@@ -927,7 +1138,7 @@ describe('ZoomEditModeSession', () => {
         const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
         await failedPreview(edit, new Error('The preview could not be made.'));
 
-        await edit.session.step(1);
+        await tap(edit.session, 1);
 
         expect(edit.session.snapshot.preview).toEqual({ kind: 'hidden' });
       });

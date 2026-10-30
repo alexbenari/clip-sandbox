@@ -6,7 +6,7 @@ import { PipelineCatalogRefresher } from '../../src/app/pipeline-catalog-refresh
 function refresher() {
   const gifExtraction = new EventSource<{ clipsPublished: void }>();
   const catalog = { load: vi.fn(async () => undefined) };
-  const component = new PipelineCatalogRefresher({ publishers: [gifExtraction, null], catalog });
+  const component = new PipelineCatalogRefresher({ publisher: gifExtraction, catalog });
   return { component, gifExtraction, catalog };
 }
 

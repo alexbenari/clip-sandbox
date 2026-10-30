@@ -43,14 +43,24 @@ class FakeEditSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
   readonly answers: ZoomEditCommandAnswer[] = [];
   readonly dispose = vi.fn(async () => undefined);
   private readonly answer = () => Promise.resolve(this.answers.shift() ?? DONE);
-  readonly togglePlayback = vi.fn(this.answer);
-  readonly step = vi.fn((_direction: -1 | 1) => this.answer());
+  readonly togglePlayback = vi.fn(() => {
+    this.playing = !this.playing;
+    return this.answer();
+  });
+  readonly pressStep = vi.fn((_direction: -1 | 1) => this.answer());
+  readonly releaseStep = vi.fn((_direction: -1 | 1) => undefined);
   readonly jump = vi.fn((_seconds: number) => this.answer());
   readonly markStart = vi.fn(this.answer);
   readonly markEnd = vi.fn(this.answer);
   readonly jumpToStart = vi.fn(this.answer);
   readonly jumpToEnd = vi.fn(this.answer);
   readonly toggleLoop = vi.fn(this.answer);
+  playing = false;
+  pausing: Promise<void> = Promise.resolve();
+  readonly pause = vi.fn(async () => {
+    await this.pausing;
+    this.playing = false;
+  });
   readonly toggleLoopify = vi.fn(() => {
     this.change({ loopify: !this.snapshot.loopify });
     return this.answer();
@@ -67,6 +77,11 @@ class FakeEditSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
     const range = this.snapshot.range;
     if (!range) return null;
     return { source: { kind: 'clip' as const }, sessionId: FrameReviewOpaqueId.sessionId('session_clip_0001'), startFrame: range.start, endFrame: range.end };
+  }
+
+  saveRefusal(): ZoomEditRefusal | null {
+    if (this.snapshot.range) return null;
+    return { reason: this.snapshot.picture === 'failed' ? 'source-failed' : 'clip-preparing' };
   }
 
   change(snapshot: Partial<IZoomEditModeSnapshot>): void {
@@ -264,8 +279,9 @@ describe('ZoomEditModeWorkflow', () => {
   describe('keys', () => {
     it.each<[string, ZoomEditModeCommand, (session: FakeEditSession) => unknown]>([
       ['Space', { kind: 'toggle-playback' }, session => session.togglePlayback.mock.calls],
-      ['Left', { kind: 'step', direction: -1 }, session => session.step.mock.calls],
-      ['Right', { kind: 'step', direction: 1 }, session => session.step.mock.calls],
+      ['Left', { kind: 'press-step', direction: -1 }, session => session.pressStep.mock.calls],
+      ['Right', { kind: 'press-step', direction: 1 }, session => session.pressStep.mock.calls],
+      ['Left released', { kind: 'release-step', direction: -1 }, session => session.releaseStep.mock.calls],
       ['5', { kind: 'jump', seconds: 10 }, session => session.jump.mock.calls],
       ['Q', { kind: 'mark-start' }, session => session.markStart.mock.calls],
       ['W', { kind: 'mark-end' }, session => session.markEnd.mock.calls],
@@ -278,7 +294,8 @@ describe('ZoomEditModeWorkflow', () => {
 
       await press(command);
 
-      const expectedArguments = command.kind === 'step' ? [command.direction] : command.kind === 'jump' ? [command.seconds] : [];
+      const expectedArguments = command.kind === 'press-step' || command.kind === 'release-step' ? [command.direction]
+        : command.kind === 'jump' ? [command.seconds] : [];
       expect(calls(session)).toEqual([expectedArguments]);
     });
 
@@ -310,7 +327,7 @@ describe('ZoomEditModeWorkflow', () => {
       const { session, zoom, press } = await editingReadyClip();
       session.answers.push({ kind: 'refused', refusal });
 
-      await press({ kind: 'step', direction: 1 });
+      await press({ kind: 'press-step', direction: 1 });
 
       expect(zoom.hint).toEqual({ keys: KEYS, status: sentence });
     });
@@ -327,9 +344,9 @@ describe('ZoomEditModeWorkflow', () => {
     it('a key that acts clears the reason the previous key gave', async () => {
       const { session, zoom, press } = await editingReadyClip();
       session.answers.push({ kind: 'refused', refusal: { reason: 'beyond-extension' } });
-      await press({ kind: 'step', direction: 1 });
+      await press({ kind: 'press-step', direction: 1 });
 
-      await press({ kind: 'step', direction: -1 });
+      await press({ kind: 'press-step', direction: -1 });
 
       expect(zoom.hint).toEqual({ keys: KEYS, status: null });
     });
@@ -356,7 +373,7 @@ describe('ZoomEditModeWorkflow', () => {
       const { session, zoom, press } = await editingReadyClip();
       session.change({ extension: 'preparing-window' });
       session.answers.push({ kind: 'refused', refusal: { reason: 'extension-unavailable', extension: 'preparing-window' } });
-      await press({ kind: 'step', direction: -1 });
+      await press({ kind: 'press-step', direction: -1 });
 
       session.change({ extension: 'ready' });
 
@@ -400,6 +417,40 @@ describe('ZoomEditModeWorkflow', () => {
 
       expect(saves.save).not.toHaveBeenCalled();
       expect(activeEdit.isActive).toBe(true);
+    });
+
+    it('opens its question while an arrow key is still held', async () => {
+      const { saveDialog, session, press } = await withStagedStart();
+      session.pressStep.mockImplementationOnce(() => new Promise<ZoomEditCommandAnswer>(() => undefined));
+      await press({ kind: 'press-step', direction: 1 });
+
+      await press({ kind: 'save' });
+
+      expect(saveDialog.open).toHaveBeenCalledOnce();
+    });
+
+    it('pauses the clip before asking Keep both or Replace', async () => {
+      const { saveDialog, session, press } = await withStagedStart();
+      const pausing = deferred<void>();
+      session.pausing = pausing.promise;
+
+      await press({ kind: 'save' });
+      expect([session.pause.mock.calls.length, saveDialog.open.mock.calls.length]).toEqual([1, 0]);
+      pausing.resolve();
+      await settled();
+
+      expect(saveDialog.open).toHaveBeenCalledOnce();
+    });
+
+    it('leaves the clip paused when the save is cancelled', async () => {
+      const { saveDialog, session, press } = await withStagedStart();
+      await press({ kind: 'toggle-playback' });
+      await press({ kind: 'save' });
+
+      saveDialog.emit('cancelled');
+      await settled();
+
+      expect(session.playing).toBe(false);
     });
 
     it('saves the staged range with the chosen outcome and shows its progress', async () => {
@@ -518,6 +569,18 @@ describe('ZoomEditModeWorkflow', () => {
       expect(session.markEnd).not.toHaveBeenCalled();
       expect(zoom.hint?.status).toBe('Saving is in progress. Press Esc to cancel it.');
     });
+
+    it('lets go of a held arrow key while saving, keeping the save progress in the hint line', async () => {
+      const { saveDialog, saveAnswers, session, zoom, press } = await withStagedStart();
+      await press({ kind: 'save' });
+      saveDialog.emit('confirmed', 'keep-both');
+      await vi.waitFor(() => expect(saveAnswers).toHaveLength(1));
+      const progressStatus = zoom.hint?.status;
+
+      await press({ kind: 'release-step', direction: 1 });
+
+      expect([session.releaseStep.mock.calls, zoom.hint?.status]).toEqual([[[1]], progressStatus]);
+    });
   });
 
   describe('leaving', () => {
@@ -542,6 +605,30 @@ describe('ZoomEditModeWorkflow', () => {
 
       expect(discardPrompt.open).toHaveBeenCalledWith(['start']);
       expect(activeEdit.isActive).toBe(true);
+    });
+
+    it('pauses the clip before asking whether to discard the staged edit', async () => {
+      const { discardPrompt, session, press } = await withStagedStart();
+      const pausing = deferred<void>();
+      session.pausing = pausing.promise;
+
+      await press({ kind: 'leave' });
+      expect([session.pause.mock.calls.length, discardPrompt.open.mock.calls.length]).toEqual([1, 0]);
+      pausing.resolve();
+      await settled();
+
+      expect(discardPrompt.open).toHaveBeenCalledOnce();
+    });
+
+    it('leaves the clip paused when the user keeps editing', async () => {
+      const { discardPrompt, session, press } = await withStagedStart();
+      await press({ kind: 'toggle-playback' });
+      await press({ kind: 'leave' });
+
+      discardPrompt.emit('cancelled');
+      await settled();
+
+      expect(session.playing).toBe(false);
     });
 
     it('keeps the staged edit and the shown clip when the user keeps editing', async () => {
@@ -572,6 +659,7 @@ describe('ZoomEditModeWorkflow', () => {
       const { zoom, zoomClips, discardPrompt, activeEdit } = await withStagedStart();
 
       zoom.emit('closeRequested');
+      await settled();
       expect(discardPrompt.open).toHaveBeenCalledOnce();
       expect(zoomClips.close).not.toHaveBeenCalled();
       discardPrompt.emit('confirmed');
@@ -593,6 +681,7 @@ describe('ZoomEditModeWorkflow', () => {
       const { screens, discardPrompt, navigation, activeEdit } = await withStagedStart();
 
       screens.emit('screenChangeRefused', { from: { id: 'collection' }, to: { id: 'settings' } });
+      await settled();
       expect(discardPrompt.open).toHaveBeenCalledOnce();
       discardPrompt.emit('confirmed');
 
@@ -636,6 +725,7 @@ describe('ZoomEditModeWorkflow', () => {
       const { workflow, discardPrompt, activeEdit } = await withStagedStart();
 
       const left = workflow.confirmLeave();
+      await settled();
       discardPrompt.emit('cancelled');
 
       expect(await left).toBe(false);
@@ -646,6 +736,7 @@ describe('ZoomEditModeWorkflow', () => {
       const { workflow, discardPrompt, activeEdit } = await withStagedStart();
 
       const left = workflow.confirmLeave();
+      await settled();
       discardPrompt.emit('confirmed');
 
       expect(await left).toBe(true);

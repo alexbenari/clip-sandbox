@@ -199,7 +199,7 @@ Dialogs use near-opaque Rail Navy, `16px` corners, a low-opacity blue or red bor
 
 ### Context Menus
 
-Context menus are compact floating utilities with `12px` outer corners, `8px` padding, a near-opaque booth-dark surface, and the Floating Utility shadow. Menu rows have `8px` corners, left-aligned text, optional `16px` inline SVG icons, and the standard secondary-button gradient without their own shadow. An entry that opens an editing mode, such as Refine, sits first, above a one-pixel slate divider. A destructive command sits last, below a one-pixel slate divider, in Warning Red text (`#f87171`) with a 1.6px-stroke trash icon; the same rule applies to the toolbar Actions menu. A disabled row that has a reason shows it as a second line in `12px` Quiet Slate at full strength, so it reads without hovering while the label stays dimmed.
+Context menus are compact floating utilities with `12px` outer corners, `8px` padding, a near-opaque booth-dark surface, and the Floating Utility shadow. Menu rows have `8px` corners, left-aligned text, optional `16px` inline SVG icons, and the standard secondary-button gradient without their own shadow. An entry that opens an editing mode, such as Refine, sits first, above a one-pixel slate divider. A destructive command sits last, below a one-pixel slate divider, in Warning Red text (`#f87171`) with a 1.6px-stroke trash icon; the same rule applies to the toolbar Actions menu.
 
 ### Activity Indicator
 

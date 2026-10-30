@@ -21,7 +21,7 @@ export interface IScreenChanges extends IEventSource<{
 type RefineLeaveDependencies = Readonly<{
   policy: Pick<RefineScreenLeavePolicy, 'canLeave' | 'unlockedChangesOn'>;
   prompt: IDiscardRefinementPrompt;
-  refineScreens: readonly Readonly<{ id: string; session: Readonly<{ abandonRefinement(): unknown }> | null }>[];
+  refineScreen: Readonly<{ id: string; session: Readonly<{ abandonRefinement(): unknown }> | null }>;
   navigation: Pick<IScreenNavigation, 'activate' | 'activeScreen'>;
   screenChanges: IScreenChanges;
 }>;
@@ -51,7 +51,8 @@ export class RefineLeaveWorkflow {
       this.pending = Object.freeze({ screenId: screen.id, settle });
       this.deps.prompt.open(changes);
     });
-    if (discard) this.deps.refineScreens.find(refine => refine.id === screen.id)?.session?.abandonRefinement();
+    const { refineScreen } = this.deps;
+    if (discard && refineScreen.id === screen.id) refineScreen.session?.abandonRefinement();
     return discard;
   }
 

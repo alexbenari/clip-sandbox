@@ -4,6 +4,7 @@ import type { ActiveZoomEdit } from './active-zoom-edit.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { IEventSource } from './event-source.js';
 import type { FolderAccess } from './folder-access.js';
+import type { StepDirection } from './held-step-repeat.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 import type { IRefinedClipSaveView, RefinedClipSaveEnd, RefinedClipSaveWorkflow, RefinedClipSaveStatus } from './refined-clip-save-workflow.js';
 import type { IScreenChangeRequest } from './refine-leave-workflow.js';
@@ -17,15 +18,18 @@ import type {
   IZoomEditStagedSelection,
   ZoomEditCommandAnswer,
   ZoomEditJumpSeconds,
+  ZoomEditRefusal,
 } from './zoom-edit-mode-session.js';
 import type { ZoomEditModeText } from './zoom-edit-mode-text.js';
 
 export interface IZoomEditSession extends IEventSource<{ changed: IZoomEditModeSnapshot }> {
   readonly snapshot: IZoomEditModeSnapshot;
   stagedSelection(): IZoomEditStagedSelection | null;
+  saveRefusal(): ZoomEditRefusal | null;
   stagedEdits(): ZoomEditComposition;
   togglePlayback(): Promise<ZoomEditCommandAnswer>;
-  step(direction: -1 | 1): Promise<ZoomEditCommandAnswer>;
+  pressStep(direction: StepDirection): Promise<ZoomEditCommandAnswer>;
+  releaseStep(direction: StepDirection): void;
   jump(seconds: ZoomEditJumpSeconds): Promise<ZoomEditCommandAnswer>;
   markStart(): Promise<ZoomEditCommandAnswer>;
   markEnd(): Promise<ZoomEditCommandAnswer>;
@@ -33,6 +37,7 @@ export interface IZoomEditSession extends IEventSource<{ changed: IZoomEditModeS
   jumpToEnd(): Promise<ZoomEditCommandAnswer>;
   toggleLoop(): Promise<ZoomEditCommandAnswer>;
   toggleLoopify(): Promise<ZoomEditCommandAnswer>;
+  pause(): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -167,6 +172,10 @@ export class ZoomEditModeWorkflow {
   private async perform(command: ZoomEditModeCommand): Promise<void> {
     const mode = this.mode;
     if (!mode) return;
+    if (command.kind === 'release-step') {
+      mode.session.releaseStep(command.direction);
+      return;
+    }
     if (mode.saving) {
       if (command.kind === 'leave') this.deps.saveWorkflow.stop();
       else this.showNotice(mode, this.deps.text.stillSaving());
@@ -181,15 +190,17 @@ export class ZoomEditModeWorkflow {
       return;
     }
     const pending = this.sessionCommand(mode.session, command);
-    mode.lastCommand = pending;
+    // A held step stages nothing, and saving must not wait for the key to be released.
+    if (command.kind !== 'press-step') mode.lastCommand = pending;
     const answer = await pending;
     if (this.mode === mode) this.showNotice(mode, this.noticeFor(answer));
   }
 
-  private sessionCommand(session: IZoomEditSession, command: Exclude<ZoomEditModeCommand, { kind: 'leave' | 'save' }>): Promise<ZoomEditCommandAnswer> {
+  private sessionCommand(session: IZoomEditSession,
+    command: Exclude<ZoomEditModeCommand, { kind: 'leave' | 'save' | 'release-step' }>): Promise<ZoomEditCommandAnswer> {
     switch (command.kind) {
       case 'toggle-playback': return session.togglePlayback();
-      case 'step': return session.step(command.direction);
+      case 'press-step': return session.pressStep(command.direction);
       case 'jump': return session.jump(command.seconds);
       case 'mark-start': return session.markStart();
       case 'mark-end': return session.markEnd();
@@ -229,8 +240,12 @@ export class ZoomEditModeWorkflow {
     void this.end(mode);
   }
 
+  // A question about the staged edits is asked over a still picture; the clip stays paused whatever the answer.
   private async leave(mode: EditMode): Promise<boolean> {
-    if (this.hasStagedEdits(mode) && !(await this.askToDiscard(mode))) return false;
+    if (this.hasStagedEdits(mode)) {
+      await mode.session.pause();
+      if (this.mode !== mode || !(await this.askToDiscard(mode))) return false;
+    }
     void this.end(mode);
     return true;
   }
@@ -260,11 +275,13 @@ export class ZoomEditModeWorkflow {
       this.showNotice(mode, this.deps.text.nothingToSave());
       return;
     }
-    if (!mode.session.stagedSelection()) {
-      const reason = mode.session.snapshot.picture === 'failed' ? 'source-failed' : 'clip-preparing';
-      this.showNotice(mode, this.deps.text.refusal({ reason }));
+    const refusal = mode.session.saveRefusal();
+    if (refusal) {
+      this.showNotice(mode, this.deps.text.refusal(refusal));
       return;
     }
+    await mode.session.pause();
+    if (this.mode !== mode) return;
     let savedClipShown = false;
     const view: IRefinedClipSaveView = {
       statusChanged: status => {

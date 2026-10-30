@@ -1,3 +1,4 @@
+import type { StepDirection } from './held-step-repeat.js';
 import type { IShortcutDescriptor } from './shortcut-descriptor.js';
 import type { ZoomEditJumpSeconds } from './zoom-edit-mode-session.js';
 
@@ -11,7 +12,8 @@ export const ZOOM_EDIT_JUMP_SECONDS: readonly ZoomEditJumpSeconds[] = Object.fre
 
 export type ZoomEditModeCommand =
   | Readonly<{ kind: 'toggle-playback' }>
-  | Readonly<{ kind: 'step'; direction: -1 | 1 }>
+  | Readonly<{ kind: 'press-step'; direction: StepDirection }>
+  | Readonly<{ kind: 'release-step'; direction: StepDirection }>
   | Readonly<{ kind: 'jump'; seconds: ZoomEditJumpSeconds }>
   | Readonly<{ kind: 'mark-start' }>
   | Readonly<{ kind: 'mark-end' }>
@@ -27,7 +29,7 @@ const jumpSeconds = ZOOM_EDIT_JUMP_SECONDS;
 
 export const ZOOM_EDIT_MODE_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
   { description: 'Play or pause', group: 'Zoom edit', sequences: [['Space']] },
-  { description: 'Step one frame', group: 'Zoom edit', sequences: [['Left'], ['Right']] },
+  { description: 'Step one frame; hold to accelerate', group: 'Zoom edit', sequences: [['Left'], ['Right']] },
   {
     description: `Jump by ${jumpSeconds.slice(0, -1).join(', ')} or ${jumpSeconds[jumpSeconds.length - 1]} seconds`,
     group: 'Zoom edit',

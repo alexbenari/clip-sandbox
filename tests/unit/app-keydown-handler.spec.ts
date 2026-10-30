@@ -287,8 +287,8 @@ describe('app keydown handler', () => {
 
     test.each([
       ['a', { kind: 'jump-to-start' }],
-      ['ArrowLeft', { kind: 'step', direction: -1 }],
-      ['ArrowRight', { kind: 'step', direction: 1 }],
+      ['ArrowLeft', { kind: 'press-step', direction: -1 }],
+      ['ArrowRight', { kind: 'press-step', direction: 1 }],
       ['Escape', { kind: 'leave' }],
     ])('%s acts in Zoom edit mode instead of keeping its Zoom meaning', (key, command) => {
       const { context, commands } = inZoom({ editing: true });

@@ -1,14 +1,14 @@
 import { CaptureEndpoints, type CaptureEndpoint } from '../domain/capture-endpoint.js';
 import type { CapturedRangeId } from '../domain/captured-range.js';
 import type {
+  GifExtractionSession,
   GifRangeView,
   GifThumbnailState,
   IGifExtractionSessionSnapshot,
 } from '../app/gif-extraction-session.js';
-import type { MovieRangeSession } from '../app/movie-range-session.js';
 
 // What the Clips panel asks of the GIF Extraction session.
-export type RangesPanelSession = Pick<MovieRangeSession, 'subscribe' | 'selectRange' | 'retryThumbnail'
+export type RangesPanelSession = Pick<GifExtractionSession, 'subscribe' | 'selectRange' | 'retryThumbnail'
   | 'canExtractRange' | 'extractRange' | 'extractAll' | 'retryExtractionPublication' | 'cancelExtraction'
   | 'canRemoveRange' | 'removeRange' | 'canRemoveDraft' | 'removeDraft'>;
 import type { IAppPanelContent } from './app-screen.js';
@@ -78,22 +78,9 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
   private render(snapshot: IGifExtractionSessionSnapshot): void {
     const cancelFocused = this.document.activeElement?.hasAttribute('data-cancel-extraction') === true;
     this.latestSnapshot = snapshot;
-    const exactCount = snapshot.ranges.filter(range => range.kind !== 'needs-exact-frames').length;
-    const extractableCount = snapshot.extractionAvailable === true && !snapshot.capturesLoading
-      && snapshot.lifecycle === 'open'
-      ? snapshot.ranges.filter(range => this.session.canExtractRange(range.id)).length
-      : 0;
-    const completedCount = snapshot.ranges.filter(range => range.extraction?.kind === 'completed').length;
-    const attentionCount = snapshot.ranges.filter(range => range.extraction?.kind === 'failed'
-      || range.extraction?.kind === 'publication-failed').length;
-    const inexactCount = snapshot.ranges.length - exactCount;
     const visibleRanges = snapshot.ranges.map((range, index) => Object.freeze({ range, number: index + 1 }));
     const fragment = this.document.createDocumentFragment();
-    fragment.append(this.renderHeader(
-      exactCount, inexactCount, extractableCount, completedCount, attentionCount,
-      snapshot.extractionAvailable === true && !snapshot.capturesLoading && snapshot.lifecycle === 'open',
-      snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening' || snapshot.capturesLoading,
-      snapshot.extractionBatch ?? null));
+    fragment.append(this.renderHeader(snapshot));
     if (snapshot.lifecycle === 'opening' && !snapshot.capturesLoading) {
       const opening = this.document.createElement('p');
       opening.className = 'gif-ranges-loading';
@@ -141,16 +128,17 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
     if (cancelFocused) this.root.querySelector<HTMLButtonElement>('[data-cancel-extraction]')?.focus();
   }
 
-  private renderHeader(
-    exactCount: number,
-    inexactCount: number,
-    extractableCount: number,
-    completedCount: number,
-    attentionCount: number,
-    available: boolean,
-    loading: boolean,
-    batch: IGifExtractionSessionSnapshot['extractionBatch'],
-  ): HTMLElement {
+  private renderHeader(snapshot: IGifExtractionSessionSnapshot): HTMLElement {
+    const { ranges } = snapshot;
+    const available = snapshot.extractionAvailable === true && !snapshot.capturesLoading && snapshot.lifecycle === 'open';
+    const loading = snapshot.lifecycle === 'choosing' || snapshot.lifecycle === 'opening' || snapshot.capturesLoading;
+    const batch = snapshot.extractionBatch ?? null;
+    const exactCount = ranges.filter(range => range.kind !== 'needs-exact-frames').length;
+    const inexactCount = ranges.length - exactCount;
+    const extractableCount = available ? ranges.filter(range => this.session.canExtractRange(range.id)).length : 0;
+    const completedCount = ranges.filter(range => range.extraction?.kind === 'completed').length;
+    const attentionCount = ranges.filter(range => range.extraction?.kind === 'failed'
+      || range.extraction?.kind === 'publication-failed').length;
     const header = this.document.createElement('header');
     header.className = 'gif-ranges-summary';
     const copy = this.document.createElement('div');

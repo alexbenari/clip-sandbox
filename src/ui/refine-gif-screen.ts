@@ -1,8 +1,7 @@
-import type { IGifExtractionSessionSnapshot } from '../app/gif-extraction-session.js';
-import type { MovieRangeSession } from '../app/movie-range-session.js';
+import type { GifExtractionSession, IGifExtractionSessionSnapshot } from '../app/gif-extraction-session.js';
 
 // What the Refine screen asks of the GIF Extraction session.
-export type RefineScreenSession = Pick<MovieRangeSession, 'subscribe' | 'snapshot' | 'reviewSession' | 'refinementDraft'
+export type RefineScreenSession = Pick<GifExtractionSession, 'subscribe' | 'snapshot' | 'reviewSession' | 'refinementDraft'
   | 'beginRefinement' | 'abandonRefinement' | 'canExtractRange' | 'extractRange' | 'cancelExtraction'>;
 import type { IRangeRefinementDraftSnapshot, RefineGifEndpoint } from '../app/range-refinement-draft.js';
 import { CaptureEndpoints } from '../domain/capture-endpoint.js';

@@ -37,7 +37,7 @@ function replacementIn({ failingCollection = null }: { failingCollection?: strin
     }),
   };
   const collectionView = { renderActiveSequence: () => { showActive(); }, refreshSelector: vi.fn(), refreshToolbar: vi.fn() };
-  const sourceMovies = { readCreatedClip: vi.fn(async (_clip: Clip) => undefined) };
+  const sourceMovies = { readClip: vi.fn(async (_clip: Clip) => undefined) };
   const zoom = { openClip: vi.fn((_clip: Clip) => true) };
   const replacement = new ClipFileReplacement({ pipelineWorkingCopy, fileWriter, grid, collectionView, sourceMovies, zoom });
   const clip = (name: string) => pipelineWorkingCopy.currentClipSequence!.orderedClips().find(candidate => candidate.name === name)!;
@@ -78,7 +78,7 @@ describe('ClipFileReplacement', () => {
     await replacement.replace(alpha, clipSource('alpha.mp4'));
 
     expect(grid.selectedClipId).toBe(alpha.id);
-    expect(sourceMovies.readCreatedClip.mock.calls).toEqual([[alpha]]);
+    expect(sourceMovies.readClip.mock.calls).toEqual([[alpha]]);
     expect(zoom.openClip.mock.calls).toEqual([[alpha]]);
   });
 
