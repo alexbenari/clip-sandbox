@@ -13,10 +13,12 @@ export interface IRefinedClipSaveRequest {
   readonly sessionId: FrameReviewSessionId;
   readonly startFrame: number;
   readonly endFrame: number;
+  readonly loopify: boolean;
   readonly outcome: RefinedClipSaveOutcome;
 }
 
-export type RefinedClipSaveStage = 'checking-source' | 'encoding-video' | 'exact-fallback' | 'adding-audio' | 'saving-media';
+export type RefinedClipSaveStage =
+  | 'checking-source' | 'encoding-video' | 'exact-fallback' | 'adding-backward-half' | 'adding-audio' | 'saving-media';
 
 export interface IRefinedClipSaveProgress {
   readonly stage: RefinedClipSaveStage;

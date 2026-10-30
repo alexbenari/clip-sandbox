@@ -6,6 +6,7 @@ import {
   type IZoomEditPlayer,
   type ZoomEditExtension,
 } from '../../src/app/zoom-edit-mode-session.js';
+import type { IZoomEditPreviewRequest } from '../../src/app/zoom-edit-preview-service.js';
 import type { ZoomEditAnchorAnswer } from '../../src/app/zoom-edit-source-service.js';
 import {
   FrameReviewOpaqueId,
@@ -101,7 +102,21 @@ class FakePlayer implements IZoomEditPlayer {
   }
 }
 
-function zoomEdit({ hasSourceInfo = true, muted = false, clipOpening = null as Deferred<typeof clipHandle> | null,
+// Preview renders whose answers the test gives one by one.
+function fakePreviews() {
+  const renders: Array<{ request: IZoomEditPreviewRequest; answer: Deferred<string> }> = [];
+  const previews = {
+    render: vi.fn((request: IZoomEditPreviewRequest) => {
+      const answer = deferred<string>();
+      renders.push({ request, answer });
+      return answer.promise;
+    }),
+    release: vi.fn(async () => undefined),
+  };
+  return { previews, renders };
+}
+
+function zoomEdit({ hasSourceInfo = true, muted = false, loopify = false, clipOpening = null as Deferred<typeof clipHandle> | null,
   clipReviewOpening = null as Deferred<void> | null } = {}) {
   const player = new FakePlayer();
   const clipReview = new FakeReview('session_clip_000001', CLIP_FRAMES);
@@ -122,9 +137,10 @@ function zoomEdit({ hasSourceInfo = true, muted = false, clipOpening = null as D
   };
   const { sources, windowAnswers, anchorAnswers } = fakeZoomEditSources(clipHandle, clipOpening);
   const failures = { report: vi.fn() };
+  const { previews, renders } = fakePreviews();
   const session = ZoomEditModeSession.begin(
-    { frameReview, sources, player, failures, previewBounds: { maxWidth: 1280, maxHeight: 720 } },
-    { folder: { folderPath: 'C:/Clips' }, filename: 'harbor-scene.mp4', hasSourceInfo, muted },
+    { frameReview, sources, previews, player, failures, previewBounds: { maxWidth: 1280, maxHeight: 720 } },
+    { folder: { folderPath: 'C:/Clips' }, filename: 'harbor-scene.mp4', hasSourceInfo, muted, loopify },
   );
 
   async function clipReady(): Promise<void> {
@@ -162,7 +178,7 @@ function zoomEdit({ hasSourceInfo = true, muted = false, clipOpening = null as D
   }
 
   return {
-    session, player, clipReview, windowReviews, openRequests, frameReview, sources, failures,
+    session, player, clipReview, windowReviews, openRequests, frameReview, sources, failures, previews, renders,
     windowAnswers, anchorAnswers, clipReady, clipReadyShowingPlaybackFrame, windowOpened, windowPrepared, windowAnchored,
   };
 }
@@ -705,5 +721,245 @@ describe('ZoomEditModeSession', () => {
     await edit.session.dispose();
 
     expect(await edit.session.markStart()).toEqual({ kind: 'refused', refusal: { reason: 'ended' } });
+  });
+
+  describe('Loopify', () => {
+    // A clip ready with frames 12 to 80 staged, as a trim.
+    async function trimmed(edit: ReturnType<typeof zoomEdit>): Promise<void> {
+      await edit.clipReady();
+      edit.player.shownFrame = 12;
+      await edit.session.markStart();
+      edit.player.shownFrame = 80;
+      await edit.session.markEnd();
+    }
+
+    const editsOf = (edit: ReturnType<typeof zoomEdit>) => edit.session.stagedEdits().edits;
+
+    it('is staged and dropped again by toggling it', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReady();
+
+      await edit.session.toggleLoopify();
+      const staged = [editsOf(edit), edit.session.snapshot.loopify];
+      await edit.session.toggleLoopify();
+
+      expect([staged, [editsOf(edit), edit.session.snapshot.loopify]]).toEqual([[['loopify'], true], [[], false]]);
+    });
+
+    it('is staged from the start when the mode is entered for Loopify', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+
+      expect(editsOf(edit)).toEqual(['loopify']);
+    });
+
+    it('stages Refine with it once the range changes', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+
+      await trimmed(edit);
+
+      expect(editsOf(edit)).toEqual(['refine', 'loopify']);
+    });
+
+    it('cannot be toggled while the clip is still being prepared', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+
+      expect(await edit.session.toggleLoopify()).toEqual({ kind: 'refused', refusal: { reason: 'clip-preparing' } });
+    });
+
+    describe('the loop preview', () => {
+      it('asks for a preview of the staged range of the shown clip when the loop is toggled', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+
+        expect(await edit.session.toggleLoop()).toEqual({ kind: 'done' });
+
+        expect(edit.renders.map(({ request }) => request)).toEqual([{
+          folder: { folderPath: 'C:/Clips' }, filename: 'harbor-scene.mp4', source: { kind: 'clip' },
+          sessionId: 'session_clip_000001', startFrame: 12, endFrame: 80,
+        }]);
+        expect(edit.session.snapshot.preview).toEqual({ kind: 'rendering', progress: null });
+      });
+
+      it('plays the preview once it is rendered, instead of the exact loop', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+
+        await vi.waitFor(() => expect(edit.session.snapshot.preview).toEqual({ kind: 'playing', mediaSource: 'file:///previews/preview-1.mp4?modified=1' }));
+        expect(edit.player.exactPreviewPhase()).toBe('inactive');
+      });
+
+      it('pauses the clip before the preview plays', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.togglePlayback();
+
+        await edit.session.toggleLoop();
+
+        expect(edit.player.ordinaryPlaybackRunning()).toBe(false);
+      });
+
+      it('hides the preview on the next toggle and shows the kept one again at once on the toggle after', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+        await vi.waitFor(() => expect(edit.session.snapshot.preview.kind).toBe('playing'));
+
+        await edit.session.toggleLoop();
+        const hidden = edit.session.snapshot.preview;
+        await edit.session.toggleLoop();
+
+        expect([hidden, edit.session.snapshot.preview, edit.renders.length])
+          .toEqual([{ kind: 'hidden' }, { kind: 'playing', mediaSource: 'file:///previews/preview-1.mp4?modified=1' }, 1]);
+      });
+
+      it('hides the preview when another key acts', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+        await vi.waitFor(() => expect(edit.session.snapshot.preview.kind).toBe('playing'));
+
+        await edit.session.step(1);
+
+        expect(edit.session.snapshot.preview).toEqual({ kind: 'hidden' });
+      });
+
+      it('drops the kept preview when the staged range changes, so the next toggle renders the new range', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+        await vi.waitFor(() => expect(edit.session.snapshot.preview.kind).toBe('playing'));
+
+        edit.player.shownFrame = 70;
+        await edit.session.markEnd();
+        await edit.session.toggleLoop();
+
+        expect(edit.renders.map(({ request }) => request.endFrame)).toEqual([80, 70]);
+      });
+
+      it('releases the kept preview’s file as soon as the staged range changes', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+        await vi.waitFor(() => expect(edit.session.snapshot.preview.kind).toBe('playing'));
+
+        edit.player.shownFrame = 70;
+        await edit.session.markEnd();
+
+        expect(edit.previews.release).toHaveBeenCalledOnce();
+      });
+
+      it('waits for the new preview when an earlier one for the same range, since released, arrives late', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        edit.player.shownFrame = 70;
+        await edit.session.markEnd();
+        edit.player.shownFrame = 80;
+        await edit.session.markEnd();
+        await edit.session.toggleLoop();
+
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+        await flushPendingWork();
+
+        expect([edit.renders.length, edit.session.snapshot.preview]).toEqual([2, { kind: 'rendering', progress: null }]);
+      });
+
+      it('never shows a preview of staged edits that changed while it was rendered', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        edit.player.shownFrame = 70;
+        await edit.session.markEnd();
+
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+        await flushPendingWork();
+
+        expect(edit.session.snapshot.preview).toEqual({ kind: 'hidden' });
+      });
+
+      it('is not shown when the loop is toggled off while it is rendered, and the next toggle shows it at once', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        await edit.session.toggleLoop();
+
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+        await flushPendingWork();
+        const whileOff = edit.session.snapshot.preview;
+        await edit.session.toggleLoop();
+
+        expect([whileOff, edit.session.snapshot.preview.kind, edit.renders.length]).toEqual([{ kind: 'hidden' }, 'playing', 1]);
+      });
+
+      async function failedPreview(edit: ReturnType<typeof zoomEdit>, cause: Error): Promise<void> {
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        edit.renders[0].answer.reject(cause);
+        await vi.waitFor(() => expect(edit.session.snapshot.preview).toEqual({ kind: 'failed' }));
+      }
+
+      it('says that a preview failed and reports why', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        const cause = new Error('The preview could not be made.');
+
+        await failedPreview(edit, cause);
+
+        expect(edit.failures.report).toHaveBeenCalledWith('The loop preview could not be made.', cause);
+      });
+
+      it('loops the exact range forward on the toggle after a failed preview', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await failedPreview(edit, new Error('The preview could not be made.'));
+
+        await edit.session.toggleLoop();
+
+        expect([edit.player.loop, edit.renders.length]).toEqual([{ startFrameIndex: 12, endFrameIndex: 80 }, 1]);
+      });
+
+      it('stops saying that the preview failed once another key acts', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await failedPreview(edit, new Error('The preview could not be made.'));
+
+        await edit.session.step(1);
+
+        expect(edit.session.snapshot.preview).toEqual({ kind: 'hidden' });
+      });
+      it('loops the exact range forward when Loopify is not staged', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false });
+        await trimmed(edit);
+
+        await edit.session.toggleLoop();
+
+        expect([edit.player.loop, edit.renders.length]).toEqual([{ startFrameIndex: 12, endFrameIndex: 80 }, 0]);
+      });
+
+      it('releases the preview when the session ends', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+
+        await edit.session.dispose();
+
+        expect(edit.previews.release).toHaveBeenCalled();
+      });
+
+      it('asks for a preview of the movie window range once the clip is shown in its window', async () => {
+        const edit = zoomEdit({ loopify: true });
+        await edit.clipReady();
+        await edit.windowAnchored();
+
+        await edit.session.toggleLoop();
+
+        expect(edit.renders.map(({ request }) => [request.source, request.startFrame, request.endFrame]))
+          .toEqual([[{ kind: 'window', windowId: 'window_1' }, 1800, 1919]]);
+      });
+    });
   });
 });

@@ -47,6 +47,7 @@ class ZoomEditSources {
     const previous = widen > 0 ? this.#widenedRecord(event, request.previousWindowId, clipPath, widen) : null;
     const sourceInfo = this.#provenance.canBeTagged(clipPath) ? await this.#provenance.read(clipPath) : null;
     if (!sourceInfo) return { kind: 'no-source-info' };
+    if (!sourceInfo.hasRange) return { kind: 'movie-only' };
     const moviePath = await this.#moviePath(event, sourceInfo.sourceMovie);
     if (!moviePath) return { kind: 'cancelled' };
     const host = this.#hostForEvent(event);

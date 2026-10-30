@@ -1,7 +1,7 @@
-import type { CreatedVideoFile } from '../../business-logic/clip-editor.js';
 import type { FolderEntry } from '../../business-logic/folder-entry.js';
 import { ClipSource } from '../../domain/clip-source.js';
 import type { FolderAccess, FolderContents } from '../../app/folder-access.js';
+import type { ISavedClipEntry } from '../../app/refined-clip-save-service.js';
 
 type ElectronFolderEntry = {
   name?: string;
@@ -67,8 +67,8 @@ export class ElectronFolderService {
     };
   }
 
-  clipSourceOf(created: CreatedVideoFile): ClipSource {
-    return ClipSource.create({ name: created.name, mediaSource: created.mediaSource ?? '', desktopPath: created.path });
+  clipSourceOf(saved: Pick<ISavedClipEntry, 'name' | 'mediaSource' | 'path'>): ClipSource {
+    return ClipSource.create({ name: saved.name, mediaSource: saved.mediaSource, desktopPath: saved.path });
   }
 
   private folderEntryOf(entry: ElectronFolderEntry): FolderEntry {

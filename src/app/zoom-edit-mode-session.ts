@@ -1,4 +1,5 @@
 import { RefineRange, type RefineRangeRefusal } from '../domain/refine-range.js';
+import { ZoomEditComposition, type ZoomEditName } from '../domain/zoom-edit-composition.js';
 import type {
   FrameReviewSessionId,
   IFrameReviewService,
@@ -10,7 +11,9 @@ import { EventSource, type EventHandler, type IEventSource } from './event-sourc
 import type { FolderAccess } from './folder-access.js';
 import type { IFrameReviewDisplayedCapture } from './frame-review-displayed-capture.js';
 import type { RuntimeFailureReporter } from './runtime-failure-reporter.js';
+import { ZoomEditLoopPreview, type ZoomEditPreviewState } from './zoom-edit-loop-preview.js';
 import { ZoomEditMovieWindow, type ZoomEditMovieWindowState, type ZoomEditWindowAnchor } from './zoom-edit-movie-window.js';
+import type { IZoomEditPreviewRequest, IZoomEditPreviewService } from './zoom-edit-preview-service.js';
 import type { IZoomEditSourceService } from './zoom-edit-source-service.js';
 
 export interface IZoomEditPlayer {
@@ -56,6 +59,8 @@ export interface IZoomEditModeSnapshot {
   readonly extension: ZoomEditExtension;
   readonly extensionPending: boolean;
   readonly range: RefineRange | null;
+  readonly loopify: boolean;
+  readonly preview: ZoomEditPreviewState;
 }
 
 export interface IZoomEditModeSessionEvents {
@@ -67,11 +72,13 @@ export interface IZoomEditModeRequest {
   readonly filename: string;
   readonly hasSourceInfo: boolean;
   readonly muted: boolean;
+  readonly loopify: boolean;
 }
 
 type ZoomEditModeDependencies = Readonly<{
   frameReview: IFrameReviewService;
   sources: IZoomEditSourceService;
+  previews: IZoomEditPreviewService;
   player: IZoomEditPlayer;
   failures: Pick<RuntimeFailureReporter, 'report'>;
   previewBounds: Readonly<{ maxWidth: number; maxHeight: number }>;
@@ -90,8 +97,10 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
   private readonly events = new EventSource<IZoomEditModeSessionEvents>();
   private readonly clipMovie: CurrentMovie;
   private readonly movieWindow: ZoomEditMovieWindow | null;
+  private readonly loopPreview: ZoomEditLoopPreview;
   private picture: ZoomEditPictureReadiness = 'preparing';
   private range: RefineRange | null = null;
+  private loopify: boolean;
   private shown: ShownSource | null = null;
   private pendingAnchor: ZoomEditWindowAnchor | null = null;
   private lastStepDirection: -1 | 1 = 1;
@@ -104,6 +113,9 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     });
     this.clipMovie.on('exactCaptureReady', () => this.onClipReady());
     this.clipMovie.on('reviewEnded', () => this.onShownReviewEnded('clip'));
+    this.loopify = request.loopify;
+    this.loopPreview = new ZoomEditLoopPreview(deps.previews, deps.failures);
+    this.loopPreview.on('changed', () => this.publish());
     this.movieWindow = request.hasSourceInfo ? this.openMovieWindow() : null;
   }
 
@@ -116,7 +128,16 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
   get snapshot(): IZoomEditModeSnapshot {
     const extension = this.extension;
     const extensionPending = extension === 'finding-movie' || extension === 'preparing-window';
-    return Object.freeze({ picture: this.picture, extension, extensionPending, range: this.range });
+    return Object.freeze({
+      picture: this.picture, extension, extensionPending, range: this.range, loopify: this.loopify, preview: this.loopPreview.state,
+    });
+  }
+
+  stagedEdits(): ZoomEditComposition {
+    const staged: ZoomEditName[] = [];
+    if (this.range?.isChanged) staged.push('refine');
+    if (this.loopify) staged.push('loopify');
+    return ZoomEditComposition.of(staged);
   }
 
   on<TName extends keyof IZoomEditModeSessionEvents>(name: TName, handler: EventHandler<IZoomEditModeSessionEvents[TName]>): () => void {
@@ -199,14 +220,35 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     });
   }
 
+  // With Loopify staged, the loop shown is a rendered preview of the clip that would be saved.
   toggleLoop(): Promise<ZoomEditCommandAnswer> {
     return this.enqueueEdit(async range => {
+      if (this.loopPreview.isShown) {
+        this.loopPreview.hide();
+        return DONE;
+      }
       if (this.deps.player.exactPreviewPhase() === 'running') {
         await this.whileOpen(this.deps.player.stopExactPreview());
         return DONE;
       }
+      const preview = this.previewRequest();
+      if (preview && !this.loopPreview.hasFailed(preview)) {
+        await this.pauseOnExactFrame();
+        this.loopPreview.show(preview);
+        return DONE;
+      }
+      this.loopPreview.hide();
       if (range.start === range.end) return this.refused('loop-needs-two-frames');
       await this.startLoop(range);
+      return DONE;
+    }, { keepsPreview: true });
+  }
+
+  toggleLoopify(): Promise<ZoomEditCommandAnswer> {
+    return this.enqueueEdit(async () => {
+      this.loopify = !this.loopify;
+      this.loopPreview.discard();
+      this.publish();
       return DONE;
     });
   }
@@ -216,7 +258,14 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     this.disposed = true;
     this.pendingAnchor = null;
     if (this.shown) this.deps.player.attachSession(null);
-    await Promise.allSettled([this.clipMovie.close()?.dispose(), this.movieWindow?.dispose()]);
+    await Promise.allSettled([this.clipMovie.close()?.dispose(), this.movieWindow?.dispose(), this.loopPreview.dispose()]);
+  }
+
+  private previewRequest(): IZoomEditPreviewRequest | null {
+    const selection = this.stagedSelection();
+    if (!this.loopify || !selection) return null;
+    const { folder, filename } = this.request;
+    return Object.freeze({ folder, filename, ...selection });
   }
 
   private get extension(): ZoomEditExtension {
@@ -322,6 +371,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     }
     const clipReview = this.clipMovie.close();
     try {
+      this.loopPreview.discard();
       this.range = extended;
       this.show({ source: Object.freeze({ kind: 'window', windowId: anchor.windowId }), review: anchor.review, offset: anchor.clipStartFrame });
       await this.whileOpen(player.enterExactScrubAtFrame(anchor.clipStartFrame + shownFrame));
@@ -400,6 +450,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
   private async stage(range: RefineRange): Promise<void> {
     if (this.deps.player.exactPreviewPhase() !== 'inactive') await this.whileOpen(this.deps.player.stopExactPreview());
     this.range = range;
+    this.loopPreview.discard();
     this.publish();
   }
 
@@ -419,18 +470,22 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     return result;
   }
 
-  private enqueueEdit(command: (range: RefineRange) => Promise<ZoomEditCommandAnswer>): Promise<ZoomEditCommandAnswer> {
+  private enqueueEdit(command: (range: RefineRange) => Promise<ZoomEditCommandAnswer>,
+    options: { keepsPreview?: boolean } = {}): Promise<ZoomEditCommandAnswer> {
     return this.enqueue(() => {
       const range = this.range;
       if (this.picture === 'failed') return Promise.resolve(this.refused('source-failed'));
       if (!range || !this.shown) return Promise.resolve(this.refused('clip-preparing'));
       return command(range);
-    });
+    }, options);
   }
 
-  private enqueue(command: () => Promise<ZoomEditCommandAnswer>): Promise<ZoomEditCommandAnswer> {
+  // Every key but Z leaves a shown preview for the player.
+  private enqueue(command: () => Promise<ZoomEditCommandAnswer>,
+    { keepsPreview = false }: { keepsPreview?: boolean } = {}): Promise<ZoomEditCommandAnswer> {
     const answer = this.run(async () => {
       try {
+        if (!keepsPreview) this.loopPreview.hide();
         return await command();
       } catch (error) {
         if (error instanceof ZoomEditSessionEnded) return this.refused('ended');

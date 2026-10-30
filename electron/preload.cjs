@@ -39,6 +39,7 @@ function correlatedInvoker(label) {
 
 const invokeClipExtraction = correlatedInvoker('Clip-extraction');
 const invokeZoomEditSave = correlatedInvoker('Zoom edit save');
+const invokeZoomEditPreview = correlatedInvoker('Zoom edit preview');
 
 const frameReviewApi = {
   chooseSource() {
@@ -122,6 +123,18 @@ const desktopApi = {
     cancelSave(saveOperationId) {
       return invokeZoomEditSave('clip-sandbox:zoom-edit-cancel-save', 'cancel', { saveOperationId });
     },
+    subscribePreviewProgress(listener) {
+      if (typeof listener !== 'function') throw new TypeError('Zoom edit preview progress listener must be a function.');
+      const handler = (_event, payload) => listener(payload);
+      ipcRenderer.on('clip-sandbox:zoom-edit-preview-progress', handler);
+      return () => ipcRenderer.removeListener('clip-sandbox:zoom-edit-preview-progress', handler);
+    },
+    preview(request) {
+      return invokeZoomEditPreview('clip-sandbox:zoom-edit-preview', 'preview', request, request?.operationId);
+    },
+    releasePreview() {
+      return ipcRenderer.invoke('clip-sandbox:zoom-edit-release-preview');
+    },
   },
   loadAppSettings() { return ipcRenderer.invoke('clip-sandbox:load-app-settings'); },
   saveAppSettings(settings) { return ipcRenderer.invoke('clip-sandbox:save-app-settings', settings); },
@@ -134,9 +147,6 @@ const desktopApi = {
   },
   refreshFolder(payload) {
     return ipcRenderer.invoke('clip-sandbox:refresh-folder', payload);
-  },
-  createVideoEdit(payload) {
-    return ipcRenderer.invoke('clip-sandbox:create-video-edit', payload);
   },
   saveTextFile(payload) {
     return ipcRenderer.invoke('clip-sandbox:save-text-file', payload);

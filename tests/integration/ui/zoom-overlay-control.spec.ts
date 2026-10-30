@@ -276,6 +276,46 @@ describe('zoom overlay controller', () => {
       expect(document.getElementById('zoomFrame').getAttribute('aria-label')).toBe('Zoomed clip');
     });
 
+    test('plays a preview over the player, silent and looping, until it is hidden', () => {
+      const { controller, player } = editableZoom();
+      controller.showEditSurface();
+
+      controller.showEditPreview('file:///previews/preview-1.mp4');
+      const preview = document.getElementById('zoomEditPreview');
+      const shown = [preview.getAttribute('src'), preview.muted, preview.loop, player.root.isConnected];
+      controller.hideEditPreview();
+
+      expect(shown).toEqual(['file:///previews/preview-1.mp4', true, true, true]);
+      expect(document.getElementById('zoomEditPreview')).toBeNull();
+    });
+
+    test('keeps one preview when shown again, and swaps in a new one for another file', () => {
+      const { controller } = editableZoom();
+      controller.showEditSurface();
+      controller.showEditPreview('file:///previews/preview-1.mp4');
+      const first = document.getElementById('zoomEditPreview');
+
+      controller.showEditPreview('file:///previews/preview-1.mp4');
+      const again = document.getElementById('zoomEditPreview');
+      controller.showEditPreview('file:///previews/preview-2.mp4');
+
+      expect(again).toBe(first);
+      expect(document.querySelectorAll('#zoomEditPreview').length).toBe(1);
+      expect(document.getElementById('zoomEditPreview').getAttribute('src')).toBe('file:///previews/preview-2.mp4');
+    });
+
+    test('removes the preview with the edit surface', () => {
+      const { controller } = editableZoom();
+      controller.showEditSurface();
+      controller.showEditPreview('file:///previews/preview-1.mp4');
+      const preview = document.getElementById('zoomEditPreview');
+
+      controller.hideEditSurface();
+
+      // A removed preview that kept its source would still hold the file open.
+      expect([document.getElementById('zoomEditPreview'), preview.getAttribute('src')]).toEqual([null, null]);
+    });
+
     test('opening a clip again shows its video instead of the edit surface', () => {
       const { controller } = editableZoom();
       controller.showEditSurface();

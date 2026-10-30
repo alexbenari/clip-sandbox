@@ -1,5 +1,5 @@
 import type { Clip } from '../domain/clip.js';
-import type { RefineRangeEndChange } from '../domain/refine-range.js';
+import type { ZoomEditComposition } from '../domain/zoom-edit-composition.js';
 import type { ActiveZoomEdit } from './active-zoom-edit.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { IEventSource } from './event-source.js';
@@ -23,6 +23,7 @@ import type { ZoomEditModeText } from './zoom-edit-mode-text.js';
 export interface IZoomEditSession extends IEventSource<{ changed: IZoomEditModeSnapshot }> {
   readonly snapshot: IZoomEditModeSnapshot;
   stagedSelection(): IZoomEditStagedSelection | null;
+  stagedEdits(): ZoomEditComposition;
   togglePlayback(): Promise<ZoomEditCommandAnswer>;
   step(direction: -1 | 1): Promise<ZoomEditCommandAnswer>;
   jump(seconds: ZoomEditJumpSeconds): Promise<ZoomEditCommandAnswer>;
@@ -31,6 +32,7 @@ export interface IZoomEditSession extends IEventSource<{ changed: IZoomEditModeS
   jumpToStart(): Promise<ZoomEditCommandAnswer>;
   jumpToEnd(): Promise<ZoomEditCommandAnswer>;
   toggleLoop(): Promise<ZoomEditCommandAnswer>;
+  toggleLoopify(): Promise<ZoomEditCommandAnswer>;
   dispose(): Promise<void>;
 }
 
@@ -40,10 +42,16 @@ export interface IZoomEditSessions {
 
 export type ZoomEditHint = Readonly<{ keys: string; status: string | null }>;
 
+export type ZoomEditEntry = 'refine' | 'loopify';
+
+export type ZoomEditStagedChange = 'start' | 'end' | 'loopify';
+
 export interface IZoomEditSurface extends IEventSource<{ closeRequested: void }> {
   isMuted(): boolean;
   showEditSurface(): boolean;
   showEditHint(hint: ZoomEditHint): void;
+  showEditPreview(mediaSource: string): void;
+  hideEditPreview(): void;
   hideEditSurface(): void;
 }
 
@@ -53,7 +61,7 @@ export interface IZoomClipView {
 }
 
 export interface IDiscardZoomEditPrompt extends IEventSource<{ confirmed: void; cancelled: void }> {
-  open(changes: readonly RefineRangeEndChange[]): void;
+  open(changes: readonly ZoomEditStagedChange[]): void;
   close(): void;
 }
 
@@ -114,11 +122,11 @@ export class ZoomEditModeWorkflow {
   enterFromGrid(clipId: string): void {
     const clip = this.deps.pipelineWorkingCopy.resolveClip(clipId);
     if (!clip || this.mode || !this.deps.zoomClips.openClip(clip)) return;
-    this.begin(clip);
+    this.begin(clip, 'refine');
   }
 
-  enterFromZoom(clip: Clip): void {
-    this.begin(clip);
+  enterFromZoom(clip: Clip, entry: ZoomEditEntry): void {
+    this.begin(clip, entry);
   }
 
   // Resolves true once the mode has ended and Zoom shows the clip again, false when the user keeps editing.
@@ -138,13 +146,15 @@ export class ZoomEditModeWorkflow {
     if (mode) await this.end(mode);
   }
 
-  private begin(clip: Clip): void {
+  private begin(clip: Clip, entry: ZoomEditEntry): void {
     const { zoom, openFolder, fullScreen, sessions, activeEdit } = this.deps;
     const folder = openFolder.currentFolderAccess;
     if (this.disposed || this.mode || !folder || fullScreen.isDocumentFullScreen()) return;
     const muted = zoom.isMuted();
     if (!zoom.showEditSurface()) return;
-    const session = sessions.begin({ folder, filename: clip.name, hasSourceInfo: clip.sourceMovie !== null, muted });
+    const session = sessions.begin({
+      folder, filename: clip.name, hasSourceInfo: clip.sourceMovie !== null, muted, loopify: entry === 'loopify',
+    });
     const mode: EditMode = {
       clip, folder, session, unsubscribe: () => undefined, shown: session.snapshot, notice: null, saving: null, lastCommand: Promise.resolve(),
     };
@@ -186,6 +196,7 @@ export class ZoomEditModeWorkflow {
       case 'jump-to-start': return session.jumpToStart();
       case 'jump-to-end': return session.jumpToEnd();
       case 'toggle-loop': return session.toggleLoop();
+      case 'toggle-loopify': return session.toggleLoopify();
     }
   }
 
@@ -249,6 +260,11 @@ export class ZoomEditModeWorkflow {
       this.showNotice(mode, this.deps.text.nothingToSave());
       return;
     }
+    if (!mode.session.stagedSelection()) {
+      const reason = mode.session.snapshot.picture === 'failed' ? 'source-failed' : 'clip-preparing';
+      this.showNotice(mode, this.deps.text.refusal({ reason }));
+      return;
+    }
     let savedClipShown = false;
     const view: IRefinedClipSaveView = {
       statusChanged: status => {
@@ -279,11 +295,12 @@ export class ZoomEditModeWorkflow {
   }
 
   private hasStagedEdits(mode: EditMode): boolean {
-    return mode.session.snapshot.range?.isChanged === true;
+    return !mode.session.stagedEdits().isEmpty;
   }
 
-  private stagedChanges(mode: EditMode): readonly RefineRangeEndChange[] {
-    return mode.session.snapshot.range?.changedEnds() ?? [];
+  private stagedChanges(mode: EditMode): readonly ZoomEditStagedChange[] {
+    const ends = mode.session.snapshot.range?.changedEnds().map(change => change.endpoint) ?? [];
+    return Object.freeze([...ends, ...(mode.session.stagedEdits().includes('loopify') ? ['loopify' as const] : [])]);
   }
 
   private askToDiscard(mode: EditMode): Promise<boolean> {
@@ -307,7 +324,8 @@ export class ZoomEditModeWorkflow {
 
   private onSessionChanged(mode: EditMode, snapshot: IZoomEditModeSnapshot): void {
     if (this.mode !== mode) return;
-    if (snapshot.picture !== mode.shown.picture || snapshot.extension !== mode.shown.extension) mode.notice = null;
+    if (snapshot.picture !== mode.shown.picture || snapshot.extension !== mode.shown.extension
+      || snapshot.preview.kind !== mode.shown.preview.kind) mode.notice = null;
     mode.shown = snapshot;
     this.render(mode);
   }
@@ -319,6 +337,9 @@ export class ZoomEditModeWorkflow {
 
   private render(mode: EditMode): void {
     const { zoom, text } = this.deps;
+    const { preview } = mode.session.snapshot;
+    if (preview.kind === 'playing') zoom.showEditPreview(preview.mediaSource);
+    else zoom.hideEditPreview();
     zoom.showEditHint({ keys: mode.saving ? text.savingKeys() : text.keys(), status: this.statusOf(mode) });
   }
 
@@ -326,7 +347,9 @@ export class ZoomEditModeWorkflow {
     const { text } = this.deps;
     if (mode.notice) return mode.notice;
     if (mode.saving) return mode.saving.kind === 'waiting-for-movie' ? text.waitingForMovie() : text.saveProgress(mode.saving.progress);
-    const { picture, extension } = mode.session.snapshot;
-    return text.pictureStatus(picture) ?? text.extensionStatus(extension);
+    const { picture, extension, extensionPending, preview } = mode.session.snapshot;
+    return text.previewStatus(preview) ?? text.pictureStatus(picture)
+      ?? (extensionPending ? text.extensionStatus(extension) : null)
+      ?? text.stagedEdits(mode.session.stagedEdits()) ?? text.extensionStatus(extension);
   }
 }

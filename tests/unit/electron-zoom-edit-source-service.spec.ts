@@ -61,6 +61,7 @@ describe('ElectronZoomEditSourceService', () => {
     ['a ready window', { kind: 'ready', sourceHandle, windowId }],
     ['a cancelled movie search', { kind: 'cancelled' }],
     ['a clip without source info', { kind: 'no-source-info' }],
+    ['a clip whose source info keeps only its movie', { kind: 'movie-only' }],
   ])('answers %s as the main process gave it', async (_scenario, answer) => {
     const { service } = serviceAnswering(answer);
 

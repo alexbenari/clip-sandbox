@@ -8,7 +8,7 @@ const sessionId = FrameReviewOpaqueId.sessionId('session_CCCCCCCCCCCCCCCCCCCCCCC
 const windowId = 'window_BBBBBBBBBBBBBBBBBBBBBBBB';
 const request: IRefinedClipSaveRequest = Object.freeze({
   folder: Object.freeze({ folderPath: 'D:\\clips' }), filename: 'Sample Feature-001.mp4', source: Object.freeze({ kind: 'window', windowId }),
-  sessionId, startFrame: 1870, endFrame: 1940, outcome: 'replace',
+  sessionId, startFrame: 1870, endFrame: 1940, loopify: true, outcome: 'replace',
 });
 const entry = (name: string) => ({
   name, path: `D:\\clips\\${name}`, mediaSource: `file:///D:/clips/${encodeURIComponent(name)}`, type: 'video/mp4', size: 2048, lastModifiedMs: 1_700_000_000_000,
@@ -33,7 +33,7 @@ function serviceAnswering(response: (payload: Record<string, unknown>) => unknow
 const succeeding = (result: unknown) => (payload: Record<string, unknown>) => ({ ok: true, operationId: payload.operationId, result });
 
 describe('ElectronRefinedClipSaveService', () => {
-  it('asks to save exactly the requested range of the named clip, by folder path and window id', async () => {
+  it('asks to save exactly the requested range of the named clip with its staged Loopify, by folder path and window id', async () => {
     const { zoomEdit, service } = serviceAnswering(succeeding(replaced));
 
     await service.save(request);
@@ -41,7 +41,7 @@ describe('ElectronRefinedClipSaveService', () => {
     const { operationId, ...payload } = zoomEdit.save.mock.calls[0][0];
     expect(payload).toStrictEqual({
       folderPath: 'D:\\clips', filename: 'Sample Feature-001.mp4', source: { kind: 'window', windowId },
-      sessionId: 'session_CCCCCCCCCCCCCCCCCCCCCCCC', startFrame: 1870, endFrame: 1940, outcome: 'replace',
+      sessionId: 'session_CCCCCCCCCCCCCCCCCCCCCCCC', startFrame: 1870, endFrame: 1940, loopify: true, outcome: 'replace',
     });
     expect(operationId).toMatch(/^refine_[a-zA-Z0-9_-]{8,120}$/);
   });

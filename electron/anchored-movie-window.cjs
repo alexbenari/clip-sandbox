@@ -22,6 +22,11 @@ class AnchoredMovieWindow {
     return startFrame >= this.#anchor.earliestFrame && endFrame <= this.#anchor.latestFrame;
   }
 
+  showsWholeClip(startFrame, endFrame) {
+    const { start, end } = this.#sourceInfo.range;
+    return this.#movieFrame(startFrame) === start && this.#movieFrame(endFrame) === end;
+  }
+
   async movieRecordOf(startIdentity, endIdentity) {
     const [startTimeUs, endTimeUs] = await Promise.all([this.#movieTimeUsOf(startIdentity), this.#movieTimeUsOf(endIdentity)]);
     const times = startTimeUs === undefined || endTimeUs === undefined ? {} : { startTimeUs, endTimeUs };

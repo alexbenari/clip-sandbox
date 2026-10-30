@@ -195,6 +195,13 @@ describe('ZoomEditSources', () => {
       expect(locator.locate).not.toHaveBeenCalled();
     });
 
+    it('answers that a clip keeping only its movie has no range to extend, without looking for the movie', async () => {
+      const { zoomEditSources, locator } = sources({ sourceInfo: storedTimesInfo().limitedTo('movie-only') });
+
+      await expect(zoomEditSources.openWindow(event, { ...clipRequest, widen: 0 })).resolves.toEqual({ kind: 'movie-only' });
+      expect(locator.locate).not.toHaveBeenCalled();
+    });
+
     it('answers cancelled and cuts nothing when the user cancels the movie lookup', async () => {
       const { zoomEditSources, windowCache } = sources({ located: { kind: 'cancelled' } });
 

@@ -3,7 +3,7 @@ import type { ZoomEditJumpSeconds } from './zoom-edit-mode-session.js';
 
 // The keys of Zoom edit mode. The hint line and the keyboard map name keys from here, so they match the bindings.
 export const ZOOM_EDIT_MODE_KEYS = Object.freeze({
-  markStart: 'Q', markEnd: 'W', jumpToStart: 'A', jumpToEnd: 'S', loop: 'Z', save: 'X',
+  markStart: 'Q', markEnd: 'W', jumpToStart: 'A', jumpToEnd: 'S', loop: 'Z', loopify: 'L', save: 'X',
 });
 
 // Top-row digits 1 to 5, in order.
@@ -18,6 +18,7 @@ export type ZoomEditModeCommand =
   | Readonly<{ kind: 'jump-to-start' }>
   | Readonly<{ kind: 'jump-to-end' }>
   | Readonly<{ kind: 'toggle-loop' }>
+  | Readonly<{ kind: 'toggle-loopify' }>
   | Readonly<{ kind: 'save' }>
   | Readonly<{ kind: 'leave' }>;
 
@@ -35,6 +36,7 @@ export const ZOOM_EDIT_MODE_SHORTCUTS: readonly IShortcutDescriptor[] = Object.f
   { description: 'Set the start or the end at this frame', group: 'Zoom edit', sequences: [[keys.markStart], [keys.markEnd]] },
   { description: 'Go to the start or the end', group: 'Zoom edit', sequences: [[keys.jumpToStart], [keys.jumpToEnd]] },
   { description: 'Loop the range', group: 'Zoom edit', sequences: [[keys.loop]] },
+  { description: 'Stage or drop Loopify', group: 'Zoom edit', sequences: [[keys.loopify]] },
   { description: 'Save', group: 'Zoom edit', sequences: [[keys.save]] },
   { description: 'Leave Zoom edit mode', group: 'Zoom edit', sequences: [['Escape']] },
 ]);

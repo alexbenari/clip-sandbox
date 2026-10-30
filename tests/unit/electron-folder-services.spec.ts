@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { ElectronFolderFileService } from '../../src/adapters/electron/electron-folder-file-service.js';
 import { ElectronFolderService } from '../../src/adapters/electron/electron-folder-service.js';
 import { ElectronPipelineCatalogService } from '../../src/adapters/electron/electron-pipeline-catalog-service.js';
-import { ElectronVideoEditService } from '../../src/adapters/electron/electron-video-edit-service.js';
 
 describe('electron folder services', () => {
   it('builds folder access and renderer files from the desktop api', async () => {
@@ -207,34 +206,5 @@ describe('electron folder services', () => {
     expect(result.results[0].error).toBeInstanceOf(Error);
     expect(result.results[1].error).toBeInstanceOf(Error);
     expect(api.trashFiles).not.toHaveBeenCalled();
-  });
-
-  it('delegates video edit requests through the desktop api', async () => {
-    const api = {
-      createVideoEdit: vi.fn(async () => ({
-        ok: true,
-        createdFile: {
-          name: 'alpha-looped.mp4',
-          path: 'C:/clips/alpha-looped.mp4',
-        },
-      })),
-    };
-    const service = new ElectronVideoEditService({ api });
-
-    const result = await service.createVideoEdit({
-      editId: 'loopify',
-      outputFolderPath: 'C:/clips',
-      preferredOutputFilename: 'alpha-looped.mp4',
-      sourcePath: 'C:/clips/alpha.mp4',
-    });
-
-    expect(api.createVideoEdit).toHaveBeenCalledOnce();
-    expect(result).toMatchObject({
-      ok: true,
-      createdFile: {
-        name: 'alpha-looped.mp4',
-        path: 'C:/clips/alpha-looped.mp4',
-      },
-    });
   });
 });

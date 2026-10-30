@@ -6,7 +6,8 @@ const DEFAULT_ZOOM_OVERLAY_CSS = `
 .zoom-frame:focus{ outline:none; }
 .zoom-video{ width:100%; height:100%; object-fit:contain; display:block; background:#000; }
 .zoom-edit-surface{ width:100%; height:100%; min-height:0; display:flex; flex-direction:column; }
-.zoom-edit-picture{ flex:1 1 auto; min-height:0; display:flex; }
+.zoom-edit-picture{ position:relative; flex:1 1 auto; min-height:0; display:flex; }
+.zoom-edit-preview{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; background:#000; }
 .zoom-edit-picture > .frame-review-player{ flex:1 1 auto; max-width:none; min-height:0; }
 .zoom-edit-picture > .frame-review-player > .frame-review-stage{ flex:1 1 auto; aspect-ratio:auto; width:100%; }
 .zoom-edit-hint{ flex:none; margin:0; padding:8px 14px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 16px; font-size:13px; line-height:1.4; color:#94a3b8; background:#0b0f14; border-top:1px solid rgba(148,163,184,.2); }
@@ -27,7 +28,8 @@ export interface IZoomEditPlayer {
 
 export type ZoomEditHintText = Readonly<{ keys: string; status: string | null }>;
 
-type ZoomEditSurface = Readonly<{ root: HTMLElement; keys: HTMLElement; status: HTMLElement }>;
+type ZoomEditSurface = { readonly root: HTMLElement; readonly picture: HTMLElement; readonly keys: HTMLElement;
+  readonly status: HTMLElement; preview: HTMLVideoElement | null };
 
 const SILENT_BY_DEFAULT: IClipAudioPreference = Object.freeze({ current: Object.freeze({ singleClipAudioDefault: false }) });
 
@@ -265,7 +267,7 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     frame.replaceChildren(root);
     frame.setAttribute('aria-label', 'Zoom edit mode');
     this.editPlayer.mountInZoomEdit(picture);
-    this.editSurface = Object.freeze({ root, keys, status });
+    this.editSurface = { root, picture, keys, status, preview: null };
     frame.focus({ preventScroll: true });
     return true;
   }
@@ -276,9 +278,37 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     this.editSurface.status.textContent = status ?? '';
   }
 
+  showEditPreview(mediaSource: string): void {
+    const surface = this.editSurface;
+    if (!surface || surface.preview?.dataset.mediaSource === mediaSource) return;
+    this.hideEditPreview();
+    const preview = this.doc.createElement('video');
+    preview.id = 'zoomEditPreview';
+    preview.className = 'zoom-edit-preview';
+    preview.dataset.mediaSource = mediaSource;
+    preview.muted = true;
+    preview.loop = true;
+    preview.autoplay = true;
+    preview.playsInline = true;
+    preview.src = mediaSource;
+    surface.picture.append(preview);
+    surface.preview = preview;
+  }
+
+  hideEditPreview(): void {
+    const preview = this.editSurface?.preview;
+    if (!preview || !this.editSurface) return;
+    this.editSurface.preview = null;
+    preview.pause();
+    preview.removeAttribute('src');
+    preview.load();
+    preview.remove();
+  }
+
   hideEditSurface(): void {
     const surface = this.editSurface;
     if (!surface) return;
+    this.hideEditPreview();
     this.editSurface = null;
     surface.root.remove();
     this.frameEl?.setAttribute('aria-label', 'Zoomed clip');

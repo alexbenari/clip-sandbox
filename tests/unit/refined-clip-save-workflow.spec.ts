@@ -4,12 +4,13 @@ import { ActivityReporter } from '../../src/app/activity-reporter.js';
 import type { ClipFileReplacementResult } from '../../src/app/clip-file-replacement.js';
 import { EventSource } from '../../src/app/event-source.js';
 import { RefinedClipSaveWorkflow, type IRefinedClipSaveView } from '../../src/app/refined-clip-save-workflow.js';
-import type { ISavedClipEntry, RefinedClipSaveOutcome, SavedRefinedClip } from '../../src/app/refined-clip-save-service.js';
+import type { IRefinedClipSaveRequest, ISavedClipEntry, RefinedClipSaveOutcome, SavedRefinedClip } from '../../src/app/refined-clip-save-service.js';
 import type { IZoomEditModeSnapshot } from '../../src/app/zoom-edit-mode-session.js';
 import { ZoomEditModeText } from '../../src/app/zoom-edit-mode-text.js';
 import type { Clip } from '../../src/domain/clip.js';
 import type { ClipSource } from '../../src/domain/clip-source.js';
 import { RefineRange } from '../../src/domain/refine-range.js';
+import { ZoomEditComposition } from '../../src/domain/zoom-edit-composition.js';
 import { FrameReviewOpaqueId } from '../../src/frame-review/frame-review-api.js';
 import { clipSource, testClip } from '../support/clip-source-fixtures.js';
 import { recordedActivityLog } from '../support/recorded-activity-log.js';
@@ -24,13 +25,27 @@ class FakeSaveDialog extends EventSource<{ confirmed: RefinedClipSaveOutcome; ca
 }
 
 class FakeSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
-  snapshot: IZoomEditModeSnapshot = { picture: 'ready', extension: 'none', extensionPending: false, range: RefineRange.ofClip(48) };
+  snapshot: IZoomEditModeSnapshot = {
+    picture: 'ready', extension: 'none', extensionPending: false, range: RefineRange.ofClip(48), loopify: false, preview: { kind: 'hidden' },
+  };
+
+  constructor(private readonly edits: ZoomEditComposition) {
+    super();
+  }
+
   stagedSelection() {
     return { source: { kind: 'clip' as const }, sessionId: FrameReviewOpaqueId.sessionId('session_clip_0001'), startFrame: 6, endFrame: 47 };
   }
+
+  stagedEdits() {
+    return this.edits;
+  }
 }
 
-function saveWorkflow({ originalName = 'alpha.mp4', answer }: { originalName?: string; answer: SavedRefinedClip }) {
+function saveWorkflow({ originalName = 'alpha.mp4', answer, edits = ZoomEditComposition.of(['refine']) }: {
+  originalName?: string; answer: SavedRefinedClip; edits?: ZoomEditComposition;
+}) {
+  const saves = { save: vi.fn(async (_request: IRefinedClipSaveRequest) => answer), cancelSave: vi.fn(async () => undefined) };
   const saveDialog = new FakeSaveDialog();
   const activityLog = recordedActivityLog();
   const createdClips = { insert: vi.fn((_original: Clip, created: ClipSource): Clip | null => testClip('clip_9', created.name)) };
@@ -38,7 +53,7 @@ function saveWorkflow({ originalName = 'alpha.mp4', answer }: { originalName?: s
     replace: vi.fn(async (original: Clip, _replacement: ClipSource): Promise<ClipFileReplacementResult | null> => ({ clip: original, failedCollections: [] })),
   };
   const flow = new RefinedClipSaveWorkflow({
-    saves: { save: vi.fn(async () => answer), cancelSave: vi.fn(async () => undefined) },
+    saves,
     saveDialog,
     savedClipSources: { clipSourceOf: saved => clipSource(saved.name, { mediaSource: saved.mediaSource }) },
     createdClips,
@@ -48,15 +63,18 @@ function saveWorkflow({ originalName = 'alpha.mp4', answer }: { originalName?: s
     text: new ZoomEditModeText(),
   });
   const original = testClip('clip_1', originalName);
-  const edit = { clip: original, folder: { folderPath: 'C:/clips' }, session: new FakeSession() };
+  const edit = { clip: original, folder: { folderPath: 'C:/clips' }, session: new FakeSession(edits) };
   const view: IRefinedClipSaveView = { statusChanged: vi.fn(), endEdit: vi.fn(() => true) };
   const saveWith = (outcome: RefinedClipSaveOutcome) => {
     const ending = flow.save(edit, view);
     saveDialog.emit('confirmed', outcome);
     return ending;
   };
-  return { flow, saveDialog, createdClips, replacements, original, edit, view, saveWith, entries: activityLog.entries };
+  return { flow, saves, saveDialog, createdClips, replacements, original, edit, view, saveWith, entries: activityLog.entries };
 }
+
+const loopedEdits = () => ZoomEditComposition.of(['refine', 'loopify']);
+const keptLooped: SavedRefinedClip = { outcome: 'kept-both', filename: 'alpha-refined-looped.mp4', entry: entry('alpha-refined-looped.mp4') };
 
 describe('RefinedClipSaveWorkflow', () => {
   describe('reports each saved outcome in Activity', () => {
@@ -88,8 +106,43 @@ describe('RefinedClipSaveWorkflow', () => {
     });
   });
 
-  it('notes in Activity that the source movie info may be missing when the main process warns', async () => {
-    const answer: SavedRefinedClip = {
+  describe('with Loopify staged', () => {
+    it('asks about the staged edits, naming the clip', async () => {
+      const { saveWith, saveDialog } = saveWorkflow({ answer: keptLooped, edits: loopedEdits() });
+
+      await saveWith('keep-both');
+
+      expect(saveDialog.open.mock.calls.map(([{ filename, edits }]) => [filename, edits.edits])).toEqual([['alpha.mp4', ['refine', 'loopify']]]);
+    });
+
+    it('asks the main process to loop the saved clip', async () => {
+      const { saveWith, saves } = saveWorkflow({ answer: keptLooped, edits: loopedEdits() });
+
+      await saveWith('keep-both');
+
+      expect(saves.save.mock.calls[0][0]).toMatchObject({ startFrame: 6, endFrame: 47, loopify: true, outcome: 'keep-both' });
+    });
+
+
+    it('reports the looped clip in Activity', async () => {
+      const { saveWith, entries } = saveWorkflow({ answer: keptLooped, edits: loopedEdits() });
+
+      await saveWith('keep-both');
+
+      expect(entries.map(({ message }) => message)).toEqual(['Saved the refined and looped clip as alpha-refined-looped.mp4.']);
+    });
+  });
+
+  it('asks the main process for a clip that is not looped when only Refine is staged', async () => {
+    const answer: SavedRefinedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
+    const { saveWith, saves } = saveWorkflow({ answer });
+
+    await saveWith('keep-both');
+
+    expect(saves.save.mock.calls[0][0]).toMatchObject({ loopify: false });
+  });
+
+  it('notes in Activity that the source movie info may be missing when the main process warns', async () => {    const answer: SavedRefinedClip = {
       outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4'),
       warning: 'Clip saved without source metadata; the metadata writer failed.',
     };

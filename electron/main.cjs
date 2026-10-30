@@ -5,7 +5,6 @@ const { pathToFileURL } = require('url');
 const { readFolderEntries } = require('./folder-entry.cjs');
 const { FolderAccessRegistry } = require('./folder-access-registry.cjs');
 const { PipelineCatalogRuntime } = require('./pipeline-catalog-runtime.cjs');
-const { createVideoEditRuntime } = require('./video-edit-runtime.cjs');
 const { AppSettingsStore } = require('./app-settings-store.cjs');
 const { registerFrameReviewIpc } = require('./frame-review-ipc.cjs');
 const { registerClipExtractionIpc } = require('./clip-extraction-ipc.cjs');
@@ -21,6 +20,9 @@ const { RefinedClipSaver } = require('./refined-clip-saver.cjs');
 const { RefinedClipPlacement } = require('./refined-clip-placement.cjs');
 const { ExactRangeEncoder } = require('./exact-range-encoder.cjs');
 const { registerZoomEditSaveIpc } = require('./zoom-edit-save-ipc.cjs');
+const { StagedEditResolver } = require('./staged-edit-resolver.cjs');
+const { ZoomEditPreviews } = require('./zoom-edit-previews.cjs');
+const { registerZoomEditPreviewIpc } = require('./zoom-edit-preview-ipc.cjs');
 const { MovieWindowPlacement } = require('./movie-window-placement.cjs');
 const { NativeProductLocator } = require('./native-product-locator.cjs');
 const { ThumbnailCacheRuntime } = require('./thumbnail-cache-runtime.cjs');
@@ -108,17 +110,19 @@ function validateTopLevelFilename(filename) {
   return normalizedFilename;
 }
 
-function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
+async function loadEditComposition(projectFolder) {
+  const moduleUrl = pathToFileURL(path.join(projectFolder, 'build', 'src', 'domain', 'zoom-edit-composition.js')).href;
+  return (await import(moduleUrl)).ZoomEditComposition;
+}
+
+async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProducts, editComposition, zoomEditPreviewFolder }) {
   const nativeEnvironment = nativeProducts.environment();
   // End-to-end tests keep moved files in their own profile, so they never touch the real Recycle Bin.
   const testRecycleBin = process.env.CLIP_SANDBOX_E2E === '1'
     ? new TestRecycleBin(path.join(app.getPath('userData'), 'test-recycle-bin'))
     : null;
   const trashItem = itemPath => (testRecycleBin ? testRecycleBin.trashItem(itemPath) : shell.trashItem(itemPath));
-  const videoEditRuntime = createVideoEditRuntime({
-    resolveBinary: () => nativeProducts.ffmpeg(),
-    processEnvironment: nativeEnvironment,
-  });
+
   const settingsStore = new AppSettingsStore(app.getPath('userData'));
   const clipCapturesStore = new ClipCapturesStore(app.getPath('userData'));
   // The encoder holds only tool locations, so extraction and refined-clip saving share one.
@@ -154,16 +158,31 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
       probeFrameRate: (moviePath, selectedStream) => frameRateProbe.framesPerSecond(moviePath, selectedStream),
     }),
   });
-  const refinedClipSaver = new RefinedClipSaver({
+  const stagedEdits = new StagedEditResolver({
     folderAccess,
     hostForEvent: frameReviewRuntime.hostForEvent,
     sources: zoomEditSources,
+    editComposition,
+  });
+  const refinedClipSaver = new RefinedClipSaver({
+    stagedEdits,
     encoder: exactRangeEncoder,
     placement: new RefinedClipPlacement({ trashItem }),
   });
+  const zoomEditPreviews = new ZoomEditPreviews({
+    folder: zoomEditPreviewFolder,
+    stagedEdits,
+    resolveFfmpeg: () => nativeProducts.ffmpeg(),
+    environment: nativeEnvironment,
+  });
+  // Previews belong to one app session, so those of an earlier session are removed.
+  await zoomEditPreviews.initialize();
   ipcMain.handle('clip-sandbox:clip-source-movies-read', (event, request) =>
     clipSourceMovieRuntime.read(event, request));
-  frameReviewRuntime.onHostReleased(webContentsId => zoomEditSources.forgetAppWindow(webContentsId));
+  frameReviewRuntime.onHostReleased(webContentsId => {
+    zoomEditSources.forgetAppWindow(webContentsId);
+    void zoomEditPreviews.release(webContentsId);
+  });
   ipcMain.handle('clip-sandbox:zoom-edit-open-clip', (event, request) => zoomEditSources.openClip(event, request));
   ipcMain.handle('clip-sandbox:zoom-edit-open-window', (event, request) => zoomEditSources.openWindow(event, request));
   ipcMain.handle('clip-sandbox:zoom-edit-anchor-window', (event, request) => zoomEditSources.anchorWindow(event, request));
@@ -263,10 +282,6 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     };
   });
 
-  ipcMain.handle('clip-sandbox:create-video-edit', async (_event, payload = {}) => {
-    return videoEditRuntime.createVideoEdit(payload);
-  });
-
   ipcMain.handle('clip-sandbox:test-set-next-folder-path', async (_event, folderPath) => {
     global.__clipSandboxNextFolderPath = folderPath || null;
     return { ok: true };
@@ -313,13 +328,16 @@ function registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts) {
     hostForEvent: frameReviewRuntime.hostForEvent,
   });
   registerZoomEditSaveIpc({ ipcMain, saver: refinedClipSaver });
+  registerZoomEditPreviewIpc({ ipcMain, previews: zoomEditPreviews });
   registerClipCapturesIpc({
     ipcMain,
     store: clipCapturesStore,
     hostForEvent: frameReviewRuntime.hostForEvent,
   });
   return { dispose: async () => {
-    await Promise.allSettled([clipExtractionRuntime.dispose(), refinedClipSaver.dispose(), clipCapturesStore.flush()]);
+    await Promise.allSettled([
+      clipExtractionRuntime.dispose(), refinedClipSaver.dispose(), zoomEditPreviews.dispose(), clipCapturesStore.flush(),
+    ]);
   } };
 }
 
@@ -412,7 +430,13 @@ app.whenReady().then(async () => {
   const frameReviewRuntime = await createFrameReviewRuntime(nativeProducts);
   const thumbnailRuntime = new ThumbnailCacheRuntime(app.getPath('userData'));
   await thumbnailRuntime.initialize();
-  const clipExtractionRuntime = registerIpc(frameReviewRuntime, thumbnailRuntime, nativeProducts);
+  const clipExtractionRuntime = await registerIpc({
+    frameReviewRuntime,
+    thumbnailRuntime,
+    nativeProducts,
+    editComposition: await loadEditComposition(projectFolder),
+    zoomEditPreviewFolder: path.join(app.getPath('userData'), 'zoom-edit-previews'),
+  });
   let shutdownComplete = false;
   let shutdownPromise = null;
   app.on('before-quit', event => {

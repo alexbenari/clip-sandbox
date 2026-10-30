@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ZoomEditModeText } from '../../../src/app/zoom-edit-mode-text.js';
 import { DiscardRefinementDialogControl } from '../../../src/ui/discard-refinement-dialog-control.js';
 import { shippedPageBody } from '../../support/page-markup.js';
 
@@ -87,7 +88,7 @@ describe('DiscardRefinementDialogControl.forZoomEdit', () => {
   beforeEach(() => { document.body.innerHTML = pageBody; });
 
   function openZoomEditDialog() {
-    const dialog = DiscardRefinementDialogControl.forZoomEdit(document);
+    const dialog = DiscardRefinementDialogControl.forZoomEdit(document, { text: new ZoomEditModeText() });
     const confirmed = vi.fn();
     const cancelled = vi.fn();
     dialog.on('confirmed', confirmed);
@@ -102,16 +103,28 @@ describe('DiscardRefinementDialogControl.forZoomEdit', () => {
   it('asks about the changed ends of the clip without frame numbers, since they count from the clip', () => {
     const { dialog } = openZoomEditDialog();
 
-    dialog.open([{ endpoint: 'start', frameIndex: -12 }, { endpoint: 'end', frameIndex: 40 }]);
+    dialog.open(['start', 'end']);
 
     expect(zoomEditDialog().querySelector('h2')?.textContent).toBe('Discard the new start and end?');
     expect(zoomEditDialog().open).toBe(true);
     expect(dialogElement().open).toBe(false);
   });
 
+  it.each([
+    [['loopify'], 'Discard Loopify?'],
+    [['end', 'loopify'], 'Discard Loopify and the new end?'],
+    [['start', 'end', 'loopify'], 'Discard Loopify and the new start and end?'],
+  ] as const)('asks about Loopify among the staged edits %j', (changes, question) => {
+    const { dialog } = openZoomEditDialog();
+
+    dialog.open(changes);
+
+    expect(zoomEditDialog().querySelector('h2')?.textContent).toBe(question);
+  });
+
   it('opens on Keep editing and answers Discard as confirmed', () => {
     const { dialog, confirmed, cancelled } = openZoomEditDialog();
-    dialog.open([{ endpoint: 'end', frameIndex: 40 }]);
+    dialog.open(['end']);
     expect(document.activeElement).toBe(zoomEditButton('Keep editing'));
 
     zoomEditButton('Discard').click();
@@ -123,7 +136,7 @@ describe('DiscardRefinementDialogControl.forZoomEdit', () => {
 
   it('treats Escape as Keep editing', () => {
     const { dialog, cancelled } = openZoomEditDialog();
-    dialog.open([{ endpoint: 'end', frameIndex: 40 }]);
+    dialog.open(['end']);
 
     zoomEditDialog().dispatchEvent(new Event('cancel', { cancelable: true }));
 
@@ -134,7 +147,7 @@ describe('DiscardRefinementDialogControl.forZoomEdit', () => {
   it('leaves the Refine screen dialog alone when answered', () => {
     const refine = openDialog();
     const zoomEdit = openZoomEditDialog();
-    zoomEdit.dialog.open([{ endpoint: 'end', frameIndex: 40 }]);
+    zoomEdit.dialog.open(['end']);
 
     zoomEditButton('Discard').click();
 

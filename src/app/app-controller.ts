@@ -1,15 +1,12 @@
 import { GlobalUtilityCoordinator, GLOBAL_UTILITY_SHORTCUTS } from '../ui/global-utility-coordinator.js';
 import { KeyboardMapControl } from '../ui/keyboard-map-control.js';
 import { PipelineFactory } from '../business-logic/PipelineFactory.js';
-import { ClipEditor } from '../business-logic/clip-editor.js';
-import { VideoEditCatalog } from '../business-logic/video-edit-catalog.js';
 import { AppSessionState } from './app-session-state.js';
 import { PipelineWorkingCopy } from './pipeline-working-copy.js';
 import { FullscreenAdapter } from '../adapters/browser/fullscreen-adapter.js';
 import { ElectronFolderFileService } from '../adapters/electron/electron-folder-file-service.js';
 import { ElectronFolderService } from '../adapters/electron/electron-folder-service.js';
 import { ElectronPipelineCatalogService } from '../adapters/electron/electron-pipeline-catalog-service.js';
-import { ElectronVideoEditService } from '../adapters/electron/electron-video-edit-service.js';
 import { ClockAdapter } from '../adapters/browser/clock-adapter.js';
 import { AudioFeedbackAdapter } from '../adapters/browser/audio-feedback-adapter.js';
 import { CollectionFullScreenWorkflow } from './collection-full-screen-workflow.js';
@@ -77,6 +74,7 @@ import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
 import { ElectronFrameReviewService } from '../adapters/electron/electron-frame-review-service.js';
 import { ElectronZoomEditSourceService } from '../adapters/electron/electron-zoom-edit-source-service.js';
 import { ElectronRefinedClipSaveService } from '../adapters/electron/electron-refined-clip-save-service.js';
+import { ElectronZoomEditPreviewService } from '../adapters/electron/electron-zoom-edit-preview-service.js';
 import { ActiveZoomEdit } from './active-zoom-edit.js';
 import { ZoomEditModeLeavePolicy } from './zoom-edit-mode-leave-policy.js';
 import { ZoomEditModeSessionStarter } from './zoom-edit-mode-session-starter.js';
@@ -106,7 +104,6 @@ export class AppController {
     const appText = new AppText();
     const collectionNameValidator = new CollectionNameValidator(appText);
     const newCollectionNameCheck = new NewCollectionNameCheck(pipelineWorkingCopy, collectionNameValidator);
-    const videoEditCatalog = new VideoEditCatalog();
     const collectionFormat = new CollectionTextFormat();
     const settingsParser = new AppSettingsParser();
     const settingsService = new AppSettingsService(ElectronAppSettingsService.fromWindow(window, settingsParser));
@@ -115,7 +112,6 @@ export class AppController {
     const folderFiles = ElectronFolderFileService.fromWindow(window);
     const collectionFileWriter = new CollectionFileWriter(folderFiles, state);
     const clipSourceMovieService = ElectronClipSourceMovieService.tryCreate(window);
-    const clipEditor = new ClipEditor({ runtimeEditingService: ElectronVideoEditService.fromWindow(window), videoEditCatalog });
     const activityLogger = new ActivityLogger({ clock: window });
     const activityReporter = new ActivityReporter(activityLogger);
     const audioFeedback = new AudioFeedbackAdapter({ win: window });
@@ -133,6 +129,7 @@ export class AppController {
     const zoomEditFrameReview = ElectronFrameReviewService.tryCreate(window);
     const zoomEditSources = ElectronZoomEditSourceService.tryCreate(window);
     const refinedClipSaves = ElectronRefinedClipSaveService.tryCreate(window);
+    const zoomEditPreviews = ElectronZoomEditPreviewService.tryCreate(window);
     const activeZoomEdit = new ActiveZoomEdit();
 
     // Controls.
@@ -143,7 +140,8 @@ export class AppController {
     });
     const clipContextMenu = ContextMenuControl.forClipMenu(document);
     const gridContextMenuControl = new GridContextMenuControl({ contextMenu: clipContextMenu });
-    const zoomEditMenuControl = new ZoomEditMenuControl({ contextMenu: clipContextMenu, videoEditCatalog });
+    const zoomEditModeText = new ZoomEditModeText();
+    const zoomEditMenuControl = new ZoomEditMenuControl({ contextMenu: clipContextMenu, text: zoomEditModeText });
     const collectionSelectorControl = CollectionSelectorControl.fromDocument(document, { appText, defaultTitle: appText.defaultAppTitle });
     const mainToolbarControl = MainToolbarControl.fromDocument(document, { appText });
     const addToCollectionDialog = AddToCollectionDialogControl.fromDocument(document, {
@@ -156,8 +154,8 @@ export class AppController {
     });
     const unsavedChangesDialog = UnsavedChangesDialogControl.fromDocument(document);
     const discardRefinementDialog = DiscardRefinementDialogControl.fromDocument(document);
-    const discardZoomEditDialog = DiscardRefinementDialogControl.forZoomEdit(document);
-    const saveRefinementDialog = SaveRefinementDialogControl.fromDocument(document);
+    const discardZoomEditDialog = DiscardRefinementDialogControl.forZoomEdit(document, { text: zoomEditModeText });
+    const saveRefinementDialog = SaveRefinementDialogControl.fromDocument(document, { text: zoomEditModeText });
     const zoomEditModeKeyboard = new ZoomEditModeKeyboard();
     const trashClipsDialog = TrashClipsDialogControl.fromDocument(document, { appText });
     const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
@@ -317,11 +315,12 @@ export class AppController {
       diagnostics,
       appText,
     });
-    const zoomEditServices = zoomEditFrameReview && zoomEditSources && refinedClipSaves
+    const zoomEditServices = zoomEditFrameReview && zoomEditSources && refinedClipSaves && zoomEditPreviews
       ? {
         sessions: new ZoomEditModeSessionStarter({
           frameReview: zoomEditFrameReview,
           sources: zoomEditSources,
+          previews: zoomEditPreviews,
           player: frameReviewPlayer,
           failures: new RuntimeFailureReporter(activityReporter, diagnostics),
           previewBounds: ZOOM_EDIT_PREVIEW_BOUNDS,
@@ -331,8 +330,6 @@ export class AppController {
       : null;
     const zoom = new ZoomWorkflow({
       pipelineWorkingCopy,
-      openFolder: state,
-      folderFiles: folders,
       zoom: zoomOverlay,
       grid,
       screens: shell,
@@ -341,17 +338,12 @@ export class AppController {
       editMenu: zoomEditMenuControl,
       activeEdit: activeZoomEdit,
       // Zoom edit mode shows its clips through Zoom, so Zoom reaches it through this callback.
-      enterZoomEditMode: zoomEditServices ? clip => zoomEditMode?.enterFromZoom(clip) : null,
-      clipEditor,
+      enterZoomEditMode: zoomEditServices ? (clip, entry) => zoomEditMode?.enterFromZoom(clip, entry) : null,
       fullScreen: fullscreenAdapter,
       boundaryFeedback: audioFeedback,
-      collectionView,
-      sourceMovies: clipSourceMovies,
       diagnostics,
       reporter: activityReporter,
-      appText,
     });
-    const zoomEditModeText = new ZoomEditModeText();
     const refinedClipSave = zoomEditServices
       ? new RefinedClipSaveWorkflow({
         saves: zoomEditServices.saves,

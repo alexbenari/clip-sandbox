@@ -55,7 +55,7 @@ describe('RefinedClipPlacement', () => {
     it('saves the refined clip as <name>-refined.mp4 beside the original', async () => {
       const clip = clipNamed('Feature-002.mp4');
 
-      const saved = await placementWith().keepBoth(clip, media);
+      const saved = await placementWith().keepBoth(clip, media, '-refined');
 
       expect(saved).toMatchObject({
         filename: 'Feature-002-refined.mp4', outcome: 'kept-both',
@@ -67,12 +67,32 @@ describe('RefinedClipPlacement', () => {
 
     it('numbers a second refined clip -refined-2 without touching the first', async () => {
       const clip = clipNamed('Feature-002.mp4');
-      await placementWith().keepBoth(clip, media);
+      await placementWith().keepBoth(clip, media, '-refined');
 
-      const saved = await placementWith().keepBoth(clip, mediaFile('second.mp4', 'refined again'));
+      const saved = await placementWith().keepBoth(clip, mediaFile('second.mp4', 'refined again'), '-refined');
 
       expect(saved.filename).toBe('Feature-002-refined-2.mp4');
       expect([contentOf('Feature-002-refined.mp4'), contentOf('Feature-002-refined-2.mp4')]).toEqual(['refined', 'refined again']);
+    });
+
+    it('names the saved clip after every staged edit, numbering a second one after the suffix', async () => {
+      const clip = clipNamed('Feature-002.mp4');
+      const first = await placementWith().keepBoth(clip, media, '-refined-looped');
+
+      const second = await placementWith().keepBoth(clip, mediaFile('second.mp4', 'looped again'), '-refined-looped');
+
+      expect([first.filename, second.filename]).toEqual(['Feature-002-refined-looped.mp4', 'Feature-002-refined-looped-2.mp4']);
+    });
+
+    it.each([
+      ['a folder', '-looped\\..\\x'],
+      ['no leading hyphen', 'looped'],
+      ['nothing', ''],
+    ])('refuses a suffix with %s without writing anything', async (_case, suffix) => {
+      const clip = clipNamed('Feature-002.mp4');
+
+      expect(() => placementWith().keepBoth(clip, media, suffix)).toThrow('The saved clip name suffix is invalid.');
+      expect(folderFiles()).toEqual(['Feature-002.mp4']);
     });
 
     it('removes its partly written copy when writing the refined clip fails', async () => {
@@ -83,7 +103,7 @@ describe('RefinedClipPlacement', () => {
       };
       const placement = placementWith({ fileSystem: { ...fsPromises, copyFile: partlyWritten } });
 
-      await expect(placement.keepBoth(clip, media)).rejects.toThrow('ENOSPC');
+      await expect(placement.keepBoth(clip, media, '-refined')).rejects.toThrow('ENOSPC');
       expect(folderFiles()).toEqual(['Feature-002.mp4']);
     });
 
@@ -91,7 +111,7 @@ describe('RefinedClipPlacement', () => {
       const clip = clipNamed('Feature-002.mp4');
       const placement = placementWith({ fileSystem: { ...fsPromises, copyFile: failing('EEXIST') } });
 
-      await expect(placement.keepBoth(clip, media)).rejects.toThrow('No free name is left for the refined clip.');
+      await expect(placement.keepBoth(clip, media, '-refined')).rejects.toThrow('No free name is left for the refined clip.');
       expect(folderFiles()).toEqual(['Feature-002.mp4']);
     });
   });
@@ -109,7 +129,7 @@ describe('RefinedClipPlacement', () => {
         },
       });
 
-      const replacing = placement.replace(clip, media);
+      const replacing = placement.replace(clip, media, '-refined');
       await vi.waitFor(() => expect(trashStarted).toHaveBeenCalled());
       const whileTrashing = { files: folderFiles(), original: contentOf('Feature-002.mp4'), temporary: contentOf('Feature-002.a1b2c3.refining') };
       releaseTrash();
@@ -131,17 +151,25 @@ describe('RefinedClipPlacement', () => {
     it('keeps the new clip under the Keep both name and leaves the original in place when the Recycle Bin refuses it', async () => {
       const clip = clipNamed('Feature-002.mp4');
 
-      const saved = await placementWith({ trashItem: failing('EBUSY') }).replace(clip, media);
+      const saved = await placementWith({ trashItem: failing('EBUSY') }).replace(clip, media, '-refined');
 
       expect(saved).toMatchObject({ filename: 'Feature-002-refined.mp4', outcome: 'kept-both', notice: 'recycle-bin-refused' });
       expect(folderFiles()).toEqual(['Feature-002-refined.mp4', 'Feature-002.mp4']);
       expect([contentOf('Feature-002.mp4'), contentOf('Feature-002-refined.mp4')]).toEqual(['original', 'refined']);
     });
 
+    it('keeps the new clip under the Keep both name of its staged edits when the Recycle Bin refuses the original', async () => {
+      const clip = clipNamed('Feature-002.mp4');
+
+      const saved = await placementWith({ trashItem: failing('EBUSY') }).replace(clip, media, '-looped');
+
+      expect(saved).toMatchObject({ filename: 'Feature-002-looped.mp4', outcome: 'kept-both', notice: 'recycle-bin-refused' });
+    });
+
     it('replaces a clip in another format with <name>.mp4 and names the file it replaced', async () => {
       const clip = clipNamed('Feature-002.webm');
 
-      const saved = await placementWith().replace(clip, media);
+      const saved = await placementWith().replace(clip, media, '-refined');
 
       expect(saved).toMatchObject({ filename: 'Feature-002.mp4', outcome: 'replaced', replacedFilename: 'Feature-002.webm' });
       expect([folderFiles(), readdirSync(recycleBin)]).toEqual([['Feature-002.mp4'], ['Feature-002.webm']]);
@@ -151,7 +179,7 @@ describe('RefinedClipPlacement', () => {
       const clip = clipNamed('Feature-002.webm');
       writeFileSync(path.join(folder, 'Feature-002.mp4'), 'another clip');
 
-      const saved = await placementWith().replace(clip, media);
+      const saved = await placementWith().replace(clip, media, '-refined');
 
       expect(saved).toMatchObject({ filename: 'Feature-002-refined.mp4', outcome: 'kept-both', notice: 'name-taken' });
       expect(folderFiles()).toEqual(['Feature-002-refined.mp4', 'Feature-002.mp4', 'Feature-002.webm']);
@@ -167,7 +195,7 @@ describe('RefinedClipPlacement', () => {
         },
       });
 
-      const saved = await placement.replace(clip, media);
+      const saved = await placement.replace(clip, media, '-refined');
 
       expect(saved).toMatchObject({
         filename: 'Feature-002-refined.mp4', outcome: 'replaced', replacedFilename: 'Feature-002.mp4', notice: 'name-taken',
@@ -180,7 +208,7 @@ describe('RefinedClipPlacement', () => {
       const clip = clipNamed('Feature-002.mp4');
       const placement = placementWith({ fileSystem: { ...fsPromises, rename: failing('EPERM') } });
 
-      const saved = await placement.replace(clip, media);
+      const saved = await placement.replace(clip, media, '-refined');
 
       expect(saved).toMatchObject({
         filename: 'Feature-002-refined.mp4', outcome: 'replaced', replacedFilename: 'Feature-002.mp4', notice: 'rename-failed',
@@ -197,7 +225,7 @@ describe('RefinedClipPlacement', () => {
       };
       const placement = placementWith({ fileSystem: { ...fsPromises, rename: failing('EPERM'), copyFile: copyFromTemporaryFails } });
 
-      await expect(placement.replace(clip, media)).rejects
+      await expect(placement.replace(clip, media, '-refined')).rejects
         .toMatchObject({ code: 'kept-under-temporary-name', message: 'The refined clip was kept under a temporary name in the folder.' });
       expect([folderFiles(), contentOf('Feature-002.a1b2c3.refining'), readdirSync(recycleBin)])
         .toEqual([['Feature-002.a1b2c3.refining'], 'refined', ['Feature-002.mp4']]);
@@ -208,7 +236,7 @@ describe('RefinedClipPlacement', () => {
       writeFileSync(path.join(folder, 'Feature-002.a1b2c3.refining'), 'earlier refined clip');
       const ids = ['a1b2c3', 'd4e5f6'];
 
-      const saved = await placementWith({ randomId: () => ids.shift()! }).replace(clip, media);
+      const saved = await placementWith({ randomId: () => ids.shift()! }).replace(clip, media, '-refined');
 
       expect(saved).toMatchObject({ filename: 'Feature-002.mp4', outcome: 'replaced' });
       expect([folderFiles(), contentOf('Feature-002.a1b2c3.refining'), contentOf('Feature-002.mp4')])
@@ -219,7 +247,7 @@ describe('RefinedClipPlacement', () => {
       const clip = clipNamed('Feature-002.mp4');
       const placement = placementWith({ trashItem: failing('EBUSY'), fileSystem: { ...fsPromises, rm: failing('EPERM') } });
 
-      const saved = await placement.replace(clip, media);
+      const saved = await placement.replace(clip, media, '-refined');
 
       expect(saved).toMatchObject({ filename: 'Feature-002-refined.mp4', outcome: 'kept-both', notice: 'recycle-bin-refused' });
       expect(contentOf('Feature-002-refined.mp4')).toBe('refined');
@@ -230,7 +258,7 @@ describe('RefinedClipPlacement', () => {
       writeFileSync(path.join(folder, 'Feature-002.mp4.refining'), 'earlier refined clip');
       writeFileSync(path.join(folder, 'Feature-002.d4e5f6.refining'), 'another earlier refined clip');
 
-      await placementWith().replace(clip, media);
+      await placementWith().replace(clip, media, '-refined');
 
       expect(folderFiles()).toEqual(['Feature-002.d4e5f6.refining', 'Feature-002.mp4', 'Feature-002.mp4.refining']);
       expect(contentOf('Feature-002.mp4.refining')).toBe('earlier refined clip');
@@ -243,8 +271,8 @@ describe('RefinedClipPlacement', () => {
       const placement = placementWith({ randomId: () => `id${++ids}` });
 
       const saved = await Promise.all([
-        placement.replace(webm, mediaFile('from-webm.mp4', 'refined webm')),
-        placement.replace(mkv, mediaFile('from-mkv.mp4', 'refined mkv')),
+        placement.replace(webm, mediaFile('from-webm.mp4', 'refined webm'), '-refined'),
+        placement.replace(mkv, mediaFile('from-mkv.mp4', 'refined mkv'), '-refined'),
       ]);
 
       const contents = saved.map(({ filename }) => contentOf(filename)).sort();

@@ -1,5 +1,5 @@
-import type { CreatedVideoFile } from '../business-logic/clip-editor.js';
 import type { Clip } from '../domain/clip.js';
+import type { ZoomEditComposition } from '../domain/zoom-edit-composition.js';
 import type { ClipSource } from '../domain/clip-source.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
@@ -10,6 +10,7 @@ import type { FolderAccess } from './folder-access.js';
 import type {
   IRefinedClipSaveProgress,
   IRefinedClipSaveService,
+  ISavedClipEntry,
   RefinedClipSaveOutcome,
   SavedRefinedClip,
 } from './refined-clip-save-service.js';
@@ -17,12 +18,12 @@ import type { IZoomEditModeSnapshot, IZoomEditStagedSelection } from './zoom-edi
 import type { ZoomEditModeText } from './zoom-edit-mode-text.js';
 
 export interface ISaveRefinementPrompt extends IEventSource<{ confirmed: RefinedClipSaveOutcome; cancelled: void }> {
-  open(filename: string): void;
+  open(request: Readonly<{ filename: string; edits: ZoomEditComposition }>): void;
   close(): void;
 }
 
 export interface ISavedClipSources {
-  clipSourceOf(file: CreatedVideoFile): ClipSource;
+  clipSourceOf(file: ISavedClipEntry): ClipSource;
 }
 
 export interface IRefinedClipEdit {
@@ -31,6 +32,7 @@ export interface IRefinedClipEdit {
   readonly session: IEventSource<{ changed: IZoomEditModeSnapshot }> & {
     readonly snapshot: IZoomEditModeSnapshot;
     stagedSelection(): IZoomEditStagedSelection | null;
+    stagedEdits(): ZoomEditComposition;
   };
 }
 
@@ -72,7 +74,8 @@ export class RefinedClipSaveWorkflow {
   }
 
   async save(edit: IRefinedClipEdit, view: IRefinedClipSaveView): Promise<RefinedClipSaveEnd> {
-    const outcome = await this.askOutcome(edit.clip.name);
+    const edits = edit.session.stagedEdits();
+    const outcome = await this.askOutcome(edit.clip.name, edits);
     if (!outcome || this.run) return 'not-saved';
     const run: SaveRun = { cancelled: false, stopWaiting: null };
     this.run = run;
@@ -80,7 +83,7 @@ export class RefinedClipSaveWorkflow {
     try {
       if (!(await this.movieSettled(edit, run, view))) return 'cancelled';
       view.statusChanged(Object.freeze({ kind: 'saving', progress: null }));
-      saved = await this.deps.saves.save(this.requestOf(edit, outcome), progress => {
+      saved = await this.deps.saves.save(this.requestOf(edit, edits, outcome), progress => {
         if (this.run === run) view.statusChanged(Object.freeze({ kind: 'saving', progress }));
       });
     } catch (error) {
@@ -90,7 +93,7 @@ export class RefinedClipSaveWorkflow {
     } finally {
       if (this.run === run) this.run = null;
     }
-    await this.showSaved(edit.clip, saved, view);
+    await this.showSaved(edit.clip, saved, edits, view);
     return 'saved';
   }
 
@@ -113,11 +116,11 @@ export class RefinedClipSaveWorkflow {
     this.stop();
   }
 
-  private askOutcome(filename: string): Promise<RefinedClipSaveOutcome | null> {
+  private askOutcome(filename: string, edits: ZoomEditComposition): Promise<RefinedClipSaveOutcome | null> {
     this.settleOutcome(null);
     return new Promise(settle => {
       this.pendingOutcome = settle;
-      this.deps.saveDialog.open(filename);
+      this.deps.saveDialog.open({ filename, edits });
     });
   }
 
@@ -145,18 +148,18 @@ export class RefinedClipSaveWorkflow {
     return !run.cancelled;
   }
 
-  private requestOf(edit: IRefinedClipEdit, outcome: RefinedClipSaveOutcome) {
+  private requestOf(edit: IRefinedClipEdit, edits: ZoomEditComposition, outcome: RefinedClipSaveOutcome) {
     const selection = edit.session.stagedSelection();
     if (!selection) throw new Error('Zoom edit mode has no staged range to save.');
     const { source, sessionId, startFrame, endFrame } = selection;
-    return { folder: edit.folder, filename: edit.clip.name, source, sessionId, startFrame, endFrame, outcome };
+    return { folder: edit.folder, filename: edit.clip.name, source, sessionId, startFrame, endFrame, loopify: edits.includes('loopify'), outcome };
   }
 
-  private async showSaved(original: Clip, saved: SavedRefinedClip, view: IRefinedClipSaveView): Promise<void> {
+  private async showSaved(original: Clip, saved: SavedRefinedClip, edits: ZoomEditComposition, view: IRefinedClipSaveView): Promise<void> {
     const { reporter, text, savedClipSources, createdClips, replacements } = this.deps;
     const previousFilename = original.name;
     const editWasOpen = view.endEdit();
-    reporter.success(text.saved(previousFilename, saved));
+    reporter.success(text.saved(previousFilename, saved, edits));
     if (saved.warning) reporter.information(text.sourceInfoNotSaved(saved.filename));
     if (!editWasOpen) return;
     const source = savedClipSources.clipSourceOf(saved.entry);

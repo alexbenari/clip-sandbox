@@ -16,13 +16,13 @@ Reason kept non-OO and non-TS: the preload bridge is a narrow Electron boundary 
 
 ### `register*Ipc` composition entrypoints
 
-Files: `electron/frame-review-ipc.cjs` (`registerFrameReviewIpc`), `electron/clip-extraction-ipc.cjs` (`registerClipExtractionIpc`), `electron/clip-captures-ipc.cjs` (`registerClipCapturesIpc`), `electron/zoom-edit-save-ipc.cjs` (`registerZoomEditSaveIpc`).
+Files: `electron/frame-review-ipc.cjs` (`registerFrameReviewIpc`), `electron/clip-extraction-ipc.cjs` (`registerClipExtractionIpc`), `electron/clip-captures-ipc.cjs` (`registerClipCapturesIpc`), `electron/zoom-edit-save-ipc.cjs` (`registerZoomEditSaveIpc`), `electron/zoom-edit-preview-ipc.cjs` (`registerZoomEditPreviewIpc`).
 
 Reason kept as module-level functions: each constructs its IPC boundary class and registers its handlers, and `electron/main.cjs` calls it once while composing the main process. Validation, dispatch, serialization, and error translation are owned by the boundary classes (`FrameReviewIpcBoundary`, `ClipExtractionIpcBoundary`, `ClipCapturesIpcBoundary`, `ZoomEditSaveIpcBoundary`). The frame-review boundary also stays CommonJS because Electron main loads it directly while the production frame-review host is emitted ESM.
 
 ### `electron/process-runner.cjs`
 
-Reason kept as a module-level function: `runProcess` is a process-spawning boundary helper that the main-process classes (`ExactRangeEncoder`, `MovieWindowCache`, `MovieFrameRateProbe`) take as an injectable `runCommand` dependency. It was moved unchanged from `electron/clip-extraction-runtime.cjs` so those classes share one implementation. `electron/video-edit-runtime.cjs` still keeps its own copy.
+Reason kept as a module-level function: `runProcess` is a process-spawning boundary helper that the main-process classes (`ExactRangeEncoder`, `MovieWindowCache`, `MovieFrameRateProbe`, `ZoomEditPreviews`) take as an injectable `runCommand` dependency. It was moved unchanged from `electron/clip-extraction-runtime.cjs` so those classes share one implementation.
 
 ### `electron/exact-range-encoder.cjs`
 

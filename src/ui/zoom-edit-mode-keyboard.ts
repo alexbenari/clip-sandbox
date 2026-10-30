@@ -20,6 +20,7 @@ const COMMANDS_BY_KEY: Readonly<Record<string, ZoomEditModeCommand>> = Object.fr
   [keys.jumpToStart.toLowerCase()]: { kind: 'jump-to-start' },
   [keys.jumpToEnd.toLowerCase()]: { kind: 'jump-to-end' },
   [keys.loop.toLowerCase()]: { kind: 'toggle-loop' },
+  [keys.loopify.toLowerCase()]: { kind: 'toggle-loopify' },
   [keys.save.toLowerCase()]: { kind: 'save' },
   'escape': { kind: 'leave' },
 });

@@ -46,7 +46,7 @@ export class ElectronZoomEditSourceService implements IZoomEditSourceService {
       folderPath: request.folder.folderPath, filename: request.filename, widen: request.widen,
       ...(request.previousWindowId === undefined ? {} : { previousWindowId: request.previousWindowId }),
     }), 'window');
-    if (answer.kind === 'cancelled' || answer.kind === 'no-source-info') return Object.freeze({ kind: answer.kind });
+    if (answer.kind === 'cancelled' || answer.kind === 'no-source-info' || answer.kind === 'movie-only') return Object.freeze({ kind: answer.kind });
     if (answer.kind !== 'ready') throw this.invalidAnswer('window');
     return Object.freeze({
       kind: 'ready',

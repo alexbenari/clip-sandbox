@@ -2,21 +2,35 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { DesktopAppTestEnvironment, desktopFile, waitFor } from './app-controller-harness.js';
 import { installGifDesktopApiFakes } from './desktop-api-fakes.js';
+import { ZoomEditComposition } from '../../../src/domain/zoom-edit-composition.js';
 
 // The edit session is replaced so these tests drive entering, keys and leaving through the shipped page,
 // with a staged edit set by the test rather than by exact frames from the native player.
-const { FakeEditSession } = vi.hoisted(() => {
+const { FakeEditSession, domain } = vi.hoisted(() => {
+  // The hoisted fake runs before imports; the real composition of staged edits is filled in below them.
+  const domain = { ZoomEditComposition: null };
   const unchanged = Object.freeze({ start: 0, end: 47, lastClipFrame: 47, isChanged: false, changedEnds: () => [] });
   class FakeEditSession {
     static instances = [];
     handlers = new Set();
-    snapshot = { picture: 'ready', extension: 'none', extensionPending: false, range: unchanged };
+    snapshot = { picture: 'ready', extension: 'none', extensionPending: false, range: unchanged, loopify: false, preview: { kind: 'hidden' } };
     commands = [];
     disposed = false;
 
     constructor(request) {
       this.request = request;
+      this.snapshot = { ...this.snapshot, loopify: request.loopify };
       FakeEditSession.instances.push(this);
+    }
+
+    stagedEdits() {
+      return domain.ZoomEditComposition.of([...(this.snapshot.range.isChanged ? ['refine'] : []), ...(this.snapshot.loopify ? ['loopify'] : [])]);
+    }
+
+    toggleLoopify() {
+      this.snapshot = { ...this.snapshot, loopify: !this.snapshot.loopify };
+      for (const handler of [...this.handlers]) handler(this.snapshot);
+      return this.record('toggleLoopify');
     }
 
     on(name, handler) {
@@ -46,8 +60,9 @@ const { FakeEditSession } = vi.hoisted(() => {
     jumpToEnd() { return this.record('jumpToEnd'); }
     toggleLoop() { return this.record('toggleLoop'); }
   }
-  return { FakeEditSession };
+  return { FakeEditSession, domain };
 });
+domain.ZoomEditComposition = ZoomEditComposition;
 
 vi.mock('../../../src/app/zoom-edit-mode-session.js', () => ({
   ZoomEditModeSession: { begin: (_deps, request) => new FakeEditSession(request) },
@@ -61,6 +76,9 @@ function installZoomEditDesktopApi(desktop) {
     subscribeSaveProgress: vi.fn(() => () => undefined),
     save: vi.fn(),
     cancelSave: vi.fn(async () => ({ ok: true })),
+    subscribePreviewProgress: vi.fn(() => () => undefined),
+    preview: vi.fn(),
+    releasePreview: vi.fn(async () => ({ ok: true })),
   };
 }
 
@@ -120,7 +138,7 @@ describe('Zoom edit mode in the Collection view', () => {
 
     expect(session().request).toMatchObject({ filename: 'bravo.mp4', folder: { folderPath: 'C:/clips' }, hasSourceInfo: false, muted: true });
     expect(document.querySelector('#zoomEditSurface .frame-review-player')).not.toBeNull();
-    expect(document.querySelector('#zoomEditHint .zoom-edit-hint-keys').textContent).toBe('Q start · W end · A/S jump · Z loop · X save · Esc leave');
+    expect(document.querySelector('#zoomEditHint .zoom-edit-hint-keys').textContent).toBe('Q start · W end · A/S jump · Z loop · L loopify · X save · Esc leave');
     expect(document.getElementById('zoomVideo')).toBeNull();
   });
 
@@ -135,6 +153,44 @@ describe('Zoom edit mode in the Collection view', () => {
 
     await waitFor(() => expect(document.getElementById('zoomEditSurface')).not.toBeNull());
     expect(session().request.filename).toBe('alpha.mp4');
+  });
+
+  async function loopifyFromZoomMenu(name) {
+    document.querySelector(`#grid .thumb[data-name="${name}"]`).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await waitFor(() => expect(document.getElementById('zoomVideo')).not.toBeNull());
+    document.getElementById('zoomVideo').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 70, clientY: 80 }));
+    await waitFor(() => expect(document.querySelector('[data-item-id="zoom-edit-loopify"]')).not.toBeNull());
+    document.querySelector('[data-item-id="zoom-edit-loopify"]').click();
+    await waitFor(() => expect(document.getElementById('zoomEditSurface')).not.toBeNull());
+  }
+
+  test('Loopify in Zoom’s edit menu enters the mode with Loopify staged, saying the clip is saved without sound', async () => {
+    await startWithFolder();
+
+    await loopifyFromZoomMenu('alpha.mp4');
+
+    expect(session().request).toMatchObject({ filename: 'alpha.mp4', loopify: true });
+    expect(document.querySelector('#zoomEditHint [role="status"]').textContent).toBe('Loopify staged · saved without sound');
+  });
+
+  test('L stages Loopify in the mode', async () => {
+    await startWithFolder();
+    await refineFromClipMenu('alpha.mp4');
+
+    press('l');
+
+    await waitFor(() => expect(session().commands).toEqual(['toggleLoopify']));
+    expect(document.querySelector('#zoomEditHint [role="status"]').textContent).toBe('Loopify staged · saved without sound');
+  });
+
+  test('Escape with only Loopify staged asks first, naming Loopify', async () => {
+    await startWithFolder();
+    await loopifyFromZoomMenu('alpha.mp4');
+
+    press('Escape');
+
+    await waitFor(() => expect(discardDialog().open).toBe(true));
+    expect(discardDialog().querySelector('h2').textContent).toBe('Discard Loopify?');
   });
 
   test('keys act in the mode instead of browsing Zoom', async () => {
@@ -292,6 +348,30 @@ describe('Saving in Zoom edit mode', () => {
     await waitFor(() => expect(clipNames()).toEqual(['charlie.mp4', 'bravo.mp4', 'bravo-refined.mp4', 'alpha.mp4']));
     expect(isShown('unsavedChangesMarker')).toBe(true);
     expect(document.getElementById('zoomVideo').dataset.name).toBe('bravo-refined.mp4');
+    expect(window.clipSandboxDesktop.saveTextFile).not.toHaveBeenCalled();
+  });
+
+  test('Loopify saved with Keep both in a saved collection’s view loops the whole clip, after asking with its loss, next to its original', async () => {
+    folderWith([desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.mp4' }), desktopFile({ name: 'picks.txt', text: 'bravo.mp4\nalpha.mp4\n' })]);
+    saveAnswers({ outcome: 'kept-both', filename: 'bravo-looped.mp4', entry: savedEntry('bravo-looped.mp4') });
+    await openFolder(['alpha.mp4', 'bravo.mp4'], { collection: 'picks.txt' });
+    await waitFor(() => expect(clipNames()).toEqual(['bravo.mp4', 'alpha.mp4']));
+    card('bravo.mp4').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await waitFor(() => expect(document.getElementById('zoomVideo')).not.toBeNull());
+    document.getElementById('zoomVideo').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 70, clientY: 80 }));
+    await waitFor(() => expect(document.querySelector('[data-item-id="zoom-edit-loopify"]')).not.toBeNull());
+    document.querySelector('[data-item-id="zoom-edit-loopify"]').click();
+    await waitFor(() => expect(document.getElementById('zoomEditSurface')).not.toBeNull());
+
+    press('x');
+    await waitFor(() => expect(document.getElementById('saveRefinementDialog').open).toBe(true));
+    const explanation = document.getElementById('saveRefinementExplanation').textContent;
+    document.getElementById('keepBothRefinedClipBtn').click();
+
+    await waitFor(() => expect(clipNames()).toEqual(['bravo.mp4', 'bravo-looped.mp4', 'alpha.mp4']));
+    expect(explanation).toContain('The looped clip is saved without sound.');
+    expect(window.clipSandboxDesktop.zoomEdit.save.mock.calls[0][0]).toMatchObject({ filename: 'bravo.mp4', startFrame: 0, endFrame: 47, loopify: true });
+    expect(isShown('unsavedChangesMarker')).toBe(true);
     expect(window.clipSandboxDesktop.saveTextFile).not.toHaveBeenCalled();
   });
 

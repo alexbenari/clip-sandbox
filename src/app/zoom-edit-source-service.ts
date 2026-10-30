@@ -14,7 +14,8 @@ export interface IZoomEditWindowRequest extends IZoomEditClipRequest {
 export type ZoomEditWindowAnswer =
   | Readonly<{ kind: 'ready'; sourceHandle: FrameReviewSourceHandle; windowId: string }>
   | Readonly<{ kind: 'cancelled' }>
-  | Readonly<{ kind: 'no-source-info' }>;
+  | Readonly<{ kind: 'no-source-info' }>
+  | Readonly<{ kind: 'movie-only' }>;
 
 export type ZoomEditAnchorAnswer =
   | Readonly<{ kind: 'anchored'; clipStartFrame: number; earliestFrame: number; latestFrame: number }>

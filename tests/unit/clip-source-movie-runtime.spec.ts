@@ -8,6 +8,7 @@ import { sourceMovieFixture, sourceMovieTag } from '../support/source-movie-fixt
 
 const require = createRequire(import.meta.url);
 const { ClipSourceMovieRuntime } = require('../../electron/clip-source-movie-runtime.cjs');
+const { Mp4Provenance } = require('../../electron/clip-provenance/mp4-provenance.cjs');
 
 const taggedMovieFileName = JSON.parse(sourceMovieTag.value).sourceMovie.displayName;
 const event = { sender: { id: 1 } };
@@ -51,6 +52,16 @@ describe('ClipSourceMovieRuntime', () => {
       { filename: 'tagged-copy.webm', kind: 'none' },
       { filename: 'tagged-v2.mp4', kind: 'movie', movieFileName: taggedMovieFileName },
     ] });
+  });
+
+  it('answers a clip whose record keeps only the movie with that movie', async () => {
+    const { sourceMovie } = JSON.parse(sourceMovieTag.value);
+    const tagReader = { read: async () => JSON.stringify({ provenanceVersion: 2, sourceMovie }) };
+    const runtime = new ClipSourceMovieRuntime({ folderAccess, provenance: new Mp4Provenance({ tagReader }) });
+
+    const answer = await runtime.read(event, { folderPath: grantedFolder, filenames: ['tagged.mp4'] });
+
+    expect(answer).toEqual({ clips: [{ filename: 'tagged.mp4', kind: 'movie', movieFileName: taggedMovieFileName }] });
   });
 
   it('logs how many clips were unreadable without naming them', async () => {

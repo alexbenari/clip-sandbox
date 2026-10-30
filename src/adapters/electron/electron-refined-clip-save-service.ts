@@ -24,7 +24,9 @@ interface IRefinedClipSaveApi {
 
 type RefinedClipSaveWindow = Window & { clipSandboxDesktop?: { zoomEdit?: Partial<IRefinedClipSaveApi> } };
 
-const STAGES: readonly RefinedClipSaveStage[] = ['checking-source', 'encoding-video', 'exact-fallback', 'adding-audio', 'saving-media'];
+const STAGES: readonly RefinedClipSaveStage[] = [
+  'checking-source', 'encoding-video', 'exact-fallback', 'adding-backward-half', 'adding-audio', 'saving-media',
+];
 const REPLACED_NOTICES: readonly ReplacedClipNotice[] = ['name-taken', 'rename-failed'];
 const KEPT_BOTH_NOTICES: readonly KeptBothClipNotice[] = ['recycle-bin-refused', 'name-taken'];
 
@@ -63,6 +65,7 @@ export class ElectronRefinedClipSaveService implements IRefinedClipSaveService {
         sessionId: request.sessionId,
         startFrame: request.startFrame,
         endFrame: request.endFrame,
+        loopify: request.loopify,
         outcome: request.outcome,
       })));
     } finally {

@@ -1,3 +1,5 @@
+const { CorrelatedIpcReplies } = require('./correlated-ipc-replies.cjs');
+
 const CHANNELS = Object.freeze({
   save: 'clip-sandbox:zoom-edit-save',
   cancel: 'clip-sandbox:zoom-edit-cancel-save',
@@ -7,6 +9,9 @@ const CHANNELS = Object.freeze({
 class ZoomEditSaveIpcBoundary {
   #ipcMain;
   #saver;
+  #replies = new CorrelatedIpcReplies({
+    label: 'Zoom edit save', failureCode: 'save-failed', failureMessage: 'The refined clip could not be saved.', logPrefix: 'zoom-edit-save',
+  });
 
   constructor({ ipcMain, saver }) {
     if (!ipcMain?.handle || !saver) throw new Error('Zoom edit save IPC dependencies are invalid.');
@@ -23,7 +28,7 @@ class ZoomEditSaveIpcBoundary {
   async #save(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      operationId = this.#operationId(payload?.operationId, 'refine');
+      operationId = this.#replies.operationId(payload?.operationId, 'refine');
       const result = await this.#saver.save(event, {
         operationId,
         folderPath: payload?.folderPath,
@@ -32,60 +37,23 @@ class ZoomEditSaveIpcBoundary {
         sessionId: payload?.sessionId,
         startFrame: payload?.startFrame,
         endFrame: payload?.endFrame,
+        loopify: payload?.loopify,
         outcome: payload?.outcome,
-      }, progress => this.#sendProgress(event.sender, { operationId, ...progress }));
-      return this.#envelope(operationId, result);
+      }, progress => this.#replies.sendProgress(event.sender, CHANNELS.progress, { operationId, ...progress }));
+      return this.#replies.envelope(operationId, result);
     } catch (error) {
-      return this.#failure(operationId, error);
+      return this.#replies.failure(operationId, error);
     }
   }
 
   async #cancel(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      operationId = this.#operationId(payload?.operationId, 'cancel');
-      return this.#envelope(operationId, await this.#saver.cancel(event.sender.id, payload?.saveOperationId));
+      operationId = this.#replies.operationId(payload?.operationId, 'cancel');
+      return this.#replies.envelope(operationId, await this.#saver.cancel(event.sender.id, payload?.saveOperationId));
     } catch (error) {
-      return this.#failure(operationId, error);
+      return this.#replies.failure(operationId, error);
     }
-  }
-
-  #sendProgress(sender, progress) {
-    try {
-      if (!sender.isDestroyed?.()) sender.send(CHANNELS.progress, progress);
-    } catch (error) {
-      console.warn('[zoom-edit-save] progress-delivery-failed', { kind: error instanceof Error ? error.name : 'unknown' });
-    }
-  }
-
-  #operationId(value, prefix) {
-    if (typeof value !== 'string' || !new RegExp(`^${prefix}_[a-zA-Z0-9_-]{8,120}$`).test(value)) {
-      throw Object.assign(new Error('Zoom edit save operation id is invalid.'), { code: 'invalid-operation' });
-    }
-    return value;
-  }
-
-  #envelope(operationId, result) {
-    return result?.ok === true
-      ? { ok: true, operationId, result: result.result }
-      : {
-        ok: false,
-        operationId,
-        error: {
-          code: String(result?.code || 'save-failed'),
-          message: String(result?.error?.message || 'The refined clip could not be saved.').slice(0, 1024),
-        },
-      };
-  }
-
-  // Thrown messages can name files, so the renderer gets a fixed one.
-  #failure(operationId, error) {
-    const invalidOperation = error?.code === 'invalid-operation';
-    return this.#envelope(operationId, {
-      ok: false,
-      code: invalidOperation ? 'invalid-operation' : 'save-failed',
-      error: { message: invalidOperation ? 'Zoom edit save operation id is invalid.' : 'The refined clip could not be saved.' },
-    });
   }
 }
 

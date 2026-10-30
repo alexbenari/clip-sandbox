@@ -78,6 +78,48 @@ describe('preload zoom edit save', () => {
   });
 });
 
+describe('preload zoom edit preview', () => {
+  it('sends a preview request on the preview channel under the renderer’s operation id', async () => {
+    const { zoomEdit, ipcRenderer } = loadPreload(echo);
+    const request = { operationId: 'preview_12345678', folderPath: 'D:\\clips', filename: 'Feature-002.mp4', loopify: true };
+
+    await zoomEdit.preview(request);
+
+    expect(ipcRenderer.invoke.mock.calls).toEqual([['clip-sandbox:zoom-edit-preview', request]]);
+  });
+
+  it('answers a protocol error when the preview answer belongs to another operation', async () => {
+    const { zoomEdit } = loadPreload(async () => ({ ok: true, operationId: 'preview_other_operation', result: null }));
+
+    await expect(zoomEdit.preview({ operationId: 'preview_12345678' })).resolves.toEqual({
+      ok: false, operationId: 'preview_12345678',
+      error: { code: 'protocol-error', message: 'Zoom edit preview response correlation failed.' },
+    });
+  });
+
+  it('releases the preview on the release channel', async () => {
+    const { zoomEdit, ipcRenderer } = loadPreload(async () => ({ ok: true }));
+
+    await zoomEdit.releasePreview();
+
+    expect(ipcRenderer.invoke.mock.calls).toEqual([['clip-sandbox:zoom-edit-release-preview']]);
+  });
+
+  it('passes preview progress events to the listener until it unsubscribes', () => {
+    const { zoomEdit, ipcRenderer } = loadPreload(echo);
+    const listener = vi.fn();
+
+    const unsubscribe = zoomEdit.subscribePreviewProgress(listener);
+    const [channel, handler] = ipcRenderer.on.mock.calls[0];
+    handler({}, { operationId: 'preview_12345678', renderedFrames: 3, totalFrames: 8 });
+    unsubscribe();
+
+    expect(channel).toBe('clip-sandbox:zoom-edit-preview-progress');
+    expect(listener.mock.calls).toEqual([[{ operationId: 'preview_12345678', renderedFrames: 3, totalFrames: 8 }]]);
+    expect(ipcRenderer.removeListener).toHaveBeenCalledWith('clip-sandbox:zoom-edit-preview-progress', handler);
+  });
+});
+
 describe('preload frame review', () => {
   it('opens a movie muted when the renderer asks for it', async () => {
     const { frameReview, ipcRenderer } = loadPreload(echo);

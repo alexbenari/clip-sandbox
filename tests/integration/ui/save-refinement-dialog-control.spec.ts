@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ZoomEditModeText } from '../../../src/app/zoom-edit-mode-text.js';
+import { ZoomEditComposition } from '../../../src/domain/zoom-edit-composition.js';
 import { SaveRefinementDialogControl } from '../../../src/ui/save-refinement-dialog-control.js';
 import { shippedPageBody } from '../../support/page-markup.js';
 
 const pageBody = shippedPageBody();
+const refined = (filename: string) => ({ filename, edits: ZoomEditComposition.of(['refine']) });
 
 function saveDialog() {
-  const dialog = SaveRefinementDialogControl.fromDocument(document);
+  const dialog = SaveRefinementDialogControl.fromDocument(document, { text: new ZoomEditModeText() });
   const confirmed = vi.fn();
   const cancelled = vi.fn();
   dialog.on('confirmed', confirmed);
@@ -30,7 +33,7 @@ describe('SaveRefinementDialogControl', () => {
   it('explains both choices for the clip being saved', () => {
     const { dialog } = saveDialog();
 
-    dialog.open('alpha.webm');
+    dialog.open(refined('alpha.webm'));
 
     expect(dialogElement().open).toBe(true);
     expect(document.getElementById('saveRefinementExplanation')?.textContent).toBe(
@@ -38,12 +41,24 @@ describe('SaveRefinementDialogControl', () => {
     );
   });
 
+  it('names the looped clip and says it is saved without sound', () => {
+    const { dialog } = saveDialog();
+
+    dialog.open({ filename: 'alpha.mp4', edits: ZoomEditComposition.of(['refine', 'loopify']) });
+
+    expect([document.getElementById('saveRefinementTitle')?.textContent, document.getElementById('saveRefinementExplanation')?.textContent]).toEqual([
+      'Save the refined and looped clip',
+      'Keep both adds the refined and looped clip next to alpha.mp4. Replace puts it in place of alpha.mp4 and moves the original '
+        + 'to the Recycle Bin. The refined and looped clip is saved without sound.',
+    ]);
+  });
+
   it.each([
     ['Keep both', 'keep-both'],
     ['Replace', 'replace'],
   ])('answers %s with that outcome and closes', (name, outcome) => {
     const { dialog, confirmed, cancelled } = saveDialog();
-    dialog.open('alpha.mp4');
+    dialog.open(refined('alpha.mp4'));
 
     button(name).click();
 
@@ -58,7 +73,7 @@ describe('SaveRefinementDialogControl', () => {
     document.body.append(frame);
     frame.focus();
     const { dialog, confirmed, cancelled } = saveDialog();
-    dialog.open('alpha.mp4');
+    dialog.open(refined('alpha.mp4'));
 
     button('Cancel').click();
 
@@ -69,7 +84,7 @@ describe('SaveRefinementDialogControl', () => {
 
   it('treats Escape as Cancel', () => {
     const { dialog, cancelled } = saveDialog();
-    dialog.open('alpha.mp4');
+    dialog.open(refined('alpha.mp4'));
 
     dialogElement().dispatchEvent(new Event('cancel', { cancelable: true }));
 
@@ -78,7 +93,7 @@ describe('SaveRefinementDialogControl', () => {
   });
 
   it('opens on the safe Keep both choice and marks Replace as removing a file', () => {
-    saveDialog().dialog.open('alpha.mp4');
+    saveDialog().dialog.open(refined('alpha.mp4'));
 
     expect(document.activeElement).toBe(button('Keep both'));
     expect(button('Replace').classList.contains('btn-destructive')).toBe(true);

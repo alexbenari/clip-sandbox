@@ -28,15 +28,22 @@ class RefinedClipPlacement {
     this.#randomId = randomId;
   }
 
-  keepBoth(clip, mediaPath) {
-    return this.#keptBoth(clip, mediaPath, {});
+  // The suffix names the staged edits, such as `-refined-looped`; Keep both adds it to the original's name.
+  keepBoth(clip, mediaPath, suffix) {
+    return this.#keptBoth({ ...clip, suffix: this.#checkedSuffix(suffix) }, mediaPath, {});
   }
 
   // Replace saves run one at a time, so two of them never both find a name free and rename onto it.
-  replace(clip, mediaPath) {
-    const replacing = this.#replacing.catch(() => undefined).then(() => this.#replaced(clip, mediaPath));
+  replace(clip, mediaPath, suffix) {
+    const named = { ...clip, suffix: this.#checkedSuffix(suffix) };
+    const replacing = this.#replacing.catch(() => undefined).then(() => this.#replaced(named, mediaPath));
     this.#replacing = replacing;
     return replacing;
+  }
+
+  #checkedSuffix(suffix) {
+    if (typeof suffix !== 'string' || !/^(-[a-z]+)+$/.test(suffix)) throw new Error('The saved clip name suffix is invalid.');
+    return suffix;
   }
 
   // The original goes to the Recycle Bin only once its replacement is complete, so the folder never loses the clip.
@@ -130,7 +137,7 @@ class RefinedClipPlacement {
   async #keptBoth(clip, mediaPath, details) {
     const stem = path.parse(clip.filename).name;
     for (let sequence = 1; sequence <= MAX_KEEP_BOTH_NAMES; sequence += 1) {
-      const filename = sequence === 1 ? `${stem}-refined.mp4` : `${stem}-refined-${sequence}.mp4`;
+      const filename = sequence === 1 ? `${stem}${clip.suffix}.mp4` : `${stem}${clip.suffix}-${sequence}.mp4`;
       if (!(await this.#copiedExclusively(mediaPath, path.join(clip.folder, filename)))) continue;
       return this.#saved(clip.folder, filename, { outcome: 'kept-both', ...details });
     }

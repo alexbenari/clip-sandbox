@@ -29,6 +29,7 @@ describe('ZoomEditModeKeyboard', () => {
     ['A', { key: 'a', code: 'KeyA' }, { kind: 'jump-to-start' }],
     ['S', { key: 's', code: 'KeyS' }, { kind: 'jump-to-end' }],
     ['Z', { key: 'z', code: 'KeyZ' }, { kind: 'toggle-loop' }],
+    ['L', { key: 'l', code: 'KeyL' }, { kind: 'toggle-loopify' }],
     ['X', { key: 'x', code: 'KeyX' }, { kind: 'save' }],
     ['Escape', { key: 'Escape', code: 'Escape' }, { kind: 'leave' }],
   ])('%s requests its command and keeps the key from the page', (_name, init, command) => {

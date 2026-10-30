@@ -223,13 +223,18 @@ Zoom edit mode edits the zoomed clip in place, inside the same Zoom frame; nothi
 
 The hint line is the mode's only text. It is a band of Booth Black under the picture with a one-pixel slate top border, `8px 14px` padding and `13px` type. The keys sit on the left in Quiet Slate; a status sits on the right in Screen Silver and is announced politely to assistive technology; the two wrap rather than clip, and the status takes no space when empty. Wording lives in `src/app/zoom-edit-mode-text.ts`, and key names come from the same constants as the bindings:
 
-- **Keys** are short verb pairs joined by middle dots: "Q start · W end · A/S jump · Z loop · X save · Esc leave". While saving they read only "Esc cancel saving".
-- **Ongoing work** is a short phrase ending in an ellipsis: "Finding the source movie…", "Preparing the movie around this clip…", "Saving: encoded 120 of 300 frames…".
+- **Keys** are short verb pairs joined by middle dots: "Q start · W end · A/S jump · Z loop · L loopify · X save · Esc leave". While saving they read only "Esc cancel saving".
+- **Ongoing work** is a short phrase ending in an ellipsis: "Finding the source movie…", "Preparing the movie around this clip…", "Making the loop preview: 120 of 300 frames…", "Saving: encoded 120 of 300 frames…".
+- **Staged edits** are named by their menu labels joined by a plus, then what the combination costs, when the hint has nothing more urgent to say: "Refine + Loopify staged · saved without sound".
 - **A key that cannot act** changes nothing and says why in full sentences, then what to do, naming keys: "This frame is after the end, so it cannot be the start. Go back, or set a later end with W first." Limits are stated plainly: "Extending stops one minute past the clip’s original start and end." A clip that can only be trimmed says so and why: "No source movie was chosen, so this clip can be trimmed but not extended."
 
-Statuses use no error color; failures that need recovery go to Activity, and the hint line keeps only what the user can act on now.
+Statuses use no error color; failures that need recovery go to Activity, and the hint line keeps only what the user can act on now. A loop preview that could not be made says so until the next key, with the way on: "The loop preview could not be made. Press Z to loop the range forward only."
 
-Saving asks in a compact confirmation dialog titled "Save the refined clip", whose sentence names the clip and explains both choices. Its actions read Cancel, Replace (Destructive, because the original goes to the Recycle Bin) and Keep both (Primary, focused on open). Leaving with a staged start or end asks in the same compact dialog shape: the question names what would be lost without frame numbers ("Discard the new start and end?"), the note says the clip file stays as it is, and the actions read Keep editing and Discard.
+With Loopify staged, Z shows what would be saved: a low-resolution preview, forward then backward, silent and looping, laid over the picture in the same frame with no chrome of its own. While it is being made the exact picture stays and the hint line shows the progress; Z again returns to the exact picture, and any other key does too.
+
+Zoom's edit menu lists the mode's edits, Refine then Loopify, each an entry into the mode (Loopify enters with Loopify staged).
+
+Saving asks in a compact confirmation dialog whose title names the clip by its staged edits ("Save the refined clip", "Save the looped clip", "Save the refined and looped clip") and whose sentence names the clip, explains both choices and ends with any loss ("The looped clip is saved without sound."). Its actions read Cancel, Replace (Destructive, because the original goes to the Recycle Bin) and Keep both (Primary, focused on open). Leaving with staged edits asks in the same compact dialog shape: the question names what would be lost without frame numbers ("Discard the new start and end?", "Discard Loopify and the new start?"), the note says the clip file stays as it is, and the actions read Keep editing and Discard.
 
 ## Do's and Don'ts
 

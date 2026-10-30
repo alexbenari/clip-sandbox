@@ -148,6 +148,44 @@ describe('SourceInfo', () => {
     expect(() => new SourceInfo(sourceMovie, { start: 9, end: 1 }, [])).toThrow('Source info is built only through its factories.');
   });
 
+  describe('a record that keeps only the movie', () => {
+    const movieOnlyRecord = { provenanceVersion: 2, sourceMovie };
+
+    it('reads and writes the movie without a range or reference frames', () => {
+      const info = SourceInfo.fromRecord(movieOnlyRecord);
+
+      expect([info.movieDisplayName, info.hasRange, info.toRecord()]).toEqual(['Sample Feature.2001.mkv', false, movieOnlyRecord]);
+    });
+
+    it.each([
+      ['a range but no reference frames', { ...movieOnlyRecord, sourceFrameRange: { start: 10, end: 19, endInclusive: true } }],
+      ['reference frames but no range', { ...movieOnlyRecord, referenceFrames: [{ frameIndex: 1, frameInfoHash: '0123456789abcdef' }] }],
+      ['a movie name with a folder', { provenanceVersion: 2, sourceMovie: { displayName: 'movies\\Sample.mkv', fingerprint } }],
+    ])('refuses a record with %s', (_case, record) => {
+      expect(() => SourceInfo.fromRecord(record)).toThrow('Clip provenance is invalid or unsupported.');
+    });
+
+    it('is what a range record limited to the movie becomes', () => {
+      expect(SourceInfo.fromRecord(versionTwoRecord()).limitedTo('movie-only').toRecord()).toEqual(movieOnlyRecord);
+    });
+
+    it('keeps a range record whole when its range may be kept', () => {
+      expect(SourceInfo.fromRecord(versionTwoRecord()).limitedTo('movie-range').toRecord()).toEqual(versionTwoRecord());
+    });
+
+    it('stays a movie-only record when it is trimmed', () => {
+      expect(SourceInfo.fromRecord(movieOnlyRecord).trimmed(3, -5).toRecord()).toEqual(movieOnlyRecord);
+    });
+
+    it('stays a movie-only record when its range may be kept, since it has none', () => {
+      expect(SourceInfo.fromRecord(movieOnlyRecord).limitedTo('movie-range').toRecord()).toEqual(movieOnlyRecord);
+    });
+
+    it('answers no exact time', () => {
+      expect(SourceInfo.fromRecord(movieOnlyRecord).exactTimeUsOf(0)).toBeUndefined();
+    });
+  });
+
   it('builds the movie identity from a prepared source without its folder', () => {
     const identity = { ...fingerprint, fingerprintVersion: undefined, bestSourceVersion: 'x', proxyProfileId: 'y' };
 

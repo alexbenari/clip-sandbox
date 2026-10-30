@@ -1,13 +1,11 @@
-import type { VideoEdit, VideoEditCatalog } from '../business-logic/video-edit-catalog.js';
+import type { ZoomEditModeText } from '../app/zoom-edit-mode-text.js';
 import type { ContextMenuControl, ContextMenuEntry, ContextMenuIcon, ContextMenuPoint } from './context-menu-control.js';
 
-const CHISEL_ICON: ContextMenuIcon = Object.freeze({
+const LOOP_ICON: ContextMenuIcon = Object.freeze({
   kind: 'svg',
-  viewBox: '0 0 16 16',
-  paths: [
-    'M10.74 1.26a1.5 1.5 0 0 1 2.12 0l1.88 1.88a1.5 1.5 0 0 1 0 2.12L9.47 10.53a1.5 1.5 0 0 1-.73.4l-2.91.64a.75.75 0 0 1-.89-.89l.64-2.91a1.5 1.5 0 0 1 .4-.73Z',
-    'M4.47 10.78 1.9 13.35a.75.75 0 1 0 1.06 1.06l2.57-2.57-.31-.31a2.98 2.98 0 0 1-.75-.75Z',
-  ],
+  viewBox: '0 0 24 24',
+  paint: 'stroke',
+  paths: ['M4 12a5 5 0 0 1 5-5h9M15 4l3 3-3 3M20 12a5 5 0 0 1-5 5H6M9 20l-3-3 3-3'],
 });
 
 const RANGE_ICON: ContextMenuIcon = Object.freeze({
@@ -17,51 +15,26 @@ const RANGE_ICON: ContextMenuIcon = Object.freeze({
   paths: ['M8 4H5v16h3M16 4h3v16h-3M10 12h4'],
 });
 
-// The menu's icon for each edit; the catalog knows which edits exist, the menu knows how they look.
-const EDIT_ICONS: Readonly<Record<VideoEdit['id'], ContextMenuIcon>> = Object.freeze({ loopify: CHISEL_ICON });
-
 type ZoomEditMenuRequest = {
-  isDisabled?: boolean;
-  onSelectEdit?: (edit: VideoEdit) => void;
-  onRefine?: (() => void) | null;
+  point: ContextMenuPoint;
+  onRefine: () => void;
+  onLoopify: () => void;
 };
 
-// Refine enters Zoom edit mode, so it is listed apart from the file edits of the catalog.
 export class ZoomEditMenuControl {
-  contextMenu: Pick<ContextMenuControl, 'open'> | null;
-  private readonly videoEditCatalog: Pick<VideoEditCatalog, 'listZoomEdits'>;
+  private readonly contextMenu: Pick<ContextMenuControl, 'open'>;
+  private readonly text: Pick<ZoomEditModeText, 'editLabel'>;
 
-  constructor({
-    contextMenu,
-    videoEditCatalog,
-  }: {
-    contextMenu?: Pick<ContextMenuControl, 'open'> | null;
-    videoEditCatalog: Pick<VideoEditCatalog, 'listZoomEdits'>;
-  }) {
-    this.contextMenu = contextMenu || null;
-    this.videoEditCatalog = videoEditCatalog;
+  constructor({ contextMenu, text }: { contextMenu: Pick<ContextMenuControl, 'open'>; text: Pick<ZoomEditModeText, 'editLabel'> }) {
+    this.contextMenu = contextMenu;
+    this.text = text;
   }
 
-  buildItems({
-    isDisabled = false,
-    onSelectEdit = () => {},
-    onRefine = null,
-  }: ZoomEditMenuRequest = {}): ContextMenuEntry[] {
-    const fileEdits: ContextMenuEntry[] = this.videoEditCatalog.listZoomEdits().map((edit) => ({
-      id: `zoom-edit-${edit.id}`,
-      label: edit.label,
-      icon: EDIT_ICONS[edit.id],
-      disabled: !!isDisabled,
-      onSelect: () => onSelectEdit(edit),
-    }));
-    if (!onRefine) return fileEdits;
-    return [
-      { id: 'zoom-edit-refine', label: 'Refine', icon: RANGE_ICON, disabled: !!isDisabled, onSelect: onRefine },
-      ...(fileEdits.length > 0 ? [{ separator: true } as const, ...fileEdits] : []),
+  open({ point, onRefine, onLoopify }: ZoomEditMenuRequest): void {
+    const items: ContextMenuEntry[] = [
+      { id: 'zoom-edit-refine', label: this.text.editLabel('refine'), icon: RANGE_ICON, onSelect: onRefine },
+      { id: 'zoom-edit-loopify', label: this.text.editLabel('loopify'), icon: LOOP_ICON, onSelect: onLoopify },
     ];
-  }
-
-  open({ point = {}, ...request }: ZoomEditMenuRequest & { point?: ContextMenuPoint } = {}): void {
-    this.contextMenu?.open({ point, items: this.buildItems(request) });
+    this.contextMenu.open({ point, items });
   }
 }

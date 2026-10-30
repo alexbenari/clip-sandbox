@@ -139,3 +139,47 @@ test('extend and Replace: the clip under its own name holds the extended movie r
     await expect.poll(() => page.locator('#zoomVideo').evaluate(video => (video as HTMLVideoElement).duration)).toBeCloseTo(16 / 24, 1);
   });
 });
+
+test('Refine and Loopify with Keep both: the looped clip plays the staged frames forward then back, without sound, naming only its movie', async () => {
+  await withApp('clip-zoom-edit-loopify-', async (page, _app, { directory, pipelines }) => {
+    const movie = path.join(directory, 'Feature.mkv');
+    await fs.copyFile(movieFixture, movie);
+    const clips = path.join(pipelines, 'extraction-tmp');
+    // The tagged clip: movie frames 30 to 40, cut by a real extraction, listed in the collection Feature.txt.
+    await openMovieForExactReview(page, movie);
+    await lockExactRange(page, 30, 40);
+    await page.getByRole('button', { name: 'Extract all (1)' }).click();
+    await expect(page.locator('[data-range-id="range-1"]')).toContainText('Extracted as Feature-001.mp4', { timeout: 90_000 });
+    await openFolderInCollection(page, clips, 'Feature-001.mp4');
+    await page.locator('#activeCollectionName').selectOption('Feature.txt');
+    await page.evaluate(next => (window as unknown as { clipSandboxDesktop: { __testSetNextMoviePath(path: string): Promise<void> } })
+      .clipSandboxDesktop.__testSetNextMoviePath(next), movie);
+
+    await clipCard(page, 'Feature-001.mp4').dblclick();
+    await page.locator('#zoomVideo').click({ button: 'right' });
+    await page.locator('#clipContextMenu [data-item-id="zoom-edit-loopify"]').click();
+    await expect(hintStatus(page)).toHaveText('Loopify staged · saved without sound', { timeout: 120_000 });
+    // From the first frame shown (clip frame 0), two on is the start; from the last (10), two back is the end.
+    await pressKeys(page, ['ArrowRight', 'ArrowRight', 'q', 's', 'ArrowLeft', 'ArrowLeft', 'w']);
+    await expect(hintStatus(page)).toHaveText('Refine + Loopify staged · saved without sound');
+    await page.keyboard.press('z');
+    await expect(page.locator('#zoomEditPreview')).toHaveAttribute('src', /^file:.*zoom-edit-previews/, { timeout: 30_000 });
+    await page.keyboard.press('z');
+    await expect(page.locator('#zoomEditPreview')).toHaveCount(0);
+    await page.keyboard.press('x');
+    await expect(page.locator('#saveRefinementExplanation')).toContainText('The refined and looped clip is saved without sound.');
+    await page.locator('#saveRefinementDialog').getByRole('button', { name: 'Keep both', exact: true }).click();
+
+    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', 'Feature-001-refined-looped.mp4', { timeout: 90_000 });
+    await expect(page.locator('#grid .thumb')).toHaveCount(2);
+    await expect(page.locator('#grid .thumb').nth(1)).toHaveAttribute('data-name', 'Feature-001-refined-looped.mp4');
+    await expect(page.locator('#saveBtn')).toBeEnabled();
+    expect((await fs.readFile(path.join(clips, 'Feature.txt'), 'utf8')).split(/\r?\n/).filter(Boolean)).toEqual(['Feature-001.mp4']);
+    const saved = path.join(clips, 'Feature-001-refined-looped.mp4');
+    // Staged frames 2 to 8 are 7 frames, played forward then backward.
+    expect(await videoFrameCount(saved)).toBe(14);
+    expect(await streamKinds(saved)).toEqual(['video']);
+    const sourceInfo = await new Mp4Provenance().read(saved);
+    expect(sourceInfo.toRecord()).toEqual({ provenanceVersion: 2, sourceMovie: expect.objectContaining({ displayName: 'Feature.mkv' }) });
+  });
+});

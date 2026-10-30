@@ -136,6 +136,14 @@ describe('ZoomEditMovieWindow', () => {
     expect(edit.movieWindow.state).toBe('none');
   });
 
+  it('reports that a clip keeping only its movie cannot be extended', async () => {
+    const edit = movieWindow();
+
+    await edit.answerWindow(1, { kind: 'movie-only' });
+
+    expect(edit.movieWindow.state).toBe('movie-only');
+  });
+
   it('reports a window that cannot be opened as failed, with the cause', async () => {
     const edit = movieWindow();
     const cause = new Error('The movie could not be read.');

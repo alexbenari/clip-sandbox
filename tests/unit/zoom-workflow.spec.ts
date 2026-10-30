@@ -2,18 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ActivityReporter } from '../../src/app/activity-reporter.js';
 import { recordedActivityLog } from '../support/recorded-activity-log.js';
-import { AppSessionState } from '../../src/app/app-session-state.js';
-import { AppText } from '../../src/app/app-text.js';
 import { EventSource } from '../../src/app/event-source.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
+import type { ZoomEditEntry } from '../../src/app/zoom-edit-mode-workflow.js';
 import { ZoomWorkflow } from '../../src/app/zoom-workflow.js';
-import type { ClipEditorResult } from '../../src/business-logic/clip-editor.js';
-import type { VideoEdit } from '../../src/business-logic/video-edit-catalog.js';
 import type { Clip } from '../../src/domain/clip.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 import { clipSource } from '../support/clip-source-fixtures.js';
-
-const loopify = { id: 'loopify', label: 'Loopify' } as VideoEdit;
 
 class FakeZoomView extends EventSource<{ playbackFailed: { name: string; error: unknown }; contextMenuRequested: { point: { x: number; y: number } }; closeRequested: void }> {
   currentClipId: string | null = null;
@@ -24,14 +19,13 @@ class FakeZoomView extends EventSource<{ playbackFailed: { name: string; error: 
   getCurrentClipId() { return this.currentClipId; }
 }
 
-function zoomWorkflow({ editResult, enterZoomEditMode = null }: { editResult?: ClipEditorResult; enterZoomEditMode?: ((clip: Clip) => void) | null } = {}) {
+type EditMenuRequest = { point: { x: number; y: number }; onRefine: () => void; onLoopify: () => void };
+
+function zoomWorkflow({ enterZoomEditMode = null }: { enterZoomEditMode?: ((clip: Clip, entry: ZoomEditEntry) => void) | null } = {}) {
   const pipeline = new Pipeline({ folderName: 'clips', videoSources: [clipSource('alpha.mp4'), clipSource('bravo.mp4')] });
   const pipelineWorkingCopy = new PipelineWorkingCopy();
   pipelineWorkingCopy.loadPipeline(pipeline);
   const [alpha, bravo] = pipelineWorkingCopy.currentClipSequence!.orderedClips();
-  const openFolder = new AppSessionState();
-  const folderAccess = { folderPath: 'C:/clips' };
-  openFolder.setCurrentFolderAccess(folderAccess);
   const zoomView = new FakeZoomView();
   const grid = Object.assign(new EventSource<{ openClipRequested: string }>(), {
     getClipMediaSource: (clipId: string) => `file:///C:/clips/${clipId}.mp4`,
@@ -40,21 +34,15 @@ function zoomWorkflow({ editResult, enterZoomEditMode = null }: { editResult?: C
     getPrevClip: (clipId: string | null) => (clipId === bravo.id ? alpha : null),
     setSelectedClipId: vi.fn(),
     focusClip: vi.fn(() => true),
-    invalidateView: vi.fn(),
-    renderCollection: vi.fn(),
   });
-  const editMenu = { open: vi.fn() };
+  const editMenu = { open: vi.fn((_request: EditMenuRequest) => undefined) };
   const boundaryFeedback = { playBoundaryClank: vi.fn() };
   const activityLog = recordedActivityLog();
   const { entries } = activityLog;
-  const collectionView = { applySelection: vi.fn(), activeCacheKey: () => 'pipeline', refreshSelector: vi.fn(), refreshToolbar: vi.fn() };
   const screens = new EventSource<{ screenChanged: { id: string } }>();
-  const sourceMovies = { readCreatedClip: vi.fn(async (_clip: Clip) => undefined) };
   const activeEdit = { isActive: false };
   const workflow = new ZoomWorkflow({
     pipelineWorkingCopy,
-    openFolder,
-    folderFiles: { clipSourceOf: created => clipSource(created.name) },
     zoom: zoomView,
     grid,
     screens,
@@ -63,18 +51,13 @@ function zoomWorkflow({ editResult, enterZoomEditMode = null }: { editResult?: C
     editMenu,
     activeEdit,
     enterZoomEditMode,
-    clipEditor: { createVideoEdit: vi.fn(async () => editResult ?? { ok: false, code: 'edit-failed', edit: loopify } as ClipEditorResult) },
     fullScreen: { isDocumentFullScreen: () => false },
     boundaryFeedback,
-    collectionView,
-    sourceMovies,
     diagnostics: { logRuntimeError: vi.fn(async () => undefined) },
     reporter: new ActivityReporter(activityLog),
-    appText: new AppText(),
   });
-  return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, collectionView, pipelineWorkingCopy, sourceMovies, activeEdit };
+  return { workflow, zoomView, grid, screens, editMenu, boundaryFeedback, entries, alpha, bravo, activeEdit };
 }
-
 describe('ZoomWorkflow', () => {
   it('closes when another screen becomes active, and stays open on Collection', () => {
     const { workflow, zoomView, screens, alpha } = zoomWorkflow();
@@ -117,24 +100,27 @@ describe('ZoomWorkflow', () => {
     expect(zoomView.currentClipId).toBe(alpha.id);
   });
 
-  it('offers Refine in its edit menu, entering Zoom edit mode on the zoomed clip', () => {
+  it.each([
+    ['onRefine', 'refine'],
+    ['onLoopify', 'loopify'],
+  ] as const)('enters Zoom edit mode on the zoomed clip from its edit menu entry %s', (entry, expected) => {
     const enterZoomEditMode = vi.fn();
     const { workflow, zoomView, editMenu, alpha } = zoomWorkflow({ enterZoomEditMode });
     workflow.openClip(alpha);
     zoomView.emit('contextMenuRequested', { point: { x: 0, y: 0 } });
 
-    editMenu.open.mock.calls[0][0].onRefine();
+    editMenu.open.mock.calls[0][0][entry]();
 
-    expect(enterZoomEditMode).toHaveBeenCalledWith(alpha);
+    expect(enterZoomEditMode.mock.calls).toEqual([[alpha, expected]]);
   });
 
-  it('offers no Refine when Zoom edit mode is unavailable', () => {
+  it('offers no edit menu when Zoom edit mode is unavailable', () => {
     const { workflow, zoomView, editMenu, alpha } = zoomWorkflow({ enterZoomEditMode: null });
     workflow.openClip(alpha);
 
     zoomView.emit('contextMenuRequested', { point: { x: 0, y: 0 } });
 
-    expect(editMenu.open.mock.calls[0][0].onRefine).toBeNull();
+    expect(editMenu.open).not.toHaveBeenCalled();
   });
 
   it('returns focus to the clip shown last when Zoom closes', () => {
@@ -164,47 +150,6 @@ describe('ZoomWorkflow', () => {
     expect(zoomView.currentClipId).toBe(bravo.id);
     expect(workflow.browseByOffset(1)).toBe(false);
     expect(boundaryFeedback.playBoundaryClank).toHaveBeenCalledOnce();
-  });
-
-  it('runs a chosen edit and reports a failed result', async () => {
-    const { workflow, zoomView, editMenu, entries, alpha } = zoomWorkflow();
-    workflow.openClip(alpha);
-
-    zoomView.emit('contextMenuRequested', { point: { x: 10, y: 20 } });
-    const { onSelectEdit } = editMenu.open.mock.calls[0][0];
-    onSelectEdit(loopify);
-
-    await vi.waitFor(() => expect(entries.at(-1)?.kind).toBe('error'));
-    expect(entries[0]).toMatchObject({ kind: 'progress', message: new AppText().videoEditStartedText('Loopify', 'alpha.mp4') });
-  });
-
-  it('inserts a created clip into the pipeline view and zooms into it', async () => {
-    const created = { name: 'alpha-looped.mp4', mediaSource: 'file:///clips/alpha-looped.mp4' };
-    const { workflow, zoomView, editMenu, entries, alpha, collectionView, pipelineWorkingCopy } = zoomWorkflow({
-      editResult: { ok: true, code: 'created', edit: loopify, request: {} as never, createdFile: created },
-    });
-    workflow.openClip(alpha);
-    zoomView.emit('contextMenuRequested', { point: { x: 0, y: 0 } });
-
-    editMenu.open.mock.calls[0][0].onSelectEdit(loopify);
-
-    await vi.waitFor(() => expect(entries.at(-1)).toMatchObject({ kind: 'success' }));
-    expect(pipelineWorkingCopy.pipeline?.videoNames()).toContain('alpha-looped.mp4');
-    expect(collectionView.applySelection).toHaveBeenCalled();
-  });
-
-  it('reads the source movie of a clip an edit created', async () => {
-    const created = { name: 'alpha-looped.mp4', mediaSource: 'file:///clips/alpha-looped.mp4' };
-    const { workflow, zoomView, editMenu, entries, alpha, sourceMovies } = zoomWorkflow({
-      editResult: { ok: true, code: 'created', edit: loopify, request: {} as never, createdFile: created },
-    });
-    workflow.openClip(alpha);
-    zoomView.emit('contextMenuRequested', { point: { x: 0, y: 0 } });
-
-    editMenu.open.mock.calls[0][0].onSelectEdit(loopify);
-
-    await vi.waitFor(() => expect(entries.at(-1)).toMatchObject({ kind: 'success' }));
-    expect(sourceMovies.readCreatedClip.mock.calls.map(([clip]) => clip.name)).toEqual(['alpha-looped.mp4']);
   });
 
   it('reports a playback failure in Zoom', () => {

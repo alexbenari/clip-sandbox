@@ -5,7 +5,8 @@ import type { FolderAccess } from './folder-access.js';
 import type { RuntimeFailureReporter } from './runtime-failure-reporter.js';
 import type { IZoomEditSourceService } from './zoom-edit-source-service.js';
 
-export type ZoomEditMovieWindowState = 'finding-movie' | 'preparing-window' | 'anchored' | 'cancelled' | 'none' | 'not-found' | 'failed';
+export type ZoomEditMovieWindowState =
+  | 'finding-movie' | 'preparing-window' | 'anchored' | 'cancelled' | 'none' | 'movie-only' | 'not-found' | 'failed';
 
 export type ZoomEditWindowAnchor = Readonly<{
   windowId: string;
@@ -83,7 +84,7 @@ export class ZoomEditMovieWindow implements IEventSource<IZoomEditMovieWindowEve
       const answer = await this.deps.sources.openWindow({ folder, filename, widen, previousWindowId });
       if (this.disposed) return;
       if (answer.kind !== 'ready') {
-        this.end(answer.kind === 'cancelled' ? 'cancelled' : 'none');
+        this.end(answer.kind === 'no-source-info' ? 'none' : answer.kind);
         return;
       }
       this.changeState('preparing-window');
@@ -134,7 +135,7 @@ export class ZoomEditMovieWindow implements IEventSource<IZoomEditMovieWindowEve
     else this.end('failed');
   }
 
-  private end(state: 'cancelled' | 'none' | 'not-found' | 'failed'): void {
+  private end(state: 'cancelled' | 'none' | 'movie-only' | 'not-found' | 'failed'): void {
     void this.closeCurrent();
     this.changeState(state);
   }

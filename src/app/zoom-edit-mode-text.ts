@@ -1,4 +1,6 @@
+import type { ZoomEditComposition, ZoomEditName } from '../domain/zoom-edit-composition.js';
 import type { IRefinedClipSaveProgress, SavedRefinedClip } from './refined-clip-save-service.js';
+import type { ZoomEditPreviewState } from './zoom-edit-loop-preview.js';
 import { ZOOM_EDIT_MODE_KEYS } from './zoom-edit-mode-keys.js';
 import type { ZoomEditExtension, ZoomEditPictureReadiness, ZoomEditRefusal } from './zoom-edit-mode-session.js';
 
@@ -8,6 +10,7 @@ const keys = ZOOM_EDIT_MODE_KEYS;
 
 const WHY_NOT_EXTENDED: Readonly<Record<ExtensionLimit, string>> = Object.freeze({
   'none': 'This clip has no source movie info, so it can be trimmed but not extended.',
+  'movie-only': 'This clip keeps only the name of its source movie, so it can be trimmed but not extended.',
   'finding-movie': 'Extending is not available yet: the source movie is still being found.',
   'preparing-window': 'Extending is not available yet: the movie around this clip is still being prepared.',
   'cancelled': 'No source movie was chosen, so this clip can be trimmed but not extended.',
@@ -19,6 +22,7 @@ const EXTENSION_STATUS: Readonly<Record<ZoomEditExtension, string | null>> = Obj
   'finding-movie': 'Finding the source movie…',
   'preparing-window': 'Preparing the movie around this clip…',
   'none': null,
+  'movie-only': null,
   'ready': null,
   'cancelled': WHY_NOT_EXTENDED.cancelled,
   'not-found': WHY_NOT_EXTENDED['not-found'],
@@ -39,14 +43,44 @@ const SAVE_STAGES: Readonly<Record<IRefinedClipSaveProgress['stage'], string>> =
   'checking-source': 'Saving: checking the frames…',
   'encoding-video': 'Saving: encoding the video…',
   'exact-fallback': 'Saving: encoding the exact frames…',
+  'adding-backward-half': 'Saving: adding the backward half…',
   'adding-audio': 'Saving: adding the audio…',
   'saving-media': 'Saving: writing the file…',
 });
 
+const EDIT_LABELS: Readonly<Record<ZoomEditName, string>> = Object.freeze({ refine: 'Refine', loopify: 'Loopify' });
+const EDITED_CLIP_ADJECTIVES: Readonly<Record<ZoomEditName, string>> = Object.freeze({ refine: 'refined', loopify: 'looped' });
+
 export class ZoomEditModeText {
   keys(): string {
     return `${keys.markStart} start · ${keys.markEnd} end · ${keys.jumpToStart}/${keys.jumpToEnd} jump · ${keys.loop} loop`
-      + ` · ${keys.save} save · Esc leave`;
+      + ` · ${keys.loopify} loopify · ${keys.save} save · Esc leave`;
+  }
+
+  stagedEdits(edits: ZoomEditComposition): string | null {
+    if (edits.isEmpty) return null;
+    const staged = `${edits.edits.map(edit => EDIT_LABELS[edit]).join(' + ')} staged`;
+    return edits.keepsAudio ? staged : `${staged} · saved without sound`;
+  }
+
+  editLabel(edit: ZoomEditName): string {
+    return EDIT_LABELS[edit];
+  }
+
+  editedClip(edits: ZoomEditComposition): string {
+    return `${edits.edits.map(edit => EDITED_CLIP_ADJECTIVES[edit]).join(' and ')} clip`;
+  }
+
+  saveLoss(edits: ZoomEditComposition): string | null {
+    return edits.keepsAudio ? null : `The ${this.editedClip(edits)} is saved without sound.`;
+  }
+
+  previewStatus(preview: ZoomEditPreviewState): string | null {
+    if (preview.kind === 'failed') return `The loop preview could not be made. Press ${keys.loop} to loop the range forward only.`;
+    if (preview.kind !== 'rendering') return null;
+    const { progress } = preview;
+    if (!progress) return 'Making the loop preview…';
+    return `Making the loop preview: ${progress.renderedFrames.toLocaleString()} of ${progress.totalFrames.toLocaleString()} frames…`;
   }
 
   savingKeys(): string {
@@ -72,7 +106,7 @@ export class ZoomEditModeText {
   }
 
   nothingToSave(): string {
-    return `Nothing to save yet. Set a new start with ${keys.markStart} or a new end with ${keys.markEnd}.`;
+    return `Nothing to save yet. Set a new start with ${keys.markStart} or a new end with ${keys.markEnd}, or stage Loopify with ${keys.loopify}.`;
   }
 
   stillSaving(): string {
@@ -93,33 +127,34 @@ export class ZoomEditModeText {
   }
 
   saveCancelled(): string {
-    return 'Saving was cancelled. Your new start and end are kept.';
+    return 'Saving was cancelled. Your staged edits are kept.';
   }
 
   saveFailedHint(): string {
-    return `The clip could not be saved. Your new start and end are kept; press ${keys.save} to try again.`;
+    return `The clip could not be saved. Your staged edits are kept; press ${keys.save} to try again.`;
   }
 
   saveFailed(filename: string): string {
-    return `Could not save the refined ${filename}.`;
+    return `Could not save the edits to ${filename}.`;
   }
 
-  saved(originalFilename: string, saved: SavedRefinedClip): string {
+  saved(originalFilename: string, saved: SavedRefinedClip, edits: ZoomEditComposition): string {
+    const clip = `the ${this.editedClip(edits)}`;
     if (saved.outcome === 'kept-both') {
       if (saved.notice === 'recycle-bin-refused') {
-        return `Saved the refined clip as ${saved.filename}, because ${originalFilename} could not be moved to the Recycle Bin.`;
+        return `Saved ${clip} as ${saved.filename}, because ${originalFilename} could not be moved to the Recycle Bin.`;
       }
       if (saved.notice === 'name-taken') {
-        return `Saved the refined clip as ${saved.filename}, because the name it would replace is already taken.`;
+        return `Saved ${clip} as ${saved.filename}, because the name it would replace is already taken.`;
       }
-      return `Saved the refined clip as ${saved.filename}.`;
+      return `Saved ${clip} as ${saved.filename}.`;
     }
     if (saved.notice) {
-      return `Moved ${originalFilename} to the Recycle Bin and saved the refined clip as ${saved.filename}, `
+      return `Moved ${originalFilename} to the Recycle Bin and saved ${clip} as ${saved.filename}, `
         + 'because it could not take the original name.';
     }
-    if (saved.filename !== originalFilename) return `Replaced ${originalFilename} with the refined clip ${saved.filename}.`;
-    return `Replaced ${originalFilename} with the refined clip.`;
+    if (saved.filename !== originalFilename) return `Replaced ${originalFilename} with ${clip} ${saved.filename}.`;
+    return `Replaced ${originalFilename} with ${clip}.`;
   }
 
   sourceInfoNotSaved(filename: string): string {

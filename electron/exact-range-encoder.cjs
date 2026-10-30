@@ -3,6 +3,7 @@ const path = require('node:path');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
 const { runProcess } = require('./process-runner.cjs');
 const { FrameTime } = require('./frame-time.cjs');
+const { ForwardThenBackwardFilter } = require('./forward-then-backward-filter.cjs');
 
 function errorResult(code, message = code) {
   return { ok: false, code, error: { message } };
@@ -90,12 +91,15 @@ class ExactRangeEncoder {
     this.#provenance = provenance;
   }
 
-  async encode({ host, source, range, tagValue, workspace, signal, report = () => undefined }) {
+  async encode({ host, source, range, tagValue, workspace, signal, report = () => undefined,
+    audio = true, forwardThenBackward = false }) {
+    if (forwardThenBackward && audio) throw new Error('A forward-then-backward clip has no sound.');
     const job = {
-      host, source, range, tagValue, workspace, signal, report,
+      host, source, range, tagValue, workspace, signal, report, audio, forwardThenBackward,
       ffmpeg: this.#resolveFfmpeg(),
       ffprobe: this.#resolveFfprobe(),
       videoPath: path.join(workspace, 'video.mp4'),
+      loopedVideoPath: path.join(workspace, 'looped.mp4'),
       mediaPath: path.join(workspace, 'media.mp4'),
     };
     let boundary = await this.#indexedBoundary(job);
@@ -107,7 +111,6 @@ class ExactRangeEncoder {
       ({ boundary, videoResult } = await this.#encodeByFullDecode(job));
     }
     if (!videoResult.ok) return errorResult(videoResult.code, 'The selected frames could not be encoded.');
-    report({ stage: 'adding-audio' });
     let finalization;
     try {
       finalization = await this.#finalizeMedia(job, boundary);
@@ -116,10 +119,9 @@ class ExactRangeEncoder {
       finalization = errorResult('unverified-media', 'The locally encoded media could not be verified.');
     }
     if (!finalization.ok && boundary?.frames && !signal.aborted) {
-      await Promise.all([this.#fs.rm(job.videoPath, { force: true }), this.#fs.rm(job.mediaPath, { force: true })]);
+      await Promise.all([job.videoPath, job.loopedVideoPath, job.mediaPath].map(file => this.#fs.rm(file, { force: true })));
       const fallback = await this.#encodeByFullDecode(job);
       if (!fallback.videoResult.ok) return errorResult(fallback.videoResult.code, 'The selected frames could not be encoded.');
-      report({ stage: 'adding-audio' });
       finalization = await this.#finalizeMedia(job, fallback.boundary);
     }
     if (!finalization.ok) return finalization;
@@ -230,18 +232,20 @@ class ExactRangeEncoder {
     return result;
   }
 
-  async #finalizeMedia({ ffmpeg, ffprobe, source, range, workspace, videoPath, mediaPath, tagValue, signal }, boundary) {
+  async #finalizeMedia(job, boundary) {
+    const { ffmpeg, ffprobe, range, workspace, mediaPath, tagValue, signal } = job;
     let writtenTag = tagValue;
     let warning;
-    const startSeconds = (Number(boundary.startUs) / 1_000_000).toFixed(6);
-    const endSeconds = (Number(boundary.endUs) / 1_000_000).toFixed(6);
-    const audioSeek = boundary.startSeconds === undefined ? []
-      : ['-ss', Math.max(0, boundary.startSeconds - 5).toFixed(6)];
-    const muxBase = [
-      '-hide_banner', '-nostdin', '-y', '-copyts', '-i', videoPath, ...audioSeek, '-i', source.sourcePath,
-      '-map', '0:v:0', '-map', '1:a:0?', '-filter:a', `atrim=start=${startSeconds}:end=${endSeconds},asetpts=PTS-STARTPTS`,
-      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
-    ];
+    let videoPath = job.videoPath;
+    if (job.forwardThenBackward) {
+      job.report({ stage: 'adding-backward-half' });
+      const looped = await this.#encodeForwardThenBackward(job);
+      if (!looped.ok) return errorResult(looped.code, 'The backward half could not be encoded.');
+      videoPath = job.loopedVideoPath;
+    }
+    if (job.audio) job.report({ stage: 'adding-audio' });
+    const muxBase = job.audio ? this.#muxWithAudio(job, videoPath, boundary)
+      : ['-hide_banner', '-nostdin', '-y', '-i', videoPath, '-map', '0:v:0', '-c:v', 'copy'];
     let muxResult = await this.#runCommand(ffmpeg, [
       ...muxBase,
       ...(writtenTag ? this.#provenance.muxArguments(writtenTag) : ['-movflags', '+faststart']),
@@ -255,9 +259,10 @@ class ExactRangeEncoder {
       ], { cwd: workspace, signal, env: this.#environment });
     }
     if (!muxResult.ok) return errorResult(muxResult.code, 'The encoded media could not be finalized.');
+    const cutFrames = range.endFrameIndex - range.startFrameIndex + 1;
     await this.#verifyMedia(ffprobe, mediaPath, {
       runCommand: this.#runCommand, signal, environment: this.#environment,
-      expectedFrames: range.endFrameIndex - range.startFrameIndex + 1,
+      expectedFrames: job.forwardThenBackward ? 2 * cutFrames : cutFrames,
     });
     if (writtenTag) {
       try {
@@ -268,6 +273,27 @@ class ExactRangeEncoder {
       }
     }
     return { ok: true, warning };
+  }
+
+  #muxWithAudio({ source }, videoPath, boundary) {
+    const startSeconds = (Number(boundary.startUs) / 1_000_000).toFixed(6);
+    const endSeconds = (Number(boundary.endUs) / 1_000_000).toFixed(6);
+    const audioSeek = boundary.startSeconds === undefined ? []
+      : ['-ss', Math.max(0, boundary.startSeconds - 5).toFixed(6)];
+    return [
+      '-hide_banner', '-nostdin', '-y', '-copyts', '-i', videoPath, ...audioSeek, '-i', source.sourcePath,
+      '-map', '0:v:0', '-map', '1:a:0?', '-filter:a', `atrim=start=${startSeconds}:end=${endSeconds},asetpts=PTS-STARTPTS`,
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+    ];
+  }
+
+  async #encodeForwardThenBackward({ ffmpeg, workspace, videoPath, loopedVideoPath, signal }) {
+    return this.#runCommand(ffmpeg, [
+      '-hide_banner', '-nostdin', '-y', '-i', videoPath,
+      '-filter_complex', ForwardThenBackwardFilter.graph('0:v:0'), '-map', ForwardThenBackwardFilter.output,
+      '-fps_mode', 'passthrough', '-an', '-c:v', 'libx264', '-crf', '16', '-maxrate', '48M', '-bufsize', '96M', '-preset', 'ultrafast',
+      '-pix_fmt', 'yuv420p', loopedVideoPath,
+    ], { cwd: workspace, signal, env: this.#environment });
   }
 }
 

@@ -22,7 +22,9 @@ const SEEKED_FRAMES = '[Parsed_showinfo_1] config in time_base: 1/1000\n'
 
 // An encoder whose FFmpeg runs succeed, recording the video filter of each video encode.
 function recordingEncoder({ verifyMedia = vi.fn(async () => undefined), events = [] as string[] } = {}) {
+  const commands: string[][] = [];
   const runCommand = vi.fn(async (_command: string, args: string[]) => {
+    commands.push(args);
     const commandLine = args.join(' ');
     if (commandLine.includes('showinfo')) events.push('encode by indexed timestamps');
     else if (commandLine.includes('between(n,10,11)')) events.push('encode by full decode');
@@ -33,10 +35,15 @@ function recordingEncoder({ verifyMedia = vi.fn(async () => undefined), events =
     fs, resolveFfmpeg: () => 'ffmpeg', resolveFfprobe: () => 'ffprobe', runCommand, verifyMedia,
     probeFrameTimes: vi.fn(async () => ({ startUs: 55_000_000n, endUs: 55_080_000n })),
   });
-  const encode = (host: object, encodedSource = source) => encoder.encode({
-    host, source: encodedSource, range, tagValue: null, workspace, signal: new AbortController().signal,
+  const encode = (host: object, encodedSource = source, shape: object = {}) => encoder.encode({
+    host, source: encodedSource, range, tagValue: null, workspace, signal: new AbortController().signal, ...shape,
   });
-  return { encode, events };
+  // The last FFmpeg run writes the saved media.
+  const mediaInputs = () => {
+    const mux = commands[commands.length - 1];
+    return mux.flatMap((argument, index) => (argument === '-i' ? [path.basename(mux[index + 1])] : []));
+  };
+  return { encode, events, verifyMedia, mediaInputs };
 }
 
 const timeline = (...frames: ReturnType<typeof identity>[]) => ({ extractionFrameTimeline: vi.fn(async () => frames) });
@@ -59,6 +66,40 @@ describe('ExactRangeEncoder', () => {
 
     expect(result).toMatchObject({ ok: true });
     expect(events).toEqual(['encode by full decode']);
+  });
+
+  it('makes the saved media from the cut frames and the source’s sound', async () => {
+    const { encode, mediaInputs } = recordingEncoder();
+
+    await encode(timeline(identity(10, 55000), identity(11, 55040), identity(12, 55080)));
+
+    expect(mediaInputs()).toEqual(['video.mp4', 'Movie.mp4']);
+  });
+
+  describe('forward then backward', () => {
+    const loop = { forwardThenBackward: true, audio: false };
+
+    it('makes the saved media from the cut frames played forward then backward, without the source’s sound', async () => {
+      const { encode, mediaInputs } = recordingEncoder();
+
+      await encode(timeline(identity(10, 55000), identity(11, 55040), identity(12, 55080)), source, loop);
+
+      expect(mediaInputs()).toEqual(['looped.mp4']);
+    });
+
+    it('checks that the saved media holds twice the cut frames', async () => {
+      const { encode, verifyMedia } = recordingEncoder();
+
+      await encode(timeline(identity(10, 55000), identity(11, 55040), identity(12, 55080)), source, loop);
+
+      expect(verifyMedia).toHaveBeenCalledWith('ffprobe', path.join(workspace, 'media.mp4'), expect.objectContaining({ expectedFrames: 4 }));
+    });
+
+    it('refuses to keep sound for frames that play backward', async () => {
+      const { encode } = recordingEncoder();
+
+      await expect(encode(timeline(), source, { forwardThenBackward: true })).rejects.toThrow('A forward-then-backward clip has no sound.');
+    });
   });
 
   it('discards the locally seeked media that failed verification before encoding again by full decode', async () => {
