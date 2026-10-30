@@ -8,7 +8,7 @@ const sessionId = FrameReviewOpaqueId.sessionId('session_CCCCCCCCCCCCCCCCCCCCCCC
 const windowId = 'window_BBBBBBBBBBBBBBBBBBBBBBBB';
 const request: IEditedClipSaveRequest = Object.freeze({
   folder: Object.freeze({ folderPath: 'D:\\clips' }), filename: 'Sample Feature-001.mp4', source: Object.freeze({ kind: 'window', windowId }),
-  sessionId, startFrame: 1870, endFrame: 1940, loopify: true, outcome: 'replace',
+  sessionId, startFrame: 1870, endFrame: 1940, edits: Object.freeze(['refine', 'loopify'] as const), outcome: 'replace',
 });
 const entry = (name: string) => ({
   name, path: `D:\\clips\\${name}`, mediaSource: `file:///D:/clips/${encodeURIComponent(name)}`, type: 'video/mp4', size: 2048, lastModifiedMs: 1_700_000_000_000,
@@ -41,7 +41,7 @@ describe('ElectronEditedClipSaveService', () => {
     const { operationId, ...payload } = zoomEdit.save.mock.calls[0][0];
     expect(payload).toStrictEqual({
       folderPath: 'D:\\clips', filename: 'Sample Feature-001.mp4', source: { kind: 'window', windowId },
-      sessionId: 'session_CCCCCCCCCCCCCCCCCCCCCCCC', startFrame: 1870, endFrame: 1940, loopify: true, outcome: 'replace',
+      sessionId: 'session_CCCCCCCCCCCCCCCCCCCCCCCC', startFrame: 1870, endFrame: 1940, edits: ['refine', 'loopify'], outcome: 'replace',
     });
     expect(operationId).toMatch(/^refine_[a-zA-Z0-9_-]{8,120}$/);
   });

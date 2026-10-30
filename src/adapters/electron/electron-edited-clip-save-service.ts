@@ -65,7 +65,7 @@ export class ElectronEditedClipSaveService implements IEditedClipSaveService {
         sessionId: request.sessionId,
         startFrame: request.startFrame,
         endFrame: request.endFrame,
-        loopify: request.loopify,
+        edits: [...request.edits],
         outcome: request.outcome,
       })));
     } finally {

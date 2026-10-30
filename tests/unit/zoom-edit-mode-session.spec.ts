@@ -839,6 +839,16 @@ describe('ZoomEditModeSession', () => {
 
       expect(edit.session.saveRefusal()).toBeNull();
     });
+
+    it('answers that Loopify needs two frames when the staged range is one frame', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+      await edit.clipReady();
+      edit.player.shownFrame = 40;
+      await edit.session.markStart();
+      await edit.session.markEnd();
+
+      expect(edit.session.saveRefusal()).toEqual({ reason: 'loop-needs-two-frames' });
+    });
   });
 
   it('stops the movie window when the clip fails before the window is used', async () => {
@@ -939,10 +949,10 @@ describe('ZoomEditModeSession', () => {
       await edit.clipReady();
 
       await edit.session.toggleLoopify();
-      const staged = [editsOf(edit), edit.session.snapshot.loopify];
+      const staged = editsOf(edit);
       await edit.session.toggleLoopify();
 
-      expect([staged, [editsOf(edit), edit.session.snapshot.loopify]]).toEqual([[['loopify'], true], [[], false]]);
+      expect([staged, editsOf(edit)]).toEqual([['loopify'], []]);
     });
 
     it('is staged from the start when the mode is entered for Loopify', async () => {
@@ -957,6 +967,14 @@ describe('ZoomEditModeSession', () => {
       await trimmed(edit);
 
       expect(editsOf(edit)).toEqual(['refine', 'loopify']);
+    });
+
+    it('lists what leaving would discard: the new ends and Loopify', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+
+      await trimmed(edit);
+
+      expect([...edit.session.stagedChanges()].sort()).toEqual(['end', 'loopify', 'start']);
     });
 
     it('cannot be toggled while the clip is still being prepared', async () => {
@@ -1149,6 +1167,18 @@ describe('ZoomEditModeSession', () => {
         await edit.session.toggleLoop();
 
         expect([edit.player.loop, edit.renders.length]).toEqual([{ startFrameIndex: 12, endFrameIndex: 80 }, 0]);
+      });
+
+      it('refuses a preview of a one-frame range and asks for none', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await edit.clipReady();
+        edit.player.shownFrame = 40;
+        await edit.session.markStart();
+        await edit.session.markEnd();
+
+        const answer = await edit.session.toggleLoop();
+
+        expect([answer, edit.renders.length]).toEqual([{ kind: 'refused', refusal: { reason: 'loop-needs-two-frames' } }, 0]);
       });
 
       it('releases the preview when the session ends', async () => {

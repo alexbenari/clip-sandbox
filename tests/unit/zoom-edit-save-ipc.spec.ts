@@ -8,7 +8,7 @@ const { registerZoomEditSaveIpc } = require('../../electron/zoom-edit-save-ipc.c
 const saveRequest = {
   operationId: 'refine_12345678', folderPath: 'D:\\clips', filename: 'Feature-002.mp4',
   source: { kind: 'window', windowId: 'window_opaque0001' }, sessionId: 'session_window01',
-  startFrame: 1870, endFrame: 1940, loopify: true, outcome: 'replace',
+  startFrame: 1870, endFrame: 1940, edits: ['refine', 'loopify'], outcome: 'replace',
 };
 
 function registered(saver: Record<string, unknown>) {

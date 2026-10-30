@@ -62,7 +62,6 @@ class EditedClipSaver {
     try {
       if (!OUTCOMES.has(request.outcome)) throw new SaveRefusal('The save request is invalid.');
       const staged = await this.#stagedEdits.resolve(event, request);
-      if (staged.composition.isEmpty) throw new SaveRefusal('Nothing is staged to save.');
       operation.report({ stage: 'checking-source' });
       const sourceInfo = (await staged.cut.sourceInfo())?.limitedTo(staged.composition.sourceInfo) ?? null;
       return await this.#encodeAndPlace({ ...staged, outcome: request.outcome, sourceInfo }, operation);

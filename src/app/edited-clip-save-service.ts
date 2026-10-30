@@ -1,3 +1,4 @@
+import type { ZoomEditName } from '../domain/zoom-edit-composition.js';
 import type { FrameReviewSessionId } from '../frame-review/frame-review-api.js';
 import type { FolderAccess } from './folder-access.js';
 
@@ -13,7 +14,7 @@ export interface IEditedClipSaveRequest {
   readonly sessionId: FrameReviewSessionId;
   readonly startFrame: number;
   readonly endFrame: number;
-  readonly loopify: boolean;
+  readonly edits: readonly ZoomEditName[];
   readonly outcome: EditedClipSaveOutcome;
 }
 

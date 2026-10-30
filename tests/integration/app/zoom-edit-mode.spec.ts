@@ -27,6 +27,10 @@ const { FakeEditSession, domain } = vi.hoisted(() => {
       return domain.ZoomEditComposition.of([...(this.snapshot.range.isChanged ? ['refine'] : []), ...(this.snapshot.loopify ? ['loopify'] : [])]);
     }
 
+    stagedChanges() {
+      return [...this.snapshot.range.changedEnds().map(change => change.endpoint), ...(this.snapshot.loopify ? ['loopify'] : [])];
+    }
+
     toggleLoopify() {
       this.snapshot = { ...this.snapshot, loopify: !this.snapshot.loopify };
       for (const handler of [...this.handlers]) handler(this.snapshot);
@@ -383,7 +387,7 @@ describe('Saving in Zoom edit mode', () => {
 
     await waitFor(() => expect(clipNames()).toEqual(['bravo.mp4', 'bravo-looped.mp4', 'alpha.mp4']));
     expect(explanation).toContain('The looped clip is saved without sound.');
-    expect(window.clipSandboxDesktop.zoomEdit.save.mock.calls[0][0]).toMatchObject({ filename: 'bravo.mp4', startFrame: 0, endFrame: 47, loopify: true });
+    expect(window.clipSandboxDesktop.zoomEdit.save.mock.calls[0][0]).toMatchObject({ filename: 'bravo.mp4', startFrame: 0, endFrame: 47, edits: ['loopify'] });
     expect(isShown('unsavedChangesMarker')).toBe(true);
     expect(window.clipSandboxDesktop.saveTextFile).not.toHaveBeenCalled();
   });

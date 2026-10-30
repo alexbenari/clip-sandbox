@@ -1,4 +1,4 @@
-import { ZoomEditComposition, type ZoomEditName } from '../domain/zoom-edit-composition.js';
+import { ZoomEditComposition, type IZoomEditWording, type ZoomEditName, type ZoomEditWords } from '../domain/zoom-edit-composition.js';
 import type { IEditedClipSaveProgress, SavedEditedClip } from './edited-clip-save-service.js';
 import type { ZoomEditPreviewState } from './zoom-edit-loop-preview.js';
 import { ZOOM_EDIT_MODE_KEYS } from './zoom-edit-mode-keys.js';
@@ -29,7 +29,10 @@ const EXTENSION_STATUS: Readonly<Record<ZoomEditExtension, string | null>> = Obj
   'failed': WHY_NOT_EXTENDED.failed,
 });
 
-const REFUSALS: Readonly<Record<Exclude<ZoomEditRefusal['reason'], 'extension-unavailable'>, string>> = Object.freeze({
+const REFINE_WORDS: ZoomEditWords = Object.freeze({ label: 'Refine', adjective: 'refined' });
+const LOOPIFY_WORDS: ZoomEditWords = Object.freeze({ label: 'Loopify', adjective: 'looped' });
+
+const REFUSALS: Readonly<Record<Exclude<ZoomEditRefusal['reason'], 'extension-unavailable' | 'range-unchanged'>, string>> = Object.freeze({
   'clip-preparing': 'The clip is still being prepared. Try again in a moment.',
   'source-failed': 'This clip could not be opened for editing. Press Esc to leave.',
   'start-after-end': `This frame is after the end, so it cannot be the start. Go back, or set a later end with ${keys.markEnd} first.`,
@@ -48,24 +51,32 @@ const SAVE_STAGES: Readonly<Record<IEditedClipSaveProgress['stage'], string>> = 
   'saving-media': 'Saving: writing the file…',
 });
 
-export class ZoomEditModeText {
+export class ZoomEditModeText implements IZoomEditWording {
   keys(): string {
     return `${keys.markStart} start · ${keys.markEnd} end · ${keys.jumpToStart}/${keys.jumpToEnd} jump · ${keys.loop} loop`
       + ` · ${keys.loopify} loopify · ${keys.save} save · Esc leave`;
   }
 
+  refine(): ZoomEditWords {
+    return REFINE_WORDS;
+  }
+
+  loopify(): ZoomEditWords {
+    return LOOPIFY_WORDS;
+  }
+
   stagedEdits(edits: ZoomEditComposition): string | null {
     if (edits.isEmpty) return null;
-    const staged = `${edits.labels.join(' + ')} staged`;
+    const staged = `${edits.wordsFrom(this).map(words => words.label).join(' + ')} staged`;
     return edits.keepsAudio ? staged : `${staged} · saved without sound`;
   }
 
   editLabel(edit: ZoomEditName): string {
-    return ZoomEditComposition.labelOf(edit);
+    return ZoomEditComposition.wordsOf(edit, this).label;
   }
 
   editedClip(edits: ZoomEditComposition): string {
-    return `${edits.adjectives.join(' and ')} clip`;
+    return `${edits.wordsFrom(this).map(words => words.adjective).join(' and ')} clip`;
   }
 
   saveLoss(edits: ZoomEditComposition): string | null {
@@ -95,7 +106,9 @@ export class ZoomEditModeText {
   }
 
   refusal(refusal: ZoomEditRefusal): string {
-    return refusal.reason === 'extension-unavailable' ? WHY_NOT_EXTENDED[refusal.extension] : REFUSALS[refusal.reason];
+    if (refusal.reason === 'extension-unavailable') return WHY_NOT_EXTENDED[refusal.extension];
+    if (refusal.reason === 'range-unchanged') return this.nothingToSave();
+    return REFUSALS[refusal.reason];
   }
 
   commandFailed(): string {

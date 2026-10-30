@@ -10,6 +10,7 @@ import type { IEditedClipSaveView, EditedClipSaveEnd, EditedClipSaveWorkflow, Ed
 import type { IScreenChangeRequest } from './refine-leave-workflow.js';
 import type { IScreenIdentity } from './refine-screen-leave-policy.js';
 import type { IScreenNavigation } from './screen-navigation.js';
+import type { ZoomEditStagedChange } from './staged-edit.js';
 import type { ZoomEditModeCommand } from './zoom-edit-mode-keys.js';
 import type { ZoomEditModeLeavePolicy } from './zoom-edit-mode-leave-policy.js';
 import type {
@@ -27,6 +28,7 @@ export interface IZoomEditSession extends IEventSource<{ changed: IZoomEditModeS
   stagedSelection(): IZoomEditStagedSelection | null;
   saveRefusal(): ZoomEditRefusal | null;
   stagedEdits(): ZoomEditComposition;
+  stagedChanges(): readonly ZoomEditStagedChange[];
   togglePlayback(): Promise<ZoomEditCommandAnswer>;
   pressStep(direction: StepDirection): Promise<ZoomEditCommandAnswer>;
   releaseStep(direction: StepDirection): void;
@@ -48,8 +50,6 @@ export interface IZoomEditSessions {
 export type ZoomEditHint = Readonly<{ keys: string; status: string | null }>;
 
 export type ZoomEditEntry = 'refine' | 'loopify';
-
-export type ZoomEditStagedChange = 'start' | 'end' | 'loopify';
 
 export interface IZoomEditSurface extends IEventSource<{ closeRequested: void }> {
   isMuted(): boolean;
@@ -315,16 +315,11 @@ export class ZoomEditModeWorkflow {
     return !mode.session.stagedEdits().isEmpty;
   }
 
-  private stagedChanges(mode: EditMode): readonly ZoomEditStagedChange[] {
-    const ends = mode.session.snapshot.range?.changedEnds().map(change => change.endpoint) ?? [];
-    return Object.freeze([...ends, ...(mode.session.stagedEdits().includes('loopify') ? ['loopify' as const] : [])]);
-  }
-
   private askToDiscard(mode: EditMode): Promise<boolean> {
     this.settleDiscard(false);
     return new Promise(settle => {
       this.pendingDiscard = settle;
-      this.deps.discardPrompt.open(this.stagedChanges(mode));
+      this.deps.discardPrompt.open(mode.session.stagedChanges());
     });
   }
 

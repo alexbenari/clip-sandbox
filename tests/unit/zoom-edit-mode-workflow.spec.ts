@@ -5,6 +5,7 @@ import { ActivityReporter } from '../../src/app/activity-reporter.js';
 import { AppSessionState } from '../../src/app/app-session-state.js';
 import { EventSource } from '../../src/app/event-source.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
+import type { ZoomEditStagedChange } from '../../src/app/staged-edit.js';
 import type { IEditedClipSaveProgress, IEditedClipSaveRequest, EditedClipSaveOutcome, SavedEditedClip } from '../../src/app/edited-clip-save-service.js';
 import type { ZoomEditModeCommand } from '../../src/app/zoom-edit-mode-keys.js';
 import { ZoomEditModeLeavePolicy } from '../../src/app/zoom-edit-mode-leave-policy.js';
@@ -38,7 +39,7 @@ const CLIP_FRAMES = 48;
 
 class FakeEditSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
   snapshot: IZoomEditModeSnapshot = {
-    picture: 'preparing', extension: 'none', extensionPending: false, range: null, loopify: false, preview: { kind: 'hidden' },
+    picture: 'preparing', extension: 'none', extensionPending: false, range: null, preview: { kind: 'hidden' },
   };
   readonly answers: ZoomEditCommandAnswer[] = [];
   readonly dispose = vi.fn(async () => undefined);
@@ -61,16 +62,22 @@ class FakeEditSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
     await this.pausing;
     this.playing = false;
   });
+  loopify = false;
   readonly toggleLoopify = vi.fn(() => {
-    this.change({ loopify: !this.snapshot.loopify });
+    this.stageLoopify(!this.loopify);
     return this.answer();
   });
 
   stagedEdits() {
     const staged: ZoomEditName[] = [];
     if (this.snapshot.range?.isChanged) staged.push('refine');
-    if (this.snapshot.loopify) staged.push('loopify');
+    if (this.loopify) staged.push('loopify');
     return ZoomEditComposition.of(staged);
+  }
+
+  stagedChanges(): ZoomEditStagedChange[] {
+    const ends = this.snapshot.range?.changedEnds().map(change => change.endpoint) ?? [];
+    return [...ends, ...(this.loopify ? ['loopify' as const] : [])];
   }
 
   stagedSelection() {
@@ -86,6 +93,11 @@ class FakeEditSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
 
   change(snapshot: Partial<IZoomEditModeSnapshot>): void {
     this.snapshot = { ...this.snapshot, ...snapshot };
+    this.emit('changed', this.snapshot);
+  }
+
+  stageLoopify(staged: boolean): void {
+    this.loopify = staged;
     this.emit('changed', this.snapshot);
   }
 
@@ -308,6 +320,8 @@ describe('ZoomEditModeWorkflow', () => {
         'This frame is before the start, so it cannot be the end. Go forward, or set an earlier start with Q first.'],
       ['a frame beyond the extension limit', { reason: 'beyond-extension' }, 'Extending stops one minute past the clip’s original start and end.'],
       ['a one-frame loop', { reason: 'loop-needs-two-frames' }, 'The start and the end are the same frame. Set a longer range to loop it.'],
+      ['a range that does not change the clip', { reason: 'range-unchanged' },
+        'Nothing to save yet. Set a new start with Q or a new end with W, or stage Loopify with L.'],
       ['an ended session', { reason: 'ended' }, 'Zoom edit mode has ended.'],
       ['extending a clip that keeps only its movie', { reason: 'extension-unavailable', extension: 'movie-only' },
         'This clip keeps only the name of its source movie, so it can be trimmed but not extended.'],
@@ -462,7 +476,7 @@ describe('ZoomEditModeWorkflow', () => {
       saveProgress[0]({ stage: 'encoding-video', encodedFrames: 12, totalFrames: 42 });
 
       expect(saves.save.mock.calls[0][0]).toEqual({
-        folder, filename: 'alpha.mp4', source: { kind: 'clip' }, sessionId: 'session_clip_0001', startFrame: 6, endFrame: 47, loopify: false, outcome: 'replace',
+        folder, filename: 'alpha.mp4', source: { kind: 'clip' }, sessionId: 'session_clip_0001', startFrame: 6, endFrame: 47, edits: ['refine'], outcome: 'replace',
       });
       expect(zoom.hint).toEqual({ keys: 'Esc cancel saving', status: 'Saving: encoded 12 of 42 frames…' });
     });
@@ -767,7 +781,7 @@ describe('ZoomEditModeWorkflow', () => {
     async function editingForLoopify() {
       const context = zoomEditMode();
       context.workflow.enterFromZoom(context.alpha, 'loopify');
-      context.session.change({ loopify: context.sessions.begin.mock.calls[0][0].loopify });
+      context.session.stageLoopify(context.sessions.begin.mock.calls[0][0].loopify);
       context.session.becomeReady();
       return context;
     }
@@ -796,13 +810,13 @@ describe('ZoomEditModeWorkflow', () => {
       await settled();
 
       expect(saveDialog.open.mock.calls.map(([{ edits }]) => edits.edits)).toEqual([['loopify']]);
-      expect(saves.save.mock.calls[0][0]).toMatchObject({ startFrame: 0, endFrame: CLIP_FRAMES - 1, loopify: true });
+      expect(saves.save.mock.calls[0][0]).toMatchObject({ startFrame: 0, endFrame: CLIP_FRAMES - 1, edits: ['loopify'] });
     });
 
     it('says the clip is still being prepared when saved before it is ready', async () => {
       const { workflow, session, saveDialog, zoom, alpha, press } = zoomEditMode();
       workflow.enterFromZoom(alpha, 'loopify');
-      session.change({ loopify: true });
+      session.stageLoopify(true);
 
       await press({ kind: 'save' });
 

@@ -154,7 +154,7 @@ export class EditedClipSaveWorkflow {
     const selection = edit.session.stagedSelection();
     if (!selection) throw new Error('Zoom edit mode has no staged range to save.');
     const { source, sessionId, startFrame, endFrame } = selection;
-    return { folder: edit.folder, filename: edit.clip.name, source, sessionId, startFrame, endFrame, loopify: edits.includes('loopify'), outcome };
+    return { folder: edit.folder, filename: edit.clip.name, source, sessionId, startFrame, endFrame, edits: edits.edits, outcome };
   }
 
   private reportSaved(previousFilename: string, saved: SavedEditedClip, edits: ZoomEditComposition): void {

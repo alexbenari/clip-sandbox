@@ -26,7 +26,7 @@ function resolverFor(fixture: Parameters<typeof stagedEditsIn>[1] = {}) {
   const { stagedEdits, host, clipPath } = stagedEditsIn(folder, fixture);
   const resolve = (request: Record<string, unknown>) => stagedEdits.resolve(event, {
     folderPath: folder, filename: 'Feature-002.mp4', sessionId: CLIP_SESSION, source: { kind: 'clip' },
-    startFrame: 5, endFrame: 45, loopify: false, ...request,
+    startFrame: 5, endFrame: 45, edits: ['refine'], ...request,
   });
   return { resolve, host, clipPath };
 }
@@ -44,7 +44,12 @@ describe('StagedEditResolver', () => {
       ['a name that is not a video', { filename: 'notes.txt' }, 'Clip filename is invalid.'],
       ['a clip that is not in the folder', { filename: 'Feature-009.mp4' }, 'Clip is not a file.'],
       ['an end before the start', { startFrame: 10, endFrame: 9 }, 'The edit request is invalid.'],
-      ['a Loopify flag that is not true or false', { loopify: 'yes' }, 'The edit request is invalid.'],
+      ['an edit list that is not a list', { edits: { length: 1, 0: 'refine' } }, 'The edit request is invalid.'],
+      ['an edit it does not know', { edits: ['refine', 'speed'] }, 'The edit request is invalid.'],
+      ['an edit named twice', { edits: ['refine', 'refine'] }, 'The edit request is invalid.'],
+      ['more edits than there are', { edits: ['refine', 'loopify', 'refine'] }, 'The edit request is invalid.'],
+      ['an edit list with a gap', { edits: new Array(1) }, 'The edit request is invalid.'],
+      ['an empty edit list', { edits: [] }, 'Nothing is staged to save.'],
       ['a source that is neither the clip nor a window', { source: { kind: 'movie' } }, 'The edit request is invalid.'],
     ])('refuses %s before reading any source', async (_case, request, message) => {
       const { resolve, host } = resolverFor();
@@ -61,6 +66,10 @@ describe('StagedEditResolver', () => {
       ['a window range ending more than a minute after the clip', { ...windowRequest, startFrame: 1900, endFrame: 3431 }, 'The range reaches more than a minute beyond the clip.'],
       ['a window that is not anchored', { ...windowRequest, source: { kind: 'window', windowId: 'window_opaque0002' }, startFrame: 1870, endFrame: 1940 }, 'The movie window is not anchored.'],
       ['a session that does not show the window', { ...windowRequest, sessionId: CLIP_SESSION, startFrame: 1870, endFrame: 1940 }, 'The review session does not show this source.'],
+      ['Refine of the whole clip', { startFrame: 0, endFrame: 50 }, 'The range does not change the clip.'],
+      ['Refine of the whole clip shown in its movie window', { ...windowRequest, startFrame: 1880, endFrame: 1930 }, 'The range does not change the clip.'],
+      ['Refine with Loopify of the whole clip', { startFrame: 0, endFrame: 50, edits: ['refine', 'loopify'] }, 'The range does not change the clip.'],
+      ['Loopify of a single frame', { startFrame: 7, endFrame: 7, edits: ['loopify'] }, 'A loop needs at least two frames.'],
     ])('refuses %s', async (_case, request, message) => {
       const { resolve } = resolverFor();
 
@@ -78,12 +87,10 @@ describe('StagedEditResolver', () => {
   describe('the staged edits', () => {
     it.each([
       ['a trim of the clip', { startFrame: 5, endFrame: 45 }, ['refine']],
-      ['the whole clip', { startFrame: 0, endFrame: 50 }, []],
-      ['the whole clip with Loopify', { startFrame: 0, endFrame: 50, loopify: true }, ['loopify']],
+      ['the whole clip with Loopify', { startFrame: 0, endFrame: 50, edits: ['loopify'] }, ['loopify']],
       ['an extension in the movie window', { ...windowRequest, startFrame: 1870, endFrame: 1940 }, ['refine']],
-      ['the whole clip shown in its movie window', { ...windowRequest, startFrame: 1880, endFrame: 1930 }, []],
-      ['a new end in the movie window with Loopify', { ...windowRequest, startFrame: 1880, endFrame: 1925, loopify: true }, ['refine', 'loopify']],
-    ])('stages Refine only for a changed range and Loopify only when asked: %s', async (_case, request, edits) => {
+      ['a new end in the movie window with Loopify', { ...windowRequest, startFrame: 1880, endFrame: 1925, edits: ['loopify', 'refine'] }, ['refine', 'loopify']],
+    ])('composes the edits the request names, in the order they apply: %s', async (_case, request, edits) => {
       const { resolve } = resolverFor();
 
       const staged = await resolve(request);

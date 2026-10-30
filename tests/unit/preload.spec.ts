@@ -81,7 +81,7 @@ describe('preload zoom edit save', () => {
 describe('preload zoom edit preview', () => {
   it('sends a preview request on the preview channel under the renderer’s operation id', async () => {
     const { zoomEdit, ipcRenderer } = loadPreload(echo);
-    const request = { operationId: 'preview_12345678', folderPath: 'D:\\clips', filename: 'Feature-002.mp4', loopify: true };
+    const request = { operationId: 'preview_12345678', folderPath: 'D:\\clips', filename: 'Feature-002.mp4' };
 
     await zoomEdit.preview(request);
 

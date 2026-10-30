@@ -55,7 +55,7 @@ function saverFor({ clipName = 'Feature-002.mp4', sourceInfo = clipRecord() as u
   let operations = 0;
   const save = (request: Record<string, unknown>, report: (progress: unknown) => void = () => undefined) => saver.save(event, {
     operationId: `refine_operation${++operations}`, folderPath: folder, filename: clipName, sessionId: CLIP_SESSION,
-    source: { kind: 'clip' }, outcome: 'keep-both', loopify: false, ...request,
+    source: { kind: 'clip' }, outcome: 'keep-both', edits: ['refine'], ...request,
   }, report);
   const writtenRecord = () => (encodes[0].tagValue === null ? null : JSON.parse(encodes[0].tagValue));
   return { saver, save, host, encoder, encodes, writtenRecord, clipPath };
@@ -121,7 +121,7 @@ describe('EditedClipSaver', () => {
     it('writes only the movie for Loopify of the whole clip', async () => {
       const { save, writtenRecord } = saverFor();
 
-      await save({ startFrame: 0, endFrame: 50, loopify: true });
+      await save({ startFrame: 0, endFrame: 50, edits: ['loopify'] });
 
       expect(writtenRecord()).toEqual({ provenanceVersion: 2, sourceMovie });
     });
@@ -129,7 +129,7 @@ describe('EditedClipSaver', () => {
     it('writes only the movie for a window range that is also looped', async () => {
       const { save, writtenRecord } = saverFor();
 
-      await save({ ...windowSave, startFrame: 1870, endFrame: 1940, loopify: true });
+      await save({ ...windowSave, startFrame: 1870, endFrame: 1940, edits: ['refine', 'loopify'] });
 
       expect(writtenRecord()).toEqual({ provenanceVersion: 2, sourceMovie });
     });
@@ -145,7 +145,7 @@ describe('EditedClipSaver', () => {
     it('writes no record for Loopify of an untagged clip', async () => {
       const { save, encodes } = saverFor({ sourceInfo: null });
 
-      await save({ startFrame: 0, endFrame: 50, loopify: true });
+      await save({ startFrame: 0, endFrame: 50, edits: ['loopify'] });
 
       expect(encodes[0].tagValue).toBeNull();
     });
@@ -161,7 +161,7 @@ describe('EditedClipSaver', () => {
     it('encodes a looped clip forward then backward, without sound', async () => {
       const { save, encodes } = saverFor();
 
-      await save({ startFrame: 5, endFrame: 45, loopify: true });
+      await save({ startFrame: 5, endFrame: 45, edits: ['refine', 'loopify'] });
 
       expect(encodes[0].output).toBe(ENCODED_OUTPUT.forwardThenBackward);
     });
@@ -202,13 +202,10 @@ describe('EditedClipSaver', () => {
       expect([encoder.encode.mock.calls.length, folderFiles()]).toEqual([0, ['Feature-002.mp4']]);
     });
 
-    it.each([
-      ['the clip', { startFrame: 0, endFrame: 50 }],
-      ['the movie window', { ...windowSave, startFrame: 1880, endFrame: 1930 }],
-    ])('refuses to save the whole of %s with nothing staged', async (_case, request) => {
+    it('refuses a request that names no edits', async () => {
       const { save, encoder } = saverFor();
 
-      const answer = await save(request);
+      const answer = await save({ startFrame: 0, endFrame: 50, edits: [] });
 
       expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message: 'Nothing is staged to save.' } });
       expect(encoder.encode).not.toHaveBeenCalled();
@@ -226,11 +223,11 @@ describe('EditedClipSaver', () => {
     });
 
     it.each([
-      ['Loopify of the whole clip', { startFrame: 0, endFrame: 50, loopify: true }, 'Feature-002-looped.mp4'],
-      ['Loopify of the whole clip shown in its movie window', { ...windowSave, startFrame: 1880, endFrame: 1930, loopify: true }, 'Feature-002-looped.mp4'],
-      ['a trim that is also looped', { startFrame: 5, endFrame: 45, loopify: true }, 'Feature-002-refined-looped.mp4'],
-      ['an extension that is also looped', { ...windowSave, startFrame: 1870, endFrame: 1940, loopify: true }, 'Feature-002-refined-looped.mp4'],
-      ['a new end in the movie window that is also looped', { ...windowSave, startFrame: 1880, endFrame: 1925, loopify: true }, 'Feature-002-refined-looped.mp4'],
+      ['Loopify of the whole clip', { startFrame: 0, endFrame: 50, edits: ['loopify'] }, 'Feature-002-looped.mp4'],
+      ['Loopify of the whole clip shown in its movie window', { ...windowSave, startFrame: 1880, endFrame: 1930, edits: ['loopify'] }, 'Feature-002-looped.mp4'],
+      ['a trim that is also looped', { startFrame: 5, endFrame: 45, edits: ['refine', 'loopify'] }, 'Feature-002-refined-looped.mp4'],
+      ['an extension that is also looped', { ...windowSave, startFrame: 1870, endFrame: 1940, edits: ['refine', 'loopify'] }, 'Feature-002-refined-looped.mp4'],
+      ['a new end in the movie window that is also looped', { ...windowSave, startFrame: 1880, endFrame: 1925, edits: ['refine', 'loopify'] }, 'Feature-002-refined-looped.mp4'],
     ])('names the clip kept beside the original after its staged edits: %s', async (_case, request, filename) => {
       const { save } = saverFor();
 

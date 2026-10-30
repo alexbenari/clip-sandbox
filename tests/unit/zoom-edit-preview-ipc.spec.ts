@@ -28,7 +28,7 @@ describe('zoom edit preview IPC', () => {
     const previews = { render: vi.fn(async (_event: unknown, _request: unknown) => ({ ok: true, result: { mediaSource: 'file:///D:/previews/preview-1.mp4?modified=1' } })) };
     const { preview } = registered(previews);
 
-    const answer = await preview({ ...previewRequest, outputPath: 'D:\\elsewhere\\x.mp4', loopify: false });
+    const answer = await preview({ ...previewRequest, outputPath: 'D:\\elsewhere\\x.mp4', edits: [] });
 
     expect(previews.render.mock.calls[0][1]).toStrictEqual({
       folderPath: 'D:\\clips', filename: 'Feature-002.mp4', source: { kind: 'window', windowId: 'window_opaque0001' },

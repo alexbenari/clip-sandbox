@@ -1,7 +1,7 @@
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import type { UnlockedEndpointChange } from '../app/range-refinement-draft.js';
 import type { ZoomEditModeText } from '../app/zoom-edit-mode-text.js';
-import type { ZoomEditStagedChange } from '../app/zoom-edit-mode-workflow.js';
+import type { ZoomEditStagedChange } from '../app/staged-edit.js';
 import { DocumentElements } from './document-elements.js';
 
 export interface IDiscardRefinementDialogEvents {
@@ -42,9 +42,10 @@ export class DiscardRefinementDialogControl<TChange> implements IEventSource<IDi
       keepEditing: elements.required<HTMLButtonElement>('keepZoomEditingBtn'),
       discard: elements.required<HTMLButtonElement>('discardZoomEditBtn'),
     }, changes => {
-      const ends = changes.filter(change => change !== 'loopify');
+      const ends = changes.filter(change => change === 'start' || change === 'end');
+      const edits = changes.filter(change => change !== 'start' && change !== 'end');
       const discarded = [
-        ...(changes.includes('loopify') ? [text.editLabel('loopify')] : []),
+        ...edits.map(edit => text.editLabel(edit)),
         ...(ends.length > 0 ? [`the new ${ends.join(' and ')}`] : []),
       ];
       return `Discard ${discarded.join(' and ')}?`;

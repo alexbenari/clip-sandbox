@@ -37,7 +37,7 @@ class ZoomEditSaveIpcBoundary {
         sessionId: payload?.sessionId,
         startFrame: payload?.startFrame,
         endFrame: payload?.endFrame,
-        loopify: payload?.loopify,
+        edits: payload?.edits,
         outcome: payload?.outcome,
       }, progress => this.#replies.sendProgress(event.sender, CHANNELS.progress, { operationId, ...progress }));
       return this.#replies.envelope(operationId, result);

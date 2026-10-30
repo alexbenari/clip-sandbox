@@ -26,7 +26,7 @@ class FakeSaveDialog extends EventSource<{ confirmed: EditedClipSaveOutcome; can
 
 class FakeSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
   snapshot: IZoomEditModeSnapshot = {
-    picture: 'ready', extension: 'none', extensionPending: false, range: RefineRange.ofClip(48), loopify: false, preview: { kind: 'hidden' },
+    picture: 'ready', extension: 'none', extensionPending: false, range: RefineRange.ofClip(48), preview: { kind: 'hidden' },
   };
 
   constructor(private readonly edits: ZoomEditComposition) {
@@ -120,7 +120,7 @@ describe('EditedClipSaveWorkflow', () => {
 
       await saveWith('keep-both');
 
-      expect(saves.save.mock.calls[0][0]).toMatchObject({ startFrame: 6, endFrame: 47, loopify: true, outcome: 'keep-both' });
+      expect(saves.save.mock.calls[0][0]).toMatchObject({ startFrame: 6, endFrame: 47, edits: ['refine', 'loopify'], outcome: 'keep-both' });
     });
 
 
@@ -139,7 +139,7 @@ describe('EditedClipSaveWorkflow', () => {
 
     await saveWith('keep-both');
 
-    expect(saves.save.mock.calls[0][0]).toMatchObject({ loopify: false });
+    expect(saves.save.mock.calls[0][0]).toMatchObject({ edits: ['refine'] });
   });
 
   it('notes in Activity that the source movie info may be missing when the main process warns', async () => {    const answer: SavedEditedClip = {

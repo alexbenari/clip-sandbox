@@ -2,10 +2,20 @@ export type ZoomEditName = 'refine' | 'loopify';
 
 export type ZoomEditSourceInfo = 'movie-range' | 'movie-only';
 
+export type ZoomEditWords = Readonly<{ label: string; adjective: string }>;
+
+// One method per edit, so an edit cannot be added until the text layer words it.
+export interface IZoomEditWording {
+  refine(): ZoomEditWords;
+  loopify(): ZoomEditWords;
+}
+
+export type ZoomEditRangeFacts = Readonly<{ changesRange: boolean; frameCount: number }>;
+
+export type ZoomEditRefusalReason = 'range-unchanged' | 'loop-needs-two-frames';
+
 type ZoomEditDeclaration = Readonly<{
   name: ZoomEditName;
-  label: string;
-  adjective: string;
   order: number;
   keepsAudio: boolean;
   playsBackward: boolean;
@@ -13,32 +23,46 @@ type ZoomEditDeclaration = Readonly<{
   filenameSuffix: string;
 }>;
 
-// How each edit is staged still branches on its name in the session, the save request and StagedEditResolver.
-// Move that onto the edits when a third edit is added.
 interface IZoomEdit {
   declaration(): ZoomEditDeclaration;
+  wordsFrom(wording: IZoomEditWording): ZoomEditWords;
+  refusal(facts: ZoomEditRangeFacts): ZoomEditRefusalReason | null;
 }
 
 // Order 1 cuts, 3 loops; 2 is left for a later speed edit.
 class RefineEdit implements IZoomEdit {
   private static readonly declared: ZoomEditDeclaration = Object.freeze({
-    name: 'refine', label: 'Refine', adjective: 'refined',
-    order: 1, keepsAudio: true, playsBackward: false, sourceInfo: 'movie-range', filenameSuffix: 'refined',
+    name: 'refine', order: 1, keepsAudio: true, playsBackward: false, sourceInfo: 'movie-range', filenameSuffix: 'refined',
   });
 
   declaration(): ZoomEditDeclaration {
     return RefineEdit.declared;
   }
+
+  wordsFrom(wording: IZoomEditWording): ZoomEditWords {
+    return wording.refine();
+  }
+
+  refusal({ changesRange }: ZoomEditRangeFacts): ZoomEditRefusalReason | null {
+    return changesRange ? null : 'range-unchanged';
+  }
 }
 
 class LoopifyEdit implements IZoomEdit {
   private static readonly declared: ZoomEditDeclaration = Object.freeze({
-    name: 'loopify', label: 'Loopify', adjective: 'looped',
-    order: 3, keepsAudio: false, playsBackward: true, sourceInfo: 'movie-only', filenameSuffix: 'looped',
+    name: 'loopify', order: 3, keepsAudio: false, playsBackward: true, sourceInfo: 'movie-only', filenameSuffix: 'looped',
   });
 
   declaration(): ZoomEditDeclaration {
     return LoopifyEdit.declared;
+  }
+
+  wordsFrom(wording: IZoomEditWording): ZoomEditWords {
+    return wording.loopify();
+  }
+
+  refusal({ frameCount }: ZoomEditRangeFacts): ZoomEditRefusalReason | null {
+    return frameCount >= 2 ? null : 'loop-needs-two-frames';
   }
 }
 
@@ -50,24 +74,28 @@ const EDITS_BY_NAME: ReadonlyMap<ZoomEditName, IZoomEdit> = new Map(
 const SOURCE_INFO_STRENGTH: readonly ZoomEditSourceInfo[] = ['movie-only', 'movie-range'];
 
 export class ZoomEditComposition {
-  private constructor(private readonly declarations: readonly ZoomEditDeclaration[]) {
+  private constructor(private readonly staged: readonly IZoomEdit[]) {
     Object.freeze(this);
   }
 
   static of(staged: Iterable<ZoomEditName>): ZoomEditComposition {
-    const names = [...new Set(staged)];
-    const declarations = names.map(name => ZoomEditComposition.declarationOf(name)).sort((first, second) => first.order - second.order);
-    return new ZoomEditComposition(Object.freeze(declarations));
+    const edits = [...new Set(staged)].map(name => ZoomEditComposition.editOf(name))
+      .sort((first, second) => first.declaration().order - second.declaration().order);
+    return new ZoomEditComposition(Object.freeze(edits));
   }
 
-  static labelOf(name: ZoomEditName): string {
-    return ZoomEditComposition.declarationOf(name).label;
+  static names(): readonly ZoomEditName[] {
+    return Object.freeze([...EDITS_BY_NAME.keys()]);
   }
 
-  private static declarationOf(name: ZoomEditName): ZoomEditDeclaration {
+  static wordsOf(name: ZoomEditName, wording: IZoomEditWording): ZoomEditWords {
+    return ZoomEditComposition.editOf(name).wordsFrom(wording);
+  }
+
+  private static editOf(name: ZoomEditName): IZoomEdit {
     const edit = EDITS_BY_NAME.get(name);
     if (!edit) throw new Error('Zoom edit is unknown.');
-    return edit.declaration();
+    return edit;
   }
 
   get edits(): readonly ZoomEditName[] {
@@ -75,19 +103,19 @@ export class ZoomEditComposition {
   }
 
   get isEmpty(): boolean {
-    return this.declarations.length === 0;
+    return this.staged.length === 0;
   }
 
-  includes(edit: ZoomEditName): boolean {
-    return this.declarations.some(declaration => declaration.name === edit);
+  wordsFrom(wording: IZoomEditWording): readonly ZoomEditWords[] {
+    return Object.freeze(this.staged.map(edit => edit.wordsFrom(wording)));
   }
 
-  get labels(): readonly string[] {
-    return Object.freeze(this.declarations.map(declaration => declaration.label));
-  }
-
-  get adjectives(): readonly string[] {
-    return Object.freeze(this.declarations.map(declaration => declaration.adjective));
+  refusal(facts: ZoomEditRangeFacts): ZoomEditRefusalReason | null {
+    for (const edit of this.staged) {
+      const refusal = edit.refusal(facts);
+      if (refusal) return refusal;
+    }
+    return null;
   }
 
   get keepsAudio(): boolean {
@@ -107,5 +135,9 @@ export class ZoomEditComposition {
 
   get filenameSuffix(): string {
     return this.declarations.map(declaration => `-${declaration.filenameSuffix}`).join('');
+  }
+
+  private get declarations(): readonly ZoomEditDeclaration[] {
+    return this.staged.map(edit => edit.declaration());
   }
 }

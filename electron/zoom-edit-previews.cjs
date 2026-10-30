@@ -77,7 +77,7 @@ class ZoomEditPreviews {
     const { controller: { signal }, report } = preview;
     try {
       if (signal.aborted) return OperationResult.failure('cancelled', 'The preview was replaced.');
-      const { host, cut } = await this.#stagedEdits.resolve(event, { ...request, loopify: true });
+      const { host, cut } = await this.#stagedEdits.resolve(event, { ...request, edits: ['loopify'] });
       const source = await host.prepareExtractionSource(cut.sourceHandle, signal);
       const [start, end] = await cut.endIdentities();
       const startUs = FrameTime.safeMicrosecondsOf(start);
