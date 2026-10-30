@@ -177,7 +177,7 @@ Buttons feel compact and tactile rather than flat or oversized.
 - **Shape:** gently rounded control corners (`12px`) with `10px 14px` padding.
 - **Primary:** Screen Silver text over a deep blue vertical gradient; reserved for the initiating action or safe confirmation.
 - **Secondary:** Screen Silver text over a dark slate-to-navy gradient.
-- **Destructive:** Screen Silver text over a deep Warning Red vertical gradient (Warning Red mixed with black, 70% to 45%), same shape and padding as Primary. Reserved for confirming an action that removes files from the folder, such as Move to Recycle Bin or Replace when saving a refined clip; never used for safe confirmations.
+- **Destructive:** Screen Silver text over a deep Warning Red vertical gradient (Warning Red mixed with black, 70% to 45%), same shape and padding as Primary. Reserved for confirming an action that removes files from the folder, such as Move to Recycle Bin or Replace when saving an edited clip; never used for safe confirmations.
 - **Hover / Focus / Active:** a small brightness increase on hover, a one-pixel downward press on activation, and a visible Projector Blue focus outline where explicitly styled.
 - **Disabled:** reduced opacity (`.45–.5`) without changing the component's silhouette.
 
@@ -219,7 +219,7 @@ Zoom is a centered, media-only viewing surface constrained to roughly two-thirds
 
 ### Zoom Edit Mode
 
-Zoom edit mode edits the zoomed clip in place, inside the same Zoom frame; nothing else on screen changes. The frame holds a column: the movie review player in its picture-only look on top, filling the frame on true black with no `16:9` cap, and one hint line below it. The picture-only look has no progress bar, transport, readiness text, empty state or busy indicator: there is no timeline and there are no buttons, because every action is a key.
+Zoom edit mode edits the zoomed clip in place, inside the same Zoom frame; nothing else on screen changes. The frame holds a column: the movie review player in its picture-only look on top, filling the frame on true black with no `16:9` cap, and one hint line below it. The picture-only look has no progress bar, transport, readiness text, empty state or busy indicator: there is no timeline and there are no buttons, because every action is a key. The picture opens on the clip's exact first frame. Left and Right step one frame; held, they keep stepping after a short pause, at the same pace as in the GIF player.
 
 The hint line is the mode's only text. It is a band of Booth Black under the picture with a one-pixel slate top border, `8px 14px` padding and `13px` type. The keys sit on the left in Quiet Slate; a status sits on the right in Screen Silver and is announced politely to assistive technology; the two wrap rather than clip, and the status takes no space when empty. Wording lives in `src/app/zoom-edit-mode-text.ts`, and key names come from the same constants as the bindings:
 
@@ -234,7 +234,7 @@ With Loopify staged, Z shows what would be saved: a low-resolution preview, forw
 
 Zoom's edit menu lists the mode's edits, Refine then Loopify, each an entry into the mode (Loopify enters with Loopify staged).
 
-Saving asks in a compact confirmation dialog whose title names the clip by its staged edits ("Save the refined clip", "Save the looped clip", "Save the refined and looped clip") and whose sentence names the clip, explains both choices and ends with any loss ("The looped clip is saved without sound."). Its actions read Cancel, Replace (Destructive, because the original goes to the Recycle Bin) and Keep both (Primary, focused on open). Leaving with staged edits asks in the same compact dialog shape: the question names what would be lost without frame numbers ("Discard the new start and end?", "Discard Loopify and the new start?"), the note says the clip file stays as it is, and the actions read Keep editing and Discard.
+Saving asks in a compact confirmation dialog whose title names the clip by its staged edits ("Save the refined clip", "Save the looped clip", "Save the refined and looped clip") and whose sentence names the clip, explains both choices and ends with any loss ("The looped clip is saved without sound."). Its actions read Cancel, Replace (Destructive, because the original goes to the Recycle Bin) and Keep both (Primary, focused on open). Leaving with staged edits asks in the same compact dialog shape: the question names what would be lost without frame numbers ("Discard the new start and end?", "Discard Loopify and the new start?"), the note says the clip file stays as it is, and the actions read Keep editing and Discard. Both dialogs open over a paused picture, which stays paused whatever the answer.
 
 ## Do's and Don'ts
 
