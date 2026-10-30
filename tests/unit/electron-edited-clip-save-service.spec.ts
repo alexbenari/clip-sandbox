@@ -1,12 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import { ElectronRefinedClipSaveService } from '../../src/adapters/electron/electron-refined-clip-save-service.js';
-import type { IRefinedClipSaveRequest } from '../../src/app/refined-clip-save-service.js';
+import { ElectronEditedClipSaveService } from '../../src/adapters/electron/electron-edited-clip-save-service.js';
+import type { IEditedClipSaveRequest } from '../../src/app/edited-clip-save-service.js';
 import { FrameReviewOpaqueId } from '../../src/frame-review/frame-review-api.js';
 
 const sessionId = FrameReviewOpaqueId.sessionId('session_CCCCCCCCCCCCCCCCCCCCCCCC');
 const windowId = 'window_BBBBBBBBBBBBBBBBBBBBBBBB';
-const request: IRefinedClipSaveRequest = Object.freeze({
+const request: IEditedClipSaveRequest = Object.freeze({
   folder: Object.freeze({ folderPath: 'D:\\clips' }), filename: 'Sample Feature-001.mp4', source: Object.freeze({ kind: 'window', windowId }),
   sessionId, startFrame: 1870, endFrame: 1940, loopify: true, outcome: 'replace',
 });
@@ -27,12 +27,12 @@ function serviceAnswering(response: (payload: Record<string, unknown>) => unknow
   };
   const emit = (value: unknown) => listeners.forEach(listener => listener(value));
   const win = { clipSandboxDesktop: { zoomEdit } } as unknown as Window;
-  return { zoomEdit, emit, service: new ElectronRefinedClipSaveService(win) };
+  return { zoomEdit, emit, service: new ElectronEditedClipSaveService(win) };
 }
 
 const succeeding = (result: unknown) => (payload: Record<string, unknown>) => ({ ok: true, operationId: payload.operationId, result });
 
-describe('ElectronRefinedClipSaveService', () => {
+describe('ElectronEditedClipSaveService', () => {
   it('asks to save exactly the requested range of the named clip with its staged Loopify, by folder path and window id', async () => {
     const { zoomEdit, service } = serviceAnswering(succeeding(replaced));
 

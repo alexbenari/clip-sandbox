@@ -1,5 +1,5 @@
 import type { ZoomEditComposition, ZoomEditName } from '../domain/zoom-edit-composition.js';
-import type { IRefinedClipSaveProgress, SavedRefinedClip } from './refined-clip-save-service.js';
+import type { IEditedClipSaveProgress, SavedEditedClip } from './edited-clip-save-service.js';
 import type { ZoomEditPreviewState } from './zoom-edit-loop-preview.js';
 import { ZOOM_EDIT_MODE_KEYS } from './zoom-edit-mode-keys.js';
 import type { ZoomEditExtension, ZoomEditPictureReadiness, ZoomEditRefusal } from './zoom-edit-mode-session.js';
@@ -39,7 +39,7 @@ const REFUSALS: Readonly<Record<Exclude<ZoomEditRefusal['reason'], 'extension-un
   'ended': 'Zoom edit mode has ended.',
 });
 
-const SAVE_STAGES: Readonly<Record<IRefinedClipSaveProgress['stage'], string>> = Object.freeze({
+const SAVE_STAGES: Readonly<Record<IEditedClipSaveProgress['stage'], string>> = Object.freeze({
   'checking-source': 'Saving: checking the frames…',
   'encoding-video': 'Saving: encoding the video…',
   'exact-fallback': 'Saving: encoding the exact frames…',
@@ -117,7 +117,7 @@ export class ZoomEditModeText {
     return 'Saving waits for the movie around this clip…';
   }
 
-  saveProgress(progress: IRefinedClipSaveProgress | null): string {
+  saveProgress(progress: IEditedClipSaveProgress | null): string {
     if (!progress) return 'Saving…';
     const { stage, encodedFrames, totalFrames } = progress;
     if (stage === 'encoding-video' && encodedFrames !== undefined && totalFrames !== undefined) {
@@ -138,7 +138,7 @@ export class ZoomEditModeText {
     return `Could not save the edits to ${filename}.`;
   }
 
-  saved(originalFilename: string, saved: SavedRefinedClip, edits: ZoomEditComposition): string {
+  saved(originalFilename: string, saved: SavedEditedClip, edits: ZoomEditComposition): string {
     const clip = `the ${this.editedClip(edits)}`;
     if (saved.outcome === 'kept-both') {
       if (saved.notice === 'recycle-bin-refused') {

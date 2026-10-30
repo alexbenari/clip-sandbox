@@ -345,8 +345,8 @@ describe('Saving in Zoom edit mode', () => {
     await refineFromClipMenu(name);
     session().stageStart(6);
     press('x');
-    await waitFor(() => expect(document.getElementById('saveRefinementDialog').open).toBe(true));
-    document.getElementById(choice === 'Keep both' ? 'keepBothRefinedClipBtn' : 'replaceRefinedClipBtn').click();
+    await waitFor(() => expect(document.getElementById('saveEditsDialog').open).toBe(true));
+    document.getElementById(choice === 'Keep both' ? 'keepBothEditedClipBtn' : 'replaceEditedClipBtn').click();
   }
 
   test('Keep both in a saved collection’s view adds the refined clip right after its original and marks the view unsaved', async () => {
@@ -377,9 +377,9 @@ describe('Saving in Zoom edit mode', () => {
     await waitFor(() => expect(document.getElementById('zoomEditSurface')).not.toBeNull());
 
     press('x');
-    await waitFor(() => expect(document.getElementById('saveRefinementDialog').open).toBe(true));
-    const explanation = document.getElementById('saveRefinementExplanation').textContent;
-    document.getElementById('keepBothRefinedClipBtn').click();
+    await waitFor(() => expect(document.getElementById('saveEditsDialog').open).toBe(true));
+    const explanation = document.getElementById('saveEditsExplanation').textContent;
+    document.getElementById('keepBothEditedClipBtn').click();
 
     await waitFor(() => expect(clipNames()).toEqual(['bravo.mp4', 'bravo-looped.mp4', 'alpha.mp4']));
     expect(explanation).toContain('The looped clip is saved without sound.');

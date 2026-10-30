@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ZoomEditModeText } from '../../../src/app/zoom-edit-mode-text.js';
 import { ZoomEditComposition } from '../../../src/domain/zoom-edit-composition.js';
-import { SaveRefinementDialogControl } from '../../../src/ui/save-refinement-dialog-control.js';
+import { SaveEditsDialogControl } from '../../../src/ui/save-edits-dialog-control.js';
 import { shippedPageBody } from '../../support/page-markup.js';
 
 const pageBody = shippedPageBody();
 const refined = (filename: string) => ({ filename, edits: ZoomEditComposition.of(['refine']) });
 
 function saveDialog() {
-  const dialog = SaveRefinementDialogControl.fromDocument(document, { text: new ZoomEditModeText() });
+  const dialog = SaveEditsDialogControl.fromDocument(document, { text: new ZoomEditModeText() });
   const confirmed = vi.fn();
   const cancelled = vi.fn();
   dialog.on('confirmed', confirmed);
@@ -17,11 +17,11 @@ function saveDialog() {
   return { dialog, confirmed, cancelled };
 }
 
-const dialogElement = (): HTMLDialogElement => document.getElementById('saveRefinementDialog') as HTMLDialogElement;
+const dialogElement = (): HTMLDialogElement => document.getElementById('saveEditsDialog') as HTMLDialogElement;
 const button = (name: string): HTMLButtonElement => [...dialogElement().querySelectorAll<HTMLButtonElement>('button')]
   .find(candidate => candidate.textContent === name)!;
 
-describe('SaveRefinementDialogControl', () => {
+describe('SaveEditsDialogControl', () => {
   beforeEach(() => { document.body.innerHTML = pageBody; });
 
   it('starts closed', () => {
@@ -36,7 +36,7 @@ describe('SaveRefinementDialogControl', () => {
     dialog.open(refined('alpha.webm'));
 
     expect(dialogElement().open).toBe(true);
-    expect(document.getElementById('saveRefinementExplanation')?.textContent).toBe(
+    expect(document.getElementById('saveEditsExplanation')?.textContent).toBe(
       'Keep both adds the refined clip next to alpha.webm. Replace puts it in place of alpha.webm and moves the original to the Recycle Bin.',
     );
   });
@@ -46,7 +46,7 @@ describe('SaveRefinementDialogControl', () => {
 
     dialog.open({ filename: 'alpha.mp4', edits: ZoomEditComposition.of(['refine', 'loopify']) });
 
-    expect([document.getElementById('saveRefinementTitle')?.textContent, document.getElementById('saveRefinementExplanation')?.textContent]).toEqual([
+    expect([document.getElementById('saveEditsTitle')?.textContent, document.getElementById('saveEditsExplanation')?.textContent]).toEqual([
       'Save the refined and looped clip',
       'Keep both adds the refined and looped clip next to alpha.mp4. Replace puts it in place of alpha.mp4 and moves the original '
         + 'to the Recycle Bin. The refined and looped clip is saved without sound.',

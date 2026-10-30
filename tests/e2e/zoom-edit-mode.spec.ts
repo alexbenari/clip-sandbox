@@ -64,8 +64,8 @@ async function pressKeys(page: Page, keys: readonly string[]): Promise<void> {
 
 async function saveWith(page: Page, choice: 'Keep both' | 'Replace'): Promise<void> {
   await page.keyboard.press('x');
-  await expect(page.locator('#saveRefinementDialog')).toBeVisible();
-  await page.locator('#saveRefinementDialog').getByRole('button', { name: choice, exact: true }).click();
+  await expect(page.locator('#saveEditsDialog')).toBeVisible();
+  await page.locator('#saveEditsDialog').getByRole('button', { name: choice, exact: true }).click();
 }
 
 async function cardDuration(page: Page, name: string): Promise<number> {
@@ -167,8 +167,8 @@ test('Refine and Loopify with Keep both: the looped clip plays the staged frames
     await page.keyboard.press('z');
     await expect(page.locator('#zoomEditPreview')).toHaveCount(0);
     await page.keyboard.press('x');
-    await expect(page.locator('#saveRefinementExplanation')).toContainText('The refined and looped clip is saved without sound.');
-    await page.locator('#saveRefinementDialog').getByRole('button', { name: 'Keep both', exact: true }).click();
+    await expect(page.locator('#saveEditsExplanation')).toContainText('The refined and looped clip is saved without sound.');
+    await page.locator('#saveEditsDialog').getByRole('button', { name: 'Keep both', exact: true }).click();
 
     await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', 'Feature-001-refined-looped.mp4', { timeout: 90_000 });
     await expect(page.locator('#grid .thumb')).toHaveCount(2);

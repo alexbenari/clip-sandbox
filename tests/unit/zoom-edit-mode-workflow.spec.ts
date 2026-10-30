@@ -5,7 +5,7 @@ import { ActivityReporter } from '../../src/app/activity-reporter.js';
 import { AppSessionState } from '../../src/app/app-session-state.js';
 import { EventSource } from '../../src/app/event-source.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
-import type { IRefinedClipSaveProgress, IRefinedClipSaveRequest, RefinedClipSaveOutcome, SavedRefinedClip } from '../../src/app/refined-clip-save-service.js';
+import type { IEditedClipSaveProgress, IEditedClipSaveRequest, EditedClipSaveOutcome, SavedEditedClip } from '../../src/app/edited-clip-save-service.js';
 import type { ZoomEditModeCommand } from '../../src/app/zoom-edit-mode-keys.js';
 import { ZoomEditModeLeavePolicy } from '../../src/app/zoom-edit-mode-leave-policy.js';
 import type {
@@ -17,7 +17,7 @@ import type {
 } from '../../src/app/zoom-edit-mode-session.js';
 import { ZoomEditModeText } from '../../src/app/zoom-edit-mode-text.js';
 import { ZoomEditModeWorkflow, type ZoomEditHint } from '../../src/app/zoom-edit-mode-workflow.js';
-import { RefinedClipSaveWorkflow } from '../../src/app/refined-clip-save-workflow.js';
+import { EditedClipSaveWorkflow } from '../../src/app/edited-clip-save-workflow.js';
 import type { Clip } from '../../src/domain/clip.js';
 import type { ClipSource } from '../../src/domain/clip-source.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
@@ -100,7 +100,7 @@ class FakeEditSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
   }
 }
 
-class FakeSaveDialog extends EventSource<{ confirmed: RefinedClipSaveOutcome; cancelled: void }> {
+class FakeSaveDialog extends EventSource<{ confirmed: EditedClipSaveOutcome; cancelled: void }> {
   readonly open = vi.fn((_request: { filename: string; edits: ZoomEditComposition }) => undefined);
   readonly close = vi.fn();
 }
@@ -133,11 +133,11 @@ function zoomEditMode({ fullScreen = false } = {}) {
   openFolder.setCurrentFolderAccess(folder);
   const session = new FakeEditSession();
   const sessions = { begin: vi.fn((_request: IZoomEditModeRequest) => session) };
-  const saveAnswers: Deferred<SavedRefinedClip>[] = [];
-  const saveProgress: ((progress: IRefinedClipSaveProgress) => void)[] = [];
+  const saveAnswers: Deferred<SavedEditedClip>[] = [];
+  const saveProgress: ((progress: IEditedClipSaveProgress) => void)[] = [];
   const saves = {
-    save: vi.fn((_request: IRefinedClipSaveRequest, onProgress?: (progress: IRefinedClipSaveProgress) => void) => {
-      const answer = deferred<SavedRefinedClip>();
+    save: vi.fn((_request: IEditedClipSaveRequest, onProgress?: (progress: IEditedClipSaveProgress) => void) => {
+      const answer = deferred<SavedEditedClip>();
       saveAnswers.push(answer);
       if (onProgress) saveProgress.push(onProgress);
       return answer.promise;
@@ -157,7 +157,7 @@ function zoomEditMode({ fullScreen = false } = {}) {
   const folderRefresh = { afterZoomEditModeEnded: vi.fn(async () => undefined) };
   const activityLog = recordedActivityLog();
   const createdClips = { insert: vi.fn((_original: Clip, _created: ClipSource): Clip | null => null) };
-  const saveWorkflow = new RefinedClipSaveWorkflow({
+  const saveWorkflow = new EditedClipSaveWorkflow({
     saves,
     saveDialog,
     savedClipSources: { clipSourceOf: entry => clipSource(entry.name) },
@@ -208,7 +208,7 @@ async function withStagedStart() {
   return context;
 }
 
-const savedAsKeepBoth: SavedRefinedClip = {
+const savedAsKeepBoth: SavedEditedClip = {
   outcome: 'kept-both',
   filename: 'alpha-refined.mp4',
   entry: {

@@ -10,7 +10,7 @@ class ZoomEditSaveIpcBoundary {
   #ipcMain;
   #saver;
   #replies = new CorrelatedIpcReplies({
-    label: 'Zoom edit save', failureCode: 'save-failed', failureMessage: 'The refined clip could not be saved.', logPrefix: 'zoom-edit-save',
+    label: 'Zoom edit save', failureCode: 'save-failed', failureMessage: 'The edited clip could not be saved.', logPrefix: 'zoom-edit-save',
   });
 
   constructor({ ipcMain, saver }) {

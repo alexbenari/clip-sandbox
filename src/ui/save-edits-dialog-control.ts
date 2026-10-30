@@ -1,15 +1,15 @@
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
-import type { RefinedClipSaveOutcome } from '../app/refined-clip-save-service.js';
+import type { EditedClipSaveOutcome } from '../app/edited-clip-save-service.js';
 import type { ZoomEditModeText } from '../app/zoom-edit-mode-text.js';
 import type { ZoomEditComposition } from '../domain/zoom-edit-composition.js';
 import { DocumentElements } from './document-elements.js';
 
-export interface ISaveRefinementDialogEvents {
-  confirmed: RefinedClipSaveOutcome;
+export interface ISaveEditsDialogEvents {
+  confirmed: EditedClipSaveOutcome;
   cancelled: void;
 }
 
-type SaveRefinementDialogParts = Readonly<{
+type SaveEditsDialogParts = Readonly<{
   dialog: HTMLDialogElement;
   title: HTMLElement;
   explanation: HTMLElement;
@@ -18,23 +18,23 @@ type SaveRefinementDialogParts = Readonly<{
   keepBoth: HTMLButtonElement;
 }>;
 
-export class SaveRefinementDialogControl implements IEventSource<ISaveRefinementDialogEvents> {
-  private readonly events = new EventSource<ISaveRefinementDialogEvents>();
+export class SaveEditsDialogControl implements IEventSource<ISaveEditsDialogEvents> {
+  private readonly events = new EventSource<ISaveEditsDialogEvents>();
   private returnFocus: HTMLElement | null = null;
 
-  static fromDocument(doc: Document, { text }: { text: Pick<ZoomEditModeText, 'editedClip' | 'saveLoss'> }): SaveRefinementDialogControl {
+  static fromDocument(doc: Document, { text }: { text: Pick<ZoomEditModeText, 'editedClip' | 'saveLoss'> }): SaveEditsDialogControl {
     const elements = new DocumentElements(doc);
-    return new SaveRefinementDialogControl({
-      dialog: elements.required<HTMLDialogElement>('saveRefinementDialog'),
-      title: elements.required('saveRefinementTitle'),
-      explanation: elements.required('saveRefinementExplanation'),
-      cancel: elements.required<HTMLButtonElement>('cancelSaveRefinementBtn'),
-      replace: elements.required<HTMLButtonElement>('replaceRefinedClipBtn'),
-      keepBoth: elements.required<HTMLButtonElement>('keepBothRefinedClipBtn'),
+    return new SaveEditsDialogControl({
+      dialog: elements.required<HTMLDialogElement>('saveEditsDialog'),
+      title: elements.required('saveEditsTitle'),
+      explanation: elements.required('saveEditsExplanation'),
+      cancel: elements.required<HTMLButtonElement>('cancelSaveEditsBtn'),
+      replace: elements.required<HTMLButtonElement>('replaceEditedClipBtn'),
+      keepBoth: elements.required<HTMLButtonElement>('keepBothEditedClipBtn'),
     }, text);
   }
 
-  private constructor(private readonly parts: SaveRefinementDialogParts, private readonly text: Pick<ZoomEditModeText, 'editedClip' | 'saveLoss'>) {
+  private constructor(private readonly parts: SaveEditsDialogParts, private readonly text: Pick<ZoomEditModeText, 'editedClip' | 'saveLoss'>) {
     parts.cancel.addEventListener('click', () => this.cancel());
     parts.replace.addEventListener('click', () => this.confirm('replace'));
     parts.keepBoth.addEventListener('click', () => this.confirm('keep-both'));
@@ -45,7 +45,7 @@ export class SaveRefinementDialogControl implements IEventSource<ISaveRefinement
     this.close();
   }
 
-  on<TName extends keyof ISaveRefinementDialogEvents>(name: TName, handler: EventHandler<ISaveRefinementDialogEvents[TName]>): () => void {
+  on<TName extends keyof ISaveEditsDialogEvents>(name: TName, handler: EventHandler<ISaveEditsDialogEvents[TName]>): () => void {
     return this.events.on(name, handler);
   }
 
@@ -78,7 +78,7 @@ export class SaveRefinementDialogControl implements IEventSource<ISaveRefinement
     if (returnFocus?.isConnected) returnFocus.focus();
   }
 
-  private confirm(outcome: RefinedClipSaveOutcome): void {
+  private confirm(outcome: EditedClipSaveOutcome): void {
     this.close();
     this.events.emit('confirmed', outcome);
   }

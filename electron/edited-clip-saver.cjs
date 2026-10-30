@@ -3,7 +3,7 @@ const path = require('node:path');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
 const { ENCODED_OUTPUT } = require('./exact-range-encoder.cjs');
 const { OperationResult } = require('./operation-result.cjs');
-const { RefinedClipKeptUnderTemporaryName } = require('./refined-clip-placement.cjs');
+const { EditedClipKeptUnderTemporaryName } = require('./edited-clip-placement.cjs');
 const { StagedEditRefusal } = require('./staged-edit-resolver.cjs');
 
 const OUTCOMES = new Set(['keep-both', 'replace']);
@@ -15,7 +15,7 @@ class SaveRefusal extends Error {
   }
 }
 
-class RefinedClipSaver {
+class EditedClipSaver {
   #stagedEdits;
   #encoder;
   #placement;
@@ -24,7 +24,7 @@ class RefinedClipSaver {
   #operations = new Map();
 
   constructor({ stagedEdits, encoder, placement, provenance = new Mp4Provenance(), fileSystem = fs }) {
-    if (!stagedEdits || !encoder || !placement) throw new Error('Refined clip saver dependencies are invalid.');
+    if (!stagedEdits || !encoder || !placement) throw new Error('Edited clip saver dependencies are invalid.');
     this.#stagedEdits = stagedEdits;
     this.#encoder = encoder;
     this.#placement = placement;
@@ -68,10 +68,10 @@ class RefinedClipSaver {
       return await this.#encodeAndPlace({ ...staged, outcome: request.outcome, sourceInfo }, operation);
     } catch (error) {
       if (error instanceof SaveRefusal || error instanceof StagedEditRefusal
-        || error instanceof RefinedClipKeptUnderTemporaryName) return OperationResult.failure(error.code, error.message);
+        || error instanceof EditedClipKeptUnderTemporaryName) return OperationResult.failure(error.code, error.message);
       if (signal.aborted) return OperationResult.failure('cancelled', 'Saving was cancelled.');
       console.warn('[zoom-edit-save] save-failed', { kind: error instanceof Error ? error.name : 'unknown', code: error?.code });
-      return OperationResult.failure('save-failed', 'The refined clip could not be saved.');
+      return OperationResult.failure('save-failed', 'The edited clip could not be saved.');
     }
   }
 
@@ -86,7 +86,7 @@ class RefinedClipSaver {
       preparedSource = await host.prepareExtractionSource(cut.sourceHandle, signal);
     } catch {
       if (signal.aborted) return OperationResult.failure('cancelled', 'Saving was cancelled.');
-      throw new SaveRefusal('The source of the refined clip is unavailable.', 'invalid-source');
+      throw new SaveRefusal('The source of the edited clip is unavailable.', 'invalid-source');
     }
     // The record comes from the clip's own tag or from the anchored window, never from the renderer.
     const tagValue = sourceInfo ? this.#provenance.tagValueOf(sourceInfo) : null;
@@ -103,7 +103,7 @@ class RefinedClipSaver {
         output: this.#encodedOutput(composition),
       });
       if (signal.aborted) return OperationResult.failure('cancelled', 'Saving was cancelled.');
-      if (!encoded.ok) return OperationResult.failure(encoded.code, 'The refined clip could not be encoded.');
+      if (!encoded.ok) return OperationResult.failure(encoded.code, 'The edited clip could not be encoded.');
       report({ stage: 'saving-media' });
       const placed = outcome === 'replace'
         ? await this.#placement.replace(clip, encoded.mediaPath, composition.filenameSuffix)
@@ -117,4 +117,4 @@ class RefinedClipSaver {
   }
 }
 
-module.exports = { RefinedClipSaver };
+module.exports = { EditedClipSaver };

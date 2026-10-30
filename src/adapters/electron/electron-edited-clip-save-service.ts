@@ -1,13 +1,13 @@
 import type {
-  IRefinedClipSaveProgress,
-  IRefinedClipSaveRequest,
-  IRefinedClipSaveService,
+  IEditedClipSaveProgress,
+  IEditedClipSaveRequest,
+  IEditedClipSaveService,
   ISavedClipEntry,
   KeptBothClipNotice,
-  RefinedClipSaveStage,
+  EditedClipSaveStage,
   ReplacedClipNotice,
-  SavedRefinedClip,
-} from '../../app/refined-clip-save-service.js';
+  SavedEditedClip,
+} from '../../app/edited-clip-save-service.js';
 
 interface IWireResponse {
   readonly ok?: boolean;
@@ -16,39 +16,39 @@ interface IWireResponse {
   readonly error?: unknown;
 }
 
-interface IRefinedClipSaveApi {
+interface IEditedClipSaveApi {
   subscribeSaveProgress(listener: (value: unknown) => void): () => void;
   save(request: unknown): Promise<IWireResponse>;
   cancelSave(saveOperationId: string): Promise<IWireResponse>;
 }
 
-type RefinedClipSaveWindow = Window & { clipSandboxDesktop?: { zoomEdit?: Partial<IRefinedClipSaveApi> } };
+type EditedClipSaveWindow = Window & { clipSandboxDesktop?: { zoomEdit?: Partial<IEditedClipSaveApi> } };
 
-const STAGES: readonly RefinedClipSaveStage[] = [
+const STAGES: readonly EditedClipSaveStage[] = [
   'checking-source', 'encoding-video', 'exact-fallback', 'adding-backward-half', 'adding-audio', 'saving-media',
 ];
 const REPLACED_NOTICES: readonly ReplacedClipNotice[] = ['name-taken', 'rename-failed'];
 const KEPT_BOTH_NOTICES: readonly KeptBothClipNotice[] = ['recycle-bin-refused', 'name-taken'];
 
-export class ElectronRefinedClipSaveService implements IRefinedClipSaveService {
-  private readonly api: IRefinedClipSaveApi;
+export class ElectronEditedClipSaveService implements IEditedClipSaveService {
+  private readonly api: IEditedClipSaveApi;
   private operationSequence = 0;
   private currentOperationId: string | null = null;
 
-  static tryCreate(win: RefinedClipSaveWindow = window): ElectronRefinedClipSaveService | null {
-    return win.clipSandboxDesktop?.zoomEdit?.save ? new ElectronRefinedClipSaveService(win) : null;
+  static tryCreate(win: EditedClipSaveWindow = window): ElectronEditedClipSaveService | null {
+    return win.clipSandboxDesktop?.zoomEdit?.save ? new ElectronEditedClipSaveService(win) : null;
   }
 
-  constructor(win: RefinedClipSaveWindow = window) {
+  constructor(win: EditedClipSaveWindow = window) {
     const api = win.clipSandboxDesktop?.zoomEdit;
     if (!api || typeof api.subscribeSaveProgress !== 'function' || typeof api.save !== 'function'
       || typeof api.cancelSave !== 'function') {
-      throw new Error('Electron refined clip save API is unavailable.');
+      throw new Error('Electron edited clip save API is unavailable.');
     }
-    this.api = api as IRefinedClipSaveApi;
+    this.api = api as IEditedClipSaveApi;
   }
 
-  async save(request: IRefinedClipSaveRequest, onProgress?: (progress: IRefinedClipSaveProgress) => void): Promise<SavedRefinedClip> {
+  async save(request: IEditedClipSaveRequest, onProgress?: (progress: IEditedClipSaveProgress) => void): Promise<SavedEditedClip> {
     this.operationSequence += 1;
     const operationId = `refine_${Date.now()}_${this.operationSequence}`;
     this.currentOperationId = operationId;
@@ -80,21 +80,21 @@ export class ElectronRefinedClipSaveService implements IRefinedClipSaveService {
     this.resultOrThrow(await this.api.cancelSave(operationId));
   }
 
-  private progressOf(value: unknown, operationId: string): IRefinedClipSaveProgress | null {
+  private progressOf(value: unknown, operationId: string): IEditedClipSaveProgress | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const { operationId: eventOperationId, stage, encodedFrames, totalFrames } = value as Record<string, unknown>;
-    if (eventOperationId !== operationId || !STAGES.includes(stage as RefinedClipSaveStage)) return null;
+    if (eventOperationId !== operationId || !STAGES.includes(stage as EditedClipSaveStage)) return null;
     const isCount = (count: unknown, minimum: number): count is number => Number.isSafeInteger(count) && Number(count) >= minimum;
     if ((encodedFrames !== undefined && !isCount(encodedFrames, 0)) || (totalFrames !== undefined && !isCount(totalFrames, 1))) return null;
     if (isCount(encodedFrames, 0) && isCount(totalFrames, 1) && encodedFrames > totalFrames) return null;
     return Object.freeze({
-      stage: stage as RefinedClipSaveStage,
+      stage: stage as EditedClipSaveStage,
       ...(encodedFrames === undefined ? {} : { encodedFrames: encodedFrames as number }),
       ...(totalFrames === undefined ? {} : { totalFrames: totalFrames as number }),
     });
   }
 
-  private savedClipOf(value: unknown): SavedRefinedClip {
+  private savedClipOf(value: unknown): SavedEditedClip {
     const answer = this.objectOf(value, 'saved clip');
     const filename = this.plainFilenameOf(answer.filename);
     const entry = this.entryOf(answer.entry, filename);
@@ -134,8 +134,8 @@ export class ElectronRefinedClipSaveService implements IRefinedClipSaveService {
 
   private resultOrThrow(response: IWireResponse): unknown {
     if (response?.ok === true) return response.result;
-    const error = this.objectOf(response?.error, 'refined clip save error');
-    const failure = new Error(typeof error.message === 'string' ? error.message.slice(0, 1024) : 'The refined clip could not be saved.');
+    const error = this.objectOf(response?.error, 'edited clip save error');
+    const failure = new Error(typeof error.message === 'string' ? error.message.slice(0, 1024) : 'The edited clip could not be saved.');
     Object.defineProperty(failure, 'code', { value: typeof error.code === 'string' ? error.code : 'save-failed' });
     throw failure;
   }

@@ -9,16 +9,16 @@ import { sourceMovie, checkValue } from '../support/movie-window-fixtures.js';
 import { CLIP_SESSION, WINDOW_PATH, clipRecord, endReferences, event, stagedEditsIn, windowRequest } from '../support/staged-edit-fixtures.js';
 
 const require = createRequire(import.meta.url);
-const { RefinedClipSaver } = require('../../electron/refined-clip-saver.cjs');
+const { EditedClipSaver } = require('../../electron/edited-clip-saver.cjs');
 const { ENCODED_OUTPUT } = require('../../electron/exact-range-encoder.cjs');
-const { RefinedClipKeptUnderTemporaryName, RefinedClipPlacement } = require('../../electron/refined-clip-placement.cjs');
+const { EditedClipKeptUnderTemporaryName, EditedClipPlacement } = require('../../electron/edited-clip-placement.cjs');
 
 let root: string;
 let folder: string;
 let recycleBin: string;
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(os.tmpdir(), 'refined-clip-saver-'));
+  root = mkdtempSync(path.join(os.tmpdir(), 'edited-clip-saver-'));
   folder = path.join(root, 'picks');
   recycleBin = path.join(root, 'recycle-bin');
   mkdirSync(folder);
@@ -44,10 +44,10 @@ function saverFor({ clipName = 'Feature-002.mp4', sourceInfo = clipRecord() as u
       return { ok: true, mediaPath, warning: undefined };
     })),
   };
-  const saver = new RefinedClipSaver({
+  const saver = new EditedClipSaver({
     stagedEdits,
     encoder,
-    placement: placement ?? new RefinedClipPlacement({
+    placement: placement ?? new EditedClipPlacement({
       trashItem: async (itemPath: string) => rename(itemPath, path.join(recycleBin, path.basename(itemPath))),
     }),
     provenance,
@@ -65,7 +65,7 @@ const windowSave = windowRequest;
 const folderFiles = () => readdirSync(folder).sort();
 const contentOf = (filename: string) => readFileSync(path.join(folder, filename), 'utf8');
 
-describe('RefinedClipSaver', () => {
+describe('EditedClipSaver', () => {
   describe('the record it writes', () => {
     it('writes a trim of a tagged clip as its record shifted by the trimmed frames, keeping its reference frames', async () => {
       const { save, writtenRecord } = saverFor();
@@ -250,12 +250,12 @@ describe('RefinedClipSaver', () => {
     });
 
     it('answers that the refined clip was kept under a temporary name when it could not be placed', async () => {
-      const { save } = saverFor({ placement: { replace: async () => { throw new RefinedClipKeptUnderTemporaryName(); } } });
+      const { save } = saverFor({ placement: { replace: async () => { throw new EditedClipKeptUnderTemporaryName(); } } });
 
       const answer = await save({ startFrame: 5, endFrame: 45, outcome: 'replace' });
 
       expect(answer).toEqual({ ok: false, code: 'kept-under-temporary-name',
-        error: { message: 'The refined clip was kept under a temporary name in the folder.' } });
+        error: { message: 'The edited clip was kept under a temporary name in the folder.' } });
     });
   });
 

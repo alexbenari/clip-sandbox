@@ -7,22 +7,22 @@ const { mediaSourceOf } = require('./folder-entry.cjs');
 const MAX_KEEP_BOTH_NAMES = 1000;
 const MAX_TEMPORARY_NAMES = 8;
 
-class RefinedClipKeptUnderTemporaryName extends Error {
+class EditedClipKeptUnderTemporaryName extends Error {
   constructor() {
-    super('The refined clip was kept under a temporary name in the folder.');
+    super('The edited clip was kept under a temporary name in the folder.');
     this.code = 'kept-under-temporary-name';
   }
 }
 
 // Names come only from the granted clip's own name; existing files are never overwritten.
-class RefinedClipPlacement {
+class EditedClipPlacement {
   #trashItem;
   #fs;
   #randomId;
   #replacing = Promise.resolve();
 
   constructor({ trashItem, fileSystem = fs, randomId = () => randomBytes(6).toString('hex') }) {
-    if (typeof trashItem !== 'function') throw new Error('Refined clip placement dependencies are invalid.');
+    if (typeof trashItem !== 'function') throw new Error('Edited clip placement dependencies are invalid.');
     this.#trashItem = trashItem;
     this.#fs = fileSystem;
     this.#randomId = randomId;
@@ -74,7 +74,7 @@ class RefinedClipPlacement {
       const temporary = path.join(clip.folder, `${path.parse(clip.filename).name}.${this.#randomId()}.refining`);
       if (await this.#copiedExclusively(mediaPath, temporary)) return temporary;
     }
-    throw new Error('No free temporary name is left for the refined clip.');
+    throw new Error('No free temporary name is left for the edited clip.');
   }
 
   async #keptBesideOriginal(clip, temporary) {
@@ -107,7 +107,7 @@ class RefinedClipPlacement {
       saved = await this.#keptBoth(clip, temporary, details);
     } catch (error) {
       console.warn('[zoom-edit-save] kept-under-temporary-name', { code: error?.code });
-      throw new RefinedClipKeptUnderTemporaryName();
+      throw new EditedClipKeptUnderTemporaryName();
     }
     await this.#removeTemporary(temporary);
     return saved;
@@ -141,7 +141,7 @@ class RefinedClipPlacement {
       if (!(await this.#copiedExclusively(mediaPath, path.join(clip.folder, filename)))) continue;
       return this.#saved(clip.folder, filename, { outcome: 'kept-both', ...details });
     }
-    throw new Error('No free name is left for the refined clip.');
+    throw new Error('No free name is left for the edited clip.');
   }
 
   async #exists(filePath) {
@@ -162,4 +162,4 @@ class RefinedClipPlacement {
   }
 }
 
-module.exports = { RefinedClipKeptUnderTemporaryName, RefinedClipPlacement };
+module.exports = { EditedClipKeptUnderTemporaryName, EditedClipPlacement };

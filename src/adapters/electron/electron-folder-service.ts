@@ -1,7 +1,7 @@
 import type { FolderEntry } from '../../business-logic/folder-entry.js';
 import { ClipSource } from '../../domain/clip-source.js';
 import type { FolderAccess, FolderContents } from '../../app/folder-access.js';
-import type { ISavedClipEntry } from '../../app/refined-clip-save-service.js';
+import type { ISavedClipEntry } from '../../app/edited-clip-save-service.js';
 
 type ElectronFolderEntry = {
   name?: string;

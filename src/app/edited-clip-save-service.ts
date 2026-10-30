@@ -2,26 +2,26 @@ import type { FrameReviewSessionId } from '../frame-review/frame-review-api.js';
 import type { FolderAccess } from './folder-access.js';
 
 // Frame numbers count the frames of the source shown: the clip itself, or its anchored movie window.
-export type RefinedClipSource = Readonly<{ kind: 'clip' }> | Readonly<{ kind: 'window'; windowId: string }>;
+export type EditedClipSource = Readonly<{ kind: 'clip' }> | Readonly<{ kind: 'window'; windowId: string }>;
 
-export type RefinedClipSaveOutcome = 'keep-both' | 'replace';
+export type EditedClipSaveOutcome = 'keep-both' | 'replace';
 
-export interface IRefinedClipSaveRequest {
+export interface IEditedClipSaveRequest {
   readonly folder: FolderAccess;
   readonly filename: string;
-  readonly source: RefinedClipSource;
+  readonly source: EditedClipSource;
   readonly sessionId: FrameReviewSessionId;
   readonly startFrame: number;
   readonly endFrame: number;
   readonly loopify: boolean;
-  readonly outcome: RefinedClipSaveOutcome;
+  readonly outcome: EditedClipSaveOutcome;
 }
 
-export type RefinedClipSaveStage =
+export type EditedClipSaveStage =
   | 'checking-source' | 'encoding-video' | 'exact-fallback' | 'adding-backward-half' | 'adding-audio' | 'saving-media';
 
-export interface IRefinedClipSaveProgress {
-  readonly stage: RefinedClipSaveStage;
+export interface IEditedClipSaveProgress {
+  readonly stage: EditedClipSaveStage;
   readonly encodedFrames?: number;
   readonly totalFrames?: number;
 }
@@ -40,7 +40,7 @@ export interface ISavedClipEntry {
 export type ReplacedClipNotice = 'name-taken' | 'rename-failed';
 export type KeptBothClipNotice = 'recycle-bin-refused' | 'name-taken';
 
-export type SavedRefinedClip =
+export type SavedEditedClip =
   | Readonly<{
     outcome: 'replaced';
     filename: string;
@@ -57,7 +57,7 @@ export type SavedRefinedClip =
     warning?: string;
   }>;
 
-export interface IRefinedClipSaveService {
-  save(request: IRefinedClipSaveRequest, onProgress?: (progress: IRefinedClipSaveProgress) => void): Promise<SavedRefinedClip>;
+export interface IEditedClipSaveService {
+  save(request: IEditedClipSaveRequest, onProgress?: (progress: IEditedClipSaveProgress) => void): Promise<SavedEditedClip>;
   cancelSave(): Promise<void>;
 }

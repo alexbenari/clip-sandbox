@@ -17,8 +17,8 @@ const { LocatedMovieStore } = require('./located-movie-store.cjs');
 const { MovieWindowCache } = require('./movie-window-cache.cjs');
 const { MovieFrameRateProbe } = require('./movie-frame-rate-probe.cjs');
 const { ZoomEditSources } = require('./zoom-edit-sources.cjs');
-const { RefinedClipSaver } = require('./refined-clip-saver.cjs');
-const { RefinedClipPlacement } = require('./refined-clip-placement.cjs');
+const { EditedClipSaver } = require('./edited-clip-saver.cjs');
+const { EditedClipPlacement } = require('./edited-clip-placement.cjs');
 const { ExactRangeEncoder } = require('./exact-range-encoder.cjs');
 const { registerZoomEditSaveIpc } = require('./zoom-edit-save-ipc.cjs');
 const { StagedEditResolver } = require('./staged-edit-resolver.cjs');
@@ -126,7 +126,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
 
   const settingsStore = new AppSettingsStore(app.getPath('userData'));
   const clipCapturesStore = new ClipCapturesStore(app.getPath('userData'));
-  // The encoder holds only tool locations, so extraction and refined-clip saving share one.
+  // The encoder holds only tool locations, so extraction and edited-clip saving share one.
   const exactRangeEncoder = new ExactRangeEncoder({
     resolveFfmpeg: () => nativeProducts.ffmpeg(),
     resolveFfprobe: () => nativeProducts.ffprobe(),
@@ -166,10 +166,10 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
     sources: zoomEditSources,
     editComposition,
   });
-  const refinedClipSaver = new RefinedClipSaver({
+  const editedClipSaver = new EditedClipSaver({
     stagedEdits,
     encoder: exactRangeEncoder,
-    placement: new RefinedClipPlacement({ trashItem }),
+    placement: new EditedClipPlacement({ trashItem }),
   });
   const zoomEditPreviews = new ZoomEditPreviews({
     folder: zoomEditPreviewFolder,
@@ -329,7 +329,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
     runtime: clipExtractionRuntime,
     hostForEvent: frameReviewRuntime.hostForEvent,
   });
-  registerZoomEditSaveIpc({ ipcMain, saver: refinedClipSaver });
+  registerZoomEditSaveIpc({ ipcMain, saver: editedClipSaver });
   registerZoomEditPreviewIpc({ ipcMain, previews: zoomEditPreviews });
   registerClipCapturesIpc({
     ipcMain,
@@ -338,7 +338,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
   });
   return { dispose: async () => {
     await Promise.allSettled([
-      clipExtractionRuntime.dispose(), refinedClipSaver.dispose(), zoomEditPreviews.dispose(), clipCapturesStore.flush(),
+      clipExtractionRuntime.dispose(), editedClipSaver.dispose(), zoomEditPreviews.dispose(), clipCapturesStore.flush(),
     ]);
   } };
 }

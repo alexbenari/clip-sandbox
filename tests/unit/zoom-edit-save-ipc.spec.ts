@@ -80,7 +80,7 @@ describe('zoom edit save IPC', () => {
     const { save } = registered({ save: () => { throw new Error('EPERM: operation not permitted, open \'D:\\clips\\Feature-002.mp4\''); } });
 
     await expect(save(saveRequest)).resolves.toEqual({ ok: false, operationId: 'refine_12345678',
-      error: { code: 'save-failed', message: 'The refined clip could not be saved.' } });
+      error: { code: 'save-failed', message: 'The edited clip could not be saved.' } });
   });
 
   it('cancels the named save for the requesting window', async () => {

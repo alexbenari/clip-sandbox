@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ActivityReporter } from '../../src/app/activity-reporter.js';
 import type { ClipFileReplacementResult } from '../../src/app/clip-file-replacement.js';
 import { EventSource } from '../../src/app/event-source.js';
-import { RefinedClipSaveWorkflow, type IRefinedClipSaveView } from '../../src/app/refined-clip-save-workflow.js';
-import type { IRefinedClipSaveRequest, ISavedClipEntry, RefinedClipSaveOutcome, SavedRefinedClip } from '../../src/app/refined-clip-save-service.js';
+import { EditedClipSaveWorkflow, type IEditedClipSaveView } from '../../src/app/edited-clip-save-workflow.js';
+import type { IEditedClipSaveRequest, ISavedClipEntry, EditedClipSaveOutcome, SavedEditedClip } from '../../src/app/edited-clip-save-service.js';
 import type { IZoomEditModeSnapshot } from '../../src/app/zoom-edit-mode-session.js';
 import { ZoomEditModeText } from '../../src/app/zoom-edit-mode-text.js';
 import type { Clip } from '../../src/domain/clip.js';
@@ -19,7 +19,7 @@ const entry = (name: string): ISavedClipEntry => ({
   name, path: `C:/clips/${name}`, mediaSource: `file:///C:/clips/${name}?modified=7`, type: 'video/mp4', size: 1024, lastModifiedMs: 7,
 });
 
-class FakeSaveDialog extends EventSource<{ confirmed: RefinedClipSaveOutcome; cancelled: void }> {
+class FakeSaveDialog extends EventSource<{ confirmed: EditedClipSaveOutcome; cancelled: void }> {
   readonly open = vi.fn();
   readonly close = vi.fn();
 }
@@ -43,16 +43,16 @@ class FakeSession extends EventSource<{ changed: IZoomEditModeSnapshot }> {
 }
 
 function saveWorkflow({ originalName = 'alpha.mp4', answer, edits = ZoomEditComposition.of(['refine']) }: {
-  originalName?: string; answer: SavedRefinedClip; edits?: ZoomEditComposition;
+  originalName?: string; answer: SavedEditedClip; edits?: ZoomEditComposition;
 }) {
-  const saves = { save: vi.fn(async (_request: IRefinedClipSaveRequest) => answer), cancelSave: vi.fn(async () => undefined) };
+  const saves = { save: vi.fn(async (_request: IEditedClipSaveRequest) => answer), cancelSave: vi.fn(async () => undefined) };
   const saveDialog = new FakeSaveDialog();
   const activityLog = recordedActivityLog();
   const createdClips = { insert: vi.fn((_original: Clip, created: ClipSource): Clip | null => testClip('clip_9', created.name)) };
   const replacements = {
     replace: vi.fn(async (original: Clip, _replacement: ClipSource): Promise<ClipFileReplacementResult | null> => ({ clip: original, failedCollections: [] })),
   };
-  const flow = new RefinedClipSaveWorkflow({
+  const flow = new EditedClipSaveWorkflow({
     saves,
     saveDialog,
     savedClipSources: { clipSourceOf: saved => clipSource(saved.name, { mediaSource: saved.mediaSource }) },
@@ -64,8 +64,8 @@ function saveWorkflow({ originalName = 'alpha.mp4', answer, edits = ZoomEditComp
   });
   const original = testClip('clip_1', originalName);
   const edit = { clip: original, folder: { folderPath: 'C:/clips' }, session: new FakeSession(edits) };
-  const view: IRefinedClipSaveView = { statusChanged: vi.fn(), endEdit: vi.fn(() => true) };
-  const saveWith = (outcome: RefinedClipSaveOutcome) => {
+  const view: IEditedClipSaveView = { statusChanged: vi.fn(), endEdit: vi.fn(() => true) };
+  const saveWith = (outcome: EditedClipSaveOutcome) => {
     const ending = flow.save(edit, view);
     saveDialog.emit('confirmed', outcome);
     return ending;
@@ -74,11 +74,11 @@ function saveWorkflow({ originalName = 'alpha.mp4', answer, edits = ZoomEditComp
 }
 
 const loopedEdits = () => ZoomEditComposition.of(['refine', 'loopify']);
-const keptLooped: SavedRefinedClip = { outcome: 'kept-both', filename: 'alpha-refined-looped.mp4', entry: entry('alpha-refined-looped.mp4') };
+const keptLooped: SavedEditedClip = { outcome: 'kept-both', filename: 'alpha-refined-looped.mp4', entry: entry('alpha-refined-looped.mp4') };
 
-describe('RefinedClipSaveWorkflow', () => {
+describe('EditedClipSaveWorkflow', () => {
   describe('reports each saved outcome in Activity', () => {
-    it.each<[string, string, SavedRefinedClip, string]>([
+    it.each<[string, string, SavedEditedClip, string]>([
       ['Keep both', 'alpha.mp4', { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') },
         'Saved the refined clip as alpha-refined.mp4.'],
       ['Replace refused by the Recycle Bin', 'alpha.mp4',
@@ -134,7 +134,7 @@ describe('RefinedClipSaveWorkflow', () => {
   });
 
   it('asks the main process for a clip that is not looped when only Refine is staged', async () => {
-    const answer: SavedRefinedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
+    const answer: SavedEditedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
     const { saveWith, saves } = saveWorkflow({ answer });
 
     await saveWith('keep-both');
@@ -142,7 +142,7 @@ describe('RefinedClipSaveWorkflow', () => {
     expect(saves.save.mock.calls[0][0]).toMatchObject({ loopify: false });
   });
 
-  it('notes in Activity that the source movie info may be missing when the main process warns', async () => {    const answer: SavedRefinedClip = {
+  it('notes in Activity that the source movie info may be missing when the main process warns', async () => {    const answer: SavedEditedClip = {
       outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4'),
       warning: 'Clip saved without source metadata; the metadata writer failed.',
     };
@@ -156,7 +156,7 @@ describe('RefinedClipSaveWorkflow', () => {
   });
 
   it('ends the edit, then adds a clip kept beside its original to the views at the saved file’s address', async () => {
-    const answer: SavedRefinedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
+    const answer: SavedEditedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
     const { saveWith, createdClips, view, original } = saveWorkflow({ answer });
     let editEndedFirst = false;
     createdClips.insert.mockImplementation(() => { editEndedFirst = vi.mocked(view.endEdit).mock.calls.length === 1; return null; });
@@ -169,7 +169,7 @@ describe('RefinedClipSaveWorkflow', () => {
   });
 
   it('gives a replaced clip the saved file, under the name it was saved with', async () => {
-    const answer: SavedRefinedClip = { outcome: 'replaced', filename: 'alpha.mp4', entry: entry('alpha.mp4'), replacedFilename: 'alpha.webm' };
+    const answer: SavedEditedClip = { outcome: 'replaced', filename: 'alpha.mp4', entry: entry('alpha.mp4'), replacedFilename: 'alpha.webm' };
     const { saveWith, replacements, original } = saveWorkflow({ originalName: 'alpha.webm', answer });
 
     await saveWith('replace');
@@ -179,7 +179,7 @@ describe('RefinedClipSaveWorkflow', () => {
   });
 
   it('reports a saved clip the views could not show', async () => {
-    const answer: SavedRefinedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
+    const answer: SavedEditedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
     const { saveWith, createdClips, entries } = saveWorkflow({ answer });
     createdClips.insert.mockReturnValue(null);
 
@@ -189,7 +189,7 @@ describe('RefinedClipSaveWorkflow', () => {
   });
 
   it('reports the collections that still list the old name after a .webm Replace', async () => {
-    const answer: SavedRefinedClip = { outcome: 'replaced', filename: 'alpha.mp4', entry: entry('alpha.mp4'), replacedFilename: 'alpha.webm' };
+    const answer: SavedEditedClip = { outcome: 'replaced', filename: 'alpha.mp4', entry: entry('alpha.mp4'), replacedFilename: 'alpha.webm' };
     const { saveWith, replacements, entries } = saveWorkflow({ originalName: 'alpha.webm', answer });
     replacements.replace.mockImplementation(async original => ({
       clip: original, failedCollections: [{ filename: 'picks.txt', collectionName: 'picks', error: new Error('EBUSY') }],
@@ -201,7 +201,7 @@ describe('RefinedClipSaveWorkflow', () => {
   });
 
   it('only reports a clip saved after its edit had ended, changing no view', async () => {
-    const answer: SavedRefinedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
+    const answer: SavedEditedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
     const { saveWith, createdClips, view, entries } = saveWorkflow({ answer });
     vi.mocked(view.endEdit).mockReturnValue(false);
 
@@ -212,7 +212,7 @@ describe('RefinedClipSaveWorkflow', () => {
   });
 
   it('closes the question and saves nothing when stopped while asking', async () => {
-    const answer: SavedRefinedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
+    const answer: SavedEditedClip = { outcome: 'kept-both', filename: 'alpha-refined.mp4', entry: entry('alpha-refined.mp4') };
     const { flow, saveDialog, edit, view } = saveWorkflow({ answer });
     const ending = flow.save(edit, view);
 

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const { createFolderEntry } = require('../../electron/folder-entry.cjs');
-const { RefinedClipPlacement } = require('../../electron/refined-clip-placement.cjs');
+const { EditedClipPlacement } = require('../../electron/edited-clip-placement.cjs');
 
 let root: string;
 let folder: string;
@@ -16,7 +16,7 @@ let recycleBin: string;
 let media: string;
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(os.tmpdir(), 'refined-clip-placement-'));
+  root = mkdtempSync(path.join(os.tmpdir(), 'edited-clip-placement-'));
   folder = path.join(root, 'picks');
   recycleBin = path.join(root, 'recycle-bin');
   mkdirSync(folder);
@@ -43,14 +43,14 @@ function clipNamed(filename: string, content = 'original') {
 const toRecycleBin = async (itemPath: string) => fsPromises.rename(itemPath, path.join(recycleBin, path.basename(itemPath)));
 
 function placementWith({ trashItem = toRecycleBin, fileSystem = fsPromises as object, randomId = () => 'a1b2c3' as string } = {}) {
-  return new RefinedClipPlacement({ trashItem, fileSystem, randomId });
+  return new EditedClipPlacement({ trashItem, fileSystem, randomId });
 }
 
 const folderFiles = () => readdirSync(folder).sort();
 const contentOf = (filename: string) => readFileSync(path.join(folder, filename), 'utf8');
 const failing = (code: string) => async () => { throw Object.assign(new Error(code), { code }); };
 
-describe('RefinedClipPlacement', () => {
+describe('EditedClipPlacement', () => {
   describe('Keep both', () => {
     it('saves the refined clip as <name>-refined.mp4 beside the original', async () => {
       const clip = clipNamed('Feature-002.mp4');
@@ -111,7 +111,7 @@ describe('RefinedClipPlacement', () => {
       const clip = clipNamed('Feature-002.mp4');
       const placement = placementWith({ fileSystem: { ...fsPromises, copyFile: failing('EEXIST') } });
 
-      await expect(placement.keepBoth(clip, media, '-refined')).rejects.toThrow('No free name is left for the refined clip.');
+      await expect(placement.keepBoth(clip, media, '-refined')).rejects.toThrow('No free name is left for the edited clip.');
       expect(folderFiles()).toEqual(['Feature-002.mp4']);
     });
   });
@@ -226,7 +226,7 @@ describe('RefinedClipPlacement', () => {
       const placement = placementWith({ fileSystem: { ...fsPromises, rename: failing('EPERM'), copyFile: copyFromTemporaryFails } });
 
       await expect(placement.replace(clip, media, '-refined')).rejects
-        .toMatchObject({ code: 'kept-under-temporary-name', message: 'The refined clip was kept under a temporary name in the folder.' });
+        .toMatchObject({ code: 'kept-under-temporary-name', message: 'The edited clip was kept under a temporary name in the folder.' });
       expect([folderFiles(), contentOf('Feature-002.a1b2c3.refining'), readdirSync(recycleBin)])
         .toEqual([['Feature-002.a1b2c3.refining'], 'refined', ['Feature-002.mp4']]);
     });

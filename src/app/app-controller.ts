@@ -73,18 +73,18 @@ import { ControlFailureReporting } from './control-failure-reporting.js';
 import { PipelineCatalogControl } from '../ui/pipeline-catalog-control.js';
 import { ElectronFrameReviewService } from '../adapters/electron/electron-frame-review-service.js';
 import { ElectronZoomEditSourceService } from '../adapters/electron/electron-zoom-edit-source-service.js';
-import { ElectronRefinedClipSaveService } from '../adapters/electron/electron-refined-clip-save-service.js';
+import { ElectronEditedClipSaveService } from '../adapters/electron/electron-edited-clip-save-service.js';
 import { ElectronZoomEditPreviewService } from '../adapters/electron/electron-zoom-edit-preview-service.js';
 import { ActiveZoomEdit } from './active-zoom-edit.js';
 import { ZoomEditModeLeavePolicy } from './zoom-edit-mode-leave-policy.js';
 import { ZoomEditModeSessionStarter } from './zoom-edit-mode-session-starter.js';
 import { ZoomEditModeText } from './zoom-edit-mode-text.js';
 import { ZoomEditModeWorkflow } from './zoom-edit-mode-workflow.js';
-import { RefinedClipSaveWorkflow } from './refined-clip-save-workflow.js';
+import { EditedClipSaveWorkflow } from './edited-clip-save-workflow.js';
 import { CreatedClipInsertion } from './created-clip-insertion.js';
 import { ClipFileReplacement } from './clip-file-replacement.js';
 import { ZoomEditModeKeyboard } from '../ui/zoom-edit-mode-keyboard.js';
-import { SaveRefinementDialogControl } from '../ui/save-refinement-dialog-control.js';
+import { SaveEditsDialogControl } from '../ui/save-edits-dialog-control.js';
 
 const ERROR_LOG_FILENAME = 'err.log';
 const NEW_COLLECTION_CHOICE_VALUE = '__new_collection__';
@@ -128,7 +128,7 @@ export class AppController {
     const gifExtractionServices = captureStore ? ElectronGifSessionServices.tryCreate(window) : null;
     const zoomEditFrameReview = ElectronFrameReviewService.tryCreate(window);
     const zoomEditSources = ElectronZoomEditSourceService.tryCreate(window);
-    const refinedClipSaves = ElectronRefinedClipSaveService.tryCreate(window);
+    const editedClipSaves = ElectronEditedClipSaveService.tryCreate(window);
     const zoomEditPreviews = ElectronZoomEditPreviewService.tryCreate(window);
     const activeZoomEdit = new ActiveZoomEdit();
 
@@ -155,7 +155,7 @@ export class AppController {
     const unsavedChangesDialog = UnsavedChangesDialogControl.fromDocument(document);
     const discardRefinementDialog = DiscardRefinementDialogControl.fromDocument(document);
     const discardZoomEditDialog = DiscardRefinementDialogControl.forZoomEdit(document, { text: zoomEditModeText });
-    const saveRefinementDialog = SaveRefinementDialogControl.fromDocument(document, { text: zoomEditModeText });
+    const saveEditsDialog = SaveEditsDialogControl.fromDocument(document, { text: zoomEditModeText });
     const zoomEditModeKeyboard = new ZoomEditModeKeyboard();
     const trashClipsDialog = TrashClipsDialogControl.fromDocument(document, { appText });
     const activityPanelAutoOpenPolicy = new ActivityPanelAutoOpenPolicy({
@@ -315,7 +315,7 @@ export class AppController {
       diagnostics,
       appText,
     });
-    const zoomEditServices = zoomEditFrameReview && zoomEditSources && refinedClipSaves && zoomEditPreviews
+    const zoomEditServices = zoomEditFrameReview && zoomEditSources && editedClipSaves && zoomEditPreviews
       ? {
         sessions: new ZoomEditModeSessionStarter({
           frameReview: zoomEditFrameReview,
@@ -325,7 +325,7 @@ export class AppController {
           failures: new RuntimeFailureReporter(activityReporter, diagnostics),
           previewBounds: ZOOM_EDIT_PREVIEW_BOUNDS,
         }),
-        saves: refinedClipSaves,
+        saves: editedClipSaves,
       }
       : null;
     const zoom = new ZoomWorkflow({
@@ -344,10 +344,10 @@ export class AppController {
       diagnostics,
       reporter: activityReporter,
     });
-    const refinedClipSave = zoomEditServices
-      ? new RefinedClipSaveWorkflow({
+    const editedClipSave = zoomEditServices
+      ? new EditedClipSaveWorkflow({
         saves: zoomEditServices.saves,
-        saveDialog: saveRefinementDialog,
+        saveDialog: saveEditsDialog,
         savedClipSources: folders,
         createdClips: new CreatedClipInsertion({
           pipelineWorkingCopy, openFolder: state, grid, collectionView, sourceMovies: clipSourceMovies, zoom,
@@ -360,10 +360,10 @@ export class AppController {
         text: zoomEditModeText,
       })
       : null;
-    const zoomEditMode = zoomEditServices && refinedClipSave
+    const zoomEditMode = zoomEditServices && editedClipSave
       ? new ZoomEditModeWorkflow({
         sessions: zoomEditServices.sessions,
-        saveWorkflow: refinedClipSave,
+        saveWorkflow: editedClipSave,
         activeEdit: activeZoomEdit,
         pipelineWorkingCopy,
         openFolder: state,
@@ -482,7 +482,7 @@ export class AppController {
       fullScreenKeys: collectionFullScreen,
       activeEdit: activeZoomEdit,
       zoomEditKeys: zoomEditModeKeyboard,
-      zoomEditDialogs: [saveRefinementDialog, discardZoomEditDialog],
+      zoomEditDialogs: [saveEditsDialog, discardZoomEditDialog],
     });
 
     // Startup: show an empty Collection view, activate the first screen, then load settings.
@@ -502,7 +502,7 @@ export class AppController {
           zoom, gridContextMenu, gifRangeRefinement, refineLeave, pipelineCatalogRefresher, settingsWorkflow,
           controlFailureReporting, clipSourceMovies]) workflow.dispose();
         await zoomEditMode?.dispose();
-        refinedClipSave?.dispose();
+        editedClipSave?.dispose();
         await gifExtractionSession?.dispose();
       },
       destroyControls: () => {

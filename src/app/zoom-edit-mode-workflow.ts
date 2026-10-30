@@ -6,7 +6,7 @@ import type { IEventSource } from './event-source.js';
 import type { FolderAccess } from './folder-access.js';
 import type { StepDirection } from './held-step-repeat.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
-import type { IRefinedClipSaveView, RefinedClipSaveEnd, RefinedClipSaveWorkflow, RefinedClipSaveStatus } from './refined-clip-save-workflow.js';
+import type { IEditedClipSaveView, EditedClipSaveEnd, EditedClipSaveWorkflow, EditedClipSaveStatus } from './edited-clip-save-workflow.js';
 import type { IScreenChangeRequest } from './refine-leave-workflow.js';
 import type { IScreenIdentity } from './refine-screen-leave-policy.js';
 import type { IScreenNavigation } from './screen-navigation.js';
@@ -77,7 +77,7 @@ export interface IZoomEditScreenChanges extends IEventSource<{
 
 type ZoomEditModeDependencies = Readonly<{
   sessions: IZoomEditSessions;
-  saveWorkflow: Pick<RefinedClipSaveWorkflow, 'save' | 'stop'>;
+  saveWorkflow: Pick<EditedClipSaveWorkflow, 'save' | 'stop'>;
   activeEdit: Pick<ActiveZoomEdit, 'begin' | 'end'>;
   pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'resolveClip'>;
   openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
@@ -101,7 +101,7 @@ type EditMode = {
   unsubscribe: () => void;
   shown: IZoomEditModeSnapshot;
   notice: string | null;
-  saving: RefinedClipSaveStatus | null;
+  saving: EditedClipSaveStatus | null;
   lastCommand: Promise<unknown>;
 };
 
@@ -283,7 +283,7 @@ export class ZoomEditModeWorkflow {
     await mode.session.pause();
     if (this.mode !== mode) return;
     let savedClipShown = false;
-    const view: IRefinedClipSaveView = {
+    const view: IEditedClipSaveView = {
       statusChanged: status => {
         if (this.mode !== mode) return;
         mode.saving = status;
@@ -305,7 +305,7 @@ export class ZoomEditModeWorkflow {
     this.showNotice(mode, this.noticeAfterSave(end));
   }
 
-  private noticeAfterSave(end: RefinedClipSaveEnd): string | null {
+  private noticeAfterSave(end: EditedClipSaveEnd): string | null {
     if (end === 'cancelled') return this.deps.text.saveCancelled();
     if (end === 'failed') return this.deps.text.saveFailedHint();
     return null;
