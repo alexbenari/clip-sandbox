@@ -210,7 +210,7 @@ export class ReviewSession {
     return this.rememberFrame(await this.options.exact.atTime(this.pendingPlaybackTargetUs ?? status.timestampUs));
   }
 
-  scrubToFrame(frameIndex: number): Promise<IHostExactFrame> {
+  dragToFrame(frameIndex: number): Promise<IHostExactFrame> {
     return this.moveToExactFrame(() => this.scrubScheduler.submit(frameIndex));
   }
 

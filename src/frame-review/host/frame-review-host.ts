@@ -49,7 +49,7 @@ export interface IFrameReviewHostSession {
   resumeExactPreview(frameIndex: number): Promise<void>;
   stopExactPreview(): Promise<IHostExactFrame | null>;
   enterFrameScrub(): Promise<IHostExactFrame>;
-  scrubToFrame(frameIndex: number): Promise<IHostExactFrame>;
+  dragToFrame(frameIndex: number): Promise<IHostExactFrame>;
   goToFrame(frameIndex: number): Promise<IHostExactFrame>;
   scrubToTime(timestampUs: bigint): Promise<IHostExactFrame>;
   stepAdjacent(direction: AdjacentDirection): Promise<IHostExactFrame>;

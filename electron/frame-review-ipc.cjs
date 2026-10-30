@@ -9,7 +9,7 @@ const CHANNELS = Object.freeze({
 });
 
 const COMMANDS = new Set([
-  'state', 'play', 'pause', 'seek-playback', 'jump-playback-by', 'enter-scrub', 'scrub-to-frame', 'go-to-frame', 'scrub-to-time',
+  'state', 'play', 'pause', 'seek-playback', 'jump-playback-by', 'enter-scrub', 'drag-to-frame', 'go-to-frame', 'scrub-to-time',
   'step-adjacent', 'press-adjacent', 'release-adjacent', 'capture-current-point',
   'frame-identity', 'thumbnail-frame',
   'start-exact-preview', 'pause-exact-preview', 'resume-exact-preview', 'stop-exact-preview',
@@ -130,7 +130,7 @@ class FrameReviewIpcBoundary {
       case 'resume-exact-preview': return session.resumeExactPreview(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
       case 'stop-exact-preview': return session.stopExactPreview();
       case 'enter-scrub': return session.enterFrameScrub();
-      case 'scrub-to-frame': return session.scrubToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      case 'drag-to-frame': return session.dragToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
       case 'go-to-frame': return session.goToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
       case 'scrub-to-time': {
         const timestampUs = this.decimalBigInt(args.timestampUs, 'timestampUs');

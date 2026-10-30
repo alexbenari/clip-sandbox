@@ -289,7 +289,7 @@ describe('review session', () => {
     playback.failRecovery = true;
     await expect(session.pauseExactPreview()).rejects.toThrow('reset failed');
     await expect(session.play()).rejects.toMatchObject({ category: 'invalid-state' });
-    await expect(session.scrubToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
+    await expect(session.dragToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
     await session.dispose();
   });
 
@@ -318,7 +318,7 @@ describe('review session', () => {
     expect(session.state()).toMatchObject({ phase: 'exact-ready', captureEnabled: true });
     await expect(session.startExactPreview({ startFrameIndex: 1, endFrameIndex: 2 }))
       .rejects.toThrow('unsupported playback-clock origin');
-    await expect(session.scrubToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
+    await expect(session.dragToFrame(2)).resolves.toMatchObject({ kind: 'exact-frame' });
     await session.dispose();
   });
 
@@ -419,7 +419,7 @@ describe('review session', () => {
     exact.exact = async (frameIndex: number) => frameAt(frameIndex);
     const session = await preparedSession(exact, vi.fn());
 
-    const dragged = session.scrubToFrame(1);
+    const dragged = session.dragToFrame(1);
     await session.goToFrame(3);
 
     await expect(dragged).rejects.toMatchObject({ category: 'stale-response' });
@@ -432,7 +432,7 @@ describe('review session', () => {
     const session = await preparedSession(new ExactFake(), emit);
 
     await session.goToFrame(2);
-    await session.scrubToFrame(2);
+    await session.dragToFrame(2);
     await session.stepAdjacent(1);
 
     expect(emit).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'display-frame' }));
@@ -575,7 +575,7 @@ describe('review session', () => {
     await session.open();
     await session.whenPrepared();
 
-    await session.scrubToFrame(3);
+    await session.dragToFrame(3);
     playback.listener?.(Object.freeze({
       kind: 'playback-frame', sourceGeneration: 1, frameGeneration: 2, playbackTimestampUs: 1_951_000n,
       width: 64, height: 48, sourceWidth: 64, sourceHeight: 48, pixels: new Uint8Array(64 * 48 * 4),
