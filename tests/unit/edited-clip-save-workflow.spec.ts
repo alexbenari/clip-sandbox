@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ActivityReporter } from '../../src/app/activity-reporter.js';
-import type { ClipFileReplacementResult } from '../../src/app/clip-file-replacement.js';
 import { EventSource } from '../../src/app/event-source.js';
 import { EditedClipSaveWorkflow, type IEditedClipSaveView } from '../../src/app/edited-clip-save-workflow.js';
 import type { IEditedClipSaveRequest, ISavedClipEntry, EditedClipSaveOutcome, SavedEditedClip } from '../../src/app/edited-clip-save-service.js';
@@ -50,7 +49,7 @@ function saveWorkflow({ originalName = 'alpha.mp4', answer, edits = ZoomEditComp
   const activityLog = recordedActivityLog();
   const createdClips = { insert: vi.fn((_original: Clip, created: ClipSource): Clip | null => testClip('clip_9', created.name)) };
   const replacements = {
-    replace: vi.fn(async (original: Clip, _replacement: ClipSource): Promise<ClipFileReplacementResult | null> => ({ clip: original, failedCollections: [] })),
+    replace: vi.fn(async (original: Clip, _replacement: ClipSource): Promise<Clip | null> => original),
   };
   const flow = new EditedClipSaveWorkflow({
     saves,
@@ -186,18 +185,6 @@ describe('EditedClipSaveWorkflow', () => {
     await saveWith('keep-both');
 
     expect(entries.at(-1)).toMatchObject({ kind: 'error', message: 'Saved alpha-refined.mp4, but the Collection view could not show it.' });
-  });
-
-  it('reports the collections that still list the old name after a .webm Replace', async () => {
-    const answer: SavedEditedClip = { outcome: 'replaced', filename: 'alpha.mp4', entry: entry('alpha.mp4'), replacedFilename: 'alpha.webm' };
-    const { saveWith, replacements, entries } = saveWorkflow({ originalName: 'alpha.webm', answer });
-    replacements.replace.mockImplementation(async original => ({
-      clip: original, failedCollections: [{ filename: 'picks.txt', collectionName: 'picks', error: new Error('EBUSY') }],
-    }));
-
-    await saveWith('replace');
-
-    expect(entries.at(-1)).toMatchObject({ kind: 'error', message: 'Could not change alpha.webm to alpha.mp4 in 1 collection.' });
   });
 
   it('only reports a clip saved after its edit had ended, changing no view', async () => {

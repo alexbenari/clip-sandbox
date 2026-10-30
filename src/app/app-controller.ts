@@ -83,6 +83,8 @@ import { ZoomEditModeWorkflow } from './zoom-edit-mode-workflow.js';
 import { EditedClipSaveWorkflow } from './edited-clip-save-workflow.js';
 import { CreatedClipInsertion } from './created-clip-insertion.js';
 import { ClipFileReplacement } from './clip-file-replacement.js';
+import { ClipRenameWorkflow } from './clip-rename-workflow.js';
+import { ElectronClipRenameService } from '../adapters/electron/electron-clip-rename-service.js';
 import { ZoomEditModeKeyboard } from '../ui/zoom-edit-mode-keyboard.js';
 import { SaveEditsDialogControl } from '../ui/save-edits-dialog-control.js';
 
@@ -130,6 +132,7 @@ export class AppController {
     const zoomEditSources = ElectronZoomEditSourceService.tryCreate(window);
     const editedClipSaves = ElectronEditedClipSaveService.tryCreate(window);
     const zoomEditPreviews = ElectronZoomEditPreviewService.tryCreate(window);
+    const clipRenames = ElectronClipRenameService.tryCreate(window);
     const activeZoomEdit = new ActiveZoomEdit();
 
     // Controls.
@@ -345,6 +348,10 @@ export class AppController {
       diagnostics,
       reporter: activityReporter,
     });
+    const clipFileReplacement = new ClipFileReplacement({
+      pipelineWorkingCopy, fileWriter: collectionFileWriter, grid, collectionView, sourceMovies: clipSourceMovies, zoom,
+      reporter: activityReporter, appText,
+    });
     const editedClipSave = zoomEditServices
       ? new EditedClipSaveWorkflow({
         saves: zoomEditServices.saves,
@@ -353,9 +360,7 @@ export class AppController {
         createdClips: new CreatedClipInsertion({
           pipelineWorkingCopy, openFolder: state, grid, collectionView, sourceMovies: clipSourceMovies, zoom,
         }),
-        replacements: new ClipFileReplacement({
-          pipelineWorkingCopy, fileWriter: collectionFileWriter, grid, collectionView, sourceMovies: clipSourceMovies, zoom,
-        }),
+        replacements: clipFileReplacement,
         reporter: activityReporter,
         diagnostics,
         text: zoomEditModeText,
@@ -422,6 +427,17 @@ export class AppController {
       reporter: activityReporter,
       appText,
     });
+    const clipRename = clipRenames
+      ? new ClipRenameWorkflow({
+        grid,
+        renames: clipRenames,
+        renamedClips: clipFileReplacement,
+        pipelineWorkingCopy,
+        openFolder: state,
+        reporter: activityReporter,
+        diagnostics,
+      })
+      : null;
     const gridContextMenu = new GridContextMenuWorkflow({
       pipelineWorkingCopy,
       grid,
@@ -430,6 +446,7 @@ export class AppController {
       fullScreen: fullscreenAdapter,
       addToCollection,
       trashClips,
+      rename: clipRename,
     });
     const gifRangeRefinement = new GifRangeRefinementWorkflow({
       session: gifExtractionSession,
@@ -503,6 +520,7 @@ export class AppController {
           controlFailureReporting, clipSourceMovies]) workflow.dispose();
         await zoomEditMode?.dispose();
         editedClipSave?.dispose();
+        clipRename?.dispose();
         await gifExtractionSession?.dispose();
       },
       destroyControls: () => {

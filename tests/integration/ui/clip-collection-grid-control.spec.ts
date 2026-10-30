@@ -997,6 +997,67 @@ describe('clip collection grid controller', () => {
     expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
   });
 
+  describe('renaming', () => {
+    function renamingGrid({ listening = true } = {}) {
+      const context = keyboardGrid();
+      const renames = [];
+      if (listening) context.controller.on('renameRequested', (request) => renames.push(request));
+      const field = () => context.card('bravo').querySelector('input');
+      const pressInField = (key) => field().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      return { ...context, renames, field, pressInField };
+    }
+
+    test('F2 on a focused card edits its name, and Enter asks to rename it keeping the extension', () => {
+      const { card, press, field, pressInField, renames } = renamingGrid();
+      card('bravo').focus();
+
+      press('F2');
+      field().value = 'sunset';
+      pressInField('Enter');
+
+      expect(renames).toEqual([{ clipId: 'clip_2', newFilename: 'sunset.mp4' }]);
+    });
+
+    test('F2 edits nothing when nothing renames clips', () => {
+      const { card, press, field } = renamingGrid({ listening: false });
+      card('bravo').focus();
+
+      press('F2');
+
+      expect(field()).toBeNull();
+    });
+
+    test('shows why a name was refused in the card being renamed', () => {
+      const { controller, field, card } = renamingGrid();
+      controller.beginRename('clip_2');
+
+      controller.showRenameProblem('clip_2', 'name-taken');
+
+      expect(card('bravo').querySelector('[role="alert"]').textContent).toBe('Another file in this folder already has this name.');
+      expect(document.activeElement).toBe(field());
+    });
+
+    test('ending the rename removes the field and gives the focus back to the card', () => {
+      const { controller, field, focusedName } = renamingGrid();
+      controller.beginRename('clip_2');
+
+      controller.endRename('clip_2');
+
+      expect(field()).toBeNull();
+      expect(focusedName()).toBe('bravo');
+    });
+
+    test('Escape in the field cancels the rename', () => {
+      const { controller, field, pressInField, renames } = renamingGrid();
+      controller.beginRename('clip_2');
+
+      field().value = 'sunset';
+      pressInField('Escape');
+
+      expect(field()).toBeNull();
+      expect(renames).toEqual([]);
+    });  });
+
   test('Alt+Arrow moves the focused clip one place or one row and reports the new order', () => {
     const { card, focusedName, press, requests } = keyboardGrid();
     card('alpha').focus();

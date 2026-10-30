@@ -80,6 +80,15 @@ describe('grid context menu control', () => {
     ]);
   });
 
+  test('lists Rename first, apart from the collection items, for a menu opened on a clip', () => {
+    const onRename = vi.fn();
+    const control = new GridContextMenuControl();
+
+    const items = control.buildItems({ hasSelection: true, hasPipeline: true, targetCollections: [subset], onRename });
+
+    expect(items.slice(0, 2)).toEqual([{ id: 'rename-clip', label: 'Rename', onSelect: onRename }, { separator: true }]);
+  });
+
   test('asks the context menu to focus its first item for a keyboard request', () => {
     const contextMenu = { open: vi.fn() };
     const control = new GridContextMenuControl({ contextMenu });

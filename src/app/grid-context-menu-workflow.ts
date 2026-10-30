@@ -11,6 +11,7 @@ export interface IClipContextMenu {
     focusFirstItem: boolean;
     hasSelection: boolean;
     hasPipeline: boolean;
+    onRename: (() => void) | null;
     targetCollections: CollectionDestinationChoice[];
     onAddToCollection: (choice: Readonly<{ collectionFilename?: string | null }>) => void;
     onNewCollection: () => void;
@@ -27,6 +28,7 @@ type GridContextMenuDependencies = Readonly<{
   fullScreen: { isDocumentFullScreen(): boolean };
   addToCollection: Pick<AddToCollectionWorkflow, 'destinationChoices' | 'addSelectedClips' | 'openDialog'>;
   trashClips: Pick<TrashClipsWorkflow, 'start'>;
+  rename: { begin(clipId: string): void } | null;
 }>;
 
 export class GridContextMenuWorkflow {
@@ -34,19 +36,21 @@ export class GridContextMenuWorkflow {
 
   constructor(private readonly menu: GridContextMenuDependencies) {
     this.unsubscribes = [
-      menu.grid.on('contextMenuRequested', ({ point, fromKeyboard }) => {
+      menu.grid.on('contextMenuRequested', ({ point, clipId, fromKeyboard }) => {
         if (menu.zoom.isOpen() || menu.fullScreen.isDocumentFullScreen()) return;
-        this.open(point, { focusFirstItem: fromKeyboard });
+        this.open(point, { focusFirstItem: fromKeyboard, clipId });
       }),
     ];
   }
 
-  open(point: MenuPoint, { focusFirstItem = false }: { focusFirstItem?: boolean } = {}): void {
+  open(point: MenuPoint, { focusFirstItem = false, clipId = null }: { focusFirstItem?: boolean; clipId?: string | null } = {}): void {
+    const { rename } = this.menu;
     this.menu.menu.open({
       point,
       focusFirstItem,
       hasSelection: this.menu.grid.getSelectedClipIds().length > 0,
       hasPipeline: !!this.menu.pipelineWorkingCopy.pipeline,
+      onRename: rename && clipId ? () => rename.begin(clipId) : null,
       targetCollections: this.menu.addToCollection.destinationChoices(),
       onAddToCollection: choice => {
         void this.menu.addToCollection.addSelectedClips({ kind: 'existing', collectionFilename: choice.collectionFilename ?? null });

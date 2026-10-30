@@ -22,6 +22,7 @@ export class GridSelection {
     const anchor = this.anchorClipId && orderedClipIds.includes(this.anchorClipId) ? this.anchorClipId : fallbackAnchorClipId;
     const anchorIndex = orderedClipIds.indexOf(anchor);
     const index = orderedClipIds.indexOf(clipId);
+    if (anchorIndex < 0 || index < 0) return;
     this.clipIds = new Set(orderedClipIds.slice(Math.min(anchorIndex, index), Math.max(anchorIndex, index) + 1));
     this.anchorClipId = anchor;
   }

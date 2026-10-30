@@ -14,6 +14,7 @@ export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Open the focused or selected clip in Zoom', group: 'Grid', sequences: [['Enter'], ['Z']] },
   { description: 'Move the focused clip in the order', group: 'Grid', sequences: [['Alt', 'Arrow keys']] },
   { description: 'Open the clip menu', group: 'Grid', sequences: [['Shift', 'F10'], ['Menu']] },
+  { description: 'Rename the focused clip', group: 'Grid', sequences: [['F2']] },
   { description: 'Save the collection; in the folder view, save as a new collection', group: 'Grid', sequences: [['Ctrl', 'S']] },
   {
     description: 'Remove selected clips from the collection; in the folder view, move them to the Recycle Bin after confirming',

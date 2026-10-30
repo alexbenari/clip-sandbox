@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { ActivityReporter } from '../../src/app/activity-reporter.js';
+import { AppText } from '../../src/app/app-text.js';
 import { ClipFileReplacement } from '../../src/app/clip-file-replacement.js';
+import { recordedActivityLog } from '../support/recorded-activity-log.js';
 import { PipelineWorkingCopy } from '../../src/app/pipeline-working-copy.js';
 import { Clip } from '../../src/domain/clip.js';
 import { Collection } from '../../src/domain/collection.js';
@@ -39,9 +42,12 @@ function replacementIn({ failingCollection = null }: { failingCollection?: strin
   const collectionView = { renderActiveSequence: () => { showActive(); }, refreshSelector: vi.fn(), refreshToolbar: vi.fn() };
   const sourceMovies = { readClip: vi.fn(async (_clip: Clip) => undefined) };
   const zoom = { openClip: vi.fn((_clip: Clip) => true) };
-  const replacement = new ClipFileReplacement({ pipelineWorkingCopy, fileWriter, grid, collectionView, sourceMovies, zoom });
+  const activityLog = recordedActivityLog();
+  const replacement = new ClipFileReplacement({
+    pipelineWorkingCopy, fileWriter, grid, collectionView, sourceMovies, zoom, reporter: new ActivityReporter(activityLog), appText: new AppText(),
+  });
   const clip = (name: string) => pipelineWorkingCopy.currentClipSequence!.orderedClips().find(candidate => candidate.name === name)!;
-  return { replacement, pipeline, grid, written, sourceMovies, zoom, clip };
+  return { replacement, pipeline, grid, written, sourceMovies, zoom, clip, entries: activityLog.entries };
 }
 
 describe('ClipFileReplacement', () => {
@@ -61,14 +67,24 @@ describe('ClipFileReplacement', () => {
     expect(written).toEqual({ 'others.txt': ['bravo.mp4'], 'picks.txt': ['bravo.mp4', 'alpha.mp4'] });
   });
 
-  it('answers the collections it could not rewrite, which keep the old name', async () => {
+  it('keeps the old name in a collection it could not rewrite', async () => {
     const { replacement, pipeline, clip } = replacementIn({ failingCollection: 'picks.txt' });
 
-    const result = await replacement.replace(clip('bravo.webm'), clipSource('bravo.mp4'));
+    await replacement.replace(clip('bravo.webm'), clipSource('bravo.mp4'));
 
-    expect(result?.failedCollections.map(({ filename, error }) => [filename, (error as Error).message]))
-      .toEqual([['picks.txt', 'EBUSY: resource busy or locked']]);
     expect(pipeline.getCollectionByFilename('picks.txt')?.orderedClipNames).toEqual(['bravo.webm', 'alpha.mp4']);
+  });
+
+  it('reports the collections it could not rewrite, with what to do', async () => {
+    const { replacement, clip, entries } = replacementIn({ failingCollection: 'picks.txt' });
+
+    await replacement.replace(clip('bravo.webm'), clipSource('bravo.mp4'));
+
+    expect(entries.at(-1)).toMatchObject({
+      kind: 'error',
+      message: 'Could not change bravo.webm to bravo.mp4 in 1 collection.',
+      recovery: 'Add bravo.mp4 to those collections again.',
+    });
   });
 
   it('selects the clip, reads its source movie again and opens it in Zoom', async () => {
@@ -80,6 +96,32 @@ describe('ClipFileReplacement', () => {
     expect(grid.selectedClipId).toBe(alpha.id);
     expect(sourceMovies.readClip.mock.calls).toEqual([[alpha]]);
     expect(zoom.openClip.mock.calls).toEqual([[alpha]]);
+  });
+
+  it('shows a renamed clip under its new name in the view', async () => {
+    const { replacement, grid, clip } = replacementIn();
+
+    await replacement.rename(clip('bravo.webm'), clipSource('sunset.webm', { mediaSource: 'file:///clips/sunset.webm' }));
+
+    expect(grid.cached.get('pipeline')).toEqual(['file:///clips/alpha.mp4', 'file:///clips/sunset.webm']);
+  });
+
+  it('rewrites every collection that lists a renamed clip', async () => {
+    const { replacement, written, clip } = replacementIn();
+
+    await replacement.rename(clip('bravo.webm'), clipSource('sunset.webm'));
+
+    expect(written).toEqual({ 'others.txt': ['sunset.webm'], 'picks.txt': ['sunset.webm', 'alpha.mp4'] });
+  });
+
+  it('reads a renamed clip’s source movie again and leaves Zoom closed', async () => {
+    const { replacement, sourceMovies, zoom, clip } = replacementIn();
+    const bravo = clip('bravo.webm');
+
+    await replacement.rename(bravo, clipSource('sunset.webm'));
+
+    expect(sourceMovies.readClip.mock.calls).toEqual([[bravo]]);
+    expect(zoom.openClip).not.toHaveBeenCalled();
   });
 
   it('answers null and opens nothing for a clip the open folder does not hold', async () => {

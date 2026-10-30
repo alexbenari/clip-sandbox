@@ -178,13 +178,4 @@ export class ZoomEditModeText implements IZoomEditWording {
   savedClipNotShownRecovery(): string {
     return 'Open the folder again to see the saved clip.';
   }
-
-  collectionsNotRenamed(previousFilename: string, filename: string, collectionCount: number): string {
-    const collections = collectionCount === 1 ? '1 collection' : `${collectionCount} collections`;
-    return `Could not change ${previousFilename} to ${filename} in ${collections}.`;
-  }
-
-  collectionsNotRenamedRecovery(filename: string): string {
-    return `Add ${filename} to those collections again.`;
-  }
 }

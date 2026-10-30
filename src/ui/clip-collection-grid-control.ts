@@ -7,6 +7,8 @@ import { DocumentElements } from './document-elements.js';
 import { GridPreviewPlaybackScheduler } from './grid-preview-playback-scheduler.js';
 import { GridNavigationRules } from './grid-navigation-rules.js';
 import { GridSelection } from './grid-selection.js';
+import { ClipNameEditor } from './clip-name-editor.js';
+import type { ClipRenameProblem } from '../app/clip-rename-service.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 
 export interface IClipGridEvents {
@@ -15,6 +17,7 @@ export interface IClipGridEvents {
   orderChanged: string[];
   openClipRequested: string;
   removeSelectedRequested: string[];
+  renameRequested: Readonly<{ clipId: string; newFilename: string }>;
   contextMenuRequested: Readonly<{
     point: { x: number; y: number };
     selectedClipId: string | null;
@@ -64,6 +67,10 @@ const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
 .clip-collection-grid .source-glyph svg{ width:16px; height:16px; }
 .clip-collection-grid-root.titles-hidden .filename,
 .clip-collection-grid-root.titles-hidden .source-glyph{ display:none; }
+.clip-collection-grid .thumb.renaming .filename{ visibility:hidden; }
+.clip-collection-grid .filename-editor{ position:absolute; left:0; right:0; bottom:0; padding:6px; background:rgba(2,6,23,.85); }
+.clip-collection-grid .filename-editor input{ width:100%; padding:4px 6px; border-radius:6px; border:1px solid var(--accent); background:rgba(2,6,23,.85); color:var(--fg); font:inherit; font-size:12px; }
+.clip-collection-grid .filename-editor-problem{ margin:0 2px 6px; color:#fca5a5; font-size:12px; line-height:1.3; }
 `;
 const SOURCE_GLYPH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/></svg>';
 
@@ -331,7 +338,8 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private doc: Document;
   private currentCollection: ClipSequence | null;
   private readonly selection = new GridSelection();
-  private focusAnchorClipId: string | null = null;
+  private renaming: { clipId: string; editor: ClipNameEditor } | null = null;
+  private tabStopClipId: string | null = null;
   private dragSourceCard: ClipCard | null;
   private hiddenCards: ClipCard[];
   private currentAppliedCols: number | null;
@@ -856,7 +864,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   // Only one card is a Tab stop, so Tab enters and leaves the grid in one step.
   private updateTabStop(): void {
     const cards = this.gridCards(this.grid);
-    const stop = cards.find((card) => card.dataset.clipId === this.focusAnchorClipId)
+    const stop = cards.find((card) => card.dataset.clipId === this.tabStopClipId)
       ?? cards.find((card) => this.selection.has(card.dataset.clipId || ''))
       ?? cards[0];
     for (const card of cards) card.tabIndex = card === stop ? 0 : -1;
@@ -864,7 +872,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
 
   private onCardFocus(card: ClipCard): void {
     if (card.parentElement !== this.grid) return;
-    this.focusAnchorClipId = card.dataset.clipId || null;
+    this.tabStopClipId = card.dataset.clipId || null;
     this.updateTabStop();
   }
 
@@ -979,6 +987,8 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     } else if (event.key === ' ' && !event.altKey && !event.shiftKey) {
       if (event.ctrlKey || event.metaKey) this.toggleCardSelection(card);
       else this.selectOnlyCard(card);
+    } else if (event.key === 'F2' && !event.altKey && !event.ctrlKey && !event.shiftKey && this.events.hasSubscribers('renameRequested')) {
+      this.beginRename(card.dataset.clipId || '');
     } else if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
       const rect = card.getBoundingClientRect();
       this.requestContextMenu(card, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, true);
@@ -987,6 +997,32 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     }
     event.preventDefault();
     return true;
+  }
+
+  beginRename(clipId: string): void {
+    const card = this.getCardByClipId(clipId);
+    const clip = this.getClipById(clipId);
+    if (!card || !clip) return;
+    this.endAnyRename();
+    const editor = new ClipNameEditor(card, clip.name, {
+      submit: (newFilename) => this.events.emit('renameRequested', { clipId, newFilename }),
+      cancel: () => this.endRename(clipId),
+    });
+    this.renaming = { clipId, editor };
+  }
+
+  showRenameProblem(clipId: string, problem: ClipRenameProblem): void {
+    if (this.renaming?.clipId === clipId) this.renaming.editor.showProblem(problem);
+  }
+
+  endRename(clipId: string): void {
+    if (this.renaming?.clipId !== clipId) return;
+    this.renaming.editor.remove();
+    this.renaming = null;
+  }
+
+  private endAnyRename(): void {
+    if (this.renaming) this.endRename(this.renaming.clipId);
   }
 
   private arrowFocusMoveOf(event: KeyboardEvent): ArrowFocusMove | null {
@@ -1078,6 +1114,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   }
 
   renderCollection(collection: ClipSequence | null | undefined, { cacheKey = null }: { cacheKey?: string | null } = {}): void {
+    this.endAnyRename();
     this.fsRestore();
     const nextCacheKey = this.normalizedCacheKey(cacheKey);
     const isSwitchingFromCachedView = nextCacheKey && nextCacheKey !== this.activeCacheKey && this.activeCacheKey !== null;
@@ -1152,13 +1189,14 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   }
 
   clear(): void {
+    this.endAnyRename();
     this.fsRestore();
     this.previewPlayback.cancel(this.grid);
     this.clearGridCards(this.grid);
     this.invalidateAllViews();
     this.selection.clear();
     this.dragSourceCard = null;
-    this.focusAnchorClipId = null;
+    this.tabStopClipId = null;
     this.activeCacheKey = null;
     this.setTitlesHidden(false);
     this.metadataTracker.reset();

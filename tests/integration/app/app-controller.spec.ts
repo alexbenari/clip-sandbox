@@ -110,6 +110,37 @@ describe('AppController Collection and Zoom workflows', () => {
     }));
   });
 
+  test('Rename in the clip menu renames the clip on disk, in the grid and in the collections that list it', async () => {
+    window.clipSandboxDesktop.pickFolder = vi.fn(async () => ({
+      canceled: false,
+      folderPath: 'C:/clips',
+      folderName: 'clips',
+      files: [desktopFile({ name: 'alpha.mp4' }), desktopFile({ name: 'bravo.mp4' }), desktopFile({ name: 'picks.txt', text: 'bravo.mp4\nalpha.mp4\n' })],
+    }));
+    window.clipSandboxDesktop.renameClip = vi.fn(async ({ newFilename }) => ({
+      kind: 'renamed', entry: desktopFile({ name: newFilename }),
+    }));
+    const { AppController } = await import('../../../src/app/app-controller.js');
+    new AppController().init();
+    document.querySelector('#appScreenSelector').value = 'collection';
+    document.querySelector('#appScreenSelector').dispatchEvent(new Event('change'));
+    document.getElementById('pickBtn').click();
+    await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(2));
+
+    document.querySelector('#grid .thumb[data-name="bravo.mp4"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 50, clientY: 60 }));
+    await waitFor(() => expect(document.querySelector('#clipContextMenu [data-item-id="rename-clip"]')).not.toBeNull());
+    document.querySelector('#clipContextMenu [data-item-id="rename-clip"]').click();
+    const field = document.querySelector('#grid .thumb[data-name="bravo.mp4"] input');
+    field.value = 'sunset';
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    await waitFor(() => expect(document.querySelector('#grid .thumb[data-name="sunset.mp4"]')).not.toBeNull());
+    expect(window.clipSandboxDesktop.renameClip).toHaveBeenCalledWith({ folderPath: 'C:/clips', filename: 'bravo.mp4', newFilename: 'sunset.mp4' });
+    expect([...document.querySelectorAll('#grid .thumb')].map(card => card.dataset.name)).toEqual(['alpha.mp4', 'sunset.mp4']);
+    expect(window.clipSandboxDesktop.saveTextFile).toHaveBeenCalledWith(expect.objectContaining({ filename: 'picks.txt', text: 'sunset.mp4\nalpha.mp4\n' }));
+    expect(document.activeElement?.dataset.name).toBe('sunset.mp4');
+  });
+
   test('a failed move to the Recycle Bin shows the file and operating system error in More details', async () => {
     window.clipSandboxDesktop.trashFiles = vi.fn(async () => ({
       ok: false,

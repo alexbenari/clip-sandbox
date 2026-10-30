@@ -23,6 +23,7 @@ const { ExactRangeEncoder } = require('./exact-range-encoder.cjs');
 const { registerZoomEditSaveIpc } = require('./zoom-edit-save-ipc.cjs');
 const { StagedEditResolver } = require('./staged-edit-resolver.cjs');
 const { ZoomEditPreviews } = require('./zoom-edit-previews.cjs');
+const { ClipFileRenamer } = require('./clip-file-renamer.cjs');
 const { registerZoomEditPreviewIpc } = require('./zoom-edit-preview-ipc.cjs');
 const { MovieWindowPlacement } = require('./movie-window-placement.cjs');
 const { NativeProductLocator } = require('./native-product-locator.cjs');
@@ -181,6 +182,8 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
   await zoomEditPreviews.initialize();
   ipcMain.handle('clip-sandbox:clip-source-movies-read', (event, request) =>
     clipSourceMovieRuntime.read(event, request));
+  const clipFileRenamer = new ClipFileRenamer({ folderAccess });
+  ipcMain.handle('clip-sandbox:rename-clip', (event, request) => clipFileRenamer.rename(event.sender, request));
   frameReviewRuntime.onHostReleased(webContentsId => {
     zoomEditSources.forgetAppWindow(webContentsId);
     void zoomEditPreviews.release(webContentsId);

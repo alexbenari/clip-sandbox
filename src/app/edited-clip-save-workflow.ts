@@ -3,7 +3,7 @@ import type { ZoomEditComposition } from '../domain/zoom-edit-composition.js';
 import type { ClipSource } from '../domain/clip-source.js';
 import type { ActivityReporter } from './activity-reporter.js';
 import type { AppDiagnostics } from './app-diagnostics.js';
-import type { ClipFileReplacement, FailedCollectionRename } from './clip-file-replacement.js';
+import type { ClipFileReplacement } from './clip-file-replacement.js';
 import type { CreatedClipInsertion } from './created-clip-insertion.js';
 import type { IEventSource } from './event-source.js';
 import type { FolderAccess } from './folder-access.js';
@@ -165,15 +165,12 @@ export class EditedClipSaveWorkflow {
 
   private async showInViews(original: Clip, saved: SavedEditedClip): Promise<void> {
     const { savedClipSources, createdClips, replacements } = this.deps;
-    const previousFilename = original.name;
     const source = savedClipSources.clipSourceOf(saved.entry);
     if (saved.outcome === 'kept-both') {
       if (!createdClips.insert(original, source)) this.reportNotShown(saved.filename);
       return;
     }
-    const replaced = await replacements.replace(original, source);
-    if (!replaced) this.reportNotShown(saved.filename);
-    else if (replaced.failedCollections.length > 0) this.reportCollectionsNotRenamed(previousFilename, saved.filename, replaced.failedCollections);
+    if (!(await replacements.replace(original, source))) this.reportNotShown(saved.filename);
   }
 
   private reportSaveFailure(clip: Clip, error: unknown): void {
@@ -190,15 +187,5 @@ export class EditedClipSaveWorkflow {
   private reportNotShown(filename: string): void {
     const { reporter, text } = this.deps;
     reporter.failure(text.savedClipNotShown(filename), { affected: filename, recovery: text.savedClipNotShownRecovery() });
-  }
-
-  private reportCollectionsNotRenamed(previousFilename: string, filename: string, failed: readonly FailedCollectionRename[]): void {
-    const { reporter, text } = this.deps;
-    reporter.failure(text.collectionsNotRenamed(previousFilename, filename, failed.length), {
-      affected: failed.map(({ collectionName }) => collectionName).join(', '),
-      recovery: text.collectionsNotRenamedRecovery(filename),
-      technicalDetails: failed.map(({ collectionName, filename: collectionFile, error }) =>
-        `${collectionName} (${collectionFile}): ${reporter.technicalDetailsOf(error)}`).join('\n'),
-    });
   }
 }

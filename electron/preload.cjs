@@ -157,6 +157,9 @@ const desktopApi = {
   trashFiles(payload) {
     return ipcRenderer.invoke('clip-sandbox:trash-files', payload);
   },
+  renameClip(payload) {
+    return ipcRenderer.invoke('clip-sandbox:rename-clip', payload);
+  },
 };
 
 if (process.env.CLIP_SANDBOX_E2E === '1') {

@@ -244,6 +244,24 @@ test.describe('Collection workflows', () => {
     expect(subsetText).toBe('');
   });
 
+  test('renames a clip from its menu on disk, in the grid and in the saved collections that list it', async () => {
+    ({ tempRoot, folderPath } = await createScenarioFolder('delete'));
+    await fsp.writeFile(path.join(folderPath, 'subset.txt'), 'solo.mp4\nduo.webm\n', 'utf8');
+
+    await loadFolder(page, folderPath);
+    await page.locator('#grid .thumb[data-name="solo.mp4"]').click({ button: 'right' });
+    await page.locator('#clipContextMenu [data-item-id="rename-clip"]').click();
+    const field = page.locator('#grid .thumb[data-name="solo.mp4"] input');
+    await expect(field).toBeFocused();
+    await field.fill('sunset');
+    await field.press('Enter');
+
+    await expect(page.locator('#grid .thumb[data-name="sunset.mp4"]')).toBeFocused();
+    expect(await allClipNames(page)).toEqual(['duo.webm', 'sunset.mp4']);
+    expect((await fsp.readdir(folderPath)).sort()).toEqual(['duo.webm', 'subset.txt', 'sunset.mp4']);
+    expect(collectionFileLines(await fsp.readFile(path.join(folderPath, 'subset.txt'), 'utf8'))).toEqual(['sunset.mp4', 'duo.webm']);
+  });
+
   test('opens zoom and toggles fullscreen inside Electron', async () => {
     ({ tempRoot, folderPath } = await createScenarioFolder('load-basic'));
 

@@ -48,6 +48,15 @@ export class AppText {
     return missingNames.join('\n');
   }
 
+  collectionsNotRenamedText(previousFilename: string, filename: string, collectionCount: number): string {
+    const collections = collectionCount === 1 ? '1 collection' : `${collectionCount} collections`;
+    return `Could not change ${previousFilename} to ${filename} in ${collections}.`;
+  }
+
+  collectionsNotRenamedRecoveryText(filename: string): string {
+    return `Add ${filename} to those collections again.`;
+  }
+
   noCollectionMatchesText(missingCount: number): string {
     return `None of the ${missingCount} missing collection entr${missingCount === 1 ? 'y matches' : 'ies match'} clips in the current pipeline.`;
   }

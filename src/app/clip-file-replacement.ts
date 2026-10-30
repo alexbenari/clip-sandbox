@@ -1,13 +1,13 @@
 import type { Clip } from '../domain/clip.js';
 import type { ClipSource } from '../domain/clip-source.js';
 import type { RenamedCollectionChange } from '../domain/pipeline.js';
+import type { ActivityReporter } from './activity-reporter.js';
+import type { AppText } from './app-text.js';
 import type { CollectionFileWriter } from './collection-file-writer.js';
 import type { CollectionViewWorkflow } from './collection-view-workflow.js';
 import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 
-export type FailedCollectionRename = Readonly<{ filename: string; collectionName: string; error: unknown }>;
-
-export type ClipFileReplacementResult = Readonly<{ clip: Clip; failedCollections: readonly FailedCollectionRename[] }>;
+type FailedCollectionRename = Readonly<{ filename: string; collectionName: string; error: unknown }>;
 
 export interface IReplacedClipSourceMovie {
   readClip(clip: Clip): Promise<void>;
@@ -24,20 +24,33 @@ type ClipFileReplacementDependencies = Readonly<{
   collectionView: Pick<CollectionViewWorkflow, 'renderActiveSequence' | 'refreshSelector' | 'refreshToolbar'>;
   sourceMovies: IReplacedClipSourceMovie;
   zoom: IReplacedClipZoom;
+  reporter: Pick<ActivityReporter, 'failure' | 'technicalDetailsOf'>;
+  appText: Pick<AppText, 'collectionsNotRenamedText' | 'collectionsNotRenamedRecoveryText'>;
 }>;
 
 export class ClipFileReplacement {
   constructor(private readonly deps: ClipFileReplacementDependencies) {}
 
-  async replace(originalClip: Clip, replacement: ClipSource): Promise<ClipFileReplacementResult | null> {
-    const { pipelineWorkingCopy, sourceMovies, zoom } = this.deps;
+  async replace(originalClip: Clip, replacement: ClipSource): Promise<Clip | null> {
+    const clip = await this.apply(originalClip, replacement);
+    if (clip) this.deps.zoom.openClip(clip);
+    return clip;
+  }
+
+  rename(clip: Clip, renamed: ClipSource): Promise<Clip | null> {
+    return this.apply(clip, renamed);
+  }
+
+  private async apply(originalClip: Clip, replacement: ClipSource): Promise<Clip | null> {
+    const { pipelineWorkingCopy, sourceMovies } = this.deps;
+    const previousName = originalClip.name;
     const replaced = pipelineWorkingCopy.replaceClipFile(originalClip, replacement);
     if (!replaced) return null;
     const failedCollections = await this.rewriteCollections(replaced.changedCollections);
     this.showReplacedClip(replaced.clip);
     void sourceMovies.readClip(replaced.clip);
-    zoom.openClip(replaced.clip);
-    return Object.freeze({ clip: replaced.clip, failedCollections });
+    if (failedCollections.length > 0) this.reportCollectionsNotRenamed(previousName, replacement.name, failedCollections);
+    return replaced.clip;
   }
 
   // A collection file that could not be rewritten keeps the old name in memory too, so its view shows unsaved changes.
@@ -62,5 +75,15 @@ export class ClipFileReplacement {
     collectionView.refreshSelector();
     collectionView.refreshToolbar();
     grid.setSelectedClipId(clip.id);
+  }
+
+  private reportCollectionsNotRenamed(previousFilename: string, filename: string, failed: readonly FailedCollectionRename[]): void {
+    const { reporter, appText } = this.deps;
+    reporter.failure(appText.collectionsNotRenamedText(previousFilename, filename, failed.length), {
+      affected: failed.map(({ collectionName }) => collectionName).join(', '),
+      recovery: appText.collectionsNotRenamedRecoveryText(filename),
+      technicalDetails: failed.map(({ collectionName, filename: collectionFile, error }) =>
+        `${collectionName} (${collectionFile}): ${reporter.technicalDetailsOf(error)}`).join('\n'),
+    });
   }
 }
