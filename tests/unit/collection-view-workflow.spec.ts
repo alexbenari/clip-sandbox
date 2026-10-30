@@ -23,7 +23,7 @@ class FakeGrid extends EventSource<ICollectionGridEvents> {
   getSelectedClipIds() { return this.selectedClipIds; }
   areTitlesHidden() { return this.titlesHidden; }
   setTitlesHidden(hidden: boolean) { this.titlesHidden = hidden; }
-  clear() { this.cleared = true; }
+  clear() { this.cleared = true; this.titlesHidden = false; }
 }
 
 class FakeToolbar extends EventSource<{ toggleTitlesRequested: void }> {
@@ -49,8 +49,9 @@ function collectionView() {
     zoom: { isOpen: vi.fn(() => false) },
   };
   const reporter = { success: vi.fn() };
+  const zoomTitle = { hidden: false, setTitleHidden(hidden: boolean) { this.hidden = hidden; } };
   const workflow = new CollectionViewWorkflow({
-    pipelineWorkingCopy, openFolder, grid, toolbar, selector, surfaces, reporter, appText: new AppText(),
+    pipelineWorkingCopy, openFolder, grid, toolbar, selector, zoomTitle, surfaces, reporter, appText: new AppText(),
   });
   const showSubset = () => {
     const subset = pipeline.getCollectionByFilename('subset.txt');
@@ -58,7 +59,7 @@ function collectionView() {
     if (!loaded || loaded.materialization.kind !== 'loaded') throw new Error('subset did not load');
     workflow.applySelection(loaded.materialization.sequence, { collection: subset });
   };
-  return { workflow, pipelineWorkingCopy, openFolder, grid, toolbar, selector, surfaces, reporter, showSubset };
+  return { workflow, pipelineWorkingCopy, openFolder, grid, toolbar, selector, zoomTitle, surfaces, reporter, showSubset };
 }
 
 describe('CollectionViewWorkflow', () => {
@@ -173,6 +174,24 @@ describe('CollectionViewWorkflow', () => {
 
     expect(grid.titlesHidden).toBe(true);
     expect(toolbar.render).toHaveBeenLastCalledWith(expect.objectContaining({ titlesHidden: true }));
+  });
+
+  it('shows or hides the zoomed clip’s title with the grid’s titles', () => {
+    const { workflow, grid, zoomTitle } = collectionView();
+
+    workflow.toggleTitles();
+    expect([grid.titlesHidden, zoomTitle.hidden]).toEqual([true, true]);
+    workflow.toggleTitles();
+    expect([grid.titlesHidden, zoomTitle.hidden]).toEqual([false, false]);
+  });
+
+  it('shows the zoomed clip’s title again when clearing the view shows the grid’s titles', () => {
+    const { workflow, zoomTitle } = collectionView();
+    workflow.setTitlesHidden(true);
+
+    workflow.clearLoadedView();
+
+    expect(zoomTitle.hidden).toBe(false);
   });
 
   it('clears the loaded folder from the view', () => {

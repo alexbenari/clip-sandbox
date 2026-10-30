@@ -231,13 +231,48 @@ describe('zoom overlay controller', () => {
     expect(controller.isOpen()).toBe(true);
   });
 
+  function editableZoom() {
+    const player = { root: document.createElement('section'), mountInZoomEdit: vi.fn(host => host.replaceChildren(player.root)) };
+    const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot'), document, editPlayer: player });
+    controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
+    return { controller, player };
+  }
+
+  describe('title', () => {
+    const shownTitle = () => {
+      const title = document.querySelector('#zoomFrame .zoom-title');
+      return title && getComputedStyle(title).display !== 'none' ? title.textContent : null;
+    };
+
+    test('shows the zoomed clip’s name wherever Zoom shows the clip, in Zoom and over the edit player', () => {
+      const { controller } = editableZoom();
+
+      expect(shownTitle()).toBe('alpha.mp4');
+      controller.showEditSurface();
+      expect(shownTitle()).toBe('alpha.mp4');
+    });
+
+    test('hides the title while titles are hidden, also for the next clip opened', () => {
+      const { controller } = editableZoom();
+
+      controller.setTitleHidden(true);
+      expect(shownTitle()).toBeNull();
+      controller.close();
+      controller.open({ clipId: 'clip_2', src: 'blob:test-b', name: 'bravo.mp4' });
+      expect(shownTitle()).toBeNull();
+    });
+
+    test('shows the title again when titles are shown', () => {
+      const { controller } = editableZoom();
+      controller.setTitleHidden(true);
+
+      controller.setTitleHidden(false);
+
+      expect(shownTitle()).toBe('alpha.mp4');
+    });
+  });
+
   describe('edit surface', () => {
-    function editableZoom() {
-      const player = { root: document.createElement('section'), mountInZoomEdit: vi.fn(host => host.replaceChildren(player.root)) };
-      const controller = createZoomOverlayControl({ mountEl: document.getElementById('zoomLayerRoot'), document, editPlayer: player });
-      controller.open({ clipId: 'clip_1', src: 'blob:test-a', name: 'alpha.mp4' });
-      return { controller, player };
-    }
 
     test('replaces the zoomed video with the edit player and a hint line under it', () => {
       const { controller, player } = editableZoom();

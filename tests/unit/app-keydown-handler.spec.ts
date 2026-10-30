@@ -44,6 +44,7 @@ function createContext(overrides = {}) {
     },
     grid: gridWith(),
     collectionSave: { saveActive: vi.fn() },
+    titles: { toggleTitles: vi.fn() },
     fullScreen: { isDocumentFullScreen: vi.fn(() => false) },
     keys: new EventSource(),
     utilities: { isOpen: false },
@@ -54,6 +55,10 @@ function createContext(overrides = {}) {
     ...overrides,
   };
 }
+
+const openZoom = () => ({
+  isOpen: vi.fn(() => true), close: vi.fn(), toggleMuted: vi.fn(), browseByOffset: vi.fn(), openClipById: vi.fn(), enterEditMode: vi.fn(),
+});
 
 describe('app keydown handler', () => {
   test('handles Collection keys before full-screen keys, and none while a utility is open', () => {
@@ -272,10 +277,6 @@ describe('app keydown handler', () => {
   });
 
   describe('Zoom edit mode', () => {
-    const openZoom = () => ({
-      isOpen: vi.fn(() => true), close: vi.fn(), toggleMuted: vi.fn(), browseByOffset: vi.fn(), openClipById: vi.fn(), enterEditMode: vi.fn(),
-    });
-
     function inZoom({ editing, dialogOpen = false }) {
       const context = createContext({
         zoom: openZoom(),
@@ -387,6 +388,37 @@ describe('app keydown handler', () => {
 
       expect(commands).toEqual([{ kind: 'toggle-loopify' }]);
       expect(context.zoom.enterEditMode).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('T', () => {
+    test.each([
+      ['in the grid', {}],
+      ['in Zoom', { zoom: openZoom() }],
+      ['in Zoom edit mode', { zoom: openZoom(), activeEdit: { isActive: true } }],
+    ])('shows or hides the titles %s', (_case, overrides) => {
+      const context = createContext(overrides);
+      new AppKeyDownHandler(context);
+      const event = keyOn(document.body, 't');
+
+      context.keys.emit('keyPressed', event);
+
+      expect(context.titles.toggleTitles).toHaveBeenCalledOnce();
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    test.each([
+      ['the Collection is full screen', { fullScreen: { isDocumentFullScreen: vi.fn(() => true) } }, document.body, {}],
+      ['a dialog is open', { zoomEditDialogs: [{ isOpen: () => true }] }, document.body, {}],
+      ['typing in a field', {}, document.createElement('input'), {}],
+      ['held with Ctrl', {}, document.body, { ctrlKey: true }],
+    ])('leaves the titles alone while %s', (_case, overrides, target, modifiers) => {
+      const context = createContext(overrides);
+      new AppKeyDownHandler(context);
+
+      context.keys.emit('keyPressed', keyOn(target, 't', modifiers));
+
+      expect(context.titles.toggleTitles).not.toHaveBeenCalled();
     });
   });
 

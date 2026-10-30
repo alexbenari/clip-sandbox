@@ -271,6 +271,7 @@ export class AppController {
       pipelineWorkingCopy,
       openFolder: state,
       grid,
+      zoomTitle: zoomOverlay,
       toolbar: mainToolbarControl,
       selector: collectionSelectorControl,
       surfaces: {
@@ -474,6 +475,7 @@ export class AppController {
       zoom,
       grid,
       collectionSave,
+      titles: collectionView,
       fullScreen: fullscreenAdapter,
       keys: collectionScreen,
       utilities,

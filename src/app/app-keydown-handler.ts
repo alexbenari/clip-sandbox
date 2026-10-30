@@ -3,6 +3,8 @@ import type { IEventSource } from './event-source.js';
 import { ZOOM_EDIT_ENTRY_KEYS, ZOOM_EDIT_ENTRY_SHORTCUTS, ZOOM_EDIT_MODE_SHORTCUTS } from './zoom-edit-mode-keys.js';
 import type { ZoomEditEntry } from './zoom-edit-mode-workflow.js';
 
+const TITLES_KEY = 'T';
+
 export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Move focus between clips', group: 'Grid', sequences: [['Arrow keys']] },
   { description: 'Select the focused clip', group: 'Grid', sequences: [['Space']] },
@@ -16,6 +18,7 @@ export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
     group: 'Grid',
     sequences: [['Delete'], ['Backspace']],
   },
+  { description: 'Show or hide clip titles, also in Zoom and Zoom edit mode', group: 'Grid', sequences: [[TITLES_KEY]] },
   { description: 'Toggle audio', group: 'Zoom', sequences: [['A']] },
   { description: 'Previous clip', group: 'Zoom', sequences: [['Left']] },
   { description: 'Next clip', group: 'Zoom', sequences: [['Right']] },
@@ -50,6 +53,7 @@ export type AppKeyDownContext = {
     focusedClipId(): string | null;
   };
   collectionSave: { saveActive(): unknown };
+  titles: { toggleTitles(): void };
   fullScreen: { isDocumentFullScreen(): boolean };
   keys: IEventSource<{ keyPressed: KeyboardEvent }>;
   utilities: { readonly isOpen: boolean } | null;
@@ -96,6 +100,11 @@ export class AppKeyDownHandler {
       return true;
     }
     if (context.unsavedChangesDialog.handleGlobalKeyDown(event)) {
+      event.preventDefault();
+      return true;
+    }
+    if (this.togglesTitles(event)) {
+      context.titles.toggleTitles();
       event.preventDefault();
       return true;
     }
@@ -165,6 +174,12 @@ export class AppKeyDownHandler {
     if (this.isKey(event, 'z')) return grid.focusedClipId() ?? grid.getSelectedClipId();
     if (event.key !== 'Enter') return null;
     return grid.focusedClipId() ?? (this.isPageBody(event.target) ? grid.getSelectedClipId() : null);
+  }
+
+  // Full screen hides the titles itself and restores them when it ends.
+  private togglesTitles(event: KeyboardEvent): boolean {
+    return this.isPlainKeyPress(event) && this.isKey(event, TITLES_KEY.toLowerCase()) && !this.anyDialogOpen()
+      && !this.isEditableTarget(event.target) && !this.context.fullScreen.isDocumentFullScreen();
   }
 
   private zoomEditEntryOf(event: KeyboardEvent): ZoomEditEntry | null {

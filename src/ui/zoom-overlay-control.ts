@@ -2,7 +2,7 @@ const ZOOM_OVERLAY_STYLE_ID = 'zoomOverlayStyles';
 const DEFAULT_ZOOM_OVERLAY_CSS = `
 #zoomLayerRoot{ position:relative; z-index:40; }
 .zoom-overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:clamp(16px, 3vw, 32px); background:transparent; }
-.zoom-frame{ width:min(66vw, 1200px); height:min(66vh, 820px); max-width:100%; max-height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#000; border-radius:18px; border:1px solid rgba(148,163,184,.24); box-shadow:0 20px 60px rgba(0,0,0,.45); }
+.zoom-frame{ position:relative; width:min(66vw, 1200px); height:min(66vh, 820px); max-width:100%; max-height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#000; border-radius:18px; border:1px solid rgba(148,163,184,.24); box-shadow:0 20px 60px rgba(0,0,0,.45); }
 .zoom-frame:focus{ outline:none; }
 .zoom-video{ width:100%; height:100%; object-fit:contain; display:block; background:#000; }
 .zoom-edit-surface{ width:100%; height:100%; min-height:0; display:flex; flex-direction:column; }
@@ -13,6 +13,8 @@ const DEFAULT_ZOOM_OVERLAY_CSS = `
 .zoom-edit-hint{ flex:none; margin:0; padding:8px 14px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 16px; font-size:13px; line-height:1.4; color:#94a3b8; background:#0b0f14; border-top:1px solid rgba(148,163,184,.2); }
 .zoom-edit-hint-status{ color:#e5e7eb; }
 .zoom-edit-hint-status:empty{ display:none; }
+.zoom-title{ position:absolute; left:0; right:0; bottom:0; z-index:2; pointer-events:none; font-size:13px; line-height:1.3; color:#d1d5db; padding:8px 14px; background:linear-gradient(180deg, rgba(2,6,23,0), rgba(2,6,23,.75)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.zoom-overlay.titles-hidden .zoom-title{ display:none; }
 `;
 
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
@@ -71,6 +73,7 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
   private editSurface: ZoomEditSurface | null = null;
   private playbackAttempt = 0;
   private playbackFailureReported = false;
+  private titleHidden = false;
 
   static fromDocument(doc: Document, { audioPreference, editPlayer }: {
     audioPreference: IClipAudioPreference;
@@ -117,6 +120,7 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     this.overlayEl = this.doc.createElement('div');
     this.overlayEl.id = 'zoomOverlay';
     this.overlayEl.className = 'zoom-overlay';
+    this.overlayEl.classList.toggle('titles-hidden', this.titleHidden);
     this.overlayEl.dataset.open = 'true';
 
     this.frameEl = this.doc.createElement('div');
@@ -224,7 +228,7 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     this.hideEditSurface();
     this.videoEl = this.createVideo({ src, name });
     this.currentItem = { clipId, src, name };
-    this.frameEl?.replaceChildren(this.videoEl);
+    this.frameEl?.replaceChildren(this.videoEl, this.createTitle(name));
     this.frameEl?.focus({ preventScroll: true });
     this.startPlayback(this.videoEl);
     return true;
@@ -267,6 +271,8 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     frame.replaceChildren(root);
     frame.setAttribute('aria-label', 'Zoom edit mode');
     this.editPlayer.mountInZoomEdit(picture);
+    // After mounting, which replaces the picture's children.
+    picture.append(this.createTitle(this.currentItem?.name ?? ''));
     this.editSurface = { root, picture, keys, status, preview: null };
     frame.focus({ preventScroll: true });
     return true;
@@ -312,6 +318,19 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     this.editSurface = null;
     surface.root.remove();
     this.frameEl?.setAttribute('aria-label', 'Zoomed clip');
+  }
+
+  setTitleHidden(hidden: boolean): void {
+    this.titleHidden = hidden;
+    this.overlayEl?.classList.toggle('titles-hidden', hidden);
+  }
+
+  private createTitle(name: string): HTMLElement {
+    const title = this.doc.createElement('div');
+    title.className = 'zoom-title';
+    title.textContent = name;
+    title.title = name;
+    return title;
   }
 
   isMuted(): boolean {

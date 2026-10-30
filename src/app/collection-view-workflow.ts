@@ -46,6 +46,10 @@ export interface ICollectionSelectorView {
   }): void;
 }
 
+export interface IZoomTitleView {
+  setTitleHidden(hidden: boolean): void;
+}
+
 export interface ISelectionChangeSurfaces {
   readonly collectionConflict: { hide(): void };
   readonly contextMenu: { close(options: { restoreFocus: boolean }): void };
@@ -60,6 +64,7 @@ type CollectionViewDependencies = Readonly<{
   grid: ICollectionGridView;
   toolbar: ICollectionToolbarView;
   selector: ICollectionSelectorView;
+  zoomTitle: IZoomTitleView;
   surfaces: ISelectionChangeSurfaces;
   reporter: Pick<ActivityReporter, 'success'>;
   appText: Pick<AppText, 'removedClipsText'>;
@@ -136,8 +141,10 @@ export class CollectionViewWorkflow {
     this.view.grid.renderCollection(this.view.pipelineWorkingCopy.currentClipSequence, { cacheKey: this.activeCacheKey() });
   }
 
+  // Clearing the grid shows its titles again.
   clearLoadedView(): void {
     this.view.grid.clear();
+    this.view.zoomTitle.setTitleHidden(this.view.grid.areTitlesHidden());
     this.view.pipelineWorkingCopy.reset();
     this.view.openFolder.setCurrentFolderAccess(null);
     this.refreshSelector();
@@ -146,15 +153,16 @@ export class CollectionViewWorkflow {
 
   setTitlesHidden(hidden: boolean): void {
     this.view.grid.setTitlesHidden(hidden);
+    this.view.zoomTitle.setTitleHidden(hidden);
     this.refreshToolbar();
+  }
+
+  toggleTitles(): void {
+    this.setTitlesHidden(!this.view.grid.areTitlesHidden());
   }
 
   dispose(): void {
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe();
-  }
-
-  private toggleTitles(): void {
-    this.setTitlesHidden(!this.view.grid.areTitlesHidden());
   }
 
   private applyOrder(orderedClipIds: string[]): void {
