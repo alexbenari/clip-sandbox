@@ -1,4 +1,4 @@
-import type { ZoomEditComposition, ZoomEditName } from '../domain/zoom-edit-composition.js';
+import { ZoomEditComposition, type ZoomEditName } from '../domain/zoom-edit-composition.js';
 import type { IEditedClipSaveProgress, SavedEditedClip } from './edited-clip-save-service.js';
 import type { ZoomEditPreviewState } from './zoom-edit-loop-preview.js';
 import { ZOOM_EDIT_MODE_KEYS } from './zoom-edit-mode-keys.js';
@@ -48,9 +48,6 @@ const SAVE_STAGES: Readonly<Record<IEditedClipSaveProgress['stage'], string>> = 
   'saving-media': 'Saving: writing the file…',
 });
 
-const EDIT_LABELS: Readonly<Record<ZoomEditName, string>> = Object.freeze({ refine: 'Refine', loopify: 'Loopify' });
-const EDITED_CLIP_ADJECTIVES: Readonly<Record<ZoomEditName, string>> = Object.freeze({ refine: 'refined', loopify: 'looped' });
-
 export class ZoomEditModeText {
   keys(): string {
     return `${keys.markStart} start · ${keys.markEnd} end · ${keys.jumpToStart}/${keys.jumpToEnd} jump · ${keys.loop} loop`
@@ -59,16 +56,16 @@ export class ZoomEditModeText {
 
   stagedEdits(edits: ZoomEditComposition): string | null {
     if (edits.isEmpty) return null;
-    const staged = `${edits.edits.map(edit => EDIT_LABELS[edit]).join(' + ')} staged`;
+    const staged = `${edits.labels.join(' + ')} staged`;
     return edits.keepsAudio ? staged : `${staged} · saved without sound`;
   }
 
   editLabel(edit: ZoomEditName): string {
-    return EDIT_LABELS[edit];
+    return ZoomEditComposition.labelOf(edit);
   }
 
   editedClip(edits: ZoomEditComposition): string {
-    return `${edits.edits.map(edit => EDITED_CLIP_ADJECTIVES[edit]).join(' and ')} clip`;
+    return `${edits.adjectives.join(' and ')} clip`;
   }
 
   saveLoss(edits: ZoomEditComposition): string | null {

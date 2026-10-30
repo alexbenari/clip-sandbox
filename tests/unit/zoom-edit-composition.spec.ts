@@ -47,6 +47,21 @@ describe('ZoomEditComposition', () => {
     expect(ZoomEditComposition.of(edits).filenameSuffix).toBe(suffix);
   });
 
+  it('names the staged edits in the order they apply', () => {
+    expect(ZoomEditComposition.of(['loopify', 'refine']).labels).toEqual(['Refine', 'Loopify']);
+  });
+
+  it('describes the saved clip with one word per edit in the order they apply', () => {
+    expect(ZoomEditComposition.of(['loopify', 'refine']).adjectives).toEqual(['refined', 'looped']);
+  });
+
+  it.each([
+    ['refine', 'Refine'],
+    ['loopify', 'Loopify'],
+  ] as const)('labels the %s edit %s on its own', (edit, label) => {
+    expect(ZoomEditComposition.labelOf(edit)).toBe(label);
+  });
+
   it('refuses an edit it does not know', () => {
     expect(() => ZoomEditComposition.of(['speed' as 'refine'])).toThrow('Zoom edit is unknown.');
   });
