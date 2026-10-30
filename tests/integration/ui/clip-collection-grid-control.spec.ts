@@ -906,6 +906,71 @@ describe('clip collection grid controller', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  test('an arrow key selects only the card it moves to', () => {
+    const { controller, card, press } = keyboardGrid();
+    card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    card('alpha').focus();
+
+    press('ArrowDown');
+
+    expect(controller.getSelectedClipIds()).toEqual(['clip_3']);
+  });
+
+  test('an arrow key at the edge of the grid keeps the selection', () => {
+    const { controller, card, press } = keyboardGrid();
+    card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    card('alpha').focus();
+
+    press('ArrowLeft');
+
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
+  });
+
+  test('Ctrl+arrow moves focus and leaves the selection as it was', () => {
+    const { controller, card, focusedName, press } = keyboardGrid();
+    card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    card('alpha').focus();
+
+    press('ArrowRight', { ctrlKey: true });
+
+    expect(focusedName()).toBe('bravo');
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
+  });
+
+  test('Shift+arrow selects the clips from the one selected on its own to the focused one', () => {
+    const { controller, card, focusedName, press } = keyboardGrid();
+    card('bravo').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    card('bravo').focus();
+
+    press('ArrowDown', { shiftKey: true });
+    expect(controller.getSelectedClipIds()).toEqual(['clip_2', 'clip_3', 'clip_4']);
+    press('ArrowLeft', { shiftKey: true });
+    expect(controller.getSelectedClipIds()).toEqual(['clip_2', 'clip_3']);
+    press('ArrowUp', { shiftKey: true });
+    expect(focusedName()).toBe('alpha');
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+  });
+
+  test('Shift+arrow extends from the clicked clip after Ctrl+arrow moved the focus away', () => {
+    const { controller, card, press } = keyboardGrid();
+    card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    card('alpha').focus();
+    press('ArrowRight', { ctrlKey: true });
+
+    press('ArrowRight', { shiftKey: true });
+
+    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2', 'clip_3']);
+  });
+
+  test('Shift+arrow with nothing selected selects from the card the key moved from', () => {
+    const { controller, card, press } = keyboardGrid();
+    card('charlie').focus();
+
+    press('ArrowRight', { shiftKey: true });
+
+    expect(controller.getSelectedClipIds()).toEqual(['clip_3', 'clip_4']);
+  });
+
   test('only the focused card is a Tab stop, so Tab enters and leaves the grid once', () => {
     const { card, press } = keyboardGrid();
     const tabStops = () => [...document.querySelectorAll('#grid .thumb')].filter(el => el.tabIndex === 0).map(el => el.dataset.name);
@@ -913,7 +978,7 @@ describe('clip collection grid controller', () => {
     expect(tabStops()).toEqual(['charlie.mp4']);
 
     card('charlie').focus();
-    press('ArrowRight');
+    press('ArrowRight', { ctrlKey: true });
 
     expect(tabStops()).toEqual(['delta.mp4']);
   });
@@ -923,7 +988,7 @@ describe('clip collection grid controller', () => {
     card('alpha').focus();
 
     press(' ');
-    press('ArrowRight');
+    press('ArrowRight', { ctrlKey: true });
     press(' ', { ctrlKey: true });
     expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
     press(' ', { ctrlKey: true });

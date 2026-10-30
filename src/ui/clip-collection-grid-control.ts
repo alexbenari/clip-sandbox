@@ -6,6 +6,7 @@ import { ClipLabelFormatter } from './clip-label-formatter.js';
 import { DocumentElements } from './document-elements.js';
 import { GridPreviewPlaybackScheduler } from './grid-preview-playback-scheduler.js';
 import { GridNavigationRules } from './grid-navigation-rules.js';
+import { GridSelection } from './grid-selection.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 
 export interface IClipGridEvents {
@@ -65,6 +66,8 @@ const DEFAULT_CLIP_COLLECTION_GRID_CSS = `
 .clip-collection-grid-root.titles-hidden .source-glyph{ display:none; }
 `;
 const SOURCE_GLYPH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/></svg>';
+
+type ArrowFocusMove = 'select-only' | 'keep-selection' | 'extend-selection';
 
 type ClipLabelFormatterFn = (name: string, durationSeconds: number | null) => string;
 
@@ -327,7 +330,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private readonly events = new EventSource<IClipGridEvents>();
   private doc: Document;
   private currentCollection: ClipSequence | null;
-  private selectedClipIds: Set<string>;
+  private readonly selection = new GridSelection();
   private focusAnchorClipId: string | null = null;
   private dragSourceCard: ClipCard | null;
   private hiddenCards: ClipCard[];
@@ -353,7 +356,6 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
 
     this.doc = this.grid?.ownerDocument || document;
     this.currentCollection = null;
-    this.selectedClipIds = new Set();
     this.dragSourceCard = null;
     this.hiddenCards = [];
     this.currentAppliedCols = null;
@@ -504,16 +506,13 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     cacheKey: string | null,
     collection: ClipSequence,
     entry: GridViewCacheEntry,
-    previousSelection: Set<string>
   ): void {
     this.currentCollection = collection;
     this.setActiveGridElement(entry.container);
     this.activeCacheKey = this.normalizedCacheKey(cacheKey);
     const orderedClips = this.currentCollection?.orderedClips?.() || [];
     this.metadataTracker.start(orderedClips);
-    this.selectedClipIds = new Set(
-      Array.from(previousSelection).filter((clipId) => collection.hasClip(clipId))
-    );
+    this.selection.retainWhere((clipId) => collection.hasClip(clipId));
     this.applySelectionClasses();
     this.events.emit('cardCountChanged');
     this.recomputeLayout();
@@ -792,7 +791,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   }
 
   getSelectedClipIds(): string[] {
-    return this.getOrderedClipIds().filter((clipId) => this.selectedClipIds.has(clipId));
+    return this.getOrderedClipIds().filter((clipId) => this.selection.has(clipId));
   }
 
   private getCardByClipId(clipId: string | null | undefined): ClipCard | null {
@@ -849,7 +848,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
 
   private applySelectionClasses(): void {
     for (const card of this.gridCards(this.grid)) {
-      card.classList.toggle('selected', this.selectedClipIds.has(card.dataset.clipId || ''));
+      card.classList.toggle('selected', this.selection.has(card.dataset.clipId || ''));
     }
     this.updateTabStop();
   }
@@ -858,7 +857,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private updateTabStop(): void {
     const cards = this.gridCards(this.grid);
     const stop = cards.find((card) => card.dataset.clipId === this.focusAnchorClipId)
-      ?? cards.find((card) => this.selectedClipIds.has(card.dataset.clipId || ''))
+      ?? cards.find((card) => this.selection.has(card.dataset.clipId || ''))
       ?? cards[0];
     for (const card of cards) card.tabIndex = card === stop ? 0 : -1;
   }
@@ -875,34 +874,36 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   }
 
   clearSelection(): void {
-    this.selectedClipIds = new Set();
-    this.applySelectionClasses();
-    this.notifySelectionChange();
+    this.selection.clear();
+    this.showSelection();
   }
 
   setSelectedClipId(clipId: string | null | undefined): void {
-    this.selectedClipIds = clipId ? new Set([clipId]) : new Set();
+    this.selection.selectOnly(clipId || null);
+    this.showSelection();
+  }
+
+  private showSelection(): void {
     this.applySelectionClasses();
     this.notifySelectionChange();
   }
 
   private selectOnlyCard(card: ClipCard | null | undefined): void {
-    if (!card) {
-      this.clearSelection();
-      return;
-    }
-    this.selectedClipIds = card.dataset.clipId ? new Set([card.dataset.clipId]) : new Set();
-    this.applySelectionClasses();
-    this.notifySelectionChange();
+    this.setSelectedClipId(card?.dataset.clipId);
   }
 
   private toggleCardSelection(card: ClipCard | null | undefined): void {
     const clipId = card?.dataset.clipId || '';
     if (!clipId) return;
-    if (this.selectedClipIds.has(clipId)) this.selectedClipIds.delete(clipId);
-    else this.selectedClipIds.add(clipId);
-    this.applySelectionClasses();
-    this.notifySelectionChange();
+    this.selection.toggle(clipId);
+    this.showSelection();
+  }
+
+  private extendSelection(fallbackAnchor: ClipCard, to: ClipCard): void {
+    const [fallbackAnchorClipId, clipId] = [fallbackAnchor.dataset.clipId, to.dataset.clipId];
+    if (!fallbackAnchorClipId || !clipId) return;
+    this.selection.extendTo(this.getOrderedClipIds(), fallbackAnchorClipId, clipId);
+    this.showSelection();
   }
 
   private onSelect(card: ClipCard | null | undefined, event: MouseEvent): void {
@@ -936,7 +937,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private requestContextMenu(card: ClipCard | null, point: { x: number; y: number }, fromKeyboard: boolean): void {
     const clipId = card?.dataset.clipId || null;
     // So the menu acts on the clip it was opened for.
-    if (clipId && !this.selectedClipIds.has(clipId)) this.selectOnlyCard(card);
+    if (clipId && !this.selection.has(clipId)) this.selectOnlyCard(card);
     this.events.emit('contextMenuRequested', {
       point,
       selectedClipId: this.getSelectedClipId(),
@@ -964,14 +965,17 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   handleCardKey(event: KeyboardEvent): boolean {
     const card = this.activeGridCard(event.target);
     if (!card) return false;
-    if (this.navigationRules.isArrowKey(event.key) && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+    if (this.navigationRules.isArrowKey(event.key)) {
+      const movesCard = event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+      const focusMove = this.arrowFocusMoveOf(event);
+      if (!movesCard && !focusMove) return false;
       const cards = this.gridCards(this.grid);
       const index = cards.indexOf(card);
       const target = this.navigationRules.targetIndex({
         key: event.key, index, columns: this.currentAppliedCols ?? 1, count: cards.length,
       });
-      if (target !== null && event.altKey) this.moveCardTo(card, target > index ? cards[target].nextSibling : cards[target]);
-      else if (target !== null) cards[target].focus();
+      if (target !== null && movesCard) this.moveCardTo(card, target > index ? cards[target].nextSibling : cards[target]);
+      else if (target !== null && focusMove) this.moveFocus(focusMove, card, cards[target]);
     } else if (event.key === ' ' && !event.altKey && !event.shiftKey) {
       if (event.ctrlKey || event.metaKey) this.toggleCardSelection(card);
       else this.selectOnlyCard(card);
@@ -983,6 +987,27 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     }
     event.preventDefault();
     return true;
+  }
+
+  private arrowFocusMoveOf(event: KeyboardEvent): ArrowFocusMove | null {
+    if (event.altKey || event.metaKey || (event.ctrlKey && event.shiftKey)) return null;
+    if (event.ctrlKey) return 'keep-selection';
+    if (event.shiftKey) return 'extend-selection';
+    return 'select-only';
+  }
+
+  private moveFocus(move: ArrowFocusMove, from: ClipCard, to: ClipCard): void {
+    to.focus();
+    switch (move) {
+      case 'select-only':
+        this.selectOnlyCard(to);
+        break;
+      case 'extend-selection':
+        this.extendSelection(from, to);
+        break;
+      case 'keep-selection':
+        break;
+    }
   }
 
   // Keyboard and drag-and-drop reordering share this path. Moving a card in the page takes focus from it.
@@ -1055,7 +1080,6 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   renderCollection(collection: ClipSequence | null | undefined, { cacheKey = null }: { cacheKey?: string | null } = {}): void {
     this.fsRestore();
     const nextCacheKey = this.normalizedCacheKey(cacheKey);
-    const previousSelection = new Set(this.selectedClipIds);
     const isSwitchingFromCachedView = nextCacheKey && nextCacheKey !== this.activeCacheKey && this.activeCacheKey !== null;
     if (nextCacheKey && nextCacheKey !== this.activeCacheKey) {
       this.stashActiveGrid();
@@ -1066,7 +1090,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     const cachedEntry = this.cachedEntryFor(nextCacheKey, this.currentCollection);
     if (cachedEntry) {
       if (this.currentCollection) {
-        this.showCachedEntry(nextCacheKey, this.currentCollection, cachedEntry, previousSelection);
+        this.showCachedEntry(nextCacheKey, this.currentCollection, cachedEntry);
       }
       return;
     }
@@ -1079,7 +1103,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     this.activeCacheKey = nextCacheKey;
     if (!this.currentCollection) {
       this.metadataTracker.reset();
-      this.selectedClipIds = new Set();
+      this.selection.clear();
       this.events.emit('cardCountChanged');
       this.recomputeLayout();
       this.notifySelectionChange();
@@ -1109,9 +1133,8 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
       fragment.appendChild(card);
     }
     this.grid.appendChild(fragment);
-    this.selectedClipIds = new Set(
-      Array.from(previousSelection).filter((clipId) => this.currentCollection?.hasClip(clipId))
-    );
+    const shownCollection = this.currentCollection;
+    this.selection.retainWhere((clipId) => shownCollection.hasClip(clipId));
     this.applySelectionClasses();
     this.events.emit('cardCountChanged');
     this.recomputeLayout();
@@ -1133,7 +1156,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     this.previewPlayback.cancel(this.grid);
     this.clearGridCards(this.grid);
     this.invalidateAllViews();
-    this.selectedClipIds = new Set();
+    this.selection.clear();
     this.dragSourceCard = null;
     this.focusAnchorClipId = null;
     this.activeCacheKey = null;

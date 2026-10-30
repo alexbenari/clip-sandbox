@@ -6,7 +6,9 @@ import type { ZoomEditEntry } from './zoom-edit-mode-workflow.js';
 const TITLES_KEY = 'T';
 
 export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
-  { description: 'Move focus between clips', group: 'Grid', sequences: [['Arrow keys']] },
+  { description: 'Move to a clip and select only it', group: 'Grid', sequences: [['Arrow keys']] },
+  { description: 'Move to a clip and keep the selection', group: 'Grid', sequences: [['Ctrl', 'Arrow keys']] },
+  { description: 'Extend the selection to a clip', group: 'Grid', sequences: [['Shift', 'Arrow keys']] },
   { description: 'Select the focused clip', group: 'Grid', sequences: [['Space']] },
   { description: 'Add or remove the focused clip from the selection', group: 'Grid', sequences: [['Ctrl', 'Space']] },
   { description: 'Open the focused or selected clip in Zoom', group: 'Grid', sequences: [['Enter'], ['Z']] },

@@ -63,7 +63,9 @@ describe('KeyboardMapControl', () => {
       'Global',
     ]);
     expect(Array.from(root.querySelectorAll('dt')).map((description) => description.textContent)).toEqual([
-      'Move focus between clips',
+      'Move to a clip and select only it',
+      'Move to a clip and keep the selection',
+      'Extend the selection to a clip',
       'Select the focused clip',
       'Add or remove the focused clip from the selection',
       'Open the focused or selected clip in Zoom',
@@ -93,6 +95,8 @@ describe('KeyboardMapControl', () => {
     ]);
     expect(Array.from(root.querySelectorAll('.keyboard-keys')).map((keys) => keys.textContent)).toEqual([
       'Arrow keys',
+      'Ctrl+Arrow keys',
+      'Shift+Arrow keys',
       'Space',
       'Ctrl+Space',
       'Enter or Z',
