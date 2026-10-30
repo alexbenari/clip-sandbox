@@ -38,6 +38,7 @@ class FakePlayer implements IZoomEditPlayer {
   attachSession(session: IFrameReviewSession | null): void {
     this.attached = session;
     this.shownFrame = null;
+    this.playbackFrame = null;
     this.playing = false;
     this.preview = 'inactive';
     this.loop = null;
@@ -47,7 +48,7 @@ class FakePlayer implements IZoomEditPlayer {
     if (this.shownFrame !== null) {
       return { point: { kind: 'exact-frame', identity: { frameIndex: this.shownFrame } } } as unknown as IFrameReviewDisplayedCapture;
     }
-    if (!this.playing || this.playbackFrame === null) return null;
+    if (this.playbackFrame === null) return null;
     const positionUs = BigInt(this.playbackFrame) * 1_000_000n / 24n;
     return { point: { kind: 'playback-timestamp', timestampUs: positionUs }, positionUs } as unknown as IFrameReviewDisplayedCapture;
   }
@@ -72,6 +73,12 @@ class FakePlayer implements IZoomEditPlayer {
   }
 
   jumpBySeconds(seconds: number): void { this.playbackJumps.push(seconds); }
+
+  async enterExactScrubAt(timestampUs: bigint): Promise<IFrameReviewDisplayedCapture | null> {
+    this.shownFrame = Math.round(Number(timestampUs) * 24 / 1_000_000);
+    this.playing = false;
+    return this.displayedCapture();
+  }
 
   async enterExactScrubAtFrame(frameIndex: number): Promise<IFrameReviewDisplayedCapture | null> {
     this.shownFrame = frameIndex;
@@ -127,6 +134,14 @@ function zoomEdit({ hasSourceInfo = true, muted = false, clipOpening = null as D
     await flushPendingWork();
   }
 
+  // The real player keeps showing the paused playback frame it had while the clip was preparing.
+  async function clipReadyShowingPlaybackFrame(frame: number): Promise<void> {
+    await vi.waitFor(() => expect(player.attached).toBe(clipReview.session));
+    player.playbackFrame = frame;
+    clipReview.becomeExactReady();
+    await flushPendingWork();
+  }
+
   async function windowOpened(step = 1): Promise<FakeReview> {
     await vi.waitFor(() => expect(windowAnswers).toHaveLength(step));
     windowAnswers[step - 1].resolve({ kind: 'ready', sourceHandle: windowHandle(step), windowId: `window_${step}` });
@@ -148,7 +163,7 @@ function zoomEdit({ hasSourceInfo = true, muted = false, clipOpening = null as D
 
   return {
     session, player, clipReview, windowReviews, openRequests, frameReview, sources, failures,
-    windowAnswers, anchorAnswers, clipReady, windowOpened, windowPrepared, windowAnchored,
+    windowAnswers, anchorAnswers, clipReady, clipReadyShowingPlaybackFrame, windowOpened, windowPrepared, windowAnchored,
   };
 }
 
@@ -161,6 +176,42 @@ describe('ZoomEditModeSession', () => {
     expect(await edit.session.markStart()).toEqual({ kind: 'done' });
 
     expect([edit.session.snapshot.range?.start, edit.session.snapshot.extension]).toEqual([12, 'finding-movie']);
+  });
+
+  describe('when the clip becomes ready showing a paused playback frame', () => {
+    it('steps from the exact frame at that position', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReadyShowingPlaybackFrame(30);
+
+      expect([await edit.session.step(1), edit.player.shownFrame]).toEqual([{ kind: 'done' }, 31]);
+    });
+
+    it('stages the exact frame at that position as the start', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReadyShowingPlaybackFrame(30);
+
+      await edit.session.markStart();
+
+      expect(edit.session.snapshot.range?.start).toBe(30);
+    });
+
+    it('jumps from the exact frame at that position', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false });
+      await edit.clipReadyShowingPlaybackFrame(30);
+
+      await edit.session.jump(1);
+
+      expect(edit.player.shownFrame).toBe(54);
+    });
+
+    it('switches to the movie window at that position without waiting for a key', async () => {
+      const edit = zoomEdit();
+      await edit.clipReadyShowingPlaybackFrame(30);
+
+      await edit.windowAnchored();
+
+      expect([edit.player.attached, edit.player.shownFrame]).toEqual([edit.windowReviews[0].session, 1830]);
+    });
   });
 
   it('refuses to stage an end while the clip is still preparing', async () => {

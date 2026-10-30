@@ -273,7 +273,7 @@ class ElectronFrameReviewSession implements IFrameReviewSession {
   static parseState(value: unknown): IFrameReviewState {
     const state = FrameReviewWire.record(value, 'frame-review state');
     const phases = ['opening', 'playback-ready', 'inspecting', 'cache-validation', 'normalizing', 'indexing',
-      'proxy-encoding', 'proxy-indexing', 'validating', 'exact-ready', 'failed', 'closed'] as const;
+      'proxy-encoding', 'proxy-ready', 'proxy-indexing', 'validating', 'exact-ready', 'failed', 'closed'] as const;
     if (!phases.includes(state.phase as typeof phases[number]) || typeof state.captureEnabled !== 'boolean') {
       throw new BackendError('protocol-error', 'Frame-review state is invalid.', false);
     }

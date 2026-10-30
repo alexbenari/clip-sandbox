@@ -83,8 +83,9 @@ test('trim and Keep both: the refined clip appears next to the original with exa
 
     await refine(page, 'untagged.mp4');
     await expect(hintStatus(page)).toHaveText('', { timeout: 90_000 });
-    // From the first frame: three frames on, the start; from the last frame (23), four back, the end.
-    await pressKeys(page, ['a', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'q', 's', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'w']);
+    // The first key is a step from the first frame shown on entry: three frames on, the start; from the last frame (23),
+    // four back, the end.
+    await pressKeys(page, ['ArrowRight', 'ArrowRight', 'ArrowRight', 'q', 's', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'w']);
     await saveWith(page, 'Keep both');
 
     await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', 'untagged-refined.mp4', { timeout: 90_000 });
@@ -116,11 +117,10 @@ test('extend and Replace: the clip under its own name holds the extended movie r
       .clipSandboxDesktop.__testSetNextMoviePath(next), movie);
 
     await refine(page, 'Feature-001.mp4');
-    await expect(hintStatus(page)).not.toHaveText('Preparing the clip…', { timeout: 90_000 });
-    await page.keyboard.press('a');
+    // Extending becomes available without a key; the first key is a step from the clip's first frame (movie 30),
+    // three frames back into the movie, then from its last (movie 40), two on.
     await expect(hintStatus(page)).toHaveText('', { timeout: 120_000 });
-    // From the clip's first frame (movie 30), three frames back into the movie; from its last (movie 40), two on.
-    await pressKeys(page, ['a', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'q', 's', 'ArrowRight', 'ArrowRight', 'w']);
+    await pressKeys(page, ['ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'q', 's', 'ArrowRight', 'ArrowRight', 'w']);
     await saveWith(page, 'Replace');
 
     await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', 'Feature-001.mp4', { timeout: 90_000 });

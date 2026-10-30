@@ -70,6 +70,26 @@ describe('Electron frame review service', () => {
     })).rejects.toMatchObject({ category: 'cache-unavailable', recoverable: false });
   });
 
+  it('passes on the state of a review whose proxy is ready before its exact frames', async () => {
+    let wireListener: ((payload: unknown) => void) | undefined;
+    const api: IElectronFrameReviewApi = {
+      chooseSource: vi.fn(),
+      open: async () => ({ ok: true, result: { sessionId: 'session_12345678', state: readyState } }),
+      command: vi.fn(), close: vi.fn(async () => ({ ok: true, result: null })),
+      subscribe: (listener) => { wireListener = listener; return () => { wireListener = undefined; }; },
+    };
+    const service = new ElectronFrameReviewService({ clipSandboxDesktop: { frameReview: api } } as unknown as Window);
+    const session = await service.open({ sourceHandle: FrameReviewOpaqueId.sourceHandle('source_123456789'),
+      previewBounds: { maxWidth: 960, maxHeight: 540 }, muted: false });
+
+    wireListener?.({ sessionId: session.id, event: { type: 'state', state: {
+      ...readyState, phase: 'proxy-ready', captureEnabled: false, preparedReview: null,
+    } } });
+
+    expect(session.state().phase).toBe('proxy-ready');
+    await session.dispose();
+  });
+
   it('asks the desktop to open the movie muted when the request says so', async () => {
     const open = vi.fn(async () => ({ ok: true, result: { sessionId: 'session_12345678', state: readyState } }));
     const api: IElectronFrameReviewApi = {

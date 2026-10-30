@@ -20,6 +20,7 @@ export interface IZoomEditPlayer {
   exactPreviewPhase(): 'inactive' | 'running' | 'paused';
   togglePlayback(): Promise<void>;
   jumpBySeconds(seconds: number): void;
+  enterExactScrubAt(timestampUs: bigint): Promise<IFrameReviewDisplayedCapture | null>;
   enterExactScrubAtFrame(frameIndex: number): Promise<IFrameReviewDisplayedCapture | null>;
   startExactPreview(range: Readonly<{ startFrameIndex: number; endFrameIndex: number }>): Promise<void>;
   stopExactPreview(): Promise<IFrameReviewDisplayedCapture | null>;
@@ -154,7 +155,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     return this.enqueueEdit(async range => {
       const { player } = this.deps;
       if (player.ordinaryPlaybackRunning() || player.exactPreviewPhase() === 'running') return this.jumpPlayback(range, seconds);
-      const current = this.displayedClipFrame();
+      const current = await this.exactFrameOnScreen();
       if (current === null) return this.refused('clip-preparing');
       return this.moveToward(range, current, current + this.lastStepDirection * this.framesIn(seconds));
     });
@@ -340,6 +341,16 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
   private async pauseOnExactFrame(): Promise<number | null> {
     const { player } = this.deps;
     if (player.exactPreviewPhase() === 'running' || player.ordinaryPlaybackRunning()) await this.whileOpen(player.togglePlayback());
+    return this.exactFrameOnScreen();
+  }
+
+  // A clip prepared while the player showed a playback frame keeps showing that frame, so it is resolved here.
+  private async exactFrameOnScreen(): Promise<number | null> {
+    const shownFrame = this.displayedClipFrame();
+    if (shownFrame !== null) return shownFrame;
+    const capture = this.deps.player.displayedCapture();
+    if (capture?.point.kind !== 'playback-timestamp') return null;
+    await this.whileOpen(this.deps.player.enterExactScrubAt(capture.positionUs));
     return this.displayedClipFrame();
   }
 

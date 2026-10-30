@@ -177,7 +177,7 @@ Buttons feel compact and tactile rather than flat or oversized.
 - **Shape:** gently rounded control corners (`12px`) with `10px 14px` padding.
 - **Primary:** Screen Silver text over a deep blue vertical gradient; reserved for the initiating action or safe confirmation.
 - **Secondary:** Screen Silver text over a dark slate-to-navy gradient.
-- **Destructive:** Screen Silver text over a deep Warning Red vertical gradient (Warning Red mixed with black, 70% to 45%), same shape and padding as Primary. Reserved for confirming an action that removes files from the folder, such as Move to Recycle Bin; never used for safe confirmations.
+- **Destructive:** Screen Silver text over a deep Warning Red vertical gradient (Warning Red mixed with black, 70% to 45%), same shape and padding as Primary. Reserved for confirming an action that removes files from the folder, such as Move to Recycle Bin or Replace when saving a refined clip; never used for safe confirmations.
 - **Hover / Focus / Active:** a small brightness increase on hover, a one-pixel downward press on activation, and a visible Projector Blue focus outline where explicitly styled.
 - **Disabled:** reduced opacity (`.45–.5`) without changing the component's silhouette.
 
@@ -199,7 +199,7 @@ Dialogs use near-opaque Rail Navy, `16px` corners, a low-opacity blue or red bor
 
 ### Context Menus
 
-Context menus are compact floating utilities with `12px` outer corners, `8px` padding, a near-opaque booth-dark surface, and the Floating Utility shadow. Menu rows have `8px` corners, left-aligned text, optional `16px` inline SVG icons, and the standard secondary-button gradient without their own shadow. A destructive command sits last, below a one-pixel slate divider, in Warning Red text (`#f87171`) with a 1.6px-stroke trash icon; the same rule applies to the toolbar Actions menu. A disabled row that has a reason shows it as a second line in `12px` Quiet Slate at full strength, so it reads without hovering while the label stays dimmed.
+Context menus are compact floating utilities with `12px` outer corners, `8px` padding, a near-opaque booth-dark surface, and the Floating Utility shadow. Menu rows have `8px` corners, left-aligned text, optional `16px` inline SVG icons, and the standard secondary-button gradient without their own shadow. An entry that opens an editing mode, such as Refine, sits first, above a one-pixel slate divider. A destructive command sits last, below a one-pixel slate divider, in Warning Red text (`#f87171`) with a 1.6px-stroke trash icon; the same rule applies to the toolbar Actions menu. A disabled row that has a reason shows it as a second line in `12px` Quiet Slate at full strength, so it reads without hovering while the label stays dimmed.
 
 ### Activity Indicator
 
@@ -207,7 +207,7 @@ Activity is a compact, labeled status control with a 34px pointer target and sta
 
 ### Movie Review Player
 
-GIF Extraction and Refine Gif share one player. Its picture is a true-black `16:9` frame, capped at `1100px` wide, that shrinks to the height left over after the transport, the capture row and, on Refine Gif, the whole two-endpoint workbench, so these stay in the first viewport down to a `900 × 700` window with the Clips panel open. The capture row and workbench actions wrap rather than clip. The player's Projector Blue focus ring appears only for keyboard focus and hides after a click on the picture until the next key. Refine Gif states its next step once, in the workbench; its command bar carries only Back, the range identity and its movie, and Cancel extraction while a batch runs. In the Clips panel, Projector Blue marks only the selected range: exact ranges have no colored border, inexact ranges a dashed Quiet Slate border beside their inexact label, a locked range a Ready Green lock icon and an unlocked one a Quiet Slate lock, and extraction results read in Quiet Slate.
+GIF Extraction and Refine Gif share one player, which Zoom edit mode also borrows in a picture-only look (see Zoom Edit Mode). Its picture is a true-black `16:9` frame, capped at `1100px` wide, that shrinks to the height left over after the transport, the capture row and, on Refine Gif, the whole two-endpoint workbench, so these stay in the first viewport down to a `900 × 700` window with the Clips panel open. The capture row and workbench actions wrap rather than clip. The player's Projector Blue focus ring appears only for keyboard focus and hides after a click on the picture until the next key. Refine Gif states its next step once, in the workbench; its command bar carries only Back, the range identity and its movie, and Cancel extraction while a batch runs. In the Clips panel, Projector Blue marks only the selected range: exact ranges have no colored border, inexact ranges a dashed Quiet Slate border beside their inexact label, a locked range a Ready Green lock icon and an unlocked one a Quiet Slate lock, and extraction results read in Quiet Slate.
 
 ### Scrollbars
 
@@ -216,6 +216,20 @@ Where a surface can still overflow, such as the GIF screens in a small window or
 ### Zoom Frame
 
 Zoom is a centered, media-only viewing surface constrained to roughly two-thirds of the viewport and capped at `1200px × 820px`. It uses true black, `18px` corners, a faint cool border, and the strongest ambient shadow in the system. The surrounding overlay remains transparent so zoom reads as focus, not navigation to another screen.
+
+### Zoom Edit Mode
+
+Zoom edit mode edits the zoomed clip in place, inside the same Zoom frame; nothing else on screen changes. The frame holds a column: the movie review player in its picture-only look on top, filling the frame on true black with no `16:9` cap, and one hint line below it. The picture-only look has no progress bar, transport, readiness text, empty state or busy indicator: there is no timeline and there are no buttons, because every action is a key.
+
+The hint line is the mode's only text. It is a band of Booth Black under the picture with a one-pixel slate top border, `8px 14px` padding and `13px` type. The keys sit on the left in Quiet Slate; a status sits on the right in Screen Silver and is announced politely to assistive technology; the two wrap rather than clip, and the status takes no space when empty. Wording lives in `src/app/zoom-edit-mode-text.ts`, and key names come from the same constants as the bindings:
+
+- **Keys** are short verb pairs joined by middle dots: "Q start · W end · A/S jump · Z loop · X save · Esc leave". While saving they read only "Esc cancel saving".
+- **Ongoing work** is a short phrase ending in an ellipsis: "Finding the source movie…", "Preparing the movie around this clip…", "Saving: encoded 120 of 300 frames…".
+- **A key that cannot act** changes nothing and says why in full sentences, then what to do, naming keys: "This frame is after the end, so it cannot be the start. Go back, or set a later end with W first." Limits are stated plainly: "Extending stops one minute past the clip’s original start and end." A clip that can only be trimmed says so and why: "No source movie was chosen, so this clip can be trimmed but not extended."
+
+Statuses use no error color; failures that need recovery go to Activity, and the hint line keeps only what the user can act on now.
+
+Saving asks in a compact confirmation dialog titled "Save the refined clip", whose sentence names the clip and explains both choices. Its actions read Cancel, Replace (Destructive, because the original goes to the Recycle Bin) and Keep both (Primary, focused on open). Leaving with a staged start or end asks in the same compact dialog shape: the question names what would be lost without frame numbers ("Discard the new start and end?"), the note says the clip file stays as it is, and the actions read Keep editing and Discard.
 
 ## Do's and Don'ts
 
@@ -238,4 +252,4 @@ Zoom is a centered, media-only viewing surface constrained to roughly two-thirds
 
 ### Application shell refinement
 
-The global bar orders Activity, a separator, then the adjacent keyboard and Settings icon controls, followed by native-caption separation. Local 1.6px-stroke SVG icons use currentColor. Handled surfaces use `#141f30` and inset surfaces `#0c131f` as restrained Rail Navy tonal layers, with `rgba(148,163,184,.2)` borders. Utility headers include explicit Close controls. A side panel with nothing for the active screen is removed together with its rail, and the workspace takes its width: the Clips panel appears only on the GIF screens. Pipelines tree group headings use the Supporting Label style in Quiet Slate. Keyboard group headings distinguish Grid, Zoom, Fullscreen and Global; keycaps remain static. The Settings surface contains only the two implemented preferences, with a 22px local title and left-to-right filesystem field. Small keycaps use a 6px radius within the 14px utility surface.
+The global bar orders Activity, a separator, then the adjacent keyboard and Settings icon controls, followed by native-caption separation. Local 1.6px-stroke SVG icons use currentColor. Handled surfaces use `#141f30` and inset surfaces `#0c131f` as restrained Rail Navy tonal layers, with `rgba(148,163,184,.2)` borders. Utility headers include explicit Close controls. A side panel with nothing for the active screen is removed together with its rail, and the workspace takes its width: the Clips panel appears only on the GIF screens. Pipelines tree group headings use the Supporting Label style in Quiet Slate. Keyboard group headings distinguish Grid, Zoom, Zoom edit, Fullscreen and Global; keycaps remain static. The Settings surface contains only the two implemented preferences, with a 22px local title and left-to-right filesystem field. Small keycaps use a 6px radius within the 14px utility surface.
