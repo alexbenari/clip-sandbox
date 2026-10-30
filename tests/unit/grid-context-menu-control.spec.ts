@@ -80,24 +80,6 @@ describe('grid context menu control', () => {
     ]);
   });
 
-  test('lists Refine first, apart from the collection items, for a menu opened on a clip', () => {
-    const onRefine = vi.fn();
-    const control = new GridContextMenuControl();
-
-    const items = control.buildItems({ hasSelection: true, hasPipeline: true, targetCollections: [subset], onRefine });
-
-    expect(items.slice(0, 2)).toEqual([{ id: 'refine-clip', label: 'Refine', onSelect: onRefine }, { separator: true }]);
-  });
-
-  test('lists Refine for a clip whatever is selected', () => {
-    const control = new GridContextMenuControl();
-
-    const items = control.buildItems({ hasSelection: false, hasPipeline: true, onRefine: vi.fn() });
-
-    expect(items[0]).toMatchObject({ id: 'refine-clip', label: 'Refine' });
-    expect(items[0].disabled).toBeFalsy();
-  });
-
   test('asks the context menu to focus its first item for a keyboard request', () => {
     const contextMenu = { open: vi.fn() };
     const control = new GridContextMenuControl({ contextMenu });

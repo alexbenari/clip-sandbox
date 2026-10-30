@@ -40,6 +40,7 @@ function createContext(overrides = {}) {
       toggleMuted: vi.fn(),
       browseByOffset: vi.fn(),
       openClipById: vi.fn(),
+      enterEditMode: vi.fn(),
     },
     grid: gridWith(),
     collectionSave: { saveActive: vi.fn() },
@@ -271,7 +272,9 @@ describe('app keydown handler', () => {
   });
 
   describe('Zoom edit mode', () => {
-    const openZoom = () => ({ isOpen: vi.fn(() => true), close: vi.fn(), toggleMuted: vi.fn(), browseByOffset: vi.fn(), openClipById: vi.fn() });
+    const openZoom = () => ({
+      isOpen: vi.fn(() => true), close: vi.fn(), toggleMuted: vi.fn(), browseByOffset: vi.fn(), openClipById: vi.fn(), enterEditMode: vi.fn(),
+    });
 
     function inZoom({ editing, dialogOpen = false }) {
       const context = createContext({
@@ -366,5 +369,32 @@ describe('app keydown handler', () => {
 
       expect(context.zoom.close).toHaveBeenCalledOnce();
     });
+
+    test.each([['r', 'refine'], ['R', 'refine'], ['l', 'loopify']])('in Zoom %s enters Zoom edit mode with %s', (key, entry) => {
+      const { context } = inZoom({ editing: false });
+      const event = keyOn(document.body, key);
+
+      context.keys.emit('keyPressed', event);
+
+      expect(context.zoom.enterEditMode.mock.calls).toEqual([[entry]]);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    test('in the mode L stages Loopify instead of entering the mode again', () => {
+      const { context, commands } = inZoom({ editing: true });
+
+      context.keys.emit('keyPressed', keyOn(document.body, 'l'));
+
+      expect(commands).toEqual([{ kind: 'toggle-loopify' }]);
+      expect(context.zoom.enterEditMode).not.toHaveBeenCalled();
+    });
   });
-});
+
+  test('R in the grid, with Zoom closed, enters no Zoom edit mode', () => {
+    const context = createContext({ grid: gridWith({ selectedClipId: 'clip_1' }) });
+    new AppKeyDownHandler(context);
+
+    context.keys.emit('keyPressed', keyOn(document.body, 'r'));
+
+    expect(context.zoom.enterEditMode).not.toHaveBeenCalled();
+  });});

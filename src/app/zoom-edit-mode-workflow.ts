@@ -5,7 +5,6 @@ import type { AppSessionState } from './app-session-state.js';
 import type { IEventSource } from './event-source.js';
 import type { FolderAccess } from './folder-access.js';
 import type { StepDirection } from './held-step-repeat.js';
-import type { PipelineWorkingCopy } from './pipeline-working-copy.js';
 import type { IEditedClipSaveView, EditedClipSaveEnd, EditedClipSaveWorkflow, EditedClipSaveStatus } from './edited-clip-save-workflow.js';
 import type { IScreenChangeRequest } from './refine-leave-workflow.js';
 import type { IScreenIdentity } from './refine-screen-leave-policy.js';
@@ -79,7 +78,6 @@ type ZoomEditModeDependencies = Readonly<{
   sessions: IZoomEditSessions;
   saveWorkflow: Pick<EditedClipSaveWorkflow, 'save' | 'stop'>;
   activeEdit: Pick<ActiveZoomEdit, 'begin' | 'end'>;
-  pipelineWorkingCopy: Pick<PipelineWorkingCopy, 'resolveClip'>;
   openFolder: Pick<AppSessionState, 'currentFolderAccess'>;
   zoom: IZoomEditSurface;
   zoomClips: IZoomClipView;
@@ -122,12 +120,6 @@ export class ZoomEditModeWorkflow {
         if (screen.id !== deps.collectionScreenId) this.endForAnotherScreen();
       }),
     ];
-  }
-
-  enterFromGrid(clipId: string): void {
-    const clip = this.deps.pipelineWorkingCopy.resolveClip(clipId);
-    if (!clip || this.mode || !this.deps.zoomClips.openClip(clip)) return;
-    this.begin(clip, 'refine');
   }
 
   enterFromZoom(clip: Clip, entry: ZoomEditEntry): void {

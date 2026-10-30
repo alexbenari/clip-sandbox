@@ -1,6 +1,7 @@
 import type { IShortcutDescriptor } from './shortcut-descriptor.js';
 import type { IEventSource } from './event-source.js';
-import { ZOOM_EDIT_MODE_SHORTCUTS } from './zoom-edit-mode-keys.js';
+import { ZOOM_EDIT_ENTRY_KEYS, ZOOM_EDIT_ENTRY_SHORTCUTS, ZOOM_EDIT_MODE_SHORTCUTS } from './zoom-edit-mode-keys.js';
+import type { ZoomEditEntry } from './zoom-edit-mode-workflow.js';
 
 export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Move focus between clips', group: 'Grid', sequences: [['Arrow keys']] },
@@ -19,6 +20,7 @@ export const COLLECTION_SHORTCUTS: readonly IShortcutDescriptor[] = [
   { description: 'Previous clip', group: 'Zoom', sequences: [['Left']] },
   { description: 'Next clip', group: 'Zoom', sequences: [['Right']] },
   { description: 'Close Zoom', group: 'Zoom', sequences: [['Escape']] },
+  ...ZOOM_EDIT_ENTRY_SHORTCUTS,
   ...ZOOM_EDIT_MODE_SHORTCUTS,
 ];
 
@@ -39,6 +41,7 @@ export type AppKeyDownContext = {
     toggleMuted(): void;
     browseByOffset(offset: number): unknown;
     openClipById(clipId: string | null): unknown;
+    enterEditMode(entry: ZoomEditEntry): unknown;
   };
   grid: {
     handleKeyDown(event: KeyboardEvent): unknown;
@@ -125,6 +128,12 @@ export class AppKeyDownHandler {
       event.preventDefault();
       return true;
     }
+    const zoomEditEntry = this.isPlainKeyPress(event) && context.zoom.isOpen() ? this.zoomEditEntryOf(event) : null;
+    if (zoomEditEntry) {
+      context.zoom.enterEditMode(zoomEditEntry);
+      event.preventDefault();
+      return true;
+    }
     if (
       this.isPlainKeyPress(event)
       && context.zoom.isOpen()
@@ -156,6 +165,12 @@ export class AppKeyDownHandler {
     if (this.isKey(event, 'z')) return grid.focusedClipId() ?? grid.getSelectedClipId();
     if (event.key !== 'Enter') return null;
     return grid.focusedClipId() ?? (this.isPageBody(event.target) ? grid.getSelectedClipId() : null);
+  }
+
+  private zoomEditEntryOf(event: KeyboardEvent): ZoomEditEntry | null {
+    if (this.isKey(event, ZOOM_EDIT_ENTRY_KEYS.refine.toLowerCase())) return 'refine';
+    if (this.isKey(event, ZOOM_EDIT_ENTRY_KEYS.loopify.toLowerCase())) return 'loopify';
+    return null;
   }
 
   private isPageBody(target: EventTarget | null): boolean {

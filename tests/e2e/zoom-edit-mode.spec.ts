@@ -53,8 +53,9 @@ function hintStatus(page: Page) {
 }
 
 async function refine(page: Page, clipName: string): Promise<void> {
-  await clipCard(page, clipName).click({ button: 'right' });
-  await page.locator('#clipContextMenu [data-item-id="refine-clip"]').click();
+  await clipCard(page, clipName).dblclick();
+  await expect(page.locator('#zoomVideo')).toBeVisible();
+  await page.keyboard.press('r');
   await expect(page.locator('#zoomEditHint')).toBeVisible();
 }
 

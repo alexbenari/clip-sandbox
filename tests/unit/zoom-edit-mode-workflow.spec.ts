@@ -183,7 +183,6 @@ function zoomEditMode({ fullScreen = false } = {}) {
     sessions,
     saveWorkflow,
     activeEdit,
-    pipelineWorkingCopy,
     openFolder,
     zoom,
     zoomClips,
@@ -209,7 +208,7 @@ function zoomEditMode({ fullScreen = false } = {}) {
 
 async function editingReadyClip() {
   const context = zoomEditMode();
-  context.workflow.enterFromGrid(context.alpha.id);
+  context.workflow.enterFromZoom(context.alpha, 'refine');
   context.session.becomeReady();
   return context;
 }
@@ -231,14 +230,13 @@ const savedAsKeepBoth: SavedEditedClip = {
 
 describe('ZoomEditModeWorkflow', () => {
   describe('entering', () => {
-    it('from the grid opens Zoom on the clip and starts editing it with the sound Zoom had', () => {
-      const { workflow, sessions, zoomClips, zoom, alpha, folder } = zoomEditMode();
+    it('starts editing the zoomed clip with the sound Zoom had', () => {
+      const { workflow, sessions, zoom, alpha, folder } = zoomEditMode();
       zoom.muted = true;
       alpha.recordSourceMovie(SourceMovie.fromFileName('Feature.mkv'));
 
-      workflow.enterFromGrid(alpha.id);
+      workflow.enterFromZoom(alpha, 'refine');
 
-      expect(zoomClips.openClip).toHaveBeenCalledWith(alpha);
       expect(zoom.editing).toBe(true);
       expect(sessions.begin).toHaveBeenCalledWith({ folder, filename: 'alpha.mp4', hasSourceInfo: true, muted: true, entry: 'refine' });
     });
@@ -263,7 +261,7 @@ describe('ZoomEditModeWorkflow', () => {
     it('shows the keys and that the clip is being prepared', () => {
       const { workflow, zoom, alpha } = zoomEditMode();
 
-      workflow.enterFromGrid(alpha.id);
+      workflow.enterFromZoom(alpha, 'refine');
 
       expect(zoom.hint).toEqual({ keys: KEYS, status: 'Preparing the clip…' });
     });
@@ -276,15 +274,6 @@ describe('ZoomEditModeWorkflow', () => {
       expect(sessions.begin).not.toHaveBeenCalled();
       expect(zoom.editing).toBe(false);
       expect(activeEdit.isActive).toBe(false);
-    });
-
-    it('does nothing when Zoom cannot show the clip', () => {
-      const { workflow, sessions, zoomClips, alpha } = zoomEditMode();
-      zoomClips.openClip.mockReturnValue(false);
-
-      workflow.enterFromGrid(alpha.id);
-
-      expect(sessions.begin).not.toHaveBeenCalled();
     });
   });
 

@@ -110,6 +110,14 @@ export class ZoomWorkflow {
     return this.openClip(nextClip);
   }
 
+  enterEditMode(entry: ZoomEditEntry): boolean {
+    const clip = this.zoomedClip();
+    const { enterZoomEditMode } = this.zoom;
+    if (!clip || !enterZoomEditMode || this.zoom.activeEdit.isActive) return false;
+    enterZoomEditMode(clip, entry);
+    return true;
+  }
+
   dispose(): void {
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe();
   }
@@ -121,13 +129,11 @@ export class ZoomWorkflow {
 
   // Every entry of Zoom's edit menu enters Zoom edit mode, so without the mode there is no menu.
   private openEditMenu(point: MenuPoint): void {
-    const clip = this.zoomedClip();
-    const { editMenu, enterZoomEditMode } = this.zoom;
-    if (!this.zoom.zoom.isOpen() || !clip || !enterZoomEditMode) return;
-    editMenu.open({
+    if (!this.zoomedClip() || !this.zoom.enterZoomEditMode) return;
+    this.zoom.editMenu.open({
       point,
-      onRefine: () => enterZoomEditMode(clip, 'refine'),
-      onLoopify: () => enterZoomEditMode(clip, 'loopify'),
+      onRefine: () => { this.enterEditMode('refine'); },
+      onLoopify: () => { this.enterEditMode('loopify'); },
     });
   }
 

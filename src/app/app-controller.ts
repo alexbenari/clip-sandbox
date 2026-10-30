@@ -365,7 +365,6 @@ export class AppController {
         sessions: zoomEditServices.sessions,
         saveWorkflow: editedClipSave,
         activeEdit: activeZoomEdit,
-        pipelineWorkingCopy,
         openFolder: state,
         zoom: zoomOverlay,
         zoomClips: zoom,
@@ -430,7 +429,6 @@ export class AppController {
       fullScreen: fullscreenAdapter,
       addToCollection,
       trashClips,
-      refine: zoomEditMode,
     });
     const gifRangeRefinement = new GifRangeRefinementWorkflow({
       session: gifExtractionSession,

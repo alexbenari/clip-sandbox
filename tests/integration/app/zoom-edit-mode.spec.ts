@@ -108,16 +108,16 @@ async function startWithFolder() {
   await waitFor(() => expect(document.querySelectorAll('#grid .thumb')).toHaveLength(2));
 }
 
-async function refineFromClipMenu(name) {
-  document.querySelector(`#grid .thumb[data-name="${name}"]`).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 50 }));
-  await waitFor(() => expect(document.querySelector('#clipContextMenu [data-item-id="refine-clip"]')).not.toBeNull());
-  document.querySelector('#clipContextMenu [data-item-id="refine-clip"]').click();
+async function refineFromZoom(name) {
+  document.querySelector(`#grid .thumb[data-name="${name}"]`).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  await waitFor(() => expect(document.getElementById('zoomVideo')).not.toBeNull());
+  press('r');
   await waitFor(() => expect(document.getElementById('zoomEditSurface')).not.toBeNull());
 }
 
 async function editingWithStagedStart() {
   await startWithFolder();
-  await refineFromClipMenu('bravo.mp4');
+  await refineFromZoom('bravo.mp4');
   session().stageStart(6);
 }
 
@@ -138,10 +138,10 @@ describe('Zoom edit mode in the Collection view', () => {
   });
   afterEach(() => environment.tearDown());
 
-  test('Refine in the clip menu opens that clip in Zoom edit mode with the player and the hint line', async () => {
+  test('R in Zoom opens the zoomed clip in Zoom edit mode with the player and the hint line', async () => {
     await startWithFolder();
 
-    await refineFromClipMenu('bravo.mp4');
+    await refineFromZoom('bravo.mp4');
 
     expect(session().request).toMatchObject({ filename: 'bravo.mp4', folder: { folderPath: 'C:/clips' }, hasSourceInfo: false, muted: true });
     expect(document.querySelector('#zoomEditSurface .frame-review-player')).not.toBeNull();
@@ -182,7 +182,7 @@ describe('Zoom edit mode in the Collection view', () => {
 
   test('L stages Loopify in the mode', async () => {
     await startWithFolder();
-    await refineFromClipMenu('alpha.mp4');
+    await refineFromZoom('alpha.mp4');
 
     press('l');
 
@@ -202,7 +202,7 @@ describe('Zoom edit mode in the Collection view', () => {
 
   test('keys act in the mode instead of browsing Zoom', async () => {
     await startWithFolder();
-    await refineFromClipMenu('alpha.mp4');
+    await refineFromZoom('alpha.mp4');
 
     press('ArrowRight');
     press('q');
@@ -213,7 +213,7 @@ describe('Zoom edit mode in the Collection view', () => {
 
   test('releasing a held arrow key tells the session to stop stepping', async () => {
     await startWithFolder();
-    await refineFromClipMenu('alpha.mp4');
+    await refineFromZoom('alpha.mp4');
     press('ArrowLeft');
 
     document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowLeft', bubbles: true }));
@@ -223,7 +223,7 @@ describe('Zoom edit mode in the Collection view', () => {
 
   test('Escape without staged edits returns to Zoom on the same clip, and a second Escape closes Zoom', async () => {
     await startWithFolder();
-    await refineFromClipMenu('bravo.mp4');
+    await refineFromZoom('bravo.mp4');
 
     press('Escape');
     await waitFor(() => expect(document.getElementById('zoomVideo')?.dataset.name).toBe('bravo.mp4'));
@@ -283,7 +283,7 @@ describe('Zoom edit mode in the Collection view', () => {
 
   test('a screen change without a staged edit leaves the mode before the other screen shows', async () => {
     await startWithFolder();
-    await refineFromClipMenu('bravo.mp4');
+    await refineFromZoom('bravo.mp4');
 
     activateScreen('gif-extraction');
 
@@ -346,7 +346,7 @@ describe('Saving in Zoom edit mode', () => {
   }
 
   async function refineAndSave(name, choice) {
-    await refineFromClipMenu(name);
+    await refineFromZoom(name);
     session().stageStart(6);
     press('x');
     await waitFor(() => expect(document.getElementById('saveEditsDialog').open).toBe(true));

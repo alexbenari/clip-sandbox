@@ -1,10 +1,17 @@
 import type { StepDirection } from './held-step-repeat.js';
 import type { IShortcutDescriptor } from './shortcut-descriptor.js';
 import type { ZoomEditJumpSeconds } from './zoom-edit-mode-session.js';
+import type { ZoomEditEntry } from './zoom-edit-mode-workflow.js';
 
-// The keys of Zoom edit mode. The hint line and the keyboard map name keys from here, so they match the bindings.
+// The keys of Zoom edit mode and of entering it from Zoom. The hint line and the keyboard map name keys from
+// here, so they match the bindings.
 export const ZOOM_EDIT_MODE_KEYS = Object.freeze({
   markStart: 'Q', markEnd: 'W', jumpToStart: 'A', jumpToEnd: 'S', loop: 'Z', loopify: 'L', save: 'X',
+});
+
+// The keys that enter the mode from Zoom, with that edit staged.
+export const ZOOM_EDIT_ENTRY_KEYS: Readonly<Record<ZoomEditEntry, string>> = Object.freeze({
+  refine: 'R', loopify: ZOOM_EDIT_MODE_KEYS.loopify,
 });
 
 // Top-row digits 1 to 5, in order.
@@ -26,6 +33,11 @@ export type ZoomEditModeCommand =
 
 const keys = ZOOM_EDIT_MODE_KEYS;
 const jumpSeconds = ZOOM_EDIT_JUMP_SECONDS;
+
+export const ZOOM_EDIT_ENTRY_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
+  { description: 'Refine the clip in Zoom edit mode', group: 'Zoom', sequences: [[ZOOM_EDIT_ENTRY_KEYS.refine]] },
+  { description: 'Loopify the clip in Zoom edit mode', group: 'Zoom', sequences: [[ZOOM_EDIT_ENTRY_KEYS.loopify]] },
+]);
 
 export const ZOOM_EDIT_MODE_SHORTCUTS: readonly IShortcutDescriptor[] = Object.freeze([
   { description: 'Play or pause', group: 'Zoom edit', sequences: [['Space']] },

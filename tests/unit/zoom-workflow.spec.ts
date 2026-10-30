@@ -114,6 +114,28 @@ describe('ZoomWorkflow', () => {
     expect(enterZoomEditMode.mock.calls).toEqual([[alpha, expected]]);
   });
 
+  it('enters Zoom edit mode on the zoomed clip with the edit asked for', () => {
+    const enterZoomEditMode = vi.fn();
+    const { workflow, alpha } = zoomWorkflow({ enterZoomEditMode });
+    workflow.openClip(alpha);
+
+    expect(workflow.enterEditMode('loopify')).toBe(true);
+    expect(enterZoomEditMode.mock.calls).toEqual([[alpha, 'loopify']]);
+  });
+
+  it.each([
+    ['Zoom is closed', false, false],
+    ['the mode is already active', true, true],
+  ])('does not enter Zoom edit mode when %s', (_case, opened, active) => {
+    const enterZoomEditMode = vi.fn();
+    const { workflow, alpha, activeEdit } = zoomWorkflow({ enterZoomEditMode });
+    if (opened) workflow.openClip(alpha);
+    activeEdit.isActive = active;
+
+    expect(workflow.enterEditMode('refine')).toBe(false);
+    expect(enterZoomEditMode).not.toHaveBeenCalled();
+  });
+
   it('offers no edit menu when Zoom edit mode is unavailable', () => {
     const { workflow, zoomView, editMenu, alpha } = zoomWorkflow({ enterZoomEditMode: null });
     workflow.openClip(alpha);

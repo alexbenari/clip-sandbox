@@ -26,7 +26,6 @@ type GridContextMenuRequest = {
   onAddToCollection?: (choice: TargetCollectionChoice) => void;
   onNewCollection?: () => void;
   onTrashSelected?: () => void;
-  onRefine?: (() => void) | null;
 };
 
 export class GridContextMenuControl {
@@ -45,9 +44,8 @@ export class GridContextMenuControl {
     onAddToCollection = () => {},
     onNewCollection = () => {},
     onTrashSelected = () => {},
-    onRefine = null,
   }: GridContextMenuRequest = {}): ContextMenuEntry[] {
-    const items: ContextMenuEntry[] = onRefine ? [{ id: 'refine-clip', label: 'Refine', onSelect: onRefine }, { separator: true }] : [];
+    const items: ContextMenuEntry[] = [];
     items.push(...hasSelection
       ? targetCollections.map((choice) => ({
         id: `add-to-${choice.value}`,

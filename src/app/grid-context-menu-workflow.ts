@@ -11,7 +11,6 @@ export interface IClipContextMenu {
     focusFirstItem: boolean;
     hasSelection: boolean;
     hasPipeline: boolean;
-    onRefine: (() => void) | null;
     targetCollections: CollectionDestinationChoice[];
     onAddToCollection: (choice: Readonly<{ collectionFilename?: string | null }>) => void;
     onNewCollection: () => void;
@@ -28,7 +27,6 @@ type GridContextMenuDependencies = Readonly<{
   fullScreen: { isDocumentFullScreen(): boolean };
   addToCollection: Pick<AddToCollectionWorkflow, 'destinationChoices' | 'addSelectedClips' | 'openDialog'>;
   trashClips: Pick<TrashClipsWorkflow, 'start'>;
-  refine: { enterFromGrid(clipId: string): void } | null;
 }>;
 
 export class GridContextMenuWorkflow {
@@ -36,21 +34,19 @@ export class GridContextMenuWorkflow {
 
   constructor(private readonly menu: GridContextMenuDependencies) {
     this.unsubscribes = [
-      menu.grid.on('contextMenuRequested', ({ point, clipId, fromKeyboard }) => {
+      menu.grid.on('contextMenuRequested', ({ point, fromKeyboard }) => {
         if (menu.zoom.isOpen() || menu.fullScreen.isDocumentFullScreen()) return;
-        this.open(point, { focusFirstItem: fromKeyboard, clipId });
+        this.open(point, { focusFirstItem: fromKeyboard });
       }),
     ];
   }
 
-  open(point: MenuPoint, { focusFirstItem = false, clipId = null }: { focusFirstItem?: boolean; clipId?: string | null } = {}): void {
-    const { refine } = this.menu;
+  open(point: MenuPoint, { focusFirstItem = false }: { focusFirstItem?: boolean } = {}): void {
     this.menu.menu.open({
       point,
       focusFirstItem,
       hasSelection: this.menu.grid.getSelectedClipIds().length > 0,
       hasPipeline: !!this.menu.pipelineWorkingCopy.pipeline,
-      onRefine: refine && clipId ? () => refine.enterFromGrid(clipId) : null,
       targetCollections: this.menu.addToCollection.destinationChoices(),
       onAddToCollection: choice => {
         void this.menu.addToCollection.addSelectedClips({ kind: 'existing', collectionFilename: choice.collectionFilename ?? null });
