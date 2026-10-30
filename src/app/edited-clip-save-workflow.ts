@@ -81,7 +81,7 @@ export class EditedClipSaveWorkflow {
     this.run = run;
     let saved: SavedEditedClip;
     try {
-      if (!(await this.movieSettled(edit, run, view))) return 'cancelled';
+      if (edits.needsSourceMovie && !(await this.movieSettled(edit, run, view))) return 'cancelled';
       view.statusChanged(Object.freeze({ kind: 'saving', progress: null }));
       saved = await this.deps.saves.save(this.requestOf(edit, edits, outcome), progress => {
         if (this.run === run) view.statusChanged(Object.freeze({ kind: 'saving', progress }));
@@ -132,7 +132,7 @@ export class EditedClipSaveWorkflow {
     pending?.(outcome);
   }
 
-  // A save waits while the source movie is still being found or prepared, so it can use the movie's frames.
+  // Edits that need the source movie wait while it is still being found or prepared, so they can use its frames.
   private async movieSettled(edit: IClipEditsToSave, run: SaveRun, view: IEditedClipSaveView): Promise<boolean> {
     if (!edit.session.snapshot.extensionPending) return true;
     view.statusChanged(Object.freeze({ kind: 'waiting-for-movie' }));

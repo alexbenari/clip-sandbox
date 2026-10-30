@@ -141,7 +141,7 @@ function zoomEdit({ hasSourceInfo = true, muted = false, loopify = false, clipOp
   const { previews, renders } = fakePreviews();
   const session = ZoomEditModeSession.begin(
     { frameReview, sources, previews, player, failures, previewBounds: { maxWidth: 1280, maxHeight: 720 } },
-    { folder: { folderPath: 'C:/Clips' }, filename: 'harbor-scene.mp4', hasSourceInfo, muted, loopify },
+    { folder: { folderPath: 'C:/Clips' }, filename: 'harbor-scene.mp4', hasSourceInfo, muted, entry: loopify ? 'loopify' : 'refine' },
   );
 
   async function clipReady(): Promise<void> {
@@ -620,6 +620,80 @@ describe('ZoomEditModeSession', () => {
     });
   });
 
+  describe('entered for Loopify, which does not need the source movie', () => {
+    it('does not look for the movie, so nothing waits for it', async () => {
+      const edit = zoomEdit({ loopify: true });
+
+      await edit.clipReady();
+
+      expect([edit.session.snapshot.extension, edit.session.snapshot.extensionPending]).toEqual(['none', false]);
+    });
+
+    it('does not look for the movie for a step within the clip', async () => {
+      const edit = zoomEdit({ loopify: true });
+      await edit.clipReady();
+      edit.player.shownFrame = 40;
+
+      await tap(edit.session, 1);
+
+      expect([edit.player.shownFrame, edit.session.snapshot.extension]).toEqual([41, 'none']);
+    });
+
+    it.each<[string, number, (edit: ReturnType<typeof zoomEdit>) => Promise<unknown>]>([
+      ['a start is marked', 40, edit => edit.session.markStart()],
+      ['an end is marked', 40, edit => edit.session.markEnd()],
+      ['a jump would pass the clip end', CLIP_FRAMES - 10, edit => edit.session.jump(5)],
+      ['a jump during playback would pass the clip end', CLIP_FRAMES - 10, edit => {
+        edit.player.playbackFrame = edit.player.shownFrame;
+        edit.player.shownFrame = null;
+        edit.player.playing = true;
+        return edit.session.jump(5);
+      }],
+    ])('starts looking for the movie when %s', async (_scenario, frame, act) => {
+      const edit = zoomEdit({ loopify: true });
+      await edit.clipReady();
+      edit.player.shownFrame = frame;
+
+      await act(edit);
+
+      expect(edit.session.snapshot.extension).toBe('finding-movie');
+    });
+
+    it.each<[string, number, StepDirection]>([
+      ['past the clip end', CLIP_FRAMES - 1, 1],
+      ['before the clip start', 0, -1],
+    ])('starts looking for the movie for a step %s, refusing it while the movie is found', async (_scenario, frame, direction) => {
+      const edit = zoomEdit({ loopify: true });
+      await edit.clipReady();
+      edit.player.shownFrame = frame;
+
+      const answer = await tap(edit.session, direction);
+
+      expect(answer).toEqual({ kind: 'refused', refusal: { reason: 'extension-unavailable', extension: 'finding-movie' } });
+    });
+
+    it('switches to the movie window once the movie found after a start is marked is anchored', async () => {
+      const edit = zoomEdit({ loopify: true });
+      await edit.clipReady();
+      edit.player.shownFrame = 5;
+      await edit.session.markStart();
+
+      await edit.windowAnchored();
+
+      expect([edit.player.attached, edit.session.snapshot.range?.start]).toEqual([edit.windowReviews[0].session, 5]);
+    });
+
+    it('does not look for a movie of a clip without source info', async () => {
+      const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+      await edit.clipReady();
+      edit.player.shownFrame = CLIP_FRAMES - 1;
+
+      const answer = await tap(edit.session, 1);
+
+      expect(answer).toEqual({ kind: 'refused', refusal: { reason: 'extension-unavailable', extension: 'none' } });
+    });
+  });
+
   describe('once the movie window is anchored', () => {
     it('keeps the staged start and end when the player switches from the clip to the window', async () => {
       const edit = zoomEdit();
@@ -1045,6 +1119,19 @@ describe('ZoomEditModeSession', () => {
         expect(edit.session.snapshot.preview).toEqual({ kind: 'hidden' });
       });
 
+      it('stops the preview when playback is toggled, leaving the player paused on the frame it showed', async () => {
+        const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
+        await trimmed(edit);
+        await edit.session.toggleLoop();
+        edit.renders[0].answer.resolve('file:///previews/preview-1.mp4?modified=1');
+        await vi.waitFor(() => expect(edit.session.snapshot.preview.kind).toBe('playing'));
+
+        expect(await edit.session.togglePlayback()).toEqual({ kind: 'done' });
+
+        expect([edit.session.snapshot.preview, edit.player.ordinaryPlaybackRunning(), edit.player.shownFrame])
+          .toEqual([{ kind: 'hidden' }, false, 80]);
+      });
+
       it('hides the preview when asked to pause', async () => {
         const edit = zoomEdit({ hasSourceInfo: false, loopify: true });
         await trimmed(edit);
@@ -1192,9 +1279,10 @@ describe('ZoomEditModeSession', () => {
       });
 
       it('asks for a preview of the movie window range once the clip is shown in its window', async () => {
-        const edit = zoomEdit({ loopify: true });
+        const edit = zoomEdit();
         await edit.clipReady();
         await edit.windowAnchored();
+        await edit.session.toggleLoopify();
 
         await edit.session.toggleLoop();
 

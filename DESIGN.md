@@ -230,7 +230,7 @@ The hint line is the mode's only text. It is a band of Booth Black under the pic
 
 Statuses use no error color; failures that need recovery go to Activity, and the hint line keeps only what the user can act on now. A loop preview that could not be made says so until the next key, with the way on: "The loop preview could not be made. Press Z to loop the range forward only."
 
-With Loopify staged, Z shows what would be saved: a low-resolution preview, forward then backward, silent and looping, laid over the picture in the same frame with no chrome of its own. While it is being made the exact picture stays and the hint line shows the progress; Z again returns to the exact picture, and any other key does too.
+With Loopify staged, Z shows what would be saved: a low-resolution preview, forward then backward, silent and looping, laid over the picture in the same frame with no chrome of its own. While it is being made the exact picture stays and the hint line shows the progress; Z again returns to the exact picture, and any other key does too; Space returns to it paused, so stopping the preview never starts playback.
 
 Zoom's edit menu lists the mode's edits, Refine then Loopify, each an entry into the mode (Loopify enters with Loopify staged).
 

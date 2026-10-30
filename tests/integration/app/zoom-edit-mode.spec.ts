@@ -19,7 +19,7 @@ const { FakeEditSession, domain } = vi.hoisted(() => {
 
     constructor(request) {
       this.request = request;
-      this.snapshot = { ...this.snapshot, loopify: request.loopify };
+      this.snapshot = { ...this.snapshot, loopify: request.entry === 'loopify' };
       FakeEditSession.instances.push(this);
     }
 
@@ -176,7 +176,7 @@ describe('Zoom edit mode in the Collection view', () => {
 
     await loopifyFromZoomMenu('alpha.mp4');
 
-    expect(session().request).toMatchObject({ filename: 'alpha.mp4', loopify: true });
+    expect(session().request).toMatchObject({ filename: 'alpha.mp4', entry: 'loopify' });
     expect(document.querySelector('#zoomEditHint [role="status"]').textContent).toBe('Loopify staged · saved without sound');
   });
 

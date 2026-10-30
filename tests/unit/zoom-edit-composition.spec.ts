@@ -37,6 +37,15 @@ describe('ZoomEditComposition', () => {
   });
 
   it.each([
+    [['refine'], true],
+    [['loopify'], false],
+    [['refine', 'loopify'], true],
+    [[], false],
+  ] as const)('with %j staged needs the source movie: %s', (edits, needsSourceMovie) => {
+    expect(ZoomEditComposition.of(edits).needsSourceMovie).toBe(needsSourceMovie);
+  });
+
+  it.each([
     [['refine'], 'movie-range'],
     [['loopify'], 'movie-only'],
     [['refine', 'loopify'], 'movie-only'],

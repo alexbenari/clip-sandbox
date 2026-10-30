@@ -240,7 +240,7 @@ describe('ZoomEditModeWorkflow', () => {
 
       expect(zoomClips.openClip).toHaveBeenCalledWith(alpha);
       expect(zoom.editing).toBe(true);
-      expect(sessions.begin).toHaveBeenCalledWith({ folder, filename: 'alpha.mp4', hasSourceInfo: true, muted: true, loopify: false });
+      expect(sessions.begin).toHaveBeenCalledWith({ folder, filename: 'alpha.mp4', hasSourceInfo: true, muted: true, entry: 'refine' });
     });
 
     it('from Zoom edits the zoomed clip where Zoom already shows it', () => {
@@ -572,6 +572,17 @@ describe('ZoomEditModeWorkflow', () => {
       expect(activeEdit.isActive).toBe(true);
     });
 
+    it('saves Loopify alone at once while the movie around the clip is still being found', async () => {
+      const { saveDialog, saves, session, press } = await editingReadyClip();
+      session.stageLoopify(true);
+      session.change({ extension: 'finding-movie', extensionPending: true });
+      await press({ kind: 'save' });
+
+      saveDialog.emit('confirmed', 'keep-both');
+
+      await vi.waitFor(() => expect(saves.save).toHaveBeenCalledOnce());
+    });
+
     it('says a save is running when another key is pressed meanwhile', async () => {
       const { saveDialog, saveAnswers, session, zoom, press } = await withStagedStart();
       await press({ kind: 'save' });
@@ -781,7 +792,7 @@ describe('ZoomEditModeWorkflow', () => {
     async function editingForLoopify() {
       const context = zoomEditMode();
       context.workflow.enterFromZoom(context.alpha, 'loopify');
-      context.session.stageLoopify(context.sessions.begin.mock.calls[0][0].loopify);
+      context.session.stageLoopify(context.sessions.begin.mock.calls[0][0].entry === 'loopify');
       context.session.becomeReady();
       return context;
     }
@@ -791,7 +802,7 @@ describe('ZoomEditModeWorkflow', () => {
 
       workflow.enterFromZoom(alpha, 'loopify');
 
-      expect(sessions.begin.mock.calls[0][0].loopify).toBe(true);
+      expect(sessions.begin.mock.calls[0][0].entry).toBe('loopify');
     });
 
     it('lists the staged edits and that the clip is saved without sound', async () => {

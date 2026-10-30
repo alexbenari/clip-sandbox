@@ -100,6 +100,25 @@ test('trim and Keep both: the refined clip appears next to the original with exa
   });
 });
 
+test('Tab and Enter in Zoom edit mode keep the focus in Zoom and press nothing behind it', async () => {
+  await withApp('clip-zoom-edit-focus-', async (page, _app, { directory }) => {
+    const folder = path.join(directory, 'clips');
+    await fs.mkdir(folder);
+    await runFfmpeg(['-i', movieFixture, '-frames:v', '24', '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+      '-map_metadata', '-1', path.join(folder, 'untagged.mp4')]);
+    await openFolderInCollection(page, folder, 'untagged.mp4');
+    await refine(page, 'untagged.mp4');
+    await expect(page.locator('#zoomFrame')).toBeFocused();
+
+    // Without the mode holding them, two Tabs reach the Activity button and Enter opens its panel.
+    await pressKeys(page, ['Tab', 'Tab', 'Enter']);
+
+    await expect(page.locator('#zoomFrame')).toBeFocused();
+    await expect(page.locator('#activityIndicatorPanel')).toBeHidden();
+    await expect(page.locator('#zoomEditHint')).toBeVisible();
+  });
+});
+
 test('extend and Replace: the clip under its own name holds the extended movie range, named in the movie’s frame numbers', async () => {
   await withApp('clip-zoom-edit-replace-', async (page, _app, { directory, profile, pipelines }) => {
     const movie = path.join(directory, 'Feature.mkv');
@@ -158,10 +177,11 @@ test('Refine and Loopify with Keep both: the looped clip plays the staged frames
     await clipCard(page, 'Feature-001.mp4').dblclick();
     await page.locator('#zoomVideo').click({ button: 'right' });
     await page.locator('#clipContextMenu [data-item-id="zoom-edit-loopify"]').click();
-    await expect(hintStatus(page)).toHaveText('Loopify staged · saved without sound', { timeout: 120_000 });
+    await expect(hintStatus(page)).toHaveText('Loopify staged · saved without sound', { timeout: 60_000 });
     // From the first frame shown (clip frame 0), two on is the start; from the last (10), two back is the end.
+    // Q starts finding the movie, and the staged edits are named again once the movie around the clip shows.
     await pressKeys(page, ['ArrowRight', 'ArrowRight', 'q', 's', 'ArrowLeft', 'ArrowLeft', 'w']);
-    await expect(hintStatus(page)).toHaveText('Refine + Loopify staged · saved without sound');
+    await expect(hintStatus(page)).toHaveText('Refine + Loopify staged · saved without sound', { timeout: 120_000 });
     await page.keyboard.press('z');
     await expect(page.locator('#zoomEditPreview')).toHaveAttribute('src', /^file:.*zoom-edit-previews/, { timeout: 30_000 });
     await page.keyboard.press('z');
@@ -181,5 +201,36 @@ test('Refine and Loopify with Keep both: the looped clip plays the staged frames
     expect(await streamKinds(saved)).toEqual(['video']);
     const sourceInfo = await new Mp4Provenance().read(saved);
     expect(sourceInfo.toRecord()).toEqual({ provenanceVersion: 2, sourceMovie: expect.objectContaining({ displayName: 'Feature.mkv' }) });
+  });
+});
+
+test('Loopify alone on an extracted clip never prepares its movie: Z previews and Keep both saves the whole clip looped', async () => {
+  await withApp('clip-zoom-edit-loopify-only-', async (page, _app, { directory, profile, pipelines }) => {
+    const movie = path.join(directory, 'Feature.mkv');
+    await fs.copyFile(movieFixture, movie);
+    const clips = path.join(pipelines, 'extraction-tmp');
+    // The tagged clip: movie frames 30 to 40, cut by a real extraction.
+    await openMovieForExactReview(page, movie);
+    await lockExactRange(page, 30, 40);
+    await page.getByRole('button', { name: 'Extract all (1)' }).click();
+    await expect(page.locator('[data-range-id="range-1"]')).toContainText('Extracted as Feature-001.mp4', { timeout: 90_000 });
+    await openFolderInCollection(page, clips, 'Feature-001.mp4');
+
+    await clipCard(page, 'Feature-001.mp4').dblclick();
+    await page.locator('#zoomVideo').click({ button: 'right' });
+    await page.locator('#clipContextMenu [data-item-id="zoom-edit-loopify"]').click();
+    await expect(hintStatus(page)).toHaveText('Loopify staged · saved without sound', { timeout: 60_000 });
+    await page.keyboard.press('z');
+    await expect(page.locator('#zoomEditPreview')).toHaveAttribute('src', /^file:.*zoom-edit-previews/, { timeout: 30_000 });
+    await saveWith(page, 'Keep both');
+
+    await expect(page.locator('#zoomVideo')).toHaveAttribute('data-name', 'Feature-001-looped.mp4', { timeout: 90_000 });
+    const saved = path.join(clips, 'Feature-001-looped.mp4');
+    // All 11 frames of the clip, played forward then backward.
+    expect(await videoFrameCount(saved)).toBe(22);
+    expect((await new Mp4Provenance().read(saved)).toRecord())
+      .toEqual({ provenanceVersion: 2, sourceMovie: expect.objectContaining({ displayName: 'Feature.mkv' }) });
+    // No movie window was cut, so the movie around the clip was never prepared.
+    expect(await fs.readdir(path.join(profile, 'movie-window-cache')).catch(() => [])).toEqual([]);
   });
 });

@@ -19,6 +19,7 @@ type ZoomEditDeclaration = Readonly<{
   order: number;
   keepsAudio: boolean;
   playsBackward: boolean;
+  needsSourceMovie: boolean;
   sourceInfo: ZoomEditSourceInfo;
   filenameSuffix: string;
 }>;
@@ -33,6 +34,8 @@ interface IZoomEdit {
 class RefineEdit implements IZoomEdit {
   private static readonly declared: ZoomEditDeclaration = Object.freeze({
     name: 'refine', order: 1, keepsAudio: true, playsBackward: false, sourceInfo: 'movie-range', filenameSuffix: 'refined',
+    // Extending the clip, and the movie range its source info records, use the movie around the clip.
+    needsSourceMovie: true,
   });
 
   declaration(): ZoomEditDeclaration {
@@ -51,6 +54,7 @@ class RefineEdit implements IZoomEdit {
 class LoopifyEdit implements IZoomEdit {
   private static readonly declared: ZoomEditDeclaration = Object.freeze({
     name: 'loopify', order: 3, keepsAudio: false, playsBackward: true, sourceInfo: 'movie-only', filenameSuffix: 'looped',
+    needsSourceMovie: false,
   });
 
   declaration(): ZoomEditDeclaration {
@@ -125,6 +129,10 @@ export class ZoomEditComposition {
   // The frames play forward, then the same frames backward.
   get playsBackward(): boolean {
     return this.declarations.some(declaration => declaration.playsBackward);
+  }
+
+  get needsSourceMovie(): boolean {
+    return this.declarations.some(declaration => declaration.needsSourceMovie);
   }
 
   // The weakest source info any staged edit allows.

@@ -1,5 +1,5 @@
 import { RefineRange, type RefineRangeRefusal } from '../domain/refine-range.js';
-import { ZoomEditComposition, type ZoomEditRangeFacts, type ZoomEditRefusalReason } from '../domain/zoom-edit-composition.js';
+import { ZoomEditComposition, type ZoomEditName, type ZoomEditRangeFacts, type ZoomEditRefusalReason } from '../domain/zoom-edit-composition.js';
 import type {
   FrameReviewSessionId,
   IFrameReviewService,
@@ -75,7 +75,7 @@ export interface IZoomEditModeRequest {
   readonly filename: string;
   readonly hasSourceInfo: boolean;
   readonly muted: boolean;
-  readonly loopify: boolean;
+  readonly entry: ZoomEditName;
 }
 
 type ZoomEditModeDependencies = Readonly<{
@@ -99,7 +99,7 @@ const COMMAND_FAILED: ZoomEditCommandAnswer = Object.freeze({ kind: 'failed' });
 export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEvents> {
   private readonly events = new EventSource<IZoomEditModeSessionEvents>();
   private readonly clipMovie: CurrentMovie;
-  private readonly movieWindow: ZoomEditMovieWindow | null;
+  private movieWindow: ZoomEditMovieWindow | null = null;
   private readonly loopPreview: ZoomEditLoopPreview;
   private readonly heldSteps: HeldStepRepeat<ZoomEditCommandAnswer>;
   private picture: ZoomEditPictureReadiness = 'preparing';
@@ -119,12 +119,12 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     });
     this.clipMovie.on('exactCaptureReady', () => this.onClipReady());
     this.clipMovie.on('reviewEnded', () => this.onShownReviewEnded('clip'));
-    this.loopify = new StagedLoopify(request.loopify);
+    this.loopify = new StagedLoopify(request.entry === 'loopify');
     this.edits = Object.freeze([new StagedRefine(() => this.range), this.loopify]);
     this.loopPreview = new ZoomEditLoopPreview(deps.previews, deps.failures);
     this.loopPreview.on('changed', () => this.publish());
     this.heldSteps = new HeldStepRepeat(direction => this.step(direction), answer => answer.kind === 'done');
-    this.movieWindow = request.hasSourceInfo ? this.openMovieWindow() : null;
+    this.lookForMovieFor(request.entry);
   }
 
   static begin(deps: ZoomEditModeDependencies, request: IZoomEditModeRequest): ZoomEditModeSession {
@@ -176,9 +176,12 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     if (this.shown) this.playbackToggled = true;
     return this.enqueue(async () => {
       if (!this.shown) return this.refused(this.notReadyReason());
-      await this.whileOpen(this.deps.player.togglePlayback());
+      // A shown preview is what plays, so toggling stops it and leaves the player paused.
+      const previewWasShown = this.loopPreview.isShown;
+      this.loopPreview.hide();
+      if (!previewWasShown) await this.whileOpen(this.deps.player.togglePlayback());
       return DONE;
-    });
+    }, { keepsPreview: true });
   }
 
   async pause(): Promise<void> {
@@ -219,6 +222,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
 
   markStart(): Promise<ZoomEditCommandAnswer> {
     return this.enqueueEdit(async range => {
+      this.lookForMovieFor('refine');
       const current = await this.pauseOnExactFrame();
       if (current === null) return this.refused('clip-preparing');
       const change = range.withStart(current);
@@ -230,6 +234,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
 
   markEnd(): Promise<ZoomEditCommandAnswer> {
     return this.enqueueEdit(async range => {
+      this.lookForMovieFor('refine');
       const current = await this.pauseOnExactFrame();
       if (current === null) return this.refused('clip-preparing');
       const change = range.withEnd(current);
@@ -311,6 +316,18 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     if (this.shown?.source.kind === 'window') return 'ready';
     const state = this.movieWindow.state;
     return state === 'anchored' ? 'preparing-window' : state;
+  }
+
+  // The movie is looked for the first time an edit that needs it is used, so an edit that does not never waits for it.
+  private lookForMovieFor(edit: ZoomEditName): void {
+    if (this.movieWindow || this.disposed || !this.request.hasSourceInfo || !ZoomEditComposition.of([edit]).needsSourceMovie) return;
+    this.movieWindow = this.openMovieWindow();
+    this.publish();
+  }
+
+  // Going past the clip's own frames extends it, which is Refine's work.
+  private lookForMovieBeyond(range: RefineRange, target: number): void {
+    if (range.unreachableReason(target) === 'outside-clip') this.lookForMovieFor('refine');
   }
 
   private openMovieWindow(): ZoomEditMovieWindow {
@@ -460,6 +477,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
   private async jumpPlayback(range: RefineRange, seconds: ZoomEditJumpSeconds): Promise<ZoomEditCommandAnswer> {
     const position = this.playbackClipFrame();
     const target = position === null ? null : position + this.framesIn(seconds);
+    if (target !== null) this.lookForMovieBeyond(range, target);
     if (target === null || range.nearestReachable(target) === target) {
       this.deps.player.jumpBySeconds(seconds);
       return DONE;
@@ -471,6 +489,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
 
   // A move that would leave the reachable frames stops at their edge; it is refused only when it cannot move at all.
   private async moveToward(range: RefineRange, current: number, target: number): Promise<ZoomEditCommandAnswer> {
+    this.lookForMovieBeyond(range, target);
     const landing = range.nearestReachable(target);
     if ((landing - current) * Math.sign(target - current) <= 0) {
       const refusal = range.unreachableReason(target);
@@ -519,7 +538,7 @@ export class ZoomEditModeSession implements IEventSource<IZoomEditModeSessionEve
     }, options);
   }
 
-  // Every key but Z leaves a shown preview for the player.
+  // Every key leaves a shown preview for the player, except the commands that keep it and decide themselves.
   private enqueue(command: () => Promise<ZoomEditCommandAnswer>,
     { keepsPreview = false }: { keepsPreview?: boolean } = {}): Promise<ZoomEditCommandAnswer> {
     const answer = this.run(async () => {

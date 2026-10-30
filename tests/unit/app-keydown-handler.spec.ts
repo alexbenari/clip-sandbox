@@ -311,6 +311,25 @@ describe('app keydown handler', () => {
       expect(context.fullScreenKeys.onGlobalKeyDown).not.toHaveBeenCalled();
     });
 
+    // A key whose default action stays allowed would move the focus (Tab) or press the focused control (Enter).
+    test.each(['Tab', 'Enter'])('%s, which the mode does not use, is kept from its browser default action', key => {
+      const { context } = inZoom({ editing: true });
+      const event = keyOn(document.body, key);
+
+      context.keys.emit('keyPressed', event);
+
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    test('a key the mode does not use, held with Ctrl, keeps its browser default action', () => {
+      const { context } = inZoom({ editing: true });
+      const event = keyOn(document.body, 'r', { ctrlKey: true });
+
+      context.keys.emit('keyPressed', event);
+
+      expect(event.defaultPrevented).toBe(false);
+    });
+
     test('keys pressed while its save or discard dialog is open stay with the dialog', () => {
       const { context, commands } = inZoom({ editing: true, dialogOpen: true });
       const event = keyOn(document.body, 'Escape');

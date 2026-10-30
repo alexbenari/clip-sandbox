@@ -1,5 +1,5 @@
 import type { Clip } from '../domain/clip.js';
-import type { ZoomEditComposition } from '../domain/zoom-edit-composition.js';
+import type { ZoomEditComposition, ZoomEditName } from '../domain/zoom-edit-composition.js';
 import type { ActiveZoomEdit } from './active-zoom-edit.js';
 import type { AppSessionState } from './app-session-state.js';
 import type { IEventSource } from './event-source.js';
@@ -49,7 +49,7 @@ export interface IZoomEditSessions {
 
 export type ZoomEditHint = Readonly<{ keys: string; status: string | null }>;
 
-export type ZoomEditEntry = 'refine' | 'loopify';
+export type ZoomEditEntry = ZoomEditName;
 
 export interface IZoomEditSurface extends IEventSource<{ closeRequested: void }> {
   isMuted(): boolean;
@@ -157,9 +157,7 @@ export class ZoomEditModeWorkflow {
     if (this.disposed || this.mode || !folder || fullScreen.isDocumentFullScreen()) return;
     const muted = zoom.isMuted();
     if (!zoom.showEditSurface()) return;
-    const session = sessions.begin({
-      folder, filename: clip.name, hasSourceInfo: clip.sourceMovie !== null, muted, loopify: entry === 'loopify',
-    });
+    const session = sessions.begin({ folder, filename: clip.name, hasSourceInfo: clip.sourceMovie !== null, muted, entry });
     const mode: EditMode = {
       clip, folder, session, unsubscribe: () => undefined, shown: session.snapshot, notice: null, saving: null, lastCommand: Promise.resolve(),
     };

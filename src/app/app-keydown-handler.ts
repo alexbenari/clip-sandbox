@@ -96,9 +96,11 @@ export class AppKeyDownHandler {
       event.preventDefault();
       return true;
     }
-    // Zoom edit mode's keys replace Zoom's own while it is active; keys it does not use do nothing.
+    // Zoom edit mode's keys replace Zoom's own while it is active. Keys it does not use do nothing, so Tab cannot
+    // move the focus out of Zoom and Enter cannot press a control behind it.
     if (context.activeEdit.isActive) {
-      if (!this.anyDialogOpen() && !this.isEditableTarget(event.target)) context.zoomEditKeys.handleKeyDown(event);
+      if (this.anyDialogOpen() || this.isEditableTarget(event.target)) return true;
+      if (!context.zoomEditKeys.handleKeyDown(event) && this.isPlainKeyPress(event)) event.preventDefault();
       return true;
     }
     if (event.key === 'Escape' && context.zoom.isOpen()) {
