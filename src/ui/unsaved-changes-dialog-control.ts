@@ -1,3 +1,4 @@
+import { ButtonRowArrowKeys } from './button-row-arrow-keys.js';
 import { DocumentElements } from './document-elements.js';
 
 type DialogHandlers = {
@@ -54,6 +55,7 @@ export class UnsavedChangesDialogControl {
       event.preventDefault();
       this.cancelFlow();
     });
+    if (dialog) ButtonRowArrowKeys.attachTo(dialog);
     this.close();
   }
 

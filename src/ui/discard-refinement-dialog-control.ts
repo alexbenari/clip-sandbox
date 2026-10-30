@@ -2,6 +2,7 @@ import { EventSource, type EventHandler, type IEventSource } from '../app/event-
 import type { UnlockedEndpointChange } from '../app/range-refinement-draft.js';
 import type { ZoomEditModeText } from '../app/zoom-edit-mode-text.js';
 import type { ZoomEditStagedChange } from '../app/staged-edit.js';
+import { ButtonRowArrowKeys } from './button-row-arrow-keys.js';
 import { DocumentElements } from './document-elements.js';
 
 export interface IDiscardRefinementDialogEvents {
@@ -59,6 +60,7 @@ export class DiscardRefinementDialogControl<TChange> implements IEventSource<IDi
       event.preventDefault();
       this.answer('cancelled');
     });
+    ButtonRowArrowKeys.attachTo(parts.dialog);
     this.close();
   }
 

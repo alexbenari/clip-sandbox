@@ -1,5 +1,6 @@
 import type { Pipeline } from '../domain/pipeline.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
+import { ButtonRowArrowKeys } from './button-row-arrow-keys.js';
 import { DocumentElements } from './document-elements.js';
 
 export type AddToCollectionChoice = {
@@ -102,6 +103,7 @@ export class AddToCollectionDialogControl implements IEventSource<IAddToCollecti
 
     if (!dialog || !destinationSelect || !newCollectionNameInput || !confirmBtn) return;
 
+    ButtonRowArrowKeys.attachTo(dialog);
     destinationSelect.addEventListener('change', () => {
       this.clearExternalError();
       this.renderState();

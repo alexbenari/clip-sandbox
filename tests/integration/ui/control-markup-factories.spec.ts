@@ -20,6 +20,9 @@ import { TrashClipsDialogControl } from '../../../src/ui/trash-clips-dialog-cont
 import { MainToolbarControl } from '../../../src/ui/main-toolbar-control.js';
 import { SaveAsNewDialogControl } from '../../../src/ui/save-as-new-dialog-control.js';
 import { UnsavedChangesDialogControl } from '../../../src/ui/unsaved-changes-dialog-control.js';
+import { DiscardRefinementDialogControl } from '../../../src/ui/discard-refinement-dialog-control.js';
+import { SaveEditsDialogControl } from '../../../src/ui/save-edits-dialog-control.js';
+import { ZoomEditModeText } from '../../../src/app/zoom-edit-mode-text.js';
 import { shippedPageBody } from '../../support/page-markup.js';
 
 // Each control finds its own parts; these tests run the factories against the shipped page markup.
@@ -309,5 +312,30 @@ describe('controls built from the page markup', () => {
     document.body.innerHTML = '';
 
     expect(() => UnsavedChangesDialogControl.fromDocument(document)).toThrow('Required element #unsavedChangesDialog was not found.');
+  });
+
+  it.each<[string, () => unknown, string, string]>([
+    ['Unsaved changes', () => UnsavedChangesDialogControl.fromDocument(document), 'confirmUnsavedChangesBtn', 'cancelUnsavedChangesBtn'],
+    ['Add to collection', () => AddToCollectionDialogControl.fromDocument(document, { newChoiceValue: '__new__' }),
+      'cancelAddToCollectionBtn', 'confirmAddToCollectionBtn'],
+    ['Save changes before moving clips', () => TrashClipsDialogControl.fromDocument(document, { appText: new AppText() }),
+      'discardTrashPreflightBtn', 'confirmTrashPreflightBtn'],
+    ['Move to Recycle Bin', () => TrashClipsDialogControl.fromDocument(document, { appText: new AppText() }),
+      'cancelTrashClipsBtn', 'confirmTrashClipsBtn'],
+    ['Discard the staged frames', () => DiscardRefinementDialogControl.fromDocument(document), 'keepRefiningBtn', 'discardRefinementBtn'],
+    ['Discard Zoom edits', () => DiscardRefinementDialogControl.forZoomEdit(document, { text: new ZoomEditModeText() }),
+      'keepZoomEditingBtn', 'discardZoomEditBtn'],
+    ['Save the edited clip', () => SaveEditsDialogControl.fromDocument(document, { text: new ZoomEditModeText() }),
+      'cancelSaveEditsBtn', 'replaceEditedClipBtn'],
+    ['Save as collection', () => SaveAsNewDialogControl.fromDocument(document), 'confirmSaveAsNewBtn', 'cancelSaveAsNewBtn'],
+    ['Collection conflict', () => CollectionConflictControl.fromDocument(document, { appText: new AppText() }),
+      'applyCollectionConflictBtn', 'cancelCollectionConflictBtn'],
+  ])('Right moves the focus to the next button of the %s dialog', (_dialog, build, from, to) => {
+    build();
+    document.getElementById(from)!.focus();
+
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+
+    expect(document.activeElement?.id).toBe(to);
   });
 });

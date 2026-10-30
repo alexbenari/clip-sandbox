@@ -1,4 +1,5 @@
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
+import { ButtonRowArrowKeys } from './button-row-arrow-keys.js';
 import { DocumentElements } from './document-elements.js';
 
 export interface ISaveAsNewDialogEvents {
@@ -68,6 +69,7 @@ export class SaveAsNewDialogControl implements IEventSource<ISaveAsNewDialogEven
 
     if (!dialog || !nameInput || !confirmBtn) return;
 
+    ButtonRowArrowKeys.attachTo(dialog);
     nameInput.addEventListener('input', () => {
       this.clearExternalError();
       this.renderState();

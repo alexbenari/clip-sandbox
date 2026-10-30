@@ -2,6 +2,7 @@ import { EventSource, type EventHandler, type IEventSource } from '../app/event-
 import type { EditedClipSaveOutcome } from '../app/edited-clip-save-service.js';
 import type { ZoomEditModeText } from '../app/zoom-edit-mode-text.js';
 import type { ZoomEditComposition } from '../domain/zoom-edit-composition.js';
+import { ButtonRowArrowKeys } from './button-row-arrow-keys.js';
 import { DocumentElements } from './document-elements.js';
 
 export interface ISaveEditsDialogEvents {
@@ -42,6 +43,7 @@ export class SaveEditsDialogControl implements IEventSource<ISaveEditsDialogEven
       event.preventDefault();
       this.cancel();
     });
+    ButtonRowArrowKeys.attachTo(parts.dialog);
     this.close();
   }
 

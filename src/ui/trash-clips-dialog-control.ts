@@ -1,4 +1,5 @@
 import type { AppText } from '../app/app-text.js';
+import { ButtonRowArrowKeys } from './button-row-arrow-keys.js';
 import { DocumentElements } from './document-elements.js';
 
 type TrashDialogHandlers = {
@@ -102,6 +103,8 @@ export class TrashClipsDialogControl {
       event.preventDefault();
       this.cancelConfirm();
     });
+    if (preflightDialog) ButtonRowArrowKeys.attachTo(preflightDialog);
+    if (confirmDialog) ButtonRowArrowKeys.attachTo(confirmDialog);
     this.closeAll();
   }
 

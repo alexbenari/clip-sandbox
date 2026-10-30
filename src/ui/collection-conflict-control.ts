@@ -1,4 +1,5 @@
 import type { AppText } from '../app/app-text.js';
+import { ButtonRowArrowKeys } from './button-row-arrow-keys.js';
 import { DocumentElements } from './document-elements.js';
 
 type ConflictHandlers = {
@@ -65,6 +66,7 @@ export class CollectionConflictControl {
       this.hide();
       onCancel?.();
     });
+    if (root) ButtonRowArrowKeys.attachTo(root);
     this.hide();
   }
 
