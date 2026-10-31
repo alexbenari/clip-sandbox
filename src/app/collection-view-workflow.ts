@@ -172,7 +172,7 @@ export class CollectionViewWorkflow {
     this.refreshToolbar();
   }
 
-  // Removing from the pipeline view deletes files instead, which the delete flow handles.
+  // Removing from the pipeline view moves files to the Recycle Bin instead, which TrashClipsWorkflow handles.
   private removeFromCollectionView(orderedClipIds: string[]): void {
     const { pipelineWorkingCopy, grid } = this.view;
     if (this.view.surfaces.zoom.isOpen() || !pipelineWorkingCopy.currentClipSequence || pipelineWorkingCopy.isPipelineMode()) return;

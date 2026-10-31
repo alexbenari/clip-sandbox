@@ -2,7 +2,7 @@ import { defineConfig } from 'eslint/config';
 import playwright from 'eslint-plugin-playwright';
 import tseslint from 'typescript-eslint';
 
-// Lints tests only: it enforces the mechanical parts of coding-quality.md § Test reliability.
+// Lints tests only: it enforces the mechanical test-reliability rules.
 export default defineConfig(
   {
     files: ['tests/**/*.ts'],

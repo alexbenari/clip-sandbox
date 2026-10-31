@@ -8,8 +8,7 @@ export interface IProxyLoopTimes {
   readonly bUs: bigint;
 }
 
-// The pinned proxy profile rebases its first video PTS to zero. Painted CFR, VFR,
-// offset-source, and timestamp-normalized fixtures validate this player-time origin.
+// The pinned proxy profile rebases its first video PTS to zero.
 export class ProxyPlaybackClock {
   private readonly firstPts: bigint;
 

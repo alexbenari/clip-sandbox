@@ -9,7 +9,7 @@ Scope: Refine Gif contextual Operate screen; same Windows desktop workflow and s
 
 ## Direction contract
 
-THESIS: Review or resolve one captured range against exact frames without leaving the movie context; keep saved-clip editing in its separate future flow.
+THESIS: Review or resolve one captured range against exact frames without leaving the movie context; keep saved-clip editing in its separate flow, Zoom edit mode.
 
 OWN-WORLD: Inherit the Screening Room Workbench: booth-black media field, rail-navy controls, screen-silver text, quiet slate support, and projector-blue only for current focus and action.
 

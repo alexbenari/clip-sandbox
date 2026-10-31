@@ -43,7 +43,7 @@ spacing:
   standard: "10px"
   control-block: "12px"
   canvas: "14px"
-  toolbar-inline: "16px"
+  toolbar-inline: "14px"
   dialog: "18px"
 components:
   button-standard:
@@ -140,7 +140,7 @@ The palette evokes a dark screening booth: nearly black room surfaces, cool navy
 
 ## Layout
 
-The main screen is a persistent workbench rail above a media-first canvas. The toolbar is sticky, wraps when necessary, and uses a compact `10px` gap with `12px 16px` padding. At central command-host widths of at least `850px`, the active collection selector is centered on its own row. At narrower widths it shares the final row with the clip count. All four commands retain icons and text, wrapping above the selector when needed.
+The main screen is a persistent workbench rail above a media-first canvas. The toolbar is sticky, wraps when necessary, and uses a compact `8px` gap with `10px 14px` padding. At central command-host widths of at least `850px`, the active collection selector is centered on its own row. At narrower widths it shares the final row with the clip count. Commands retain icons and text, wrapping above the selector when needed.
 
 The clip field uses a dense responsive grid whose column count and cell height are computed from the available viewport and the clips' intrinsic dimensions. The canvas uses `14px` padding and a `10px` gap. Cards remain mounted across collection changes when possible, preserving media continuity. Fullscreen removes the workbench rail and surface decoration so only the clip field remains.
 
@@ -223,7 +223,7 @@ Zoom edit mode edits the zoomed clip in place, inside the same Zoom frame; nothi
 
 The hint line is the mode's only text. It is a band of Booth Black under the picture with a one-pixel slate top border, `8px 14px` padding and `13px` type. The keys sit on the left in Quiet Slate; a status sits on the right in Screen Silver and is announced politely to assistive technology; the two wrap rather than clip, and the status takes no space when empty. Wording lives in `src/app/zoom-edit-mode-text.ts`, and key names come from the same constants as the bindings:
 
-- **Keys** are short verb pairs joined by middle dots: "Q start · W end · A/S jump · Z loop · L loopify · X save · Esc leave". While saving they read only "Esc cancel saving".
+- **Keys** are short key-and-verb pairs joined by middle dots, such as "Q start · W end · Esc leave". While saving they read only "Esc cancel saving".
 - **Ongoing work** is a short phrase ending in an ellipsis: "Finding the source movie…", "Preparing the movie around this clip…", "Making the loop preview: 120 of 300 frames…", "Saving: encoded 120 of 300 frames…".
 - **Staged edits** are named by their menu labels joined by a plus, then what the combination costs, when the hint has nothing more urgent to say: "Refine + Loopify staged · saved without sound".
 - **A key that cannot act** changes nothing and says why in full sentences, then what to do, naming keys: "This frame is after the end, so it cannot be the start. Go back, or set a later end with W first." Limits are stated plainly: "Extending stops one minute past the clip’s original start and end." A clip that can only be trimmed says so and why: "No source movie was chosen, so this clip can be trimmed but not extended."
@@ -257,4 +257,4 @@ Saving asks in a compact confirmation dialog whose title names the clip by its s
 
 ### Application shell refinement
 
-The global bar orders Activity, a separator, then the adjacent keyboard and Settings icon controls, followed by native-caption separation. Local 1.6px-stroke SVG icons use currentColor. Handled surfaces use `#141f30` and inset surfaces `#0c131f` as restrained Rail Navy tonal layers, with `rgba(148,163,184,.2)` borders. Utility headers include explicit Close controls. A side panel with nothing for the active screen is removed together with its rail, and the workspace takes its width: the Clips panel appears only on the GIF screens. Pipelines tree group headings use the Supporting Label style in Quiet Slate. Keyboard group headings distinguish Grid, Zoom, Zoom edit, Fullscreen and Global; keycaps remain static. The Settings surface contains only the two implemented preferences, with a 22px local title and left-to-right filesystem field. Small keycaps use a 6px radius within the 14px utility surface.
+The global bar orders Activity, a separator, then the adjacent keyboard and Settings icon controls, followed by native-caption separation. Local 1.6px-stroke SVG icons use currentColor. Handled surfaces use `#141f30` and inset surfaces `#0c131f` as restrained Rail Navy tonal layers, with `rgba(148,163,184,.2)` borders. Utility headers include explicit Close controls. A side panel with nothing for the active screen is removed together with its rail, and the workspace takes its width: the Clips panel appears only on the GIF screens. Pipelines tree group headings use the Supporting Label style in Quiet Slate. Keyboard group headings name the context each group of keys works in; keycaps remain static. The Settings surface lists only implemented preferences, with a 22px local title and left-to-right filesystem fields. Small keycaps use a 6px radius within the 14px utility surface.
