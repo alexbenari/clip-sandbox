@@ -7,6 +7,10 @@ colors:
   screen-silver: "#e5e7eb"
   quiet-slate: "#94a3b8"
   projector-blue: "#7aa2f7"
+  projector-blue-deep: "#2a4b9e"
+  projector-blue-night: "#1f2b6b"
+  booth-shade: "#020617"
+  pale-slate: "#cbd5e1"
   warning-red: "#ef4444"
   warning-red-text: "#f87171"
   ready-green: "#22c55e"
@@ -97,6 +101,7 @@ The palette evokes a dark screening booth: nearly black room surfaces, cool navy
 ### Primary
 
 - **Projector Blue** (`#7aa2f7`): identifies the active collection, focus treatment, selection rings, drag targets, and the primary-action family.
+- **Deep Projector Blue** (`#2a4b9e`) to **Night Projector Blue** (`#1f2b6b`): the top and bottom of the primary button's vertical gradient; nowhere else.
 
 ### Neutral
 
@@ -104,6 +109,8 @@ The palette evokes a dark screening booth: nearly black room surfaces, cool navy
 - **Rail Navy** (`#0f172a`): toolbars, cards, dialogs, and elevated working surfaces.
 - **Screen Silver** (`#e5e7eb`): primary labels and high-priority interface text.
 - **Quiet Slate** (`#94a3b8`): counts, hints, supporting copy, and low-priority borders.
+- **Pale Slate** (`#cbd5e1`): quieter-than-silver text inside Activity history, such as resolved entries and feedback lines.
+- **Booth Shade** (`#020617`): the near-black under translucent layers, used only with transparency: the fades behind clip and zoom titles, the rename field, and the context menu and Activity panel surfaces.
 
 ### Status
 
@@ -191,7 +198,7 @@ The active collection is the calm focal control. It uses Projector Blue text, a 
 
 ### Clip Cards
 
-Clip cards are practical inset viewing frames. They use a navy vertical gradient, a faint cool border, `14px` corners, and ambient shadow. The video scales up or down to fill the card, contained on true black, so a source smaller than its card letterboxes in black instead of floating inside the navy frame; the same holds in Collection full screen. Filenames sit over a bottom fade in small Screen Silver text; hiding titles removes only that overlay and the source glyph. A clip that came from a movie through Clip Sandbox carries a quiet source glyph in its top-left corner: a 16px 1.6px-stroke film icon in Quiet Slate on a small translucent Booth Black backing, whose tooltip names the movie; other clips carry no mark. Selection is communicated by a `3px` Projector Blue ring, while drag targeting uses a dashed blue inset border. Keyboard focus is a separate `2px` Projector Blue outline set `5px` outside the card, shown only for keyboard focus, so it reads apart from the selection ring. Renaming replaces the filename overlay with a field on a Booth Black backing (`6px` corners, a Projector Blue border, the card's `12px` type) holding the name without its extension; a refusal sits above the field in the soft red of dialog validation text, and the field stays open.
+Clip cards are practical inset viewing frames. They use a navy vertical gradient, a faint cool border, `14px` corners, and ambient shadow. The video scales up or down to fill the card, contained on true black, so a source smaller than its card letterboxes in black instead of floating inside the navy frame; the same holds in Collection full screen. Filenames sit over a bottom fade in small Screen Silver text; hiding titles removes only that overlay and the source glyph. A clip that came from a movie through Clip Sandbox carries a quiet source glyph in its top-left corner: a 16px 1.6px-stroke film icon in Quiet Slate on a small translucent Booth Black backing, whose tooltip names the movie; other clips carry no mark. Selection is communicated by a `3px` Projector Blue ring, while drag targeting uses a dashed blue inset border. Keyboard focus is a separate `2px` Projector Blue outline set `5px` outside the card, shown only for keyboard focus, so it reads apart from the selection ring. Renaming replaces the filename overlay with a field on a translucent Booth Shade backing (`6px` corners, a Projector Blue border, the card's `12px` type) holding the name without its extension; a refusal sits above the field in the soft red of dialog validation text, and the field stays open.
 
 ### Dialogs and Fields
 

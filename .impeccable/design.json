@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-31T11:43:58.404Z",
+  "generatedAt": "2026-10-31T12:14:30.734Z",
   "title": "Design System: Clip Sandbox",
   "extensions": {
     "colorMeta": {
@@ -45,6 +45,30 @@
         "displayName": "Ready Green",
         "canonical": "#22c55e",
         "tonalRamp": ["#052914", "#084a23", "#0c7034", "#139646", "#1bb456", "#22c55e", "#8be5ad", "#e5faed"]
+      },
+      "projector-blue-deep": {
+        "role": "primary",
+        "displayName": "Deep Projector Blue",
+        "canonical": "#2a4b9e",
+        "tonalRamp": ["#000035", "#021263", "#143182", "#2a4b9e", "#567cd4", "#79a1fd", "#b1caff", "#e7effe"]
+      },
+      "projector-blue-night": {
+        "role": "primary",
+        "displayName": "Night Projector Blue",
+        "canonical": "#1f2b6b",
+        "tonalRamp": ["#040032", "#101756", "#1f2b6b", "#3e4f93", "#677cc3", "#8aa0eb", "#b7c9fe", "#e9eefe"]
+      },
+      "booth-shade": {
+        "role": "neutral",
+        "displayName": "Booth Shade",
+        "canonical": "#020617",
+        "tonalRamp": ["#020617", "#182135", "#303a50", "#4a556c", "#748099", "#98a5bf", "#becbe6", "#e7effe"]
+      },
+      "pale-slate": {
+        "role": "neutral",
+        "displayName": "Pale Slate",
+        "canonical": "#cbd5e1",
+        "tonalRamp": ["#060c13", "#1b222b", "#333b45", "#4e5660", "#78818c", "#9ca6b1", "#cbd5e1", "#e5f0fc"]
       }
     },
     "typographyMeta": {

@@ -34,6 +34,24 @@
         "value": "sfmono-regular",
         "createdAt": "2026-10-23T10:04:50.565Z",
         "reason": "Agent: part of the monospace stack DESIGN.md documents as Machine Detail typography for exact filenames"
+      },
+      {
+        "rule": "clipped-overflow-container",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-10-31T12:13:26.474Z",
+        "reason": "User confirmed after tracing: body and #workspaceRow hide overflow so the page never scrolls; their positioned children (panel reveal buttons, player empty/busy overlays) are meant to stay inside, dialogs open modally in the top layer, and menus are fixed."
+      },
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-10-31T12:13:36.830Z",
+        "reason": "User confirmed: the only glow in index.html is the collection selector's restrained Projector Blue text glow, which DESIGN.md documents."
       }
     ]
   }
