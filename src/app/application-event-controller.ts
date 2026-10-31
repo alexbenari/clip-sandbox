@@ -34,7 +34,7 @@ export class ApplicationEventController {
     this.onWindowBlur = onWindowBlur ?? null;
     this.onPageHide = () => {
       onPageHide();
-      this.destroy();
+      this.dispose();
     };
 
     this.doc.addEventListener('fullscreenchange', this.onFullscreenChange);
@@ -45,7 +45,7 @@ export class ApplicationEventController {
     this.win.addEventListener('pagehide', this.onPageHide, { once: true });
   }
 
-  destroy(): void {
+  dispose(): void {
     this.doc.removeEventListener('fullscreenchange', this.onFullscreenChange);
     this.doc.removeEventListener('webkitfullscreenchange', this.onFullscreenChange);
     this.doc.removeEventListener('keydown', this.onKeyDown);

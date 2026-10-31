@@ -67,7 +67,7 @@ export class ActivityIndicatorControl {
   private clearHistoryButton: HTMLButtonElement | null = null;
   private clearFeedback: HTMLElement | null = null;
   private resizeObserver?: ResizeObserver;
-  private destroyed = false;
+  private disposed = false;
 
   static fromDocument(doc: Document, behavior: ActivityIndicatorBehavior): ActivityIndicatorControl {
     const elements = new DocumentElements(doc);
@@ -135,8 +135,8 @@ export class ActivityIndicatorControl {
     return { label: 'Activity and errors', trigger: this.button, panel: this.panel, focusInitial: () => this.focusInitial() };
   }
 
-  destroy(): void {
-    this.destroyed = true;
+  dispose(): void {
+    this.disposed = true;
     this.unsubscribeLogger();
     this.resizeObserver?.disconnect();
     for (const remove of this.listeners.splice(0)) remove();
@@ -214,7 +214,7 @@ export class ActivityIndicatorControl {
   }
 
   private renderHistory(): void {
-    if (!this.listEl || this.destroyed) return;
+    if (!this.listEl || this.disposed) return;
     const entries = this.logger.snapshot.entries;
     const liveIds = new Set(entries.map(entry => entry.id));
     for (const [id, view] of this.views) {
@@ -330,7 +330,7 @@ export class ActivityIndicatorControl {
     const button = this.doc.createElement('button');
     button.type = 'button'; button.textContent = label;
     // Row listeners are collected with their removed nodes, not retained in the control's disposal list.
-    button.addEventListener('click', () => { if (!this.destroyed) action(); });
+    button.addEventListener('click', () => { if (!this.disposed) action(); });
     return button;
   }
 
@@ -360,7 +360,7 @@ export class ActivityIndicatorControl {
       const result = await entry.retry();
       if (result && result.ok === false) failure = result.error;
     } catch (error) { failure = error instanceof Error ? error.message : String(error); }
-    if (this.destroyed || !this.logger.has(entry.id)) return;
+    if (this.disposed || !this.logger.has(entry.id)) return;
     this.logger.updateError(entry.id, { retryBusy: false });
     if (failure !== undefined) this.logger.updateError(entry.id, { feedback: `Retry failed: ${failure}` });
     else this.logger.resolveError(entry.id);
@@ -375,7 +375,7 @@ export class ActivityIndicatorControl {
       await this.writeClipboard(entry.technicalDetails);
       feedback = 'Technical details copied.';
     } catch (error) { feedback = `Copy failed: ${error instanceof Error ? error.message : String(error)}`; }
-    if (this.destroyed || !this.logger.has(entry.id)) return;
+    if (this.disposed || !this.logger.has(entry.id)) return;
     this.logger.updateError(entry.id, { copyBusy: false, feedback });
   }
 

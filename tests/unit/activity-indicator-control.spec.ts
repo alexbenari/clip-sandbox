@@ -3,9 +3,9 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ActivityIndicatorControl } from '../../src/ui/activity-indicator-control.js';
 import { ActivityLogger } from '../../src/app/activity-logger.js';
 
-const controls: { destroy(): void }[] = [];
+const controls: { dispose(): void }[] = [];
 afterEach(() => {
-  for (const control of controls.splice(0)) control.destroy();
+  for (const control of controls.splice(0)) control.dispose();
   vi.useRealTimers();
   document.head.innerHTML = '';
   document.body.innerHTML = '';
@@ -42,7 +42,7 @@ function createControl(options = {}) {
     showError: (message: string, extra = {}) => logger.log({ kind: 'error', message, ...extra }),
     resolveError: (id: string) => logger.resolveError(id),
     focusInitial: () => panel.focusInitial(),
-    destroy: () => { panel.destroy(); logger.destroy(); },
+    dispose: () => { panel.dispose(); logger.dispose(); },
   };
   controls.push(control);
   return control;
@@ -314,12 +314,12 @@ describe('detailed Activity and errors', () => {
     expect(document.getElementById('button').dataset.state).toBe('error');
   });
 
-  test('destroy prevents late retry completion from changing the surface', async () => {
+  test('dispose prevents late retry completion from changing the surface', async () => {
     let finish;
     const control = createControl();
     control.showError('Failed', { retry: () => new Promise(resolve => { finish = resolve; }) });
     button('Retry').click();
-    control.destroy();
+    control.dispose();
     finish({ ok: true });
     await Promise.resolve();
     expect(rows()[0].dataset.resolution).toBe('unresolved');

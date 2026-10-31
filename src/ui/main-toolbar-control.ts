@@ -169,8 +169,8 @@ export class MainToolbarControl implements IEventSource<IMainToolbarEvents> {
     this.saveChangesButton.title = isPipelineMode ? 'Save this order as a new collection' : 'Save the changes to this collection';
   }
 
-  destroy(): void {
+  dispose(): void {
     for (const [button, request] of this.buttonRequests) button?.removeEventListener('click', request);
-    this.orderMenu?.destroy();
+    this.orderMenu?.dispose();
   }
 }

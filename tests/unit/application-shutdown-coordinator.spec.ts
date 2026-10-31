@@ -17,7 +17,7 @@ function deferred<T>(): {
 }
 
 describe('ApplicationShutdownCoordinator', () => {
-  it('stops actions and begins disposal synchronously, then destroys controls after successful disposal', async () => {
+  it('stops actions and begins disposal synchronously, then disposes controls after successful disposal', async () => {
     const events: string[] = [];
     const disposal = deferred<void>();
     const coordinator = new ApplicationShutdownCoordinator({
@@ -26,7 +26,7 @@ describe('ApplicationShutdownCoordinator', () => {
         events.push('dispose-workflow');
         return disposal.promise;
       },
-      destroyControls: () => { events.push('destroy-controls'); },
+      disposeControls: () => { events.push('dispose-controls'); },
     });
 
     const cleanup = coordinator.begin();
@@ -35,35 +35,35 @@ describe('ApplicationShutdownCoordinator', () => {
     disposal.resolve();
     await cleanup;
 
-    expect(events).toEqual(['stop-actions', 'dispose-workflow', 'destroy-controls']);
+    expect(events).toEqual(['stop-actions', 'dispose-workflow', 'dispose-controls']);
   });
 
-  it('defers control destruction while workflow disposal remains pending', async () => {
+  it('defers control disposal while workflow disposal remains pending', async () => {
     const disposal = deferred<void>();
-    const destroyControls = vi.fn();
+    const disposeControls = vi.fn();
     const coordinator = new ApplicationShutdownCoordinator({
       stopActions: vi.fn(),
       disposeWorkflow: () => disposal.promise,
-      destroyControls,
+      disposeControls,
     });
 
     const cleanup = coordinator.begin();
     await Promise.resolve();
-    expect(destroyControls).not.toHaveBeenCalled();
+    expect(disposeControls).not.toHaveBeenCalled();
 
     disposal.resolve();
     await cleanup;
-    expect(destroyControls).toHaveBeenCalledOnce();
+    expect(disposeControls).toHaveBeenCalledOnce();
   });
 
-  it('reports disposal failure, still destroys controls, and resolves cleanup', async () => {
+  it('reports disposal failure, still disposes controls, and resolves cleanup', async () => {
     const disposalError = new Error('workflow disposal failed');
     const reportFailure = vi.fn();
-    const destroyControls = vi.fn();
+    const disposeControls = vi.fn();
     const coordinator = new ApplicationShutdownCoordinator({
       stopActions: vi.fn(),
       disposeWorkflow: () => Promise.reject(disposalError),
-      destroyControls,
+      disposeControls,
       reportFailure,
     });
 
@@ -71,36 +71,36 @@ describe('ApplicationShutdownCoordinator', () => {
 
     expect(reportFailure).toHaveBeenCalledOnce();
     expect(reportFailure).toHaveBeenCalledWith(disposalError);
-    expect(destroyControls).toHaveBeenCalledOnce();
+    expect(disposeControls).toHaveBeenCalledOnce();
   });
 
   it('reports synchronous phase failures while continuing the remaining shutdown phases', async () => {
     const stopError = new Error('stop failed');
-    const destroyError = new Error('destroy failed');
+    const disposeError = new Error('dispose failed');
     const disposeWorkflow = vi.fn(async () => undefined);
     const reportFailure = vi.fn();
     const coordinator = new ApplicationShutdownCoordinator({
       stopActions: () => { throw stopError; },
       disposeWorkflow,
-      destroyControls: () => { throw destroyError; },
+      disposeControls: () => { throw disposeError; },
       reportFailure,
     });
 
     await expect(coordinator.begin()).resolves.toBeUndefined();
 
     expect(disposeWorkflow).toHaveBeenCalledOnce();
-    expect(reportFailure.mock.calls).toEqual([[stopError], [destroyError]]);
+    expect(reportFailure.mock.calls).toEqual([[stopError], [disposeError]]);
   });
 
   it('returns one cleanup promise and performs shutdown work only once', async () => {
     const disposal = deferred<void>();
     const stopActions = vi.fn();
     const disposeWorkflow = vi.fn(() => disposal.promise);
-    const destroyControls = vi.fn();
+    const disposeControls = vi.fn();
     const coordinator = new ApplicationShutdownCoordinator({
       stopActions,
       disposeWorkflow,
-      destroyControls,
+      disposeControls,
     });
 
     const first = coordinator.begin();
@@ -108,7 +108,7 @@ describe('ApplicationShutdownCoordinator', () => {
     expect(second).toBe(first);
     expect(stopActions).toHaveBeenCalledOnce();
     expect(disposeWorkflow).toHaveBeenCalledOnce();
-    expect(destroyControls).not.toHaveBeenCalled();
+    expect(disposeControls).not.toHaveBeenCalled();
 
     disposal.resolve();
     await first;
@@ -117,6 +117,6 @@ describe('ApplicationShutdownCoordinator', () => {
     expect(third).toBe(first);
     expect(stopActions).toHaveBeenCalledOnce();
     expect(disposeWorkflow).toHaveBeenCalledOnce();
-    expect(destroyControls).toHaveBeenCalledOnce();
+    expect(disposeControls).toHaveBeenCalledOnce();
   });
 });

@@ -73,26 +73,6 @@
     <button id="viewBtn" type="button">Click to View</button>
   </main>
   <div id="zoomLayerRoot"></div>
-  <script type="module">
-    import { createZoomOverlayControl } from '../build/src/ui/zoom-overlay-control.js';
-
-    const zoomOverlay = createZoomOverlayControl({
-      mountEl: document.getElementById('zoomLayerRoot'),
-      document,
-    });
-
-    document.getElementById('viewBtn').addEventListener('click', () => {
-      zoomOverlay.open({
-        src: './hand-closes-curtain.mp4',
-        name: 'hand-closes-curtain.mp4',
-      });
-    });
-
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && zoomOverlay.isOpen()) {
-        zoomOverlay.close();
-      }
-    });
-  </script>
+  <script type="module" src="../build/sandbox/zoom-demo.js"></script>
 </body>
 </html>

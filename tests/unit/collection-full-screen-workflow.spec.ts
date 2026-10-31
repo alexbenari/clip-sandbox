@@ -45,7 +45,7 @@ test('the toolbar full-screen request enters and leaves full screen', async () =
   await Promise.resolve();
   expect(isActive()).toBe(false);
 
-  session.destroy();
+  session.dispose();
   toolbar.emit('toggleFullscreenRequested');
   await Promise.resolve();
   expect(isActive()).toBe(false);
@@ -74,7 +74,7 @@ test('fullscreen exit and disposal cancel rotation and delayed slot input', asyn
   session.onFsChange();
   vi.advanceTimersByTime(A_WHILE_MS);
   expect(grid.rotateVisibleClip).toHaveBeenCalled();
-  session.destroy();
+  session.dispose();
   grid.rotateVisibleClip.mockClear();
   vi.advanceTimersByTime(A_WHILE_MS);
   expect(grid.rotateVisibleClip).not.toHaveBeenCalled();
@@ -88,7 +88,7 @@ test('the window layout follows full screen in both directions', async () => {
   session.onFsChange();
 
   expect(layout.setFullScreenLayout.mock.calls).toEqual([[true], [false]]);
-  session.destroy();
+  session.dispose();
 });
 
 test('a typed clip count is normalized by the grid, applied and reported', async () => {
@@ -103,5 +103,5 @@ test('a typed clip count is normalized by the grid, applied and reported', async
   expect(grid.normalizeFullscreenSlots).toHaveBeenCalledWith(1);
   expect(grid.fsApplySlots).toHaveBeenLastCalledWith(2);
   expect(reporter.success).toHaveBeenCalledWith('2', expect.any(Number));
-  session.destroy();
+  session.dispose();
 });

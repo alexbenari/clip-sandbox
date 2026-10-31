@@ -24,7 +24,7 @@ export class FoldablePanelControl {
   private shownState = true;
   private movingState = false;
   private generation = 0;
-  private destroyed = false;
+  private disposed = false;
 
   private readonly onFoldClick = (): void => { this.setFolded(true); };
   private readonly onRevealClick = (): void => { this.setFolded(false); };
@@ -75,7 +75,7 @@ export class FoldablePanelControl {
 
   // A hidden panel is not folded or opened, so it starts no animation or workspace resize.
   setFolded(folded: boolean): void {
-    if (this.destroyed || !this.shownState || folded === this.foldedState) return;
+    if (this.disposed || !this.shownState || folded === this.foldedState) return;
 
     const activeInsidePanel = this.root.contains(this.root.ownerDocument.activeElement);
     this.foldedState = folded;
@@ -103,9 +103,9 @@ export class FoldablePanelControl {
     );
   }
 
-  destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.generation += 1;
     this.foldButton.removeEventListener('click', this.onFoldClick);
     this.revealButton.removeEventListener('click', this.onRevealClick);
@@ -134,7 +134,7 @@ export class FoldablePanelControl {
   }
 
   private settle(requestGeneration: number): void {
-    if (this.destroyed || requestGeneration !== this.generation || !this.movingState) return;
+    if (this.disposed || requestGeneration !== this.generation || !this.movingState) return;
     this.movingState = false;
     this.onSettled();
   }

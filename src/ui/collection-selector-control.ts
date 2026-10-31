@@ -133,7 +133,7 @@ export class CollectionSelectorControl implements IEventSource<ICollectionSelect
     else this.selectEl?.removeAttribute('aria-describedby');
   }
 
-  destroy(): void {
+  dispose(): void {
     this.selectEl?.removeEventListener('change', this.onChange);
   }
 

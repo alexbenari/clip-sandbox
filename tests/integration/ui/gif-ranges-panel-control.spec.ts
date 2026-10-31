@@ -31,7 +31,7 @@ describe('GifRangesPanelControl', () => {
     expect(document.activeElement?.hasAttribute('data-cancel-extraction')).toBe(true);
     root.querySelector<HTMLButtonElement>('[data-cancel-extraction]')!.click();
     expect(session.cancelExtraction).toHaveBeenCalledOnce();
-    control.destroy();
+    control.dispose();
     root.remove();
   });
   it('updates extraction availability without replacing a focused range card', () => {
@@ -66,7 +66,7 @@ describe('GifRangesPanelControl', () => {
     running = false;
     transportChanged();
     expect(extract.disabled).toBe(false);
-    control.destroy();
+    control.dispose();
     root.remove();
   });
 
@@ -134,7 +134,7 @@ describe('GifRangesPanelControl', () => {
     const control = new GifRangesPanelControl(root, session as never, { document });
 
     expect(root.querySelector('[data-range-id="range-1"] .gif-range-thumbnail')?.textContent).toBe('Preview unavailable');
-    control.destroy();
+    control.dispose();
   });
 
   it('makes an inexact range visually compact while retaining its unlocked state for assistive technology', () => {

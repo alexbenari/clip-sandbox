@@ -632,7 +632,7 @@ describe('FrameReviewPlayerControl', () => {
     control.releaseStep(-1);
     expect(review.pressAdjacent).toHaveBeenCalledWith(-1);
     expect(review.releaseAdjacent).toHaveBeenCalledWith(-1);
-    control.destroy();
+    control.dispose();
     expect(review.releaseAdjacent).toHaveBeenCalled();
     expect(review.dispose).not.toHaveBeenCalled();
   });

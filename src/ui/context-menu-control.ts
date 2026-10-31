@@ -241,7 +241,7 @@ export class ContextMenuControl {
     }
   }
 
-  destroy(): void {
+  dispose(): void {
     if (!this.root || !this.panel) return;
     this.doc.removeEventListener('mousedown', this.onDocumentPointerDown);
     this.doc.removeEventListener('keydown', this.onDocumentKeyDown);

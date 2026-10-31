@@ -141,7 +141,7 @@ export class OrderMenuControl {
     }
   }
 
-  destroy(): void {
+  dispose(): void {
     this.listeners.abort();
   }
 

@@ -511,8 +511,8 @@ export class AppController {
     const shutdown = new ApplicationShutdownCoordinator({
       stopActions: () => {
         appKeyDownHandler.dispose();
-        collectionFullScreen.destroy();
-        shell.destroy();
+        collectionFullScreen.dispose();
+        shell.dispose();
       },
       disposeWorkflow: async () => {
         for (const workflow of [collectionView, collectionSave, addToCollection, folderSelection, trashClips,
@@ -523,18 +523,18 @@ export class AppController {
         clipRename?.dispose();
         await gifExtractionSession?.dispose();
       },
-      destroyControls: () => {
+      disposeControls: () => {
         grid.dispose();
-        gifExtractionScreen.destroy();
-        refineGifScreen.destroy();
-        gifRangesPanelControl?.destroy();
-        frameReviewPlayer.destroy();
-        utilities?.destroy();
-        activityIndicatorControl.destroy();
-        activityLogger.destroy();
-        pipelineCatalogControl?.destroy();
-        collectionSelectorControl.destroy();
-        mainToolbarControl.destroy();
+        gifExtractionScreen.dispose();
+        refineGifScreen.dispose();
+        gifRangesPanelControl?.dispose();
+        frameReviewPlayer.dispose();
+        utilities?.dispose();
+        activityIndicatorControl.dispose();
+        activityLogger.dispose();
+        pipelineCatalogControl?.dispose();
+        collectionSelectorControl.dispose();
+        mainToolbarControl.dispose();
       },
       reportFailure: error => {
         void diagnostics.logRuntimeError('Failed to dispose the GIF extraction workflow during shutdown.', error);

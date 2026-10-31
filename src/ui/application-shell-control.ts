@@ -47,7 +47,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
   }>();
   private readonly panelStates = new Map<string, Map<string, boolean>>();
   private activated = false;
-  private destroyed = false;
+  private disposed = false;
   private motionPending = false;
   private applyingPanelState = false;
   private readonly onSelectionChange = (): void => { this.activate(this.elements.selector.value); };
@@ -136,7 +136,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
   }
 
   handleKeyDown(event: KeyboardEvent): void {
-    if (this.destroyed || !this.activated) return;
+    if (this.disposed || !this.activated) return;
     this.current.onKeyDown?.(event);
   }
 
@@ -180,7 +180,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
   }
 
   activate(id: string): void {
-    if (this.destroyed) throw new Error('Application shell is destroyed.');
+    if (this.disposed) throw new Error('Application shell is disposed.');
     const incoming = this.screens.get(id);
     if (!incoming) throw new Error(`Unknown app screen: ${id}`);
     if (this.activated && incoming === this.current) {
@@ -234,13 +234,13 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     this.elements.screenHost.ownerDocument.body.classList.toggle('fs-active', active);
   }
 
-  destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.elements.selector.removeEventListener('change', this.onSelectionChange);
     this.elements.settingsButton?.removeEventListener('click', this.onSettingsClick);
     if (this.activated) this.current.onDeactivate?.();
-    for (const panel of this.panels.values()) panel.controller.destroy();
+    for (const panel of this.panels.values()) panel.controller.dispose();
   }
 
   private validateScreen(screen: IAppScreen, availablePanelIds: ReadonlySet<string>): void {

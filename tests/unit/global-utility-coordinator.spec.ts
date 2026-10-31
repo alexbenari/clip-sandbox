@@ -3,7 +3,7 @@ import { KeyboardMapControl } from '../../src/ui/keyboard-map-control.js';
 import { GlobalUtilityCoordinator } from '../../src/ui/global-utility-coordinator.js';
 
 const coordinators: GlobalUtilityCoordinator[] = [];
-afterEach(() => { coordinators.splice(0).forEach(coordinator => coordinator.destroy()); document.body.replaceChildren(); });
+afterEach(() => { coordinators.splice(0).forEach(coordinator => coordinator.dispose()); document.body.replaceChildren(); });
 
 function fixture() {
   const host = document.createElement('div'); host.id = 'utilities';
@@ -82,7 +82,7 @@ describe('global utility coordination', () => {
     keyboard.trigger.click(); activity.trigger.click(); keyboard.trigger.click();
     expect(host.firstElementChild).toBe(keyboard.panel);
     expect(cancel).toHaveBeenCalledTimes(2);
-    coordinator.destroy();
+    coordinator.dispose();
     activity.trigger.click();
     expect(coordinator.isOpen).toBe(false);
     expect(host.hidden).toBe(true);

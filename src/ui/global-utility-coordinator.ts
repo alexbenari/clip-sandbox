@@ -118,7 +118,7 @@ export class GlobalUtilityCoordinator {
     this.host.style.maxHeight = `${Math.max(0, view.innerHeight - anchor.bottom - 22)}px`;
   }
 
-  destroy(): void {
+  dispose(): void {
     this.close(false);
     for (const remove of this.listeners) remove();
     this.doc.removeEventListener('keydown', this.onKeyDown, true);

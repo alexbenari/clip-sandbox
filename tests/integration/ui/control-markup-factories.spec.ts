@@ -113,7 +113,7 @@ describe('controls built from the page markup', () => {
     document.querySelector<HTMLElement>('#clipContextMenuPanel [data-item-id="refine"]')!.click();
 
     expect(onSelect).toHaveBeenCalledOnce();
-    menu.destroy();
+    menu.dispose();
   });
 
   it('the Activity indicator describes its own utility surface', () => {
@@ -124,7 +124,7 @@ describe('controls built from the page markup', () => {
       trigger: document.getElementById('activityIndicatorBtn'),
       panel: document.getElementById('activityIndicatorPanel'),
     });
-    activity.destroy();
+    activity.dispose();
   });
 
   it('the main toolbar reports its commands and navigates its Actions menu', () => {
@@ -141,7 +141,7 @@ describe('controls built from the page markup', () => {
 
     expect(saveAsNewRequested).toHaveBeenCalledOnce();
     expect(document.getElementById('orderMenu')!.dataset.open).toBe('false');
-    toolbar.destroy();
+    toolbar.dispose();
   });
 
   it('the main toolbar shows its Save command only while there are unsaved changes, and it saves', () => {
@@ -158,7 +158,7 @@ describe('controls built from the page markup', () => {
     click('saveChangesBtn');
 
     expect(saveRequested).toHaveBeenCalledOnce();
-    toolbar.destroy();
+    toolbar.dispose();
   });
 
   it('the main toolbar labels its Save command "Save…" in the folder view, where saving asks for a name', () => {
@@ -167,7 +167,7 @@ describe('controls built from the page markup', () => {
     toolbar.render({ clipCount: 2, hasPipeline: true, hasSequence: true, isPipelineMode: true, hasUnsavedChanges: true });
 
     expect(text('saveChangesBtn')).toBe('Save…');
-    toolbar.destroy();
+    toolbar.dispose();
   });
 
   it('the application shell mounts its screens and reports the Settings button', () => {
@@ -187,7 +187,7 @@ describe('controls built from the page markup', () => {
     expect([...(document.getElementById('appScreenSelector') as HTMLSelectElement).options].map(option => option.value))
       .toEqual(['collection', 'settings']);
     expect(settingsRequested).toHaveBeenCalledOnce();
-    shell.destroy();
+    shell.dispose();
   });
 
   it('the keyboard map describes its own utility surface', () => {
@@ -245,7 +245,7 @@ describe('controls built from the page markup', () => {
     select.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(selectionRequested).toHaveBeenCalledWith('picks.txt');
-    selector.destroy();
+    selector.dispose();
   });
 
   it('the collection selector marks unsaved changes beside the active collection name', () => {
@@ -259,7 +259,7 @@ describe('controls built from the page markup', () => {
     selector.render({ hasUnsavedChanges: false });
 
     expect(marker.hidden).toBe(true);
-    selector.destroy();
+    selector.dispose();
   });
 
   it('Zoom opens its overlay in the page Zoom layer', () => {
@@ -286,8 +286,8 @@ describe('controls built from the page markup', () => {
 
     expect(catalog).not.toBeNull();
     expect(host.firstElementChild?.id).toBe('gifRangesPanel');
-    catalog!.destroy();
-    ranges!.destroy();
+    catalog!.dispose();
+    ranges!.dispose();
 
     document.body.innerHTML = '';
     expect(PipelineCatalogControl.fromDocument(document, { catalog: {} as never })).toBeNull();
@@ -303,7 +303,7 @@ describe('controls built from the page markup', () => {
     utilities!.open('keyboard');
 
     expect(document.getElementById('keyboardMapPanel')!.hidden).toBe(false);
-    utilities!.destroy();
+    utilities!.dispose();
     document.body.innerHTML = '';
     expect(GlobalUtilityCoordinator.isAvailableIn(document)).toBe(false);
   });

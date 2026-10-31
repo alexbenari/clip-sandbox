@@ -126,6 +126,6 @@ describe('FoldablePanelControl', () => {
     expect(f.settled).toHaveBeenCalledTimes(3); expect(controller.moving).toBe(false);
     pending.resolve(); await Promise.resolve();
     expect(f.settled).toHaveBeenCalledTimes(3);
-    controller.destroy(); media.setReduced(false); controller.setFolded(false); expect(f.settled).toHaveBeenCalledTimes(3);
+    controller.dispose(); media.setReduced(false); controller.setFolded(false); expect(f.settled).toHaveBeenCalledTimes(3);
   });
 });

@@ -63,7 +63,7 @@ export class GifExtractionScreen implements IAppScreen {
   private pendingPreviewStop: Promise<unknown> = Promise.resolve();
   private previewOperation = 0;
   private active = false;
-  private destroyed = false;
+  private disposed = false;
 
   constructor(private readonly options: GifExtractionScreenOptions) {
     const doc = options.document ?? document;
@@ -158,9 +158,9 @@ export class GifExtractionScreen implements IAppScreen {
     if (!event.defaultPrevented) this.options.keyboard.handleKeyDown(event);
   }
 
-  destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.unsubscribeSession?.();
     this.unsubscribeTransport();
   }

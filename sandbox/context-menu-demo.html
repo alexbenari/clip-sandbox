@@ -95,7 +95,7 @@
       <button id="openBtn" type="button">Open Menu</button>
     </div>
     <section class="demo-surface" id="demoSurface">
-      <p>Right-click anywhere in this box. One action is intentionally disabled so the sandbox proves rendering and dismissal behavior independent of the main app.</p>
+      <p>Right-click anywhere in this box. One action is intentionally disabled and one is destructive, so the sandbox proves rendering and dismissal behavior independent of the main app.</p>
       <p><code>Escape</code> also closes the menu.</p>
     </section>
     <div class="log" id="resultLog">No sandbox action invoked yet.</div>
@@ -103,60 +103,6 @@
   <div id="sandboxContextMenu" hidden>
     <div id="sandboxContextMenuPanel"></div>
   </div>
-  <script type="module">
-    import { createContextMenuControl } from '../build/src/ui/context-menu-control.js';
-
-    const root = document.getElementById('sandboxContextMenu');
-    const panel = document.getElementById('sandboxContextMenuPanel');
-    const openBtn = document.getElementById('openBtn');
-    const demoSurface = document.getElementById('demoSurface');
-    const resultLog = document.getElementById('resultLog');
-    const controller = createContextMenuControl({ root, panel, document });
-
-    function writeLog(text) {
-      resultLog.textContent = text;
-    }
-
-    function buildItems(sourceLabel) {
-      return [
-        {
-          id: 'primary',
-          label: `Primary action from ${sourceLabel}`,
-          onSelect: () => writeLog(`Primary action invoked from ${sourceLabel}.`),
-        },
-        {
-          id: 'disabled',
-          label: 'Disabled action',
-          disabled: true,
-        },
-        {
-          id: 'secondary',
-          label: 'Secondary action',
-          onSelect: () => writeLog(`Secondary action invoked from ${sourceLabel}.`),
-        },
-      ];
-    }
-
-    openBtn.addEventListener('click', () => {
-      const rect = openBtn.getBoundingClientRect();
-      controller.open({
-        point: {
-          x: rect.left + rect.width / 2,
-          y: rect.bottom + 8,
-        },
-        items: buildItems('button'),
-        focusFirst: true,
-        restoreFocusTo: openBtn,
-      });
-    });
-
-    demoSurface.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-      controller.open({
-        point: { x: event.clientX, y: event.clientY },
-        items: buildItems('surface'),
-      });
-    });
-  </script>
+  <script type="module" src="../build/sandbox/context-menu-demo.js"></script>
 </body>
 </html>

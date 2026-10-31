@@ -23,7 +23,7 @@ describe('ActivityLogger', () => {
     unsubscribe();
     logger.log({ kind: 'success', message: 'Saved collection' });
     expect(seen).toEqual(['Saving collection']);
-    logger.destroy();
+    logger.dispose();
   });
 
   it('retains unresolved errors through trimming and clearing, then resolves them', () => {
@@ -36,7 +36,7 @@ describe('ActivityLogger', () => {
     expect(logger.snapshot.entries[0]).toMatchObject({ resolution: 'resolved' });
     logger.dismissError(errorId);
     expect(logger.snapshot.entries).toEqual([]);
-    logger.destroy();
+    logger.dispose();
   });
 
   it('preserves progress and success status across informational entries and resets success', async () => {
@@ -49,7 +49,7 @@ describe('ActivityLogger', () => {
     expect(logger.snapshot.state).toBe('success');
     await vi.advanceTimersByTimeAsync(20);
     expect(logger.snapshot.state).toBe('idle');
-    logger.destroy();
+    logger.dispose();
   });
 
   it('does not let an earlier success reset newer progress logged by a subscriber', async () => {
@@ -63,6 +63,6 @@ describe('ActivityLogger', () => {
     logger.log({ kind: 'success', message: 'Saved first clip', timeoutMs: 10 });
     await vi.advanceTimersByTimeAsync(10);
     expect(logger.snapshot.state).toBe('progress');
-    logger.destroy();
+    logger.dispose();
   });
 });

@@ -33,7 +33,7 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
   private readonly document: Document;
   private readonly detailsByPipelineId = new Map<string, IPipelineCatalogDetails>();
   private requestGeneration = 0;
-  private destroyed = false;
+  private disposed = false;
 
   static fromDocument(doc: Document, { catalog }: { catalog: PipelineCatalogPort }): PipelineCatalogControl | null {
     const host = new DocumentElements(doc).optional('pipelinesPanelHost');
@@ -66,8 +66,8 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
     }
   }
 
-  destroy(): void {
-    this.destroyed = true;
+  dispose(): void {
+    this.disposed = true;
     this.requestGeneration += 1;
   }
 
@@ -131,11 +131,11 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
     details.replaceChildren(this.message('Loading contents…', 'pipeline-catalog-loading'));
     try {
       const pipelineDetails = await this.catalog.describePipelineCatalogEntry(entry);
-      if (this.destroyed || expand.getAttribute('aria-expanded') !== 'true') return;
+      if (this.disposed || expand.getAttribute('aria-expanded') !== 'true') return;
       this.detailsByPipelineId.set(entry.id, pipelineDetails);
       details.replaceChildren(this.pipelineDetails(pipelineDetails));
     } catch (error) {
-      if (this.destroyed || expand.getAttribute('aria-expanded') !== 'true') return;
+      if (this.disposed || expand.getAttribute('aria-expanded') !== 'true') return;
       details.replaceChildren(this.message('Pipeline contents could not be loaded.', 'pipeline-catalog-error'));
       this.events.emit('failed', { kind: 'pipeline-contents', message: `Could not load ${entry.name}.`, error });
     }
@@ -229,6 +229,6 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
   }
 
   private isCurrent(requestGeneration: number): boolean {
-    return !this.destroyed && requestGeneration === this.requestGeneration;
+    return !this.disposed && requestGeneration === this.requestGeneration;
   }
 }

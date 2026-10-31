@@ -6,7 +6,8 @@
     "noEmit": false
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "sandbox/*.ts"
   ],
   "exclude": [
     "build",

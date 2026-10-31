@@ -138,7 +138,7 @@ export class CollectionFullScreenWorkflow {
     this.session.grid.cancelRotation();
   }
 
-  destroy(): void {
+  dispose(): void {
     this.unsubscribeToolbar();
     this.stopFsRandomizer();
     if (this.fullscreenState.digitTimer) clearTimeout(this.fullscreenState.digitTimer);

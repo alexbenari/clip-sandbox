@@ -85,7 +85,7 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
   private readonly keyboardTarget: IGifWorkflowKeyboardTarget;
   private snapshot: IGifExtractionSessionSnapshot | null = null;
   private active = false;
-  private destroyed = false;
+  private disposed = false;
   private lastSeekKey: string | null = null;
   private seekGeneration = 0;
   private pendingSeek: IRangeRefinementDraftSnapshot | null = null;
@@ -224,9 +224,9 @@ export class RefineGifScreen implements IAppScreen, IEventSource<IRefineGifScree
     if (!this.options.player.focusInitial()) this.back.focus();
   }
 
-  destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.unsubscribeSession?.();
     this.unsubscribeTransport();
   }

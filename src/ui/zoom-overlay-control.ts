@@ -337,7 +337,7 @@ export class ZoomOverlayControl implements IEventSource<IZoomOverlayEvents> {
     return this.videoEl ? this.videoEl.muted : !this.audioPreference.current.singleClipAudioDefault;
   }
 
-  destroy(): void {
+  dispose(): void {
     this.close();
   }
 

@@ -60,7 +60,7 @@ export class GifRangesPanelControl implements IAppPanelContent, IEventSource<IGi
     host.replaceChildren(this.root);
   }
 
-  destroy(): void {
+  dispose(): void {
     this.unsubscribe();
     this.unsubscribeTransport();
     this.root.removeEventListener('click', this.clickListener);

@@ -94,7 +94,7 @@ export class FrameReviewPlayerControl {
   private busy = false;
   private busyMessage = '';
   private initialFrameRequested = false;
-  private destroyed = false;
+  private disposed = false;
 
   constructor(options: FrameReviewPlayerControlOptions = {}) {
     const doc = options.document ?? document;
@@ -179,7 +179,7 @@ export class FrameReviewPlayerControl {
   }
 
   private mountWithLook(host: HTMLElement, inZoomEdit: boolean): void {
-    if (this.destroyed) throw new Error('Frame-review player is destroyed.');
+    if (this.disposed) throw new Error('Frame-review player is disposed.');
     if (this.isMovieFullScreen()) void this.exitMovieFullScreen();
     this.root.classList.toggle('zoom-edit-look', inZoomEdit);
     this.jumpUnavailable = false;
@@ -188,7 +188,7 @@ export class FrameReviewPlayerControl {
   }
 
   attachSession(session: IFrameReviewSession | null): void {
-    if (this.destroyed) throw new Error('Frame-review player is destroyed.');
+    if (this.disposed) throw new Error('Frame-review player is disposed.');
     if (session === this.session) return;
     this.fullScreenRequest += 1;
     this.fullScreenPending = false;
@@ -224,7 +224,7 @@ export class FrameReviewPlayerControl {
     this.currentTime.textContent = '00:00:00.000';
     this.duration.textContent = '00:00:00.000';
     if (this.replacementBarrier) void this.replacementBarrier.then(() => {
-      if (!this.destroyed && this.session === session) this.frameRenderer.clear(this.canvas);
+      if (!this.disposed && this.session === session) this.frameRenderer.clear(this.canvas);
     });
     else this.frameRenderer.clear(this.canvas);
     this.session = session;
@@ -259,7 +259,7 @@ export class FrameReviewPlayerControl {
   isMovieFullScreen(): boolean { return this.fullScreen?.isElementFullScreen(this.root) === true; }
 
   canEnterMovieFullScreen(): boolean {
-    return !this.destroyed && !this.fullScreenPending && this.fullScreen !== null
+    return !this.disposed && !this.fullScreenPending && this.fullScreen !== null
       && this.session !== null && this.reviewState?.phase === 'exact-ready' && this.reviewState.captureEnabled;
   }
 
@@ -317,7 +317,7 @@ export class FrameReviewPlayerControl {
       this.lastPointer = null;
       this.hideOverlay();
       this.releaseHostHeight();
-      if (!this.destroyed && this.isVisibleHost()) this.root.focus();
+      if (!this.disposed && this.isVisibleHost()) this.root.focus();
     }
     this.renderState();
   }
@@ -390,7 +390,7 @@ export class FrameReviewPlayerControl {
   }
 
   jumpBySeconds(seconds: number): void {
-    if (!this.session || this.destroyed || this.jumpUnavailable
+    if (!this.session || this.disposed || this.jumpUnavailable
       || ![1, 2, 5, 7, 10].includes(seconds)) return;
     if (this.scrubbingExact && !this.playing && !this.reviewState?.captureEnabled) return;
     if (this.previewPhase === 'running') {
@@ -442,15 +442,15 @@ export class FrameReviewPlayerControl {
           const target = this.scrubJumpTargetUs;
           if (target === null) break;
           const frame = await session.scrubToTime(target);
-          if (revision !== this.jumpRevision || this.session !== session || this.destroyed) break;
+          if (revision !== this.jumpRevision || this.session !== session || this.disposed) break;
           await this.requestDisplay(frame);
         } else {
           const confirmed = await session.jumpPlaybackBy(deltaUs);
-          if (revision !== this.jumpRevision || this.session !== session || this.destroyed) break;
+          if (revision !== this.jumpRevision || this.session !== session || this.disposed) break;
           this.currentTime.textContent = this.formatTime(confirmed);
         }
       } catch (error) {
-        if (revision === this.jumpRevision && this.session === session && !this.destroyed) {
+        if (revision === this.jumpRevision && this.session === session && !this.disposed) {
           this.showError(error);
           this.queuedJumpUs = 0n;
         }
@@ -466,17 +466,17 @@ export class FrameReviewPlayerControl {
   }
 
   focusInitial(): boolean {
-    if (!this.session || this.destroyed) return false;
+    if (!this.session || this.disposed) return false;
     this.root.focus();
     return true;
   }
 
   async togglePlayback(): Promise<void> {
-    if (!this.session || this.busy || this.destroyed) return;
+    if (!this.session || this.busy || this.disposed) return;
     const barrier = this.interruptJumps();
     const revision = this.jumpRevision;
     await barrier;
-    if (revision !== this.jumpRevision || this.destroyed) return;
+    if (revision !== this.jumpRevision || this.disposed) return;
     await this.changePlayback();
   }
 
@@ -486,7 +486,7 @@ export class FrameReviewPlayerControl {
     await barrier;
     if (revision !== this.jumpRevision) return;
     const session = this.session;
-    if (!session || !this.reviewState?.captureEnabled || this.destroyed) return;
+    if (!session || !this.reviewState?.captureEnabled || this.disposed) return;
     const operation = ++this.previewOperationRevision;
     this.scrubbingExact = false;
     this.playing = true;
@@ -497,7 +497,7 @@ export class FrameReviewPlayerControl {
     try {
       await session.startExactPreview(range);
     } catch (error) {
-      if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return;
+      if (this.session !== session || this.disposed || operation !== this.previewOperationRevision) return;
       this.playing = false;
       this.scrubbingExact = true;
       this.previewRange = null;
@@ -505,20 +505,20 @@ export class FrameReviewPlayerControl {
       this.renderState();
       throw error;
     }
-    if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return;
+    if (this.session !== session || this.disposed || operation !== this.previewOperationRevision) return;
     this.renderState();
   }
 
   async pauseExactPreview(): Promise<IFrameReviewDisplayedCapture | null> {
     await this.interruptJumps();
     const session = this.session;
-    if (!session || this.destroyed) return null;
+    if (!session || this.disposed) return null;
     const operation = ++this.previewOperationRevision;
     let frame: IExactDisplayFrame;
     try {
       frame = await session.pauseExactPreview();
     } catch (error) {
-      if (this.session === session && !this.destroyed && operation === this.previewOperationRevision) {
+      if (this.session === session && !this.disposed && operation === this.previewOperationRevision) {
         this.playing = false;
         this.scrubbingExact = true;
         this.previewRange = null;
@@ -529,7 +529,7 @@ export class FrameReviewPlayerControl {
       }
       throw error;
     }
-    if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return null;
+    if (this.session !== session || this.disposed || operation !== this.previewOperationRevision) return null;
     this.playing = false;
     this.scrubbingExact = true;
     this.previewPhase = 'paused';
@@ -541,7 +541,7 @@ export class FrameReviewPlayerControl {
   async resumeExactPreview(frameIndex: number): Promise<void> {
     await this.interruptJumps();
     const session = this.session;
-    if (!session || this.destroyed) return;
+    if (!session || this.disposed) return;
     const operation = ++this.previewOperationRevision;
     this.scrubbingExact = false;
     this.playing = true;
@@ -551,27 +551,27 @@ export class FrameReviewPlayerControl {
     try {
       await session.resumeExactPreview(frameIndex);
     } catch (error) {
-      if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return;
+      if (this.session !== session || this.disposed || operation !== this.previewOperationRevision) return;
       this.playing = false;
       this.scrubbingExact = true;
       this.previewPhase = 'paused';
       this.renderState();
       throw error;
     }
-    if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return;
+    if (this.session !== session || this.disposed || operation !== this.previewOperationRevision) return;
     this.renderState();
   }
 
   async stopExactPreview(): Promise<IFrameReviewDisplayedCapture | null> {
     await this.interruptJumps();
     const session = this.session;
-    if (!session || this.destroyed) return null;
+    if (!session || this.disposed) return null;
     const operation = ++this.previewOperationRevision;
     let frame: IExactDisplayFrame | null;
     try {
       frame = await session.stopExactPreview();
     } catch (error) {
-      if (this.session === session && !this.destroyed && operation === this.previewOperationRevision) {
+      if (this.session === session && !this.disposed && operation === this.previewOperationRevision) {
         this.playing = false;
         this.scrubbingExact = true;
         this.previewRange = null;
@@ -580,7 +580,7 @@ export class FrameReviewPlayerControl {
       }
       throw error;
     }
-    if (this.session !== session || this.destroyed || operation !== this.previewOperationRevision) return null;
+    if (this.session !== session || this.disposed || operation !== this.previewOperationRevision) return null;
     this.playing = false;
     this.scrubbingExact = true;
     this.previewRange = null;
@@ -631,7 +631,7 @@ export class FrameReviewPlayerControl {
     await barrier;
     if (revision !== this.jumpRevision) return null;
     const session = this.session;
-    if (!session || !this.reviewState?.captureEnabled || this.busy || this.destroyed) return null;
+    if (!session || !this.reviewState?.captureEnabled || this.busy || this.disposed) return null;
     this.busy = true;
     this.busyMessage = 'Resolving exact frame';
     this.scrubbingExact = true;
@@ -639,16 +639,16 @@ export class FrameReviewPlayerControl {
     this.renderState();
     try {
       const frame = await resolveFrame(session);
-      if (this.session !== session || this.destroyed) return null;
+      if (this.session !== session || this.disposed) return null;
       await this.requestDisplay(frame);
-      if (this.session !== session || this.destroyed) return null;
+      if (this.session !== session || this.disposed) return null;
       this.playing = false;
       return this.displayedCapture();
     } catch (error) {
       if (!this.isSuperseded(error)) this.showError(error);
       return null;
     } finally {
-      if (this.session === session && !this.destroyed) {
+      if (this.session === session && !this.disposed) {
         this.busy = false;
         this.busyMessage = '';
         this.renderState();
@@ -657,7 +657,7 @@ export class FrameReviewPlayerControl {
   }
 
   pressStep(direction: AdjacentDirection): void {
-    if (!this.session || !this.reviewState?.captureEnabled || this.busy || this.destroyed) return;
+    if (!this.session || !this.reviewState?.captureEnabled || this.busy || this.disposed) return;
     const wasPlaying = this.playing;
     const activeJump = this.jumpTask;
     const barrier = this.interruptJumps();
@@ -668,7 +668,7 @@ export class FrameReviewPlayerControl {
     this.scrubbingExact = true;
     this.renderState();
     const step = (): void => {
-      if (revision !== this.jumpRevision || this.destroyed || !this.session) return;
+      if (revision !== this.jumpRevision || this.disposed || !this.session) return;
       if (wasPlaying) {
         void this.enterExactScrubForHeldStep(direction);
         return;
@@ -684,19 +684,19 @@ export class FrameReviewPlayerControl {
   }
 
   releaseStep(direction?: AdjacentDirection): void {
-    if (!this.session || this.destroyed) return;
+    if (!this.session || this.disposed) return;
     if (direction === undefined) this.heldStepDirections.clear();
     else this.heldStepDirections.delete(direction);
     void this.session.releaseAdjacent(direction).catch(error => this.showError(error));
   }
 
-  destroy(): void {
-    if (this.destroyed) return;
+  dispose(): void {
+    if (this.disposed) return;
     if (this.isMovieFullScreen()) void this.exitMovieFullScreen();
     this.hideOverlay();
     this.releaseHostHeight();
     if (this.session) void this.session.releaseAdjacent().catch(error => this.showError(error));
-    this.destroyed = true;
+    this.disposed = true;
     this.interruptJumps();
     this.cancelProgressPreview();
     this.previewOperationRevision += 1;
@@ -825,13 +825,13 @@ export class FrameReviewPlayerControl {
     try {
       await this.requestDisplay(await session.enterFrameScrub());
       if (this.displayedFrame?.kind === 'exact-frame') this.retainPreviewAt(this.displayedFrame.identity.frameIndex);
-      if (this.session === session && !this.destroyed) {
+      if (this.session === session && !this.disposed) {
         if (this.heldStepDirections.has(direction)) await session.pressAdjacent(direction);
       }
     } catch (error) {
       if (!this.isSuperseded(error)) this.showError(error);
     } finally {
-      if (this.session === session && !this.destroyed) {
+      if (this.session === session && !this.disposed) {
         this.busy = false;
         this.busyMessage = '';
         this.renderState();
@@ -852,7 +852,7 @@ export class FrameReviewPlayerControl {
       const timestampUs = this.progressTimestampUs();
       this.progressPreviewTimer = setTimeout(() => {
         this.progressPreviewTimer = null;
-        if (this.session !== session || !this.progressInteractionActive || this.destroyed) return;
+        if (this.session !== session || !this.progressInteractionActive || this.disposed) return;
         if (this.previewPhase === 'running') {
           this.previewOperationRevision += 1;
           this.previewRange = null;
@@ -860,7 +860,7 @@ export class FrameReviewPlayerControl {
           this.renderState();
         }
         void session.seekPlayback(timestampUs).catch(error => {
-          if (this.session === session && !this.destroyed) this.showError(error);
+          if (this.session === session && !this.disposed) this.showError(error);
         });
       }, 100);
     }
@@ -904,7 +904,7 @@ export class FrameReviewPlayerControl {
     if (!session) return;
     const barrier = this.jumpTask;
     if (barrier) await barrier;
-    if (this.session !== session || this.destroyed) return;
+    if (this.session !== session || this.disposed) return;
     const frameIndex = Math.round(Number(this.progress.value));
     this.scrubbingExact = true;
     try {
@@ -925,7 +925,7 @@ export class FrameReviewPlayerControl {
   }
 
   private onSessionEvent(event: FrameReviewEvent): void {
-    if (this.destroyed) return;
+    if (this.disposed) return;
     if (event.type === 'state') {
       if (this.reviewState && event.state.sourceGeneration !== this.reviewState.sourceGeneration) {
         this.displayedFrame = null;
@@ -969,11 +969,11 @@ export class FrameReviewPlayerControl {
     const session = this.session;
     const promise = (async () => {
       if (this.replacementBarrier) await this.replacementBarrier;
-      if (this.destroyed || this.session !== session || revision !== this.renderRevision) return;
+      if (this.disposed || this.session !== session || revision !== this.renderRevision) return;
       await this.frameRenderer.render(this.canvas, frame, () => (
-        !this.destroyed && this.session === session && revision === this.renderRevision
+        !this.disposed && this.session === session && revision === this.renderRevision
       ));
-      if (this.destroyed || this.session !== session || revision !== this.renderRevision) return;
+      if (this.disposed || this.session !== session || revision !== this.renderRevision) return;
       this.displayedFrame = frame;
       if (frame.kind === 'exact-frame') this.retainPreviewAt(frame.identity.frameIndex);
       this.emptyState.hidden = true;
@@ -994,11 +994,11 @@ export class FrameReviewPlayerControl {
     this.initialFrameRequested = true;
     try {
       const frame = await session.thumbnailFrame(0);
-      if (this.session !== session || this.destroyed || this.playing || this.busy || this.scrubbingExact
+      if (this.session !== session || this.disposed || this.playing || this.busy || this.scrubbingExact
         || this.progressInteractionActive || this.displayedFrame || this.pendingDisplay) return;
       await this.requestDisplay(frame);
     } catch (error) {
-      if (this.session === session && !this.destroyed && !this.displayedFrame) this.showError(error);
+      if (this.session === session && !this.disposed && !this.displayedFrame) this.showError(error);
     }
   }
 
@@ -1061,7 +1061,7 @@ export class FrameReviewPlayerControl {
     const transportKey = `${this.playing}:${this.scrubbingExact}:${this.previewPhase}:${this.busy}`;
     if (transportKey !== this.lastTransportKey) {
       this.lastTransportKey = transportKey;
-      queueMicrotask(() => { if (!this.destroyed) for (const listener of this.transportListeners) listener(); });
+      queueMicrotask(() => { if (!this.disposed) for (const listener of this.transportListeners) listener(); });
     }
     const attached = this.session !== null;
     const exactReady = this.reviewState?.captureEnabled === true;

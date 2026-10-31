@@ -1,7 +1,7 @@
 interface IApplicationShutdownCoordinatorOptions {
   readonly stopActions: () => void;
   readonly disposeWorkflow: () => Promise<void>;
-  readonly destroyControls: () => void;
+  readonly disposeControls: () => void;
   readonly reportFailure?: (error: unknown) => void;
 }
 
@@ -29,7 +29,7 @@ export class ApplicationShutdownCoordinator {
       .catch(error => this.reportFailure(error))
       .then(() => {
         try {
-          this.options.destroyControls();
+          this.options.disposeControls();
         } catch (error) {
           this.reportFailure(error);
         }

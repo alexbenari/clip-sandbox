@@ -38,10 +38,10 @@ describe('order menu control', () => {
     expect(orderMenu.dataset.open).toBe('false');
   });
 
-  test('stops reacting to clicks once destroyed', () => {
+  test('stops reacting to clicks once disposed', () => {
     const { control, orderMenu, orderMenuBtn } = setupDom();
     orderMenuBtn.click();
-    control.destroy();
+    control.dispose();
 
     document.body.click();
     orderMenuBtn.click();

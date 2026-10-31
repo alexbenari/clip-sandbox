@@ -87,7 +87,7 @@ describe('main toolbar control', () => {
     expect(document.getElementById('toggleTitlesBtn').textContent).toBe('Show titles');
   });
 
-  test('owns its button event bindings and removes them when destroyed', () => {
+  test('owns its button event bindings and removes them when disposed', () => {
     const browseButton = document.createElement('button');
     const saveBtn = document.createElement('button');
     const saveAsNewBtn = document.createElement('button');
@@ -127,7 +127,7 @@ describe('main toolbar control', () => {
     buttons.forEach(button => button.click());
     handlers.forEach(handler => expect(handler).toHaveBeenCalledTimes(1));
 
-    control.destroy();
+    control.dispose();
     buttons.forEach(button => button.click());
     handlers.forEach(handler => expect(handler).toHaveBeenCalledTimes(1));
   });

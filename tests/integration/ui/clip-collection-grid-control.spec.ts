@@ -840,7 +840,7 @@ describe('clip collection grid controller', () => {
     expect(document.querySelector('#grid .thumb').style.height).toBe('180px');
   });
 
-  test('clears drag-over state when rerendering or destroying', () => {
+  test('clears drag-over state when rerendering or disposing', () => {
     const controller = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),

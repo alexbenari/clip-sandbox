@@ -109,7 +109,7 @@ describe('application shell screen ownership', () => {
     expect(document.body.classList.contains('fs-active')).toBe(true);
     shell.setFullScreenLayout(false);
     expect(document.body.classList.contains('fs-active')).toBe(false);
-    shell.destroy();
+    shell.dispose();
   });
   it('keeps the current workspace selected when a leave guard rejects navigation', () => {
     const f = fixture();
@@ -124,7 +124,7 @@ describe('application shell screen ownership', () => {
     expect(f.selector.value).toBe(f.collection.id);
     expect(f.collection.onDeactivate).not.toHaveBeenCalled();
     expect(leavePolicy.canLeave).toHaveBeenCalledWith(f.collection, f.settings);
-    shell.destroy();
+    shell.dispose();
   });
   it('reports which screen change its leave guard held, so the change can be completed later', () => {
     const f = fixture();
@@ -139,7 +139,7 @@ describe('application shell screen ownership', () => {
     f.selector.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(refused).toHaveBeenCalledWith({ from: f.collection, to: f.settings });
-    shell.destroy();
+    shell.dispose();
   });
   it('reclaims each panel width and notifies the active screen once after both settle', async () => {
     const f = fixture();
@@ -170,9 +170,9 @@ describe('application shell screen ownership', () => {
     finishes[1](); await Promise.resolve(); await Promise.resolve();
     expect(settled).toHaveBeenCalledOnce();
     expect(shell.workspaceMoving).toBe(false);
-    shell.destroy();
+    shell.dispose();
   });
-  it('gives keys to the active screen only, and none after it is destroyed', () => {
+  it('gives keys to the active screen only, and none after it is disposed', () => {
     const f = fixture();
     const collection = { ...f.collection, onKeyDown: vi.fn() } satisfies IAppScreen;
     const settings = { ...f.settings, onKeyDown: vi.fn() } satisfies IAppScreen;
@@ -185,7 +185,7 @@ describe('application shell screen ownership', () => {
     shell.handleKeyDown(key);
     shell.activate(settings.id);
     shell.handleKeyDown(key);
-    shell.destroy();
+    shell.dispose();
     shell.handleKeyDown(key);
 
     expect(collection.onKeyDown).toHaveBeenCalledOnce();
@@ -270,7 +270,7 @@ describe('application shell screen ownership', () => {
     shell.activate(collection.id);
     expect(folded()).toEqual([false, false]);
     expect(clips.contributionHost.firstElementChild).toBe(clips.fallbackContent);
-    shell.destroy();
+    shell.dispose();
   });
 
   it('hides a panel with nothing to show on the active screen and gives its width to the workspace', () => {
@@ -294,7 +294,7 @@ describe('application shell screen ownership', () => {
 
     shell.activate(extraction.id);
     expect(clips.root.hidden).toBe(false);
-    shell.destroy();
+    shell.dispose();
   });
 
   it('switches to a screen that hides a folded panel without starting a workspace resize', () => {
@@ -313,7 +313,7 @@ describe('application shell screen ownership', () => {
 
     expect(boundsSettled).toHaveBeenCalledOnce();
     expect(boundsChanging).not.toHaveBeenCalled();
-    shell.destroy();
+    shell.dispose();
   });
 
   it('shows a hidden panel again, folded as its screen left it, when that screen returns', () => {
@@ -331,7 +331,7 @@ describe('application shell screen ownership', () => {
 
     expect(clips.root.hidden).toBe(false);
     expect(clips.root.classList.contains('folded')).toBe(true);
-    shell.destroy();
+    shell.dispose();
   });
 
   it('supports contextual Refine Gif with deterministic lifecycle and a temporary label', () => {
@@ -396,7 +396,7 @@ describe('application shell screen ownership', () => {
     shell.activate(f.collection.id);
     expect(clips.root.classList.contains('folded')).toBe(true);
     expect(pipelines.root.classList.contains('folded')).toBe(false);
-    shell.destroy();
+    shell.dispose();
   });
 
   it('settles rapid requests with matching commands, selector and focus', () => {

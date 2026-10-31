@@ -5,8 +5,6 @@ export const GIF_CAPTURE_KEYS = Object.freeze({
   markStart: 'Q', markEnd: 'W', jumpStart: 'A', jumpEnd: 'S', loop: 'Z', lock: 'X', extract: 'E',
 });
 
-const boundTo = (key: string, binding: string): boolean => key === binding.toLowerCase();
-
 export interface IGifWorkflowPlayerCommands {
   toggleMovieFullScreen(): void;
   exitMovieFullScreen(): Promise<void>;
@@ -112,17 +110,21 @@ export class GifWorkflowKeyboard {
   private commandForKey(key: string): (() => void) | null {
     if (!this.target) return null;
     if (key === ' ') return () => this.target?.player.togglePlayback();
-    if (boundTo(key, GIF_CAPTURE_KEYS.markStart) && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markStart();
-    if (boundTo(key, GIF_CAPTURE_KEYS.markEnd) && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markEnd();
-    if (boundTo(key, GIF_CAPTURE_KEYS.jumpStart) && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpStart();
-    if (boundTo(key, GIF_CAPTURE_KEYS.jumpEnd) && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpEnd();
-    if (boundTo(key, GIF_CAPTURE_KEYS.loop) && this.target.capture?.canLoop?.() === true) return () => this.target?.capture?.startLoop();
-    if (boundTo(key, GIF_CAPTURE_KEYS.lock) && this.target.capture?.canLock?.() === true) return () => this.target?.capture?.lockRange();
-    if (boundTo(key, GIF_CAPTURE_KEYS.extract) && this.target.capture?.extractCurrent
+    if (this.matchesBinding(key, GIF_CAPTURE_KEYS.markStart) && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markStart();
+    if (this.matchesBinding(key, GIF_CAPTURE_KEYS.markEnd) && this.target.capture && this.target.capture.canMark?.() !== false) return () => this.target?.capture?.markEnd();
+    if (this.matchesBinding(key, GIF_CAPTURE_KEYS.jumpStart) && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpStart();
+    if (this.matchesBinding(key, GIF_CAPTURE_KEYS.jumpEnd) && this.target.capture?.canJump?.() === true) return () => this.target?.capture?.jumpEnd();
+    if (this.matchesBinding(key, GIF_CAPTURE_KEYS.loop) && this.target.capture?.canLoop?.() === true) return () => this.target?.capture?.startLoop();
+    if (this.matchesBinding(key, GIF_CAPTURE_KEYS.lock) && this.target.capture?.canLock?.() === true) return () => this.target?.capture?.lockRange();
+    if (this.matchesBinding(key, GIF_CAPTURE_KEYS.extract) && this.target.capture?.extractCurrent
       && this.target.capture.canExtractCurrent?.() === true) {
       return () => this.target?.capture?.extractCurrent?.();
     }
     return null;
+  }
+
+  private matchesBinding(key: string, binding: string): boolean {
+    return key === binding.toLowerCase();
   }
 
   private releaseHeldDirections(): void {

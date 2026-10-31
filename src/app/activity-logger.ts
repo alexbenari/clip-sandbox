@@ -121,7 +121,7 @@ export class ActivityLogger {
 
   has(id: string): boolean { return this.entries.some(entry => entry.id === id); }
 
-  destroy(): void {
+  dispose(): void {
     this.clearResetTimer();
     this.listeners.clear();
     this.entries = [];
