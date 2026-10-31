@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-05T20:40:21.2411610+03:00",
+  "generatedAt": "2026-10-31T11:43:58.404Z",
   "title": "Design System: Clip Sandbox",
   "extensions": {
     "colorMeta": {
@@ -160,16 +160,16 @@
     {
       "name": "Context Menu",
       "kind": "nav",
-      "description": "A pointer-adjacent utility menu for direct clip operations.",
-      "html": "<nav class=\"ds-context-menu\"><button>Loopify</button><button>Add to Collection…</button></nav>",
-      "css": ".ds-context-menu { box-sizing:border-box; width:240px; display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid rgba(148,163,184,.25); border-radius:12px; background:rgba(2,6,23,.96); box-shadow:0 18px 38px rgba(0,0,0,.35); } .ds-context-menu button { width:100%; padding:9px 10px; border:0; border-radius:8px; background:linear-gradient(180deg,#1e293b,#111827); color:#e5e7eb; font:400 14px ui-sans-serif,system-ui,sans-serif; text-align:left; } .ds-context-menu button:hover { filter:brightness(1.05); } .ds-context-menu button:focus-visible { outline:2px solid rgba(122,162,247,.8); outline-offset:0; }"
+      "description": "A pointer-adjacent utility menu for direct clip operations: an edit of the opened clip first, a destructive command last, each set apart by a divider.",
+      "html": "<nav class=\"ds-context-menu\"><button>Rename</button><div class=\"ds-menu-separator\"></div><button>Add to collection…</button><div class=\"ds-menu-separator\"></div><button class=\"ds-menu-destructive\"><span class=\"ds-menu-item\"><svg class=\"ds-menu-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 7h16M10 11v6m4-6v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3\"/></svg>Move to Recycle Bin</span></button></nav>",
+      "css": ".ds-context-menu { box-sizing:border-box; min-width:220px; max-width:320px; display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid rgba(148,163,184,.25); border-radius:12px; background:rgba(2,6,23,.96); box-shadow:0 18px 38px rgba(0,0,0,.35); } .ds-context-menu button { width:100%; padding:9px 10px; border:0; border-radius:8px; background:linear-gradient(180deg,#1e293b,#111827); color:#e5e7eb; font:400 14px ui-sans-serif,system-ui,sans-serif; text-align:left; box-shadow:none; cursor:pointer; } .ds-context-menu button:hover { filter:brightness(1.05); } .ds-context-menu button:focus-visible { outline:2px solid rgba(122,162,247,.8); outline-offset:0; } .ds-menu-item { display:flex; align-items:center; gap:8px; } .ds-menu-icon { width:16px; height:16px; flex:0 0 16px; } .ds-menu-destructive { color:#f87171 !important; } .ds-menu-separator { flex:none; height:1px; margin:2px 4px; background:rgba(148,163,184,.2); }"
     },
     {
       "name": "Activity Status",
       "kind": "custom",
-      "description": "A tiny semantic status light that expands into recent activity when needed.",
-      "html": "<button class=\"ds-activity-status\" aria-label=\"Activity history\"></button>",
-      "css": ".ds-activity-status { width:18px; height:18px; padding:0; border:1px solid rgba(148,163,184,.3); border-radius:999px; background:rgba(71,85,105,.8); box-shadow:none; } .ds-activity-status:hover { filter:brightness(1.1); } .ds-activity-status:focus-visible { outline:2px solid rgba(122,162,247,.8); outline-offset:2px; } .ds-activity-status:active { transform:scale(.94); }"
+      "description": "A compact labeled status control: a dot and short text for Ready, Working or the unresolved-error count; only the progress dot pulses.",
+      "html": "<button class=\"ds-activity-status\" data-state=\"progress\" aria-label=\"Activity and errors: Working\"><span class=\"ds-activity-dot\" aria-hidden=\"true\"></span>Working</button>",
+      "css": ".ds-activity-status { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-width:112px; min-height:34px; padding:0 12px; border:1px solid rgba(148,163,184,.2); border-radius:12px; background:#0c131f; color:#e5e7eb; font:600 13.3333px Arial,sans-serif; font-variant-numeric:tabular-nums; box-shadow:none; cursor:pointer; } .ds-activity-status:hover { background:#141f30; } .ds-activity-status:focus-visible { outline:2px solid rgba(122,162,247,.8); outline-offset:2px; } .ds-activity-dot { width:8px; height:8px; flex:0 0 8px; border-radius:999px; background:#94a3b8; } .ds-activity-status[data-state=\"progress\"] .ds-activity-dot { background:#22c55e; animation:ds-activity-pulse 1.1s ease-in-out infinite; } .ds-activity-status[data-state=\"error\"] .ds-activity-dot { background:#ef4444; } @keyframes ds-activity-pulse { 0% { transform:scale(1); box-shadow:0 0 0 0 rgba(34,197,94,.32); } 70% { transform:scale(1.06); box-shadow:0 0 0 8px rgba(34,197,94,0); } 100% { transform:scale(1); box-shadow:0 0 0 0 rgba(34,197,94,0); } } @media (prefers-reduced-motion:reduce) { .ds-activity-status[data-state=\"progress\"] .ds-activity-dot { animation:none; } }"
     }
   ],
   "narrative": {
