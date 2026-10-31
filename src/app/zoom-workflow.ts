@@ -27,6 +27,7 @@ export interface IZoomGrid extends IEventSource<{ openClipRequested: string }> {
   getPrevClip(clipId: string | null): Clip | null;
   setSelectedClipId(clipId: string): void;
   focusClip(clipId: string): boolean;
+  holdPreviews(): () => void;
 }
 
 export interface IScreenChanges extends IEventSource<{ screenChanged: Readonly<{ id: string }> }> {}
@@ -53,6 +54,8 @@ type ZoomDependencies = Readonly<{
 
 export class ZoomWorkflow {
   private readonly unsubscribes: (() => void)[];
+  // The grid's clips would compete with the zoomed clip for the video decoder.
+  private releaseGridPreviews: (() => void) | null = null;
 
   constructor(private readonly zoom: ZoomDependencies) {
     this.unsubscribes = [
@@ -80,6 +83,8 @@ export class ZoomWorkflow {
     const shownClipId = this.zoom.zoom.getCurrentClipId();
     this.zoom.contextMenu.close({ restoreFocus: false });
     this.zoom.zoom.close();
+    this.releaseGridPreviews?.();
+    this.releaseGridPreviews = null;
     if (shownClipId) this.zoom.grid.focusClip(shownClipId);
   }
 
@@ -92,7 +97,9 @@ export class ZoomWorkflow {
     const src = this.zoom.grid.getClipMediaSource(clip.id);
     if (!src) return false;
     this.zoom.grid.setSelectedClipId(clip.id);
-    return this.zoom.zoom.open({ clipId: clip.id, src, name: clip.name || '' });
+    const opened = this.zoom.zoom.open({ clipId: clip.id, src, name: clip.name || '' });
+    if (opened && !this.releaseGridPreviews) this.releaseGridPreviews = this.zoom.grid.holdPreviews();
+    return opened;
   }
 
   openClipById(clipId: string | null | undefined): boolean {
@@ -120,6 +127,8 @@ export class ZoomWorkflow {
 
   dispose(): void {
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe();
+    this.releaseGridPreviews?.();
+    this.releaseGridPreviews = null;
   }
 
   private zoomedClip(): Clip | null {

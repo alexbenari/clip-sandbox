@@ -115,6 +115,45 @@ describe('clip collection grid controller', () => {
     controller.dispose();
   });
 
+  function fullScreenWithHiddenCard() {
+    const grid = document.getElementById('grid');
+    const controller = createClipCollectionGridControl({
+      grid, isFullscreen: () => true,
+      layoutRules: { computeFullscreenLayout: () => ({ cols: 2, cellH: 100, targetVisible: 2 }) },
+    });
+    controller.renderCollection(makeThreeClipCollection());
+    controller.fsApplySlots(2);
+    const hiddenVideo = [...grid.children].find(card => card.style.display === 'none').querySelector('video');
+    return { controller, hiddenVideo };
+  }
+
+  test('full screen pauses the clips it hides', () => {
+    const { controller, hiddenVideo } = fullScreenWithHiddenCard();
+
+    expect(new Set(HTMLMediaElement.prototype.pause.mock.instances)).toEqual(new Set([hiddenVideo]));
+    controller.dispose();
+  });
+
+  test('restoring the grid after full screen plays the clips full screen hid', () => {
+    const { controller, hiddenVideo } = fullScreenWithHiddenCard();
+    HTMLMediaElement.prototype.play.mockClear();
+
+    controller.fsRestore();
+
+    expect(HTMLMediaElement.prototype.play.mock.instances).toEqual([hiddenVideo]);
+    controller.dispose();
+  });
+
+  test('full screen starts no clip it hides when that clip becomes ready', () => {
+    const { controller, hiddenVideo } = fullScreenWithHiddenCard();
+    HTMLMediaElement.prototype.play.mockClear();
+
+    hiddenVideo.dispatchEvent(new Event('canplay'));
+
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
   test('view replacement, restart and disposal cancel pending fullscreen rotation', () => {
     const grid = document.getElementById('grid');
     const controller = createClipCollectionGridControl({
@@ -311,6 +350,108 @@ describe('clip collection grid controller', () => {
     expect(HTMLMediaElement.prototype.play.mock.instances).toEqual([videos[0]]);
   });
 
+  test('pauses the previews of a view it leaves', () => {
+    const controller = createClipCollectionGridControl({
+      grid: document.getElementById('grid'), gridRoot: document.getElementById('gridWrap'), formatLabel: (name) => name,
+    });
+    const pipeline = makeThreeClipCollection();
+    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    const pipelineVideos = Array.from(document.querySelectorAll('#grid video'));
+    for (const video of pipelineVideos) Object.defineProperty(video, 'paused', { value: false, configurable: true });
+
+    controller.renderCollection(new ClipSequence({ name: 'subset', clips: [pipeline.orderedClips()[0]] }), { cacheKey: 'collection:subset.txt' });
+
+    expect(new Set(HTMLMediaElement.prototype.pause.mock.instances)).toEqual(new Set(pipelineVideos));
+    controller.dispose();
+  });
+
+  test('starts no preview of a view it left when that preview becomes ready', () => {
+    const controller = createClipCollectionGridControl({
+      grid: document.getElementById('grid'), gridRoot: document.getElementById('gridWrap'), formatLabel: (name) => name,
+    });
+    const pipeline = makeThreeClipCollection();
+    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    const pipelineVideo = document.querySelector('#grid video');
+    controller.renderCollection(new ClipSequence({ name: 'subset', clips: [pipeline.orderedClips()[0]] }), { cacheKey: 'collection:subset.txt' });
+
+    pipelineVideo.dispatchEvent(new Event('canplay'));
+
+    expect(HTMLMediaElement.prototype.play.mock.instances).not.toContain(pipelineVideo);
+    controller.dispose();
+  });
+
+  describe('holding previews', () => {
+    function gridWithReadyVideos({ playing = false } = {}) {
+      const controller = createClipCollectionGridControl({
+        grid: document.getElementById('grid'), gridRoot: document.getElementById('gridWrap'), formatLabel: (name) => name,
+      });
+      controller.renderCollection(makeThreeClipCollection(), { cacheKey: 'pipeline' });
+      const videos = Array.from(document.querySelectorAll('#grid video'));
+      for (const video of videos) {
+        Object.defineProperty(video, 'readyState', { value: 2, configurable: true });
+        Object.defineProperty(video, 'paused', { value: !playing, configurable: true });
+      }
+      return { controller, videos };
+    }
+
+    test('pauses every playing preview', () => {
+      const { controller, videos } = gridWithReadyVideos({ playing: true });
+
+      controller.holdPreviews();
+
+      expect(new Set(HTMLMediaElement.prototype.pause.mock.instances)).toEqual(new Set(videos));
+      controller.dispose();
+    });
+
+    test('starts no preview that becomes ready while held', () => {
+      const { controller, videos } = gridWithReadyVideos();
+      controller.holdPreviews();
+
+      videos[0].dispatchEvent(new Event('canplay'));
+
+      expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+      controller.dispose();
+    });
+
+    test('plays the previews again once every hold is released', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] });
+      try {
+        const { controller, videos } = gridWithReadyVideos();
+        const releaseZoom = controller.holdPreviews();
+        const releaseScreen = controller.holdPreviews();
+
+        releaseZoom();
+        await vi.runAllTimersAsync();
+        expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+        releaseScreen();
+        await vi.runAllTimersAsync();
+
+        expect(new Set(HTMLMediaElement.prototype.play.mock.instances)).toEqual(new Set(videos));
+        controller.dispose();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('a release called twice does not release another hold', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] });
+      try {
+        const { controller } = gridWithReadyVideos();
+        const release = controller.holdPreviews();
+        controller.holdPreviews();
+
+        release();
+        release();
+        await vi.runAllTimersAsync();
+
+        expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+        controller.dispose();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   test('reuses cached card videos and resumes their playback after switching back to an unchanged view', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] });
     try {
@@ -333,7 +474,6 @@ describe('clip collection grid controller', () => {
       expect(pipelineGrid.inert).toBe(true);
       expect(pipelineGrid.getAttribute('aria-hidden')).toBe('true');
       expect(document.querySelectorAll('#grid .thumb')).toHaveLength(1);
-      expect(HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
 
       HTMLMediaElement.prototype.play.mockClear();
       for (const video of pipelineVideos) Object.defineProperty(video, 'paused', { value: true, configurable: true });

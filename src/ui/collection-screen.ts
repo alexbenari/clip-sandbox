@@ -13,12 +13,14 @@ type CollectionGrid = {
   focusSelectedClip(): boolean;
   beginWorkspaceResize(width: number, durationMs: number): void;
   endWorkspaceResize(): void;
+  holdPreviews(): () => void;
 };
 
 type CollectionToolbar = { focusBrowse(): void };
 
 export class CollectionScreen implements IAppScreen, IEventSource<ICollectionScreenEvents> {
   private readonly events = new EventSource<ICollectionScreenEvents>();
+  private releasePreviews: (() => void) | null;
   readonly id = 'collection';
   readonly label = 'Collection';
   readonly selectorStatus = 'fixed' as const;
@@ -38,7 +40,19 @@ export class CollectionScreen implements IAppScreen, IEventSource<ICollectionScr
     readonly commands: HTMLElement,
     private readonly grid: CollectionGrid,
     private readonly toolbar: CollectionToolbar,
-  ) {}
+  ) {
+    // The grid's clips would keep decoding behind another screen, including the one the app starts on.
+    this.releasePreviews = grid.holdPreviews();
+  }
+
+  onDeactivate(): void {
+    this.releasePreviews ??= this.grid.holdPreviews();
+  }
+
+  onActivate(): void {
+    this.releasePreviews?.();
+    this.releasePreviews = null;
+  }
 
   focusInitial(): void {
     if (!this.grid.focusSelectedClip()) this.toolbar.focusBrowse();

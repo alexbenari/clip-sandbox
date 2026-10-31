@@ -1,9 +1,16 @@
 export class GridPreviewPlaybackScheduler {
   private readonly playbackTokens = new WeakMap<HTMLElement, number>();
 
-  cancel(grid: HTMLElement | null | undefined): void {
+  constructor(private readonly mayPlay: (video: HTMLVideoElement) => boolean) {}
+
+  stop(grid: HTMLElement | null | undefined): void {
     if (!grid) return;
     this.playbackTokens.set(grid, (this.playbackTokens.get(grid) || 0) + 1);
+    for (const video of Array.from(grid.querySelectorAll('video'))) this.pause(video);
+  }
+
+  pause(video: HTMLVideoElement | null | undefined): void {
+    if (video && !video.paused) video.pause();
   }
 
   schedule(grid: HTMLElement): void {
@@ -25,7 +32,7 @@ export class GridPreviewPlaybackScheduler {
     const runBatch = (retryIndex = 0, startIndex = 0): void => {
       if (this.playbackTokens.get(grid) !== token) return;
       const videos = Array.from(grid.querySelectorAll('video')) as HTMLVideoElement[];
-      const readyVideos = videos.filter(video => video.readyState >= 2 && (video.paused || video.ended));
+      const readyVideos = videos.filter(video => video.readyState >= 2 && (video.paused || video.ended) && this.mayPlay(video));
       const video = readyVideos[startIndex];
       if (video) this.start(video);
 
@@ -42,8 +49,9 @@ export class GridPreviewPlaybackScheduler {
   }
 
   start(video: HTMLVideoElement | null | undefined): void {
+    if (!video || !this.mayPlay(video)) return;
     try {
-      const result = video?.play();
+      const result = video.play();
       if (result && typeof result.catch === 'function') result.catch(() => {});
     } catch {
       // Preview playback is best-effort because media APIs are not available in every renderer host.

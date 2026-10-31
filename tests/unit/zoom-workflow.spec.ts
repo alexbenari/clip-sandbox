@@ -9,6 +9,7 @@ import { ZoomWorkflow } from '../../src/app/zoom-workflow.js';
 import type { Clip } from '../../src/domain/clip.js';
 import { Pipeline } from '../../src/domain/pipeline.js';
 import { clipSource } from '../support/clip-source-fixtures.js';
+import { FakePreviewHolds } from '../support/preview-holds.js';
 
 class FakeZoomView extends EventSource<{ playbackFailed: { name: string; error: unknown }; contextMenuRequested: { point: { x: number; y: number } }; closeRequested: void }> {
   currentClipId: string | null = null;
@@ -34,6 +35,8 @@ function zoomWorkflow({ enterZoomEditMode = null }: { enterZoomEditMode?: ((clip
     getPrevClip: (clipId: string | null) => (clipId === bravo.id ? alpha : null),
     setSelectedClipId: vi.fn(),
     focusClip: vi.fn(() => true),
+    previews: new FakePreviewHolds(),
+    holdPreviews: () => grid.previews.holdPreviews(),
   });
   const editMenu = { open: vi.fn((_request: EditMenuRequest) => undefined) };
   const boundaryFeedback = { playBoundaryClank: vi.fn() };
@@ -143,6 +146,45 @@ describe('ZoomWorkflow', () => {
     zoomView.emit('contextMenuRequested', { point: { x: 0, y: 0 } });
 
     expect(editMenu.open).not.toHaveBeenCalled();
+  });
+
+  it('holds the grid’s previews once while Zoom shows clips, also while browsing', () => {
+    const { workflow, grid, alpha } = zoomWorkflow();
+
+    workflow.openClip(alpha);
+    workflow.browseByOffset(1);
+
+    expect(grid.previews.count).toBe(1);
+  });
+
+  it.each([
+    ['closes', (workflow: ZoomWorkflow) => { workflow.close(); }],
+    ['is disposed', (workflow: ZoomWorkflow) => { workflow.dispose(); }],
+  ])('releases the grid’s previews when Zoom %s', (_case, end) => {
+    const { workflow, grid, alpha } = zoomWorkflow();
+    workflow.openClip(alpha);
+
+    end(workflow);
+
+    expect(grid.previews.count).toBe(0);
+  });
+
+  it('releases the grid’s previews when another screen closes Zoom', () => {
+    const { workflow, grid, screens, alpha } = zoomWorkflow();
+    workflow.openClip(alpha);
+
+    screens.emit('screenChanged', { id: 'settings' });
+
+    expect(grid.previews.count).toBe(0);
+  });
+
+  it('holds no previews when Zoom cannot show the clip', () => {
+    const { workflow, zoomView, grid, alpha } = zoomWorkflow();
+    zoomView.open.mockReturnValue(false);
+
+    workflow.openClip(alpha);
+
+    expect(grid.previews.count).toBe(0);
   });
 
   it('returns focus to the clip shown last when Zoom closes', () => {

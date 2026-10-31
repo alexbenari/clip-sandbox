@@ -211,7 +211,7 @@ describe('controls built from the page markup', () => {
 
   it('the Collection screen finds its root and command bar', () => {
     const screen = CollectionScreen.fromDocument(document, {
-      grid: { focusSelectedClip: () => false, beginWorkspaceResize: vi.fn(), endWorkspaceResize: vi.fn() },
+      grid: { focusSelectedClip: () => false, beginWorkspaceResize: vi.fn(), endWorkspaceResize: vi.fn(), holdPreviews: () => () => undefined },
       toolbar: { focusBrowse: vi.fn() },
     });
 

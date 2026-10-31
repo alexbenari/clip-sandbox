@@ -348,7 +348,8 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private gridViewCache: Map<string, GridViewCacheEntry>;
   private metadataTracker: GridVideoMetadataTracker;
   private readonly coordinateWorkspaceLayout: boolean;
-  private readonly previewPlayback = new GridPreviewPlaybackScheduler();
+  private readonly previewHolds = new Set<symbol>();
+  private readonly previewPlayback = new GridPreviewPlaybackScheduler((video) => this.mayPlayPreview(video));
   private readonly navigationRules = new GridNavigationRules();
   private workspaceBounds: { width: number; height: number } | null = null;
 
@@ -480,7 +481,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     }
     this.fsRestore();
     this.removeDragOverClasses(this.grid);
-    this.previewPlayback.cancel(this.grid);
+    this.previewPlayback.stop(this.grid);
     entry.collection = this.currentCollection;
     entry.signature = this.clipSequenceSignature(this.currentCollection);
     entry.container = this.grid as ClipCard;
@@ -666,11 +667,16 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     for (const card of this.gridCards(this.grid)) card.style.order = '';
     const cardsToRestore = this.hiddenCardBuffer();
     if (cardsToRestore.length === 0) return;
+    this.replaceHiddenCards([]);
     cardsToRestore.forEach((element) => {
       element.style.display = '';
       this.previewPlayback.start(element.querySelector('video'));
     });
-    this.replaceHiddenCards([]);
+  }
+
+  private hideCard(card: ClipCard): void {
+    card.style.display = 'none';
+    this.previewPlayback.pause(card.querySelector('video'));
   }
 
   fsApplySlots(slots = this.fullscreenSlots): void {
@@ -692,7 +698,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
         continue;
       }
       if (toHide > 0) {
-        element.style.display = 'none';
+        this.hideCard(element);
         nextHiddenCards.push(element);
         toHide -= 1;
       } else {
@@ -722,7 +728,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
       const outgoingOrder = outgoing.style.order;
       outgoing.style.order = incoming.style.order;
       incoming.style.order = outgoingOrder;
-      outgoing.style.display = 'none';
+      this.hideCard(outgoing);
       incoming.style.display = '';
       this.hiddenCards = hidden.filter(card => card !== incoming).concat(outgoing);
       this.previewPlayback.start(incoming.querySelector('video'));
@@ -852,6 +858,22 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
 
   setTitlesHidden(hidden: boolean): void {
     this.gridRoot?.classList.toggle('titles-hidden', !!hidden);
+  }
+
+  // Returns the function that releases this hold.
+  holdPreviews(): () => void {
+    const hold = Symbol('preview hold');
+    this.previewHolds.add(hold);
+    this.previewPlayback.stop(this.grid);
+    return () => {
+      if (this.previewHolds.delete(hold) && this.previewHolds.size === 0) this.previewPlayback.schedule(this.grid);
+    };
+  }
+
+  // Each card decodes its full-size clip, so only the cards the shown view displays may play.
+  private mayPlayPreview(video: HTMLVideoElement): boolean {
+    const card = this.asClipCard(video.closest('.thumb'));
+    return this.previewHolds.size === 0 && this.grid.contains(video) && !(card && this.hiddenCards.includes(card));
   }
 
   private applySelectionClasses(): void {
@@ -1191,7 +1213,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   clear(): void {
     this.endAnyRename();
     this.fsRestore();
-    this.previewPlayback.cancel(this.grid);
+    this.previewPlayback.stop(this.grid);
     this.clearGridCards(this.grid);
     this.invalidateAllViews();
     this.selection.clear();
