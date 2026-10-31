@@ -7,62 +7,60 @@
   <style>
     :root{
       color-scheme: dark;
-      --bg:#09111d;
-      --panel:rgba(7, 17, 31, .82);
-      --text:#e5eefc;
-      --muted:#93a8c7;
-      --accent:#d99a2b;
-      --accent-deep:#9f6410;
-      --border:rgba(147,168,199,.22);
-      --shadow:0 24px 60px rgba(0,0,0,.35);
+      --bg:#0b0f14;
+      --panel:#0f172a;
+      --fg:#e5e7eb;
+      --muted:#94a3b8;
+      --accent:#7aa2f7;
+      --surface-inset:#0c131f;
+      --line:rgba(148,163,184,.2);
+      --shadow:0 8px 24px rgba(0,0,0,.35);
     }
     *{ box-sizing:border-box; }
+    ::selection{ background:var(--accent); color:var(--bg); }
+    :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
     body{
       margin:0;
       min-height:100vh;
-      display:grid;
-      place-items:center;
-      padding:24px;
-      background:
-        radial-gradient(circle at top left, rgba(217,154,43,.26), transparent 30%),
-        radial-gradient(circle at right 20%, rgba(50,104,140,.24), transparent 28%),
-        linear-gradient(160deg, #06101a 0%, #0b1524 54%, #08111d 100%);
-      color:var(--text);
-      font-family:"Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      padding:24px 16px;
+      background:linear-gradient(180deg, #0b0f14 0%, #0a0e13 60%, #0b0f14 100%);
+      color:var(--fg);
+      font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
     .demo-shell{
-      width:min(560px, 100%);
-      padding:28px;
-      border:1px solid var(--border);
-      border-radius:24px;
+      width:min(720px, 100%);
+      margin:0 auto;
+      padding:24px;
+      border:1px solid var(--line);
+      border-radius:16px;
       background:var(--panel);
       box-shadow:var(--shadow);
-      backdrop-filter:blur(10px);
     }
     h1{
-      margin:0 0 10px;
-      font-size:clamp(1.7rem, 3vw, 2.4rem);
-      line-height:1.05;
-      letter-spacing:.02em;
+      margin:0 0 8px;
+      font-size:18px;
+      font-weight:700;
     }
     p{
-      margin:0 0 20px;
+      max-width:65ch;
+      margin:0 0 16px;
       color:var(--muted);
+      font-size:14px;
       line-height:1.5;
     }
     button{
       appearance:none;
       border:0;
       cursor:pointer;
-      padding:12px 18px;
-      border-radius:999px;
-      color:#1b1205;
-      font-weight:700;
-      letter-spacing:.02em;
-      background:linear-gradient(180deg, #f0ba54 0%, var(--accent) 64%, var(--accent-deep) 100%);
-      box-shadow:0 12px 28px rgba(159,100,16,.3);
+      padding:10px 14px;
+      border-radius:12px;
+      background:linear-gradient(180deg, #2a4b9e, #1f2b6b);
+      color:var(--fg);
+      font-weight:600;
+      letter-spacing:.2px;
+      box-shadow:var(--shadow);
     }
-    button:hover{ filter:brightness(1.04); }
+    button:hover{ filter:brightness(1.05); }
     button:active{ transform:translateY(1px); }
   </style>
 </head>

@@ -7,84 +7,61 @@
   <style>
     :root{
       color-scheme: dark;
-      --bg:#0a111c;
-      --panel:rgba(8, 19, 34, .86);
-      --text:#e5eefc;
-      --muted:#93a8c7;
-      --accent:#f0ba54;
-      --border:rgba(147,168,199,.22);
-      --shadow:0 24px 60px rgba(0,0,0,.35);
+      --bg:#0b0f14;
+      --panel:#0f172a;
+      --fg:#e5e7eb;
+      --muted:#94a3b8;
+      --accent:#7aa2f7;
+      --surface-inset:#0c131f;
+      --line:rgba(148,163,184,.2);
+      --shadow:0 8px 24px rgba(0,0,0,.35);
     }
     *{ box-sizing:border-box; }
+    ::selection{ background:var(--accent); color:var(--bg); }
+    :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
     body{
       margin:0;
       min-height:100vh;
-      padding:28px;
-      background:
-        radial-gradient(circle at top left, rgba(240,186,84,.22), transparent 28%),
-        radial-gradient(circle at right 18%, rgba(64,122,175,.2), transparent 24%),
-        linear-gradient(160deg, #06101a 0%, #0b1524 54%, #08111d 100%);
-      color:var(--text);
-      font-family:"Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      padding:24px 16px;
+      background:linear-gradient(180deg, #0b0f14 0%, #0a0e13 60%, #0b0f14 100%);
+      color:var(--fg);
+      font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
     .demo-shell{
-      width:min(760px, 100%);
+      width:min(720px, 100%);
       margin:0 auto;
-      padding:28px;
-      border:1px solid var(--border);
-      border-radius:24px;
+      padding:24px;
+      border:1px solid var(--line);
+      border-radius:16px;
       background:var(--panel);
       box-shadow:var(--shadow);
-      backdrop-filter:blur(10px);
     }
     h1{
-      margin:0 0 10px;
-      font-size:clamp(1.8rem, 3vw, 2.5rem);
-      line-height:1.05;
-      letter-spacing:.02em;
+      margin:0 0 8px;
+      font-size:18px;
+      font-weight:700;
     }
     p{
-      margin:0 0 18px;
+      max-width:65ch;
+      margin:0 0 16px;
       color:var(--muted);
+      font-size:14px;
       line-height:1.5;
-    }
-    .actions{
-      display:flex;
-      gap:12px;
-      flex-wrap:wrap;
-      margin-bottom:18px;
     }
     button{
       appearance:none;
       border:0;
       cursor:pointer;
-      padding:12px 18px;
-      border-radius:999px;
-      color:#1b1205;
-      font-weight:700;
-      letter-spacing:.02em;
-      background:linear-gradient(180deg, #f0ba54 0%, #d99a2b 64%, #9f6410 100%);
-      box-shadow:0 12px 28px rgba(159,100,16,.3);
+      padding:10px 14px;
+      border-radius:12px;
+      background:linear-gradient(180deg, #2a4b9e, #1f2b6b);
+      color:var(--fg);
+      font-weight:600;
+      letter-spacing:.2px;
+      box-shadow:var(--shadow);
     }
-    .demo-surface{
-      min-height:220px;
-      padding:22px;
-      border:1px dashed rgba(147,168,199,.35);
-      border-radius:18px;
-      background:rgba(5, 12, 22, .55);
-    }
-    .log{
-      margin-top:18px;
-      padding:14px 16px;
-      border-radius:14px;
-      background:rgba(5, 12, 22, .72);
-      color:var(--muted);
-      min-height:56px;
-    }
-    code{
-      color:#f4d18a;
-      font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
+    button:hover{ filter:brightness(1.05); }
+    button:active{ transform:translateY(1px); }
   </style>
 </head>
 <body>
