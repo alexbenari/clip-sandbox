@@ -529,6 +529,8 @@ export class AppController {
         refineGifScreen.dispose();
         gifRangesPanelControl?.dispose();
         frameReviewPlayer.dispose();
+        zoomOverlay.dispose();
+        clipContextMenu.dispose();
         utilities?.dispose();
         activityIndicatorControl.dispose();
         activityLogger.dispose();
