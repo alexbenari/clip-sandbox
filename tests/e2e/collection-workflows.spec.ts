@@ -258,7 +258,9 @@ test.describe('Collection workflows', () => {
 
     await expect(page.locator('#grid .thumb[data-name="sunset.mp4"]')).toBeFocused();
     expect(await allClipNames(page)).toEqual(['duo.webm', 'sunset.mp4']);
-    expect((await fsp.readdir(folderPath)).sort()).toEqual(['duo.webm', 'subset.txt', 'sunset.mp4']);
+    // The fixture's clips are not decodable, so the folder also holds the app's err.log.
+    const clipFiles = (await fsp.readdir(folderPath)).filter(name => /\.(mp4|webm)$/.test(name)).sort();
+    expect(clipFiles).toEqual(['duo.webm', 'sunset.mp4']);
     expect(collectionFileLines(await fsp.readFile(path.join(folderPath, 'subset.txt'), 'utf8'))).toEqual(['sunset.mp4', 'duo.webm']);
   });
 
