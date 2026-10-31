@@ -8,7 +8,7 @@ import { testClip, clipSource } from '../../support/clip-source-fixtures.js';
 
 const createClipCollectionGridControl = options => new ClipCollectionGridControl(options);
 
-describe('clip collection grid controller', () => {
+describe('clip collection grid control', () => {
   let originalPlay;
   let originalPause;
 
@@ -45,23 +45,23 @@ describe('clip collection grid controller', () => {
     root.style.padding = '14px';
     Object.defineProperty(root, 'clientWidth', { configurable: true, value: 428 });
     const computeBestGrid = vi.fn(({ availW }) => ({ cols: availW >= 600 ? 2 : 1, cellH: 100 }));
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid,
       gridRoot: root,
       coordinateWorkspaceLayout: true,
       getAvailableHeight: () => 400,
       layoutRules: { computeBestGrid },
     });
-    controller.renderCollection(makeCollection());
+    control.renderCollection(makeCollection());
     const videos = [...grid.querySelectorAll('video')];
-    controller.beginWorkspaceResize(828, 240);
+    control.beginWorkspaceResize(828, 240);
     expect(grid.dataset.layoutCols).toBe('2');
     expect(grid.children[1].style.top).toBe('0px');
     expect(grid.children[1].style.left).toBe('400px');
     expect([...grid.querySelectorAll('video')]).toEqual(videos);
     Object.defineProperty(root, 'clientWidth', { configurable: true, value: 828 });
     const target = grid.children[1].style.cssText;
-    controller.endWorkspaceResize();
+    control.endWorkspaceResize();
     expect(grid.children[1].style.cssText).toBe(target);
     expect(computeBestGrid).toHaveBeenLastCalledWith(expect.objectContaining({ availW: 800 }));
   });
@@ -81,16 +81,16 @@ describe('clip collection grid controller', () => {
     const grid = document.getElementById('grid');
     const collection = makeThreeClipCollection();
     const opened = vi.fn();
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid, isFullscreen: () => true,
       layoutRules: { computeFullscreenLayout: () => ({ cols: 2, cellH: 100, targetVisible: 2 }) },
     });
-    controller.on('openClipRequested', opened);
-    controller.renderCollection(collection);
+    control.on('openClipRequested', opened);
+    control.renderCollection(collection);
     const cards = [...grid.children];
     const sources = cards.map(card => card.querySelector('video').src);
     vi.spyOn(Math, 'random').mockReturnValue(0);
-    controller.rotateVisibleClip();
+    control.rotateVisibleClip();
     cards[1].querySelector('video').dispatchEvent(new Event('ended'));
     expect(cards[0].style.display).toBe('');
     expect(cards[1].style.display).toBe('none');
@@ -107,79 +107,79 @@ describe('clip collection grid controller', () => {
     expect(collection.getClip('clip_2').durationSec).toBeNull();
     cards[0].dispatchEvent(new MouseEvent('dblclick'));
     expect(opened).toHaveBeenCalledWith('clip_1');
-    controller.rotateVisibleClip();
-    controller.fsRestore();
+    control.rotateVisibleClip();
+    control.fsRestore();
     cards.forEach(card => card.querySelector('video').dispatchEvent(new Event('ended')));
     expect(cards.every(card => card.style.display === '' && card.style.order === '')).toBe(true);
     expect(cards.every(card => card.querySelector('video').loop)).toBe(true);
-    controller.dispose();
+    control.dispose();
   });
 
   function fullScreenWithHiddenCard() {
     const grid = document.getElementById('grid');
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid, isFullscreen: () => true,
       layoutRules: { computeFullscreenLayout: () => ({ cols: 2, cellH: 100, targetVisible: 2 }) },
     });
-    controller.renderCollection(makeThreeClipCollection());
-    controller.fsApplySlots(2);
+    control.renderCollection(makeThreeClipCollection());
+    control.fsApplySlots(2);
     const hiddenVideo = [...grid.children].find(card => card.style.display === 'none').querySelector('video');
-    return { controller, hiddenVideo };
+    return { control, hiddenVideo };
   }
 
   test('full screen pauses the clips it hides', () => {
-    const { controller, hiddenVideo } = fullScreenWithHiddenCard();
+    const { control, hiddenVideo } = fullScreenWithHiddenCard();
 
     expect(new Set(HTMLMediaElement.prototype.pause.mock.instances)).toEqual(new Set([hiddenVideo]));
-    controller.dispose();
+    control.dispose();
   });
 
   test('restoring the grid after full screen plays the clips full screen hid', () => {
-    const { controller, hiddenVideo } = fullScreenWithHiddenCard();
+    const { control, hiddenVideo } = fullScreenWithHiddenCard();
     HTMLMediaElement.prototype.play.mockClear();
 
-    controller.fsRestore();
+    control.fsRestore();
 
     expect(HTMLMediaElement.prototype.play.mock.instances).toEqual([hiddenVideo]);
-    controller.dispose();
+    control.dispose();
   });
 
   test('full screen starts no clip it hides when that clip becomes ready', () => {
-    const { controller, hiddenVideo } = fullScreenWithHiddenCard();
+    const { control, hiddenVideo } = fullScreenWithHiddenCard();
     HTMLMediaElement.prototype.play.mockClear();
 
     hiddenVideo.dispatchEvent(new Event('canplay'));
 
     expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
-    controller.dispose();
+    control.dispose();
   });
 
   test('view replacement, restart and disposal cancel pending fullscreen rotation', () => {
     const grid = document.getElementById('grid');
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid, isFullscreen: () => true,
       layoutRules: { computeFullscreenLayout: () => ({ cols: 2, cellH: 100, targetVisible: 2 }) },
     });
     vi.spyOn(Math, 'random').mockReturnValue(0);
-    controller.renderCollection(makeThreeClipCollection(), { cacheKey: 'first' });
+    control.renderCollection(makeThreeClipCollection(), { cacheKey: 'first' });
     const oldVideo = grid.children[1].querySelector('video');
-    controller.rotateVisibleClip();
-    controller.renderCollection(makeThreeClipCollection(), { cacheKey: 'second' });
+    control.rotateVisibleClip();
+    control.renderCollection(makeThreeClipCollection(), { cacheKey: 'second' });
     const active = document.getElementById('grid');
     const before = [...active.children].map(card => card.style.display);
     oldVideo.dispatchEvent(new Event('ended'));
     expect([...active.children].map(card => card.style.display)).toEqual(before);
     expect(oldVideo.loop).toBe(true);
     const currentVideo = active.children[1].querySelector('video');
-    controller.rotateVisibleClip();
-    controller.cancelRotation();
-    controller.rotateVisibleClip();
+    control.rotateVisibleClip();
+    control.cancelRotation();
+    control.rotateVisibleClip();
     currentVideo.dispatchEvent(new Event('ended'));
     expect(active.children[0].style.display).toBe('');
     expect(active.children[1].style.display).toBe('none');
-    controller.rotateVisibleClip();
+    control.rotateVisibleClip();
     const finalVideo = active.children[0].querySelector('video');
-    controller.dispose();
+    control.dispose();
     finalVideo.dispatchEvent(new Event('ended'));
     expect(active.children).toHaveLength(0);
     expect(finalVideo.loop).toBe(true);
@@ -187,52 +187,52 @@ describe('clip collection grid controller', () => {
 
   test('tracks single and modifier-based multi-selection by clip id', () => {
     const selectionChanges = [];
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       recomputeLayout: vi.fn(),
     });
-    controller.on('selectionChanged', ({ selectedClipId, selectedClipIds }) => selectionChanges.push({ clipId: selectedClipId, clipIds: selectedClipIds }));
+    control.on('selectionChanged', ({ selectedClipId, selectedClipIds }) => selectionChanges.push({ clipId: selectedClipId, clipIds: selectedClipIds }));
 
-    controller.renderCollection(makeCollection());
+    control.renderCollection(makeCollection());
     const cards = document.querySelectorAll('#grid .thumb');
     expect(cards).toHaveLength(2);
     expect([...document.querySelectorAll('#grid video')].every(video => video.muted)).toBe(true);
     cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(controller.getSelectedClipId()).toBe('clip_1');
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
+    expect(control.getSelectedClipId()).toBe('clip_1');
+    expect(control.getSelectedClipIds()).toEqual(['clip_1']);
     expect(selectionChanges.at(-1)).toEqual({ clipId: 'clip_1', clipIds: ['clip_1'] });
     expect(cards[0].classList.contains('selected')).toBe(true);
 
     cards[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
-    expect(controller.getSelectedClipId()).toBeNull();
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+    expect(control.getSelectedClipId()).toBeNull();
+    expect(control.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
     expect(cards[1].classList.contains('selected')).toBe(true);
 
     cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
-    expect(controller.getSelectedClipId()).toBe('clip_2');
-    expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
+    expect(control.getSelectedClipId()).toBe('clip_2');
+    expect(control.getSelectedClipIds()).toEqual(['clip_2']);
 
     cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(controller.getSelectedClipId()).toBe('clip_1');
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
+    expect(control.getSelectedClipId()).toBe('clip_1');
+    expect(control.getSelectedClipIds()).toEqual(['clip_1']);
   });
 
   test('reorders a collection view without pulling cards from a cached view of the same clips', () => {
     const orders = [];
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       recomputeLayout: vi.fn(),
     });
-    controller.on('orderChanged', (ids) => orders.push(ids));
+    control.on('orderChanged', (ids) => orders.push(ids));
     const pipeline = makeThreeClipCollection();
     const [alpha, bravo, charlie] = pipeline.orderedClips();
-    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    control.renderCollection(pipeline, { cacheKey: 'pipeline' });
     const pipelineGrid = document.getElementById('grid');
-    controller.renderCollection(new ClipSequence({ name: 'subset', clips: [charlie, alpha] }), { cacheKey: 'subset.txt' });
+    control.renderCollection(new ClipSequence({ name: 'subset', clips: [charlie, alpha] }), { cacheKey: 'subset.txt' });
     const collectionGrid = document.getElementById('grid');
     expect(collectionGrid).not.toBe(pipelineGrid);
     const cards = [...collectionGrid.children];
@@ -255,22 +255,22 @@ describe('clip collection grid controller', () => {
     expect(orders.at(-1)).toEqual([alpha.id, charlie.id]);
     expect([...collectionGrid.children].map(card => card.dataset.clipId)).toEqual([alpha.id, charlie.id]);
     expect([...pipelineGrid.children].map(card => card.dataset.clipId)).toEqual([alpha.id, bravo.id, charlie.id]);
-    expect(controller.getCardCount()).toBe(2);
+    expect(control.getCardCount()).toBe(2);
   });
 
   test('emits full order after drag-drop reorder and provides clip media source', () => {
     const orders = [];
     const openRequests = [];
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       recomputeLayout: vi.fn(),
     });
-    controller.on('orderChanged', (ids) => orders.push(ids));
-    controller.on('openClipRequested', (clipId) => openRequests.push(clipId));
+    control.on('orderChanged', (ids) => orders.push(ids));
+    control.on('openClipRequested', (clipId) => openRequests.push(clipId));
 
-    controller.renderCollection(makeCollection());
+    control.renderCollection(makeCollection());
     const cards = document.querySelectorAll('#grid .thumb');
     const dataTransfer = {
       effectAllowed: '',
@@ -292,24 +292,24 @@ describe('clip collection grid controller', () => {
     expect(orders.at(-1)).toEqual(['clip_2', 'clip_1']);
     document.querySelectorAll('#grid .thumb')[0].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     expect(openRequests).toEqual(['clip_2']);
-    expect(controller.getClipMediaSource('clip_2')).toBe('file:///clips/bravo.webm');
-    expect(controller.getClipById('clip_2')?.name).toBe('bravo.webm');
-    expect(controller.getPrevClip('clip_2')).toBeNull();
-    expect(controller.getNextClip('clip_2')?.id).toBe('clip_1');
-    expect(controller.getPrevClip('clip_1')?.id).toBe('clip_2');
-    expect(controller.getNextClip('clip_1')).toBeNull();
-    expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
+    expect(control.getClipMediaSource('clip_2')).toBe('file:///clips/bravo.webm');
+    expect(control.getClipById('clip_2')?.name).toBe('bravo.webm');
+    expect(control.getPrevClip('clip_2')).toBeNull();
+    expect(control.getNextClip('clip_2')?.id).toBe('clip_1');
+    expect(control.getPrevClip('clip_1')?.id).toBe('clip_2');
+    expect(control.getNextClip('clip_1')).toBeNull();
+    expect(control.getSelectedClipIds()).toEqual(['clip_2']);
   });
 
   test('renders safe filename labels and updates duration text', () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name, seconds) => `${name} (${seconds ?? '--:--:--'})`,
       recomputeLayout: vi.fn(),
     });
 
-    controller.renderCollection(
+    control.renderCollection(
       new ClipSequence({
         name: 'demo',
         clips: [testClip('clip_1', '<img src=x>.mp4')],
@@ -328,14 +328,14 @@ describe('clip collection grid controller', () => {
   });
 
   test('waits for a card\'s metadata before starting its preview playback', () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       recomputeLayout: vi.fn(),
     });
 
-    controller.renderCollection(makeCollection());
+    control.renderCollection(makeCollection());
 
     const videos = Array.from(document.querySelectorAll('#grid video'));
     expect(videos).toHaveLength(2);
@@ -351,74 +351,74 @@ describe('clip collection grid controller', () => {
   });
 
   test('pauses the previews of a view it leaves', () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'), gridRoot: document.getElementById('gridWrap'), formatLabel: (name) => name,
     });
     const pipeline = makeThreeClipCollection();
-    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    control.renderCollection(pipeline, { cacheKey: 'pipeline' });
     const pipelineVideos = Array.from(document.querySelectorAll('#grid video'));
     for (const video of pipelineVideos) Object.defineProperty(video, 'paused', { value: false, configurable: true });
 
-    controller.renderCollection(new ClipSequence({ name: 'subset', clips: [pipeline.orderedClips()[0]] }), { cacheKey: 'collection:subset.txt' });
+    control.renderCollection(new ClipSequence({ name: 'subset', clips: [pipeline.orderedClips()[0]] }), { cacheKey: 'collection:subset.txt' });
 
     expect(new Set(HTMLMediaElement.prototype.pause.mock.instances)).toEqual(new Set(pipelineVideos));
-    controller.dispose();
+    control.dispose();
   });
 
   test('starts no preview of a view it left when that preview becomes ready', () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'), gridRoot: document.getElementById('gridWrap'), formatLabel: (name) => name,
     });
     const pipeline = makeThreeClipCollection();
-    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    control.renderCollection(pipeline, { cacheKey: 'pipeline' });
     const pipelineVideo = document.querySelector('#grid video');
-    controller.renderCollection(new ClipSequence({ name: 'subset', clips: [pipeline.orderedClips()[0]] }), { cacheKey: 'collection:subset.txt' });
+    control.renderCollection(new ClipSequence({ name: 'subset', clips: [pipeline.orderedClips()[0]] }), { cacheKey: 'collection:subset.txt' });
 
     pipelineVideo.dispatchEvent(new Event('canplay'));
 
     expect(HTMLMediaElement.prototype.play.mock.instances).not.toContain(pipelineVideo);
-    controller.dispose();
+    control.dispose();
   });
 
   describe('holding previews', () => {
     function gridWithReadyVideos({ playing = false } = {}) {
-      const controller = createClipCollectionGridControl({
+      const control = createClipCollectionGridControl({
         grid: document.getElementById('grid'), gridRoot: document.getElementById('gridWrap'), formatLabel: (name) => name,
       });
-      controller.renderCollection(makeThreeClipCollection(), { cacheKey: 'pipeline' });
+      control.renderCollection(makeThreeClipCollection(), { cacheKey: 'pipeline' });
       const videos = Array.from(document.querySelectorAll('#grid video'));
       for (const video of videos) {
         Object.defineProperty(video, 'readyState', { value: 2, configurable: true });
         Object.defineProperty(video, 'paused', { value: !playing, configurable: true });
       }
-      return { controller, videos };
+      return { control, videos };
     }
 
     test('pauses every playing preview', () => {
-      const { controller, videos } = gridWithReadyVideos({ playing: true });
+      const { control, videos } = gridWithReadyVideos({ playing: true });
 
-      controller.holdPreviews();
+      control.holdPreviews();
 
       expect(new Set(HTMLMediaElement.prototype.pause.mock.instances)).toEqual(new Set(videos));
-      controller.dispose();
+      control.dispose();
     });
 
     test('starts no preview that becomes ready while held', () => {
-      const { controller, videos } = gridWithReadyVideos();
-      controller.holdPreviews();
+      const { control, videos } = gridWithReadyVideos();
+      control.holdPreviews();
 
       videos[0].dispatchEvent(new Event('canplay'));
 
       expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
-      controller.dispose();
+      control.dispose();
     });
 
     test('plays the previews again once every hold is released', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] });
       try {
-        const { controller, videos } = gridWithReadyVideos();
-        const releaseZoom = controller.holdPreviews();
-        const releaseScreen = controller.holdPreviews();
+        const { control, videos } = gridWithReadyVideos();
+        const releaseZoom = control.holdPreviews();
+        const releaseScreen = control.holdPreviews();
 
         releaseZoom();
         await vi.runAllTimersAsync();
@@ -427,7 +427,7 @@ describe('clip collection grid controller', () => {
         await vi.runAllTimersAsync();
 
         expect(new Set(HTMLMediaElement.prototype.play.mock.instances)).toEqual(new Set(videos));
-        controller.dispose();
+        control.dispose();
       } finally {
         vi.useRealTimers();
       }
@@ -436,16 +436,16 @@ describe('clip collection grid controller', () => {
     test('a release called twice does not release another hold', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] });
       try {
-        const { controller } = gridWithReadyVideos();
-        const release = controller.holdPreviews();
-        controller.holdPreviews();
+        const { control } = gridWithReadyVideos();
+        const release = control.holdPreviews();
+        control.holdPreviews();
 
         release();
         release();
         await vi.runAllTimersAsync();
 
         expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
-        controller.dispose();
+        control.dispose();
       } finally {
         vi.useRealTimers();
       }
@@ -455,7 +455,7 @@ describe('clip collection grid controller', () => {
   test('reuses cached card videos and resumes their playback after switching back to an unchanged view', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] });
     try {
-      const controller = createClipCollectionGridControl({
+      const control = createClipCollectionGridControl({
         grid: document.getElementById('grid'),
         gridRoot: document.getElementById('gridWrap'),
         formatLabel: (name) => name,
@@ -463,12 +463,12 @@ describe('clip collection grid controller', () => {
       });
       const pipeline = makeThreeClipCollection();
       const collection = new ClipSequence({ name: 'subset', clips: [pipeline.orderedClips()[0]] });
-      controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+      control.renderCollection(pipeline, { cacheKey: 'pipeline' });
       const pipelineGrid = document.getElementById('grid');
       const pipelineVideos = Array.from(pipelineGrid.querySelectorAll('video'));
       for (const video of pipelineVideos) Object.defineProperty(video, 'readyState', { value: 2, configurable: true });
 
-      controller.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
+      control.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
       const collectionGrid = document.getElementById('grid');
       expect(collectionGrid).not.toBe(pipelineGrid);
       expect(pipelineGrid.inert).toBe(true);
@@ -477,7 +477,7 @@ describe('clip collection grid controller', () => {
 
       HTMLMediaElement.prototype.play.mockClear();
       for (const video of pipelineVideos) Object.defineProperty(video, 'paused', { value: true, configurable: true });
-      controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+      control.renderCollection(pipeline, { cacheKey: 'pipeline' });
 
       expect(document.getElementById('grid')).toBe(pipelineGrid);
       expect(Array.from(pipelineGrid.querySelectorAll('video'))).toEqual(pipelineVideos);
@@ -491,14 +491,14 @@ describe('clip collection grid controller', () => {
         'clip_2',
         'clip_3',
       ]);
-      controller.dispose();
+      control.dispose();
     } finally {
       vi.useRealTimers();
     }
   });
 
   test('invalidates cached card videos when a view sequence changes', () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -510,11 +510,11 @@ describe('clip collection grid controller', () => {
       clips: [pipeline.orderedClips()[0]],
     });
 
-    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    control.renderCollection(pipeline, { cacheKey: 'pipeline' });
     const firstPipelineVideo = document.querySelector('#grid video');
-    controller.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
-    controller.invalidateView('pipeline');
-    controller.renderCollection(new ClipSequence({
+    control.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
+    control.invalidateView('pipeline');
+    control.renderCollection(new ClipSequence({
       name: 'changed',
       clips: pipeline.orderedClips().slice(0, 2),
     }), { cacheKey: 'pipeline' });
@@ -527,7 +527,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('switches back to an unchanged cached view without rewriting its card layout', () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -538,13 +538,13 @@ describe('clip collection grid controller', () => {
       name: 'subset',
       clips: [pipeline.orderedClips()[0]],
     });
-    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    control.renderCollection(pipeline, { cacheKey: 'pipeline' });
     const pipelineCards = [...document.querySelectorAll('#grid .thumb')];
-    controller.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
+    control.renderCollection(collection, { cacheKey: 'collection:subset.txt' });
     const cardStyleWrites = new MutationObserver(() => undefined);
     for (const card of pipelineCards) cardStyleWrites.observe(card, { attributes: true, attributeFilter: ['style'] });
 
-    controller.renderCollection(pipeline, { cacheKey: 'pipeline' });
+    control.renderCollection(pipeline, { cacheKey: 'pipeline' });
 
     expect(cardStyleWrites.takeRecords()).toEqual([]);
     expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(3, 1fr)');
@@ -552,85 +552,85 @@ describe('clip collection grid controller', () => {
   });
 
   test('owns title visibility on the grid surface', () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       recomputeLayout: vi.fn(),
     });
 
-    expect(controller.areTitlesHidden()).toBe(false);
+    expect(control.areTitlesHidden()).toBe(false);
     expect(document.getElementById('clipCollectionGridStyles')).not.toBeNull();
     expect(document.getElementById('gridWrap').classList.contains('clip-collection-grid-root')).toBe(true);
     expect(document.getElementById('grid').classList.contains('clip-collection-grid')).toBe(true);
-    controller.setTitlesHidden(true);
-    expect(controller.areTitlesHidden()).toBe(true);
+    control.setTitlesHidden(true);
+    expect(control.areTitlesHidden()).toBe(true);
     expect(document.getElementById('gridWrap').classList.contains('titles-hidden')).toBe(true);
   });
 
   describe('source movie glyph', () => {
     function gridWithClips() {
-      const controller = createClipCollectionGridControl({
+      const control = createClipCollectionGridControl({
         grid: document.getElementById('grid'),
         gridRoot: document.getElementById('gridWrap'),
       });
       const sequence = makeThreeClipCollection();
       const [alpha, bravo] = sequence.orderedClips();
-      return { controller, sequence, alpha, bravo };
+      return { control, sequence, alpha, bravo };
     }
 
     const cardOf = clip => document.querySelector(`#grid .thumb[data-clip-id="${clip.id}"]`);
     const sampleFeature = () => SourceMovie.fromFileName('Sample Feature.2001.mkv');
 
     test('marks a clip that came from a movie with a glyph naming that movie', () => {
-      const { controller, sequence, alpha } = gridWithClips();
+      const { control, sequence, alpha } = gridWithClips();
       alpha.recordSourceMovie(sampleFeature());
 
-      controller.renderCollection(sequence);
+      control.renderCollection(sequence);
 
       expect(cardOf(alpha).querySelector('.source-glyph')?.title).toBe('From Sample Feature.2001');
       expect(cardOf(alpha).getAttribute('aria-description')).toBe('From Sample Feature.2001');
     });
 
     test('shows no glyph on a clip without a source movie', () => {
-      const { controller, sequence, bravo } = gridWithClips();
+      const { control, sequence, bravo } = gridWithClips();
 
-      controller.renderCollection(sequence);
+      control.renderCollection(sequence);
 
       expect(cardOf(bravo).querySelector('.source-glyph')).toBeNull();
       expect(cardOf(bravo).hasAttribute('aria-description')).toBe(false);
     });
 
     test('hides glyphs with the titles while keeping the card description', () => {
-      const { controller, sequence, alpha } = gridWithClips();
+      const { control, sequence, alpha } = gridWithClips();
       alpha.recordSourceMovie(sampleFeature());
-      controller.renderCollection(sequence);
+      control.renderCollection(sequence);
 
-      controller.setTitlesHidden(true);
+      control.setTitlesHidden(true);
 
       expect(getComputedStyle(cardOf(alpha).querySelector('.source-glyph')).display).toBe('none');
       expect(cardOf(alpha).getAttribute('aria-description')).toBe('From Sample Feature.2001');
     });
 
     test('shows a glyph learned while its view was cached once that view is shown again', () => {
-      const { controller, sequence, alpha } = gridWithClips();
-      controller.renderCollection(sequence, { cacheKey: 'pipeline' });
-      controller.renderCollection(new ClipSequence({ name: 'subset', clips: [sequence.orderedClips()[2]] }), { cacheKey: 'collection:subset.txt' });
+      const { control, sequence, alpha } = gridWithClips();
+      control.renderCollection(sequence, { cacheKey: 'pipeline' });
+      control.renderCollection(new ClipSequence({ name: 'subset', clips: [sequence.orderedClips()[2]] }), { cacheKey: 'collection:subset.txt' });
       alpha.recordSourceMovie(sampleFeature());
 
-      controller.refreshSourceMovieGlyphs();
-      controller.renderCollection(sequence, { cacheKey: 'pipeline' });
+      control.refreshSourceMovieGlyphs();
+      control.renderCollection(sequence, { cacheKey: 'pipeline' });
 
       expect(cardOf(alpha).querySelector('.source-glyph')?.title).toBe('From Sample Feature.2001');
     });
 
     test('removes the glyph when the clip no longer has a source movie', () => {
-      const { controller, sequence, alpha } = gridWithClips();
+      const { control, sequence, alpha } = gridWithClips();
       alpha.recordSourceMovie(sampleFeature());
-      controller.renderCollection(sequence);
+      control.renderCollection(sequence);
 
       alpha.recordSourceMovie(null);
-      controller.refreshSourceMovieGlyphs();
+      control.refreshSourceMovieGlyphs();
 
       expect(cardOf(alpha).querySelector('.source-glyph')).toBeNull();
       expect(cardOf(alpha).hasAttribute('aria-description')).toBe(false);
@@ -648,7 +648,7 @@ describe('clip collection grid controller', () => {
     try {
       const gridRoot = document.getElementById('gridWrap');
       const computeBestGrid = vi.fn(() => ({ cols: 1, cellH: 100 }));
-      const controller = createClipCollectionGridControl({
+      const control = createClipCollectionGridControl({
         grid: document.getElementById('grid'),
         gridRoot,
         coordinateWorkspaceLayout: true,
@@ -656,7 +656,7 @@ describe('clip collection grid controller', () => {
         layoutRules: { computeBestGrid },
         observeRootResize: true,
       });
-      controller.renderCollection(makeCollection());
+      control.renderCollection(makeCollection());
       const [observer] = observers;
       expect(observer.element).toBe(gridRoot);
 
@@ -664,20 +664,20 @@ describe('clip collection grid controller', () => {
       observer.callback();
       expect(computeBestGrid).toHaveBeenCalled();
 
-      controller.beginWorkspaceResize(800, 240);
+      control.beginWorkspaceResize(800, 240);
       computeBestGrid.mockClear();
       observer.callback();
       expect(computeBestGrid).not.toHaveBeenCalled();
 
-      controller.endWorkspaceResize();
-      controller.clear();
-      controller.renderCollection(makeCollection());
+      control.endWorkspaceResize();
+      control.clear();
+      control.renderCollection(makeCollection());
       computeBestGrid.mockClear();
       observer.callback();
       expect(observer.disconnected).toBeUndefined();
       expect(computeBestGrid).toHaveBeenCalled();
 
-      controller.dispose();
+      control.dispose();
       expect(observer.disconnected).toBe(true);
     } finally {
       window.ResizeObserver = originalResizeObserver;
@@ -689,7 +689,7 @@ describe('clip collection grid controller', () => {
     const gridRoot = document.getElementById('gridWrap');
     Object.defineProperty(gridRoot, 'clientWidth', { value: 900, configurable: true });
     let fullscreen = false;
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid,
       gridRoot,
       formatLabel: (name) => name,
@@ -700,19 +700,19 @@ describe('clip collection grid controller', () => {
       isFullscreen: () => fullscreen,
     });
 
-    controller.renderCollection(makeThreeClipCollection());
+    control.renderCollection(makeThreeClipCollection());
     expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(2, 1fr)');
     expect(document.querySelector('#grid .thumb').style.height).toBe('180px');
 
     fullscreen = true;
-    controller.recomputeLayout();
+    control.recomputeLayout();
     expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(2, 1fr)');
     expect(document.querySelector('#grid .thumb').style.height).toBe('220px');
 
     const cards = Array.from(document.querySelectorAll('#grid .thumb'));
     expect(cards.filter((card) => card.style.display === 'none')).toHaveLength(1);
 
-    controller.fsRestore();
+    control.fsRestore();
     expect(cards.every((card) => card.style.display === '')).toBe(true);
   });
 
@@ -723,7 +723,7 @@ describe('clip collection grid controller', () => {
     const computeBestGrid = vi.fn()
       .mockReturnValueOnce({ cols: 1, cellH: 100 })
       .mockReturnValueOnce({ cols: 2, cellH: 180 });
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid,
       gridRoot,
       formatLabel: (name) => name,
@@ -731,7 +731,7 @@ describe('clip collection grid controller', () => {
     });
     const collection = makeCollection();
 
-    controller.renderCollection(collection);
+    control.renderCollection(collection);
     const videos = Array.from(document.querySelectorAll('#grid video'));
     for (const video of videos) {
       Object.defineProperty(video, 'duration', { value: 2.5, configurable: true });
@@ -749,7 +749,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('skips metadata-complete relayout when the column count is unchanged', async () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -760,7 +760,7 @@ describe('clip collection grid controller', () => {
       },
     });
 
-    controller.renderCollection(makeCollection());
+    control.renderCollection(makeCollection());
     for (const video of Array.from(document.querySelectorAll('#grid video'))) {
       Object.defineProperty(video, 'duration', { value: 1, configurable: true });
       Object.defineProperty(video, 'videoWidth', { value: 640, configurable: true });
@@ -774,7 +774,7 @@ describe('clip collection grid controller', () => {
   });
 
   test('defers metadata-complete relayout while dragging', async () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -785,7 +785,7 @@ describe('clip collection grid controller', () => {
       },
     });
 
-    controller.renderCollection(makeCollection());
+    control.renderCollection(makeCollection());
     const cards = document.querySelectorAll('#grid .thumb');
     const dragStartEvent = new Event('dragstart', { bubbles: true });
     Object.defineProperty(dragStartEvent, 'dataTransfer', {
@@ -811,7 +811,7 @@ describe('clip collection grid controller', () => {
 
   test('reports metadata failure once and still completes relayout', async () => {
     const metadataFailures = [];
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
@@ -821,9 +821,9 @@ describe('clip collection grid controller', () => {
           .mockReturnValueOnce({ cols: 2, cellH: 180 }),
       },
     });
-    controller.on('metadataFailed', (failure) => metadataFailures.push(failure));
+    control.on('metadataFailed', (failure) => metadataFailures.push(failure));
 
-    controller.renderCollection(makeCollection());
+    control.renderCollection(makeCollection());
     const videos = Array.from(document.querySelectorAll('#grid video'));
     Object.defineProperty(videos[0], 'duration', { value: 1, configurable: true });
     Object.defineProperty(videos[0], 'videoWidth', { value: 640, configurable: true });
@@ -835,20 +835,20 @@ describe('clip collection grid controller', () => {
 
     expect(metadataFailures).toHaveLength(1);
     expect(metadataFailures[0].clip.name).toBe('bravo.webm');
-    expect(controller.getClipById('clip_2').metadataFailed).toBe(true);
+    expect(control.getClipById('clip_2').metadataFailed).toBe(true);
     expect(document.querySelector('#grid').style.gridTemplateColumns).toBe('repeat(2, 1fr)');
     expect(document.querySelector('#grid .thumb').style.height).toBe('180px');
   });
 
   test('clears drag-over state when rerendering or disposing', () => {
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       recomputeLayout: vi.fn(),
     });
 
-    controller.renderCollection(makeCollection());
+    control.renderCollection(makeCollection());
     const cards = document.querySelectorAll('#grid .thumb');
     cards[0].classList.add('drag-over');
     cards[1].classList.add('drag-over');
@@ -866,24 +866,24 @@ describe('clip collection grid controller', () => {
     expect(cards[0].classList.contains('drag-over')).toBe(false);
     expect(cards[1].classList.contains('drag-over')).toBe(false);
 
-    controller.renderCollection(makeCollection());
-    controller.setTitlesHidden(true);
-    controller.dispose();
+    control.renderCollection(makeCollection());
+    control.setTitlesHidden(true);
+    control.dispose();
     expect(document.getElementById('grid').children).toHaveLength(0);
     expect(document.getElementById('gridWrap').classList.contains('titles-hidden')).toBe(false);
   });
 
   test('drops invalid selections on rerender and emits ordered selected ids for removal', () => {
     const removalRequests = [];
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       recomputeLayout: vi.fn(),
     });
-    controller.on('removeSelectedRequested', (clipIds) => removalRequests.push(clipIds));
+    control.on('removeSelectedRequested', (clipIds) => removalRequests.push(clipIds));
 
-    controller.renderCollection(
+    control.renderCollection(
       new ClipSequence({
         name: 'demo',
         clips: [
@@ -897,9 +897,9 @@ describe('clip collection grid controller', () => {
     const cards = document.querySelectorAll('#grid .thumb');
     cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     cards[2].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_3']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1', 'clip_3']);
 
-    const handled = controller.handleKeyDown(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    const handled = control.handleKeyDown(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
     expect(handled).toBe(true);
     expect(removalRequests).toEqual([['clip_1', 'clip_3']]);
 
@@ -907,29 +907,29 @@ describe('clip collection grid controller', () => {
     document.body.appendChild(input);
     const inputDelete = new KeyboardEvent('keydown', { key: 'Delete', bubbles: true });
     Object.defineProperty(inputDelete, 'target', { value: input });
-    expect(controller.handleKeyDown(inputDelete)).toBe(false);
+    expect(control.handleKeyDown(inputDelete)).toBe(false);
 
-    controller.renderCollection(
+    control.renderCollection(
       new ClipSequence({
         name: 'subset',
         clips: [testClip('clip_3', 'charlie.mp4')],
       })
     );
-    expect(controller.getSelectedClipIds()).toEqual(['clip_3']);
-    expect(controller.getSelectedClipId()).toBe('clip_3');
+    expect(control.getSelectedClipIds()).toEqual(['clip_3']);
+    expect(control.getSelectedClipId()).toBe('clip_3');
   });
 
   test('emits context-menu requests without changing the current selection', () => {
     const contextMenuRequests = [];
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       recomputeLayout: vi.fn(),
     });
-    controller.on('contextMenuRequested', (payload) => contextMenuRequests.push(payload));
+    control.on('contextMenuRequested', (payload) => contextMenuRequests.push(payload));
 
-    controller.renderCollection(
+    control.renderCollection(
       new ClipSequence({
         name: 'demo',
         clips: [
@@ -942,7 +942,7 @@ describe('clip collection grid controller', () => {
     const cards = document.querySelectorAll('#grid .thumb');
     cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     cards[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
 
     document.getElementById('gridWrap').dispatchEvent(new MouseEvent('contextmenu', {
       bubbles: true,
@@ -953,59 +953,59 @@ describe('clip collection grid controller', () => {
     expect(contextMenuRequests).toHaveLength(1);
     expect(contextMenuRequests[0].selectedClipIds).toEqual(['clip_1', 'clip_2']);
     expect(contextMenuRequests[0].clipId).toBeNull();
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
   });
 
   function gridWithTwoClips() {
     const contextMenuRequests = [];
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       recomputeLayout: vi.fn(),
     });
-    controller.on('contextMenuRequested', (payload) => contextMenuRequests.push(payload));
-    controller.renderCollection(new ClipSequence({
+    control.on('contextMenuRequested', (payload) => contextMenuRequests.push(payload));
+    control.renderCollection(new ClipSequence({
       name: 'demo',
       clips: [testClip('clip_1', 'alpha.mp4'), testClip('clip_2', 'bravo.webm')],
     }));
     const cards = document.querySelectorAll('#grid .thumb');
     const rightClick = (card) => card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
-    return { controller, contextMenuRequests, cards, rightClick };
+    return { control, contextMenuRequests, cards, rightClick };
   }
 
   test('right-clicking a clip outside the selection makes it the only selected clip before the menu request', () => {
-    const { controller, contextMenuRequests, cards, rightClick } = gridWithTwoClips();
+    const { control, contextMenuRequests, cards, rightClick } = gridWithTwoClips();
     cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     rightClick(cards[1]);
 
-    expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_2']);
     expect(contextMenuRequests[0]).toMatchObject({ clipId: 'clip_2', selectedClipIds: ['clip_2'], fromKeyboard: false });
   });
 
   test('right-clicking a clip inside a multi-selection keeps the selection', () => {
-    const { controller, cards, rightClick } = gridWithTwoClips();
+    const { control, cards, rightClick } = gridWithTwoClips();
     cards[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     cards[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
 
     rightClick(cards[1]);
 
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
   });
 
   // Five cards laid out in two columns: rows [alpha, bravo], [charlie, delta], [echo].
   function keyboardGrid() {
     const requests = { orders: [], menus: [] };
-    const controller = createClipCollectionGridControl({
+    const control = createClipCollectionGridControl({
       grid: document.getElementById('grid'),
       gridRoot: document.getElementById('gridWrap'),
       formatLabel: (name) => name,
       layoutRules: { computeBestGrid: () => ({ cols: 2, cellH: 100 }) },
     });
-    controller.on('orderChanged', (ids) => requests.orders.push(ids));
-    controller.on('contextMenuRequested', (payload) => requests.menus.push(payload));
-    controller.renderCollection(new ClipSequence({
+    control.on('orderChanged', (ids) => requests.orders.push(ids));
+    control.on('contextMenuRequested', (payload) => requests.menus.push(payload));
+    control.renderCollection(new ClipSequence({
       name: 'demo',
       clips: ['alpha', 'bravo', 'charlie', 'delta', 'echo'].map((name, index) => testClip(`clip_${index + 1}`, `${name}.mp4`)),
     }));
@@ -1014,10 +1014,10 @@ describe('clip collection grid controller', () => {
     const press = (key, modifiers = {}) => {
       const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers });
       Object.defineProperty(event, 'target', { value: document.activeElement });
-      controller.handleCardKey(event);
+      control.handleCardKey(event);
       return event;
     };
-    return { controller, requests, card, focusedName, press };
+    return { control, requests, card, focusedName, press };
   }
 
   test('arrow keys move focus to the neighbouring card and one row up or down', () => {
@@ -1047,68 +1047,68 @@ describe('clip collection grid controller', () => {
   });
 
   test('an arrow key selects only the card it moves to', () => {
-    const { controller, card, press } = keyboardGrid();
+    const { control, card, press } = keyboardGrid();
     card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     card('alpha').focus();
 
     press('ArrowDown');
 
-    expect(controller.getSelectedClipIds()).toEqual(['clip_3']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_3']);
   });
 
   test('an arrow key at the edge of the grid keeps the selection', () => {
-    const { controller, card, press } = keyboardGrid();
+    const { control, card, press } = keyboardGrid();
     card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     card('alpha').focus();
 
     press('ArrowLeft');
 
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1']);
   });
 
   test('Ctrl+arrow moves focus and leaves the selection as it was', () => {
-    const { controller, card, focusedName, press } = keyboardGrid();
+    const { control, card, focusedName, press } = keyboardGrid();
     card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     card('alpha').focus();
 
     press('ArrowRight', { ctrlKey: true });
 
     expect(focusedName()).toBe('bravo');
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1']);
   });
 
   test('Shift+arrow selects the clips from the one selected on its own to the focused one', () => {
-    const { controller, card, focusedName, press } = keyboardGrid();
+    const { control, card, focusedName, press } = keyboardGrid();
     card('bravo').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     card('bravo').focus();
 
     press('ArrowDown', { shiftKey: true });
-    expect(controller.getSelectedClipIds()).toEqual(['clip_2', 'clip_3', 'clip_4']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_2', 'clip_3', 'clip_4']);
     press('ArrowLeft', { shiftKey: true });
-    expect(controller.getSelectedClipIds()).toEqual(['clip_2', 'clip_3']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_2', 'clip_3']);
     press('ArrowUp', { shiftKey: true });
     expect(focusedName()).toBe('alpha');
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
   });
 
   test('Shift+arrow extends from the clicked clip after Ctrl+arrow moved the focus away', () => {
-    const { controller, card, press } = keyboardGrid();
+    const { control, card, press } = keyboardGrid();
     card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     card('alpha').focus();
     press('ArrowRight', { ctrlKey: true });
 
     press('ArrowRight', { shiftKey: true });
 
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2', 'clip_3']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1', 'clip_2', 'clip_3']);
   });
 
   test('Shift+arrow with nothing selected selects from the card the key moved from', () => {
-    const { controller, card, press } = keyboardGrid();
+    const { control, card, press } = keyboardGrid();
     card('charlie').focus();
 
     press('ArrowRight', { shiftKey: true });
 
-    expect(controller.getSelectedClipIds()).toEqual(['clip_3', 'clip_4']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_3', 'clip_4']);
   });
 
   test('only the focused card is a Tab stop, so Tab enters and leaves the grid once', () => {
@@ -1124,24 +1124,24 @@ describe('clip collection grid controller', () => {
   });
 
   test('Space selects only the focused card and Ctrl+Space adds or removes it', () => {
-    const { controller, card, press } = keyboardGrid();
+    const { control, card, press } = keyboardGrid();
     card('alpha').focus();
 
     press(' ');
     press('ArrowRight', { ctrlKey: true });
     press(' ', { ctrlKey: true });
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1', 'clip_2']);
     press(' ', { ctrlKey: true });
-    expect(controller.getSelectedClipIds()).toEqual(['clip_1']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_1']);
     press(' ');
-    expect(controller.getSelectedClipIds()).toEqual(['clip_2']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_2']);
   });
 
   describe('renaming', () => {
     function renamingGrid({ listening = true } = {}) {
       const context = keyboardGrid();
       const renames = [];
-      if (listening) context.controller.on('renameRequested', (request) => renames.push(request));
+      if (listening) context.control.on('renameRequested', (request) => renames.push(request));
       const field = () => context.card('bravo').querySelector('input');
       const pressInField = (key) => field().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
       return { ...context, renames, field, pressInField };
@@ -1168,28 +1168,28 @@ describe('clip collection grid controller', () => {
     });
 
     test('shows why a name was refused in the card being renamed', () => {
-      const { controller, field, card } = renamingGrid();
-      controller.beginRename('clip_2');
+      const { control, field, card } = renamingGrid();
+      control.beginRename('clip_2');
 
-      controller.showRenameProblem('clip_2', 'name-taken');
+      control.showRenameProblem('clip_2', 'name-taken');
 
       expect(card('bravo').querySelector('[role="alert"]').textContent).toBe('Another file in this folder already has this name.');
       expect(document.activeElement).toBe(field());
     });
 
     test('ending the rename removes the field and gives the focus back to the card', () => {
-      const { controller, field, focusedName } = renamingGrid();
-      controller.beginRename('clip_2');
+      const { control, field, focusedName } = renamingGrid();
+      control.beginRename('clip_2');
 
-      controller.endRename('clip_2');
+      control.endRename('clip_2');
 
       expect(field()).toBeNull();
       expect(focusedName()).toBe('bravo');
     });
 
     test('Escape in the field cancels the rename', () => {
-      const { controller, field, pressInField, renames } = renamingGrid();
-      controller.beginRename('clip_2');
+      const { control, field, pressInField, renames } = renamingGrid();
+      control.beginRename('clip_2');
 
       field().value = 'sunset';
       pressInField('Escape');
@@ -1216,14 +1216,14 @@ describe('clip collection grid controller', () => {
     ['Shift+F10', 'F10', { shiftKey: true }],
     ['the Menu key', 'ContextMenu', {}],
   ])('%s requests the clip menu at the focused card and selects that card', (_name, key, modifiers) => {
-    const { controller, card, press, requests } = keyboardGrid();
+    const { control, card, press, requests } = keyboardGrid();
     card('alpha').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     vi.spyOn(card('delta'), 'getBoundingClientRect').mockReturnValue({ left: 200, top: 100, width: 300, height: 160 });
     card('delta').focus();
 
     press(key, modifiers);
 
-    expect(controller.getSelectedClipIds()).toEqual(['clip_4']);
+    expect(control.getSelectedClipIds()).toEqual(['clip_4']);
     expect(requests.menus).toEqual([{
       point: expect.anything(),
       selectedClipId: 'clip_4',
@@ -1276,15 +1276,15 @@ test('focuses selected cards through the grid API without relying on selection C
   const root = document.createElement('div');
   const grid = document.createElement('div');
   root.append(grid); document.body.append(root);
-  const controller = createClipCollectionGridControl({ grid, gridRoot: root });
-  controller.renderCollection(new ClipSequence({ name: 'demo', clips: [testClip('other-clip', 'alpha.mp4'), testClip('selected-clip', 'bravo.mp4')] }));
+  const control = createClipCollectionGridControl({ grid, gridRoot: root });
+  control.renderCollection(new ClipSequence({ name: 'demo', clips: [testClip('other-clip', 'alpha.mp4'), testClip('selected-clip', 'bravo.mp4')] }));
   const card = grid.querySelector('[data-clip-id="selected-clip"]');
-  expect(controller.focusSelectedClip()).toBe(false);
-  controller.setSelectedClipId('selected-clip');
+  expect(control.focusSelectedClip()).toBe(false);
+  control.setSelectedClipId('selected-clip');
   card.classList.remove('selected');
-  expect(controller.focusSelectedClip()).toBe(true);
+  expect(control.focusSelectedClip()).toBe(true);
   expect(document.activeElement).toBe(card);
-  controller.dispose(); root.remove();
+  control.dispose(); root.remove();
 });
 
 test('measures allocated grid height using its own current padding', () => {
@@ -1294,16 +1294,16 @@ test('measures allocated grid height using its own current padding', () => {
   Object.defineProperty(root, 'clientHeight', { value: 480 });
   root.style.padding = '10px 14px 22px';
   const computeBestGrid = vi.fn(() => ({ cols: 1, cellH: 100 }));
-  const controller = createClipCollectionGridControl({
+  const control = createClipCollectionGridControl({
     grid,
     gridRoot: root,
     coordinateWorkspaceLayout: true,
     layoutRules: { computeBestGrid },
   });
-  controller.renderCollection(new ClipSequence({ clips: [new Clip({ id: 'a', source: clipSource('a.mp4', { mediaSource: 'file:///a.mp4' }) })] }));
+  control.renderCollection(new ClipSequence({ clips: [new Clip({ id: 'a', source: clipSource('a.mp4', { mediaSource: 'file:///a.mp4' }) })] }));
   expect(computeBestGrid).toHaveBeenLastCalledWith(expect.objectContaining({ availH: 448 }));
   root.style.paddingBottom = '30px';
-  controller.beginWorkspaceResize(800, 0);
+  control.beginWorkspaceResize(800, 0);
   expect(computeBestGrid).toHaveBeenLastCalledWith(expect.objectContaining({ availH: 440 }));
-  controller.dispose(); root.remove();
+  control.dispose(); root.remove();
 });

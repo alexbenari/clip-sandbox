@@ -35,12 +35,12 @@ afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); });
 
 describe('FoldablePanelControl', () => {
   it('updates folded presentation, ARIA, and focus for an independent caller', () => {
-    const f = fixture(); const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
+    const f = fixture(); const control = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
     expect(f.foldButton.getAttribute('aria-expanded')).toBe('true');
     expect(f.revealButton.getAttribute('aria-expanded')).toBe('true');
     f.content.append(document.createElement('input')); f.content.firstElementChild?.dispatchEvent(new Event('focus'));
-    f.foldButton.focus(); controller.setFolded(true);
-    expect(controller.folded).toBe(true); expect(f.root.classList.contains('folded')).toBe(true);
+    f.foldButton.focus(); control.setFolded(true);
+    expect(control.folded).toBe(true); expect(f.root.classList.contains('folded')).toBe(true);
     expect(f.content.inert).toBe(true); expect(f.content.getAttribute('aria-hidden')).toBe('true');
     expect(f.revealButton.hidden).toBe(false); expect(f.foldButton.hidden).toBe(true);
     expect(f.foldButton.getAttribute('aria-expanded')).toBe('false');
@@ -49,7 +49,7 @@ describe('FoldablePanelControl', () => {
     expect(f.change).toHaveBeenCalledWith(240); expect(f.settled).toHaveBeenCalledOnce();
   });
 
-  it('keeps two controller instances independent and responds to button clicks', () => {
+  it('keeps two control instances independent and responds to button clicks', () => {
     const first = fixture(); const second = fixture();
     const firstController = new FoldablePanelControl({ ...first, onChange: first.change, onSettled: first.settled });
     const secondController = new FoldablePanelControl({ ...second, onChange: second.change, onSettled: second.settled });
@@ -60,14 +60,14 @@ describe('FoldablePanelControl', () => {
 
   it('expands idempotently through the semantic operation', () => {
     const f = fixture();
-    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
-    controller.setFolded(true);
+    const control = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
+    control.setFolded(true);
     f.change.mockClear();
 
-    controller.expand();
-    controller.expand();
+    control.expand();
+    control.expand();
 
-    expect(controller.folded).toBe(false);
+    expect(control.folded).toBe(false);
     expect(f.change).toHaveBeenCalledOnce();
     expect(f.change).toHaveBeenCalledWith(280);
   });
@@ -76,25 +76,25 @@ describe('FoldablePanelControl', () => {
     const f = fixture();
     f.root.style.setProperty('--panel-open-width', '240px');
     f.root.style.setProperty('--panel-folded-width', '36px');
-    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
+    const control = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
 
-    controller.setShown(false);
+    control.setShown(false);
     expect(f.root.hidden).toBe(true);
-    expect(controller.targetWidth).toBe(0);
+    expect(control.targetWidth).toBe(0);
 
-    controller.setShown(true);
+    control.setShown(true);
     expect(f.root.hidden).toBe(false);
-    expect(controller.targetWidth).toBe(240);
+    expect(control.targetWidth).toBe(240);
   });
 
   it('keeps its fold state and starts no workspace resize while hidden', () => {
     const f = fixture();
-    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
-    controller.setShown(false);
+    const control = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
+    control.setShown(false);
 
-    controller.setFolded(true);
+    control.setFolded(true);
 
-    expect(controller.folded).toBe(false);
+    expect(control.folded).toBe(false);
     expect(f.root.classList.contains('folded')).toBe(false);
     expect(f.change).not.toHaveBeenCalled();
   });
@@ -107,25 +107,25 @@ describe('FoldablePanelControl', () => {
       { transitionProperty: 'width', effect: { target: f.root }, finished: second.promise },
     ];
     Object.defineProperty(f.root, 'getAnimations', { configurable: true, value: () => [animations.shift() as unknown as Animation] });
-    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
-    controller.setFolded(true); controller.setFolded(false); first.resolve(); await Promise.resolve();
-    expect(controller.moving).toBe(true); expect(f.settled).not.toHaveBeenCalled();
-    second.resolve(); await Promise.resolve(); await Promise.resolve(); expect(controller.moving).toBe(false); expect(f.settled).toHaveBeenCalledOnce();
+    const control = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
+    control.setFolded(true); control.setFolded(false); first.resolve(); await Promise.resolve();
+    expect(control.moving).toBe(true); expect(f.settled).not.toHaveBeenCalled();
+    second.resolve(); await Promise.resolve(); await Promise.resolve(); expect(control.moving).toBe(false); expect(f.settled).toHaveBeenCalledOnce();
   });
 
   it('settles immediately without animation or when reduced motion changes', async () => {
     const f = fixture(); const media = mediaQuery(); vi.spyOn(window, 'matchMedia').mockReturnValue(media);
-    const controller = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
-    controller.setFolded(true); expect(f.settled).toHaveBeenCalledOnce();
-    controller.setFolded(false); expect(f.settled).toHaveBeenCalledTimes(2); expect(f.change).toHaveBeenLastCalledWith(280);
+    const control = new FoldablePanelControl({ ...f, onChange: f.change, onSettled: f.settled });
+    control.setFolded(true); expect(f.settled).toHaveBeenCalledOnce();
+    control.setFolded(false); expect(f.settled).toHaveBeenCalledTimes(2); expect(f.change).toHaveBeenLastCalledWith(280);
     const pending = deferred();
     Object.defineProperty(f.root, 'getAnimations', { configurable: true, value: () => [{
       transitionProperty: 'width', effect: { target: f.root }, finished: pending.promise,
     } as unknown as Animation] });
-    media.setReduced(false); controller.setFolded(true); media.setReduced(true);
-    expect(f.settled).toHaveBeenCalledTimes(3); expect(controller.moving).toBe(false);
+    media.setReduced(false); control.setFolded(true); media.setReduced(true);
+    expect(f.settled).toHaveBeenCalledTimes(3); expect(control.moving).toBe(false);
     pending.resolve(); await Promise.resolve();
     expect(f.settled).toHaveBeenCalledTimes(3);
-    controller.dispose(); media.setReduced(false); controller.setFolded(false); expect(f.settled).toHaveBeenCalledTimes(3);
+    control.dispose(); media.setReduced(false); control.setFolded(false); expect(f.settled).toHaveBeenCalledTimes(3);
   });
 });

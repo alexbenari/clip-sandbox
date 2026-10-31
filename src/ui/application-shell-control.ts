@@ -43,7 +43,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
   private current: IAppScreen;
   private readonly panels = new Map<string, {
     readonly shell: ShellPanel;
-    readonly controller: FoldablePanelControl;
+    readonly control: FoldablePanelControl;
   }>();
   private readonly panelStates = new Map<string, Map<string, boolean>>();
   private activated = false;
@@ -104,7 +104,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     for (const panel of elements.panels ?? []) {
       this.panels.set(panel.id, {
         shell: panel,
-        controller: new FoldablePanelControl({
+        control: new FoldablePanelControl({
           ...panel,
           onChange: duration => this.prepareWorkspaceResize(duration),
           onSettled: () => this.settleWorkspaceResize(),
@@ -152,7 +152,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     if (!workspace || !center) return;
     this.motionPending = true;
     workspace.dataset.moving = 'true';
-    const panelWidth = [...this.panels.values()].reduce((sum, panel) => sum + panel.controller.targetWidth, 0);
+    const panelWidth = [...this.panels.values()].reduce((sum, panel) => sum + panel.control.targetWidth, 0);
     const width = Math.max(0, workspace.clientWidth - panelWidth);
     const currentCommandHeight = commandHost.getBoundingClientRect().height;
     // Measure the destination once, including command wrapping, before animating both allocations.
@@ -171,7 +171,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
   }
 
   private settleWorkspaceResize(): void {
-    if (!this.motionPending || this.applyingPanelState || [...this.panels.values()].some(panel => panel.controller.moving)) return;
+    if (!this.motionPending || this.applyingPanelState || [...this.panels.values()].some(panel => panel.control.moving)) return;
     this.motionPending = false;
     if (this.elements.workspace) this.elements.workspace.dataset.moving = 'false';
     this.elements.commandHost.style.transition = '';
@@ -193,7 +193,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
       return;
     }
     if (this.activated) {
-      this.panelStates.set(this.current.id, new Map([...this.panels].map(([panelId, panel]) => [panelId, panel.controller.folded])));
+      this.panelStates.set(this.current.id, new Map([...this.panels].map(([panelId, panel]) => [panelId, panel.control.folded])));
       this.current.onDeactivate?.();
     }
     for (const screen of this.screens.values()) {
@@ -212,7 +212,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
           : this.panelStates.get(incoming.id)?.get(panelId)
             ?? incoming.initiallyFoldedPanelIds?.includes(panelId)
             ?? false;
-        panel.controller.setFolded(folded);
+        panel.control.setFolded(folded);
       }
     } finally {
       this.applyingPanelState = false;
@@ -240,7 +240,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
     this.elements.selector.removeEventListener('change', this.onSelectionChange);
     this.elements.settingsButton?.removeEventListener('click', this.onSettingsClick);
     if (this.activated) this.current.onDeactivate?.();
-    for (const panel of this.panels.values()) panel.controller.dispose();
+    for (const panel of this.panels.values()) panel.control.dispose();
   }
 
   private validateScreen(screen: IAppScreen, availablePanelIds: ReadonlySet<string>): void {
@@ -265,7 +265,7 @@ export class ApplicationShellControl implements IEventSource<IApplicationShellEv
       const contribution = contributions.get(panelId);
       if (contribution) contribution.content.mount(panel.shell.contributionHost);
       else panel.shell.contributionHost.replaceChildren(...(panel.shell.fallbackContent ? [panel.shell.fallbackContent] : []));
-      panel.controller.setShown(contribution !== undefined || panel.shell.fallbackContent !== undefined);
+      panel.control.setShown(contribution !== undefined || panel.shell.fallbackContent !== undefined);
     }
   }
 
