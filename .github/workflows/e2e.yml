@@ -21,9 +21,10 @@ jobs:
       - name: Install Cygwin toolchain
         shell: pwsh
         run: |
-          $setupPath = Join-Path $env:RUNNER_TEMP 'setup-x86_64.exe'
-          Invoke-WebRequest -Uri 'https://cygwin.com/setup-x86_64.exe' -OutFile $setupPath
-          $expectedSha512 = '6acea47c59781c9e7f544a18d53935d59df6e44d5d52ac95ee165671b8e388820455eebf30ccc7d254b00c3d0eb694269a0f8dc84b17944c1f355dac9c5aafcc'
+          # A versioned installer never changes; https://cygwin.com/setup-x86_64.exe changes with every release.
+          $setupPath = Join-Path $env:RUNNER_TEMP 'setup-2.941.x86_64.exe'
+          Invoke-WebRequest -Uri 'https://cygwin.com/setup/setup-2.941.x86_64.exe' -OutFile $setupPath
+          $expectedSha512 = '9bbbd4de497842446af58af875590ace5d8fa3c557cd7e27328569dfa68e58213da1cc1a6fb7102d4f0f01be38e0b92c6fa74f61b6eb7351a0481ca4bd9e8781'
           $actualSha512 = (Get-FileHash -LiteralPath $setupPath -Algorithm SHA512).Hash.ToLowerInvariant()
           if ($actualSha512 -ne $expectedSha512) {
             throw "Cygwin setup SHA-512 mismatch. Expected $expectedSha512; got $actualSha512."
