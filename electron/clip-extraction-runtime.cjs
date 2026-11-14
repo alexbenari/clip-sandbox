@@ -9,10 +9,6 @@ const { OperationResult } = require('./operation-result.cjs');
 const MAX_NAME_LENGTH = 180;
 const OPAQUE_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 
-function publicEntry(name, stat, type = '') {
-  return Object.freeze({ name, type, size: stat.size, lastModifiedMs: stat.mtimeMs });
-}
-
 class ClipExtractionRuntime {
   constructor({
     fs = fsPromises,
@@ -59,9 +55,9 @@ class ClipExtractionRuntime {
       const absolutePath = path.join(folderPath, name);
       const stat = await this.fs.stat(absolutePath);
       if (/\.txt$/i.test(name)) {
-        entries.push({ ...publicEntry(name, stat, 'text/plain'), text: await this.fs.readFile(absolutePath, 'utf8') });
+        entries.push({ ...this.#publicEntry(name, stat, 'text/plain'), text: await this.fs.readFile(absolutePath, 'utf8') });
       } else if (/\.mp4$/i.test(name)) {
-        entries.push(publicEntry(name, stat, 'video/mp4'));
+        entries.push(this.#publicEntry(name, stat, 'video/mp4'));
       }
     }
     return { ok: true, result: { destinationHandle: handle, folderPath, folderName: path.basename(folderPath), entries } };
@@ -102,7 +98,7 @@ class ClipExtractionRuntime {
         result: {
           mediaHandle: `media_${this.randomId()}`,
           filename,
-          entry: publicEntry(filename, stat, 'video/mp4'),
+          entry: this.#publicEntry(filename, stat, 'video/mp4'),
           warning: encoded.warning ?? provenance.warning,
         },
       };
@@ -233,12 +229,10 @@ class ClipExtractionRuntime {
   #isLegalBoundedFilename(value, extension) {
     return this.#isLegalBoundedName(value) && value.toLowerCase().endsWith(extension);
   }
+
+  #publicEntry(name, stat, type = '') {
+    return Object.freeze({ name, type, size: stat.size, lastModifiedMs: stat.mtimeMs });
+  }
 }
 
-function createClipExtractionRuntime(options = {}) {
-  return new ClipExtractionRuntime(options);
-}
-
-module.exports = {
-  createClipExtractionRuntime,
-};
+module.exports = { ClipExtractionRuntime };

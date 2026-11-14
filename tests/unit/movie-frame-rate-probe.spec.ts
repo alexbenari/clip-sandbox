@@ -6,25 +6,25 @@ const require = createRequire(import.meta.url);
 const { MovieFrameRateProbe } = require('../../electron/movie-frame-rate-probe.cjs');
 
 function probeAnswering(stream: Record<string, string>, stdoutPrefix = '') {
-  const runCommand = vi.fn(async (_command: string, _args: string[]) => ({
+  const run = vi.fn(async (_command: string, _args: string[]) => ({
     ok: true, stdout: `${stdoutPrefix}${JSON.stringify({ streams: [stream] })}`,
   }));
-  return { runCommand, probe: new MovieFrameRateProbe({ resolveFfprobe: () => 'ffprobe', environment: {}, runCommand }) };
+  return { run, probe: new MovieFrameRateProbe({ resolveFfprobe: () => 'ffprobe', environment: {}, processRunner: { run } }) };
 }
 
 describe('MovieFrameRateProbe', () => {
   it('reads the average frame rate of the movie’s selected stream', async () => {
-    const { probe, runCommand } = probeAnswering({ avg_frame_rate: '24000/1001', r_frame_rate: '24/1' });
+    const { probe, run } = probeAnswering({ avg_frame_rate: '24000/1001', r_frame_rate: '24/1' });
 
     await expect(probe.framesPerSecond('D:\\movies\\Feature.mkv', 2)).resolves.toBeCloseTo(23.976, 3);
   });
 
   it('asks FFprobe for the frame rates of the selected stream of the movie', async () => {
-    const { probe, runCommand } = probeAnswering({ avg_frame_rate: '24000/1001', r_frame_rate: '24/1' });
+    const { probe, run } = probeAnswering({ avg_frame_rate: '24000/1001', r_frame_rate: '24/1' });
 
     await probe.framesPerSecond('D:\\movies\\Feature.mkv', 2);
 
-    expect(runCommand.mock.calls[0][1]).toEqual([
+    expect(run.mock.calls[0][1]).toEqual([
       '-v', 'error', '-select_streams', '2',
       '-show_entries', 'stream=avg_frame_rate,r_frame_rate', '-of', 'json', 'D:\\movies\\Feature.mkv',
     ]);
@@ -43,7 +43,7 @@ describe('MovieFrameRateProbe', () => {
   });
 
   it('fails when FFprobe cannot read the movie', async () => {
-    const probe = new MovieFrameRateProbe({ resolveFfprobe: () => 'ffprobe', environment: {}, runCommand: async () => ({ ok: false }) });
+    const probe = new MovieFrameRateProbe({ resolveFfprobe: () => 'ffprobe', environment: {}, processRunner: { run: async () => ({ ok: false }) } });
 
     await expect(probe.framesPerSecond('D:\\movies\\Feature.mkv', 0)).rejects.toThrow('The movie frame rate could not be read.');
   });

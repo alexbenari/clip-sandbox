@@ -23,7 +23,7 @@ const SEEKED_FRAMES = '[Parsed_showinfo_1] config in time_base: 1/1000\n'
 // An encoder whose FFmpeg runs succeed, recording the video filter of each video encode.
 function recordingEncoder({ verifyEncoded = vi.fn(async () => undefined), events = [] as string[] } = {}) {
   const commands: string[][] = [];
-  const runCommand = vi.fn(async (_command: string, args: string[]) => {
+  const run = vi.fn(async (_command: string, args: string[]) => {
     commands.push(args);
     const commandLine = args.join(' ');
     if (commandLine.includes('showinfo')) events.push('encode by indexed timestamps');
@@ -32,7 +32,7 @@ function recordingEncoder({ verifyEncoded = vi.fn(async () => undefined), events
   });
   const fs = { rm: vi.fn(async (target: string) => { events.push(`remove ${path.basename(target)}`); }) };
   const encoder = new ExactRangeEncoder({
-    fs, resolveFfmpeg: () => 'ffmpeg', runCommand,
+    fs, resolveFfmpeg: () => 'ffmpeg', processRunner: { run },
     probe: { frameBoundaries: vi.fn(async () => ({ startUs: 55_000_000n, endUs: 55_080_000n })), verifyEncoded },
   });
   const encode = (host: object, encodedSource = source, output?: string) => encoder.encode({

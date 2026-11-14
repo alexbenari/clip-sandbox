@@ -43,9 +43,9 @@ const runsUntilAborted: FfmpegRun = async (args, { signal }) => {
 async function previewsWith({ run = writesOutput, sourceInfo = clipRecord() as unknown, windowRecord = {} as object } = {}) {
   const { stagedEdits, clipPath } = stagedEditsIn(folder, { sourceInfo, windowRecord });
   let ids = 0;
-  const runCommand = vi.fn((_ffmpeg: string, args: string[], options: Parameters<FfmpegRun>[1]) => run(args, options));
+  const runFfmpeg = vi.fn((_ffmpeg: string, args: string[], options: Parameters<FfmpegRun>[1]) => run(args, options));
   const previews = new ZoomEditPreviews({
-    folder: previewFolder, stagedEdits, resolveFfmpeg: () => 'ffmpeg', runCommand, randomId: () => `id${++ids}`,
+    folder: previewFolder, stagedEdits, resolveFfmpeg: () => 'ffmpeg', processRunner: { run: runFfmpeg }, randomId: () => `id${++ids}`,
   });
   await previews.initialize();
   let operations = 0;
@@ -54,7 +54,7 @@ async function previewsWith({ run = writesOutput, sourceInfo = clipRecord() as u
       operationId: `preview_operation${++operations}`, folderPath: folder, filename: 'Feature-002.mp4', sessionId: CLIP_SESSION,
       source: { kind: 'clip' }, startFrame: 5, endFrame: 45, ...request,
     }, report);
-  return { previews, render, runCommand, clipPath };
+  return { previews, render, runFfmpeg, clipPath };
 }
 
 const previewFiles = () => readdirSync(previewFolder).sort();
@@ -78,23 +78,23 @@ describe('ZoomEditPreviews', () => {
   });
 
   it('selects exactly the staged frames by their times in the source the review indexed', async () => {
-    const { render, runCommand, clipPath } = await previewsWith();
+    const { render, runFfmpeg, clipPath } = await previewsWith();
 
     await render({ startFrame: 5, endFrame: 45 });
 
     // Frames are 40 ms apart: frame 5 at 0.2 s, frame 45 at 1.8 s.
-    const args = runCommand.mock.calls[0][1];
+    const args = runFfmpeg.mock.calls[0][1];
     const [from, to] = selectedSeconds(args);
     expect(argumentAfter(args, '-i')).toBe(clipPath);
     expect([from > 0.16 && from <= 0.2, to >= 1.8 && to < 1.84]).toEqual([true, true]);
   });
 
   it('plays the staged frames forward then backward, without sound', async () => {
-    const { render, runCommand } = await previewsWith();
+    const { render, runFfmpeg } = await previewsWith();
 
     await render();
 
-    const args = runCommand.mock.calls[0][1];
+    const args = runFfmpeg.mock.calls[0][1];
     expect(argumentAfter(args, '-filter_complex')).toMatch(/split=2\[forward\]\[reverse\];\[reverse\]reverse\[backward\];\[forward\]\[backward\]concat/);
     expect(args).toContain('-an');
   });
@@ -112,21 +112,21 @@ describe('ZoomEditPreviews', () => {
   });
 
   it('answers a refusal of the staged edits without rendering', async () => {
-    const { render, runCommand } = await previewsWith();
+    const { render, runFfmpeg } = await previewsWith();
 
     const answer = await render({ endFrame: 51 });
 
     expect(answer).toEqual({ ok: false, code: 'invalid-request', error: { message: 'The range is outside the clip.' } });
-    expect([runCommand.mock.calls.length, previewFiles()]).toEqual([0, []]);
+    expect([runFfmpeg.mock.calls.length, previewFiles()]).toEqual([0, []]);
   });
 
   it('renders a range of the anchored movie window', async () => {
-    const { render, runCommand } = await previewsWith();
+    const { render, runFfmpeg } = await previewsWith();
 
     const answer = await render({ source: { kind: 'window', windowId: WINDOW_ID }, sessionId: 'session_window01', startFrame: 1870, endFrame: 1940 });
 
     expect(answer.ok).toBe(true);
-    expect(argumentAfter(runCommand.mock.calls[0][1], '-i')).toBe('D:\\app\\movie-window-cache\\key\\window.mkv');
+    expect(argumentAfter(runFfmpeg.mock.calls[0][1], '-i')).toBe('D:\\app\\movie-window-cache\\key\\window.mkv');
   });
 
   describe('files', () => {
@@ -159,9 +159,9 @@ describe('ZoomEditPreviews', () => {
     });
 
     it('stops a preview being rendered when it is released, answering that it was replaced and leaving no file', async () => {
-      const { previews, render, runCommand } = await previewsWith({ run: runsUntilAborted });
+      const { previews, render, runFfmpeg } = await previewsWith({ run: runsUntilAborted });
       const rendering = render();
-      await vi.waitFor(() => expect(runCommand).toHaveBeenCalled());
+      await vi.waitFor(() => expect(runFfmpeg).toHaveBeenCalled());
 
       await previews.release(event.sender.id);
 
@@ -171,13 +171,13 @@ describe('ZoomEditPreviews', () => {
 
     it('stops the preview being rendered when a new one is asked for, keeping only the new one', async () => {
       let first = true;
-      const { render, runCommand } = await previewsWith({ run: (args, options) => {
+      const { render, runFfmpeg } = await previewsWith({ run: (args, options) => {
         const run = first ? runsUntilAborted : writesOutput;
         first = false;
         return run(args, options);
       } });
       const replaced = render({ startFrame: 5 });
-      await vi.waitFor(() => expect(runCommand).toHaveBeenCalled());
+      await vi.waitFor(() => expect(runFfmpeg).toHaveBeenCalled());
 
       const answer = await render({ startFrame: 6 });
 

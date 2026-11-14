@@ -130,4 +130,15 @@ describe('preload frame review', () => {
       operationId: expect.any(String), sourceHandle: 'source_12345678', previewBounds: { maxWidth: 640, maxHeight: 360 }, muted: true,
     }]);
   });
+
+  it('answers a frame-review protocol error when the answer belongs to another operation', async () => {
+    const { frameReview, ipcRenderer } = loadPreload(async () => ({ ok: true, operationId: 'operation_other_operation', result: null }));
+
+    const answer = await frameReview.close('session_12345678');
+
+    expect(answer).toEqual({
+      ok: false, operationId: ipcRenderer.invoke.mock.calls[0][1].operationId,
+      error: { category: 'protocol-error', message: 'Frame-review response correlation failed.', recoverable: false },
+    });
+  });
 });

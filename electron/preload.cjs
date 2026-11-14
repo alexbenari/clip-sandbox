@@ -1,64 +1,52 @@
+// The preload bridge is a thin Electron boundary, so plain functions are clearer here than classes.
 const { contextBridge, ipcRenderer } = require('electron');
 
-let frameReviewOperation = 0;
 let correlatedOperation = 0;
-
-function frameReviewOperationId() {
-  frameReviewOperation += 1;
-  return `operation_${Date.now()}_${frameReviewOperation}`;
-}
-
-async function invokeFrameReview(channel, payload) {
-  const operationId = frameReviewOperationId();
-  const response = await ipcRenderer.invoke(channel, { operationId, ...payload });
-  if (!response || response.operationId !== operationId) {
-    return {
-      ok: false,
-      operationId,
-      error: { category: 'protocol-error', message: 'Frame-review response correlation failed.', recoverable: false },
-    };
-  }
-  return response;
-}
 
 function correlatedOperationId(kind) {
   correlatedOperation += 1;
   return `${kind}_${Date.now()}_${correlatedOperation}`;
 }
 
-function correlatedInvoker(label) {
+function correlatedInvoker(correlationError) {
   return async (channel, kind, payload, requestedOperationId = null) => {
     const operationId = requestedOperationId || correlatedOperationId(kind);
     const response = await ipcRenderer.invoke(channel, { operationId, ...payload });
     if (!response || response.operationId !== operationId) {
-      return { ok: false, operationId, error: { code: 'protocol-error', message: `${label} response correlation failed.` } };
+      return { ok: false, operationId, error: { ...correlationError } };
     }
     return response;
   };
 }
 
-const invokeClipExtraction = correlatedInvoker('Clip-extraction');
-const invokeZoomEditSave = correlatedInvoker('Zoom edit save');
-const invokeZoomEditPreview = correlatedInvoker('Zoom edit preview');
+function protocolError(label) {
+  return { code: 'protocol-error', message: `${label} response correlation failed.` };
+}
+
+const invokeFrameReview = correlatedInvoker(
+  { category: 'protocol-error', message: 'Frame-review response correlation failed.', recoverable: false });
+const invokeClipExtraction = correlatedInvoker(protocolError('Clip-extraction'));
+const invokeZoomEditSave = correlatedInvoker(protocolError('Zoom edit save'));
+const invokeZoomEditPreview = correlatedInvoker(protocolError('Zoom edit preview'));
 
 const frameReviewApi = {
   chooseSource() {
-    return invokeFrameReview('clip-sandbox:frame-review-choose-source', {});
+    return invokeFrameReview('clip-sandbox:frame-review-choose-source', 'operation', {});
   },
   open(request) {
-    return invokeFrameReview('clip-sandbox:frame-review-open', {
+    return invokeFrameReview('clip-sandbox:frame-review-open', 'operation', {
       sourceHandle: request?.sourceHandle,
       previewBounds: request?.previewBounds,
       muted: request?.muted,
     });
   },
   command(sessionId, command, args = {}) {
-    return invokeFrameReview('clip-sandbox:frame-review-command', {
+    return invokeFrameReview('clip-sandbox:frame-review-command', 'operation', {
       sessionId, command, args,
     });
   },
   close(sessionId) {
-    return invokeFrameReview('clip-sandbox:frame-review-close', {
+    return invokeFrameReview('clip-sandbox:frame-review-close', 'operation', {
       sessionId,
     });
   },

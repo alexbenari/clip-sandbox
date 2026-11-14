@@ -1,9 +1,10 @@
 // @vitest-environment node
 import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
+import { FakeIpcMain } from '../support/fake-ipc-main.js';
 
 const require = createRequire(import.meta.url);
-const { registerZoomEditPreviewIpc } = require('../../electron/zoom-edit-preview-ipc.cjs');
+const { ZoomEditPreviewIpc } = require('../../electron/zoom-edit-preview-ipc.cjs');
 
 const previewRequest = {
   operationId: 'preview_12345678', folderPath: 'D:\\clips', filename: 'Feature-002.mp4',
@@ -12,14 +13,13 @@ const previewRequest = {
 };
 
 function registered(previews: Record<string, unknown>) {
-  const handlers = new Map<string, Function>();
-  const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
-  registerZoomEditPreviewIpc({ ipcMain, previews });
+  const ipcMain = new FakeIpcMain();
+  new ZoomEditPreviewIpc({ ipcMain, previews }).register();
   const sender = { id: 7, isDestroyed: vi.fn(() => false), send: vi.fn() };
   return {
     sender,
-    preview: (payload: unknown) => handlers.get('clip-sandbox:zoom-edit-preview')!({ sender }, payload),
-    release: () => handlers.get('clip-sandbox:zoom-edit-release-preview')!({ sender }),
+    preview: (payload: unknown) => ipcMain.invoke('clip-sandbox:zoom-edit-preview', { sender }, payload),
+    release: () => ipcMain.invoke('clip-sandbox:zoom-edit-release-preview', { sender }),
   };
 }
 

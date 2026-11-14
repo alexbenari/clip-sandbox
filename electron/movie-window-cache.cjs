@@ -1,7 +1,7 @@
 const fsPromises = require('node:fs/promises');
 const path = require('node:path');
 const { createHash, randomBytes } = require('node:crypto');
-const { runProcess } = require('./process-runner.cjs');
+const { ProcessRunner } = require('./process-runner.cjs');
 
 const SCHEMA_VERSION = 1;
 const WINDOW_FILE = 'window.mkv';
@@ -11,13 +11,25 @@ const MICROSECONDS_PER_SECOND = 1_000_000;
 // A window is a short stretch of a source movie copied out without re-encoding, so that only the window
 // is prepared for exact frames.
 class MovieWindowCache {
+  #folder;
+  #resolveFfmpeg;
+  #environment;
+  #forgetPreparedReview;
+  #maxWindows;
+  #fs;
+  #now;
+  #randomId;
+  #cuts;
+  #eviction;
+  #processRunner;
+
   constructor({
     folder,
     resolveFfmpeg,
     environment,
     forgetPreparedReview,
     maxWindows = 10,
-    runCommand = runProcess,
+    processRunner = new ProcessRunner(),
     fileSystem = fsPromises,
     now = () => Date.now(),
     randomId = () => randomBytes(9).toString('base64url'),
@@ -26,23 +38,23 @@ class MovieWindowCache {
       || typeof forgetPreparedReview !== 'function' || !Number.isSafeInteger(maxWindows) || maxWindows < 1) {
       throw new Error('Movie window cache dependencies are invalid.');
     }
-    this.folder = folder;
-    this.resolveFfmpeg = resolveFfmpeg;
-    this.environment = environment;
-    this.forgetPreparedReview = forgetPreparedReview;
-    this.maxWindows = maxWindows;
-    this.runCommand = runCommand;
-    this.fs = fileSystem;
-    this.now = now;
-    this.randomId = randomId;
-    this.cuts = new Map();
-    this.eviction = Promise.resolve();
+    this.#folder = folder;
+    this.#resolveFfmpeg = resolveFfmpeg;
+    this.#environment = environment;
+    this.#forgetPreparedReview = forgetPreparedReview;
+    this.#maxWindows = maxWindows;
+    this.#processRunner = processRunner;
+    this.#fs = fileSystem;
+    this.#now = now;
+    this.#randomId = randomId;
+    this.#cuts = new Map();
+    this.#eviction = Promise.resolve();
   }
 
   async window(request, signal = new AbortController().signal) {
     const placement = this.#placement(request);
     signal.throwIfAborted();
-    if (!this.cuts.has(placement.key)) {
+    if (!this.#cuts.has(placement.key)) {
       const windowPath = await this.#reusedWindow(placement);
       if (windowPath) return { windowPath, cacheHit: true };
     }
@@ -82,19 +94,19 @@ class MovieWindowCache {
     if (!manifest) return null;
     const windowPath = this.#windowPath(placement.key);
     try {
-      const stat = await this.fs.stat(windowPath);
+      const stat = await this.#fs.stat(windowPath);
       if (!stat.isFile() || stat.size !== manifest.bytes) return null;
     } catch {
       return null;
     }
-    await this.#writeManifest(placement.key, { ...manifest, lastUsedMs: this.now() });
+    await this.#writeManifest(placement.key, { ...manifest, lastUsedMs: this.#now() });
     return windowPath;
   }
 
   async #manifest(key) {
     let manifest;
     try {
-      manifest = JSON.parse(await this.fs.readFile(path.join(this.folder, key, MANIFEST_FILE), 'utf8'));
+      manifest = JSON.parse(await this.#fs.readFile(path.join(this.#folder, key, MANIFEST_FILE), 'utf8'));
     } catch {
       return null;
     }
@@ -107,28 +119,28 @@ class MovieWindowCache {
   }
 
   async #writeManifest(key, manifest) {
-    const temporary = path.join(this.folder, key, `.manifest-${this.randomId()}.json`);
+    const temporary = path.join(this.#folder, key, `.manifest-${this.#randomId()}.json`);
     try {
-      await this.fs.writeFile(temporary, `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', flag: 'wx' });
-      await this.fs.rename(temporary, path.join(this.folder, key, MANIFEST_FILE));
+      await this.#fs.writeFile(temporary, `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', flag: 'wx' });
+      await this.#fs.rename(temporary, path.join(this.#folder, key, MANIFEST_FILE));
     } catch (error) {
-      await this.fs.rm(temporary, { force: true }).catch(() => undefined);
+      await this.#fs.rm(temporary, { force: true }).catch(() => undefined);
       throw error;
     }
   }
 
   #windowPath(key) {
-    return path.join(this.folder, key, WINDOW_FILE);
+    return path.join(this.#folder, key, WINDOW_FILE);
   }
 
   // Callers asking for the same window share one cut, which stops only when every one of them gives up.
   #sharedCut(placement, signal) {
-    let cut = this.cuts.get(placement.key);
+    let cut = this.#cuts.get(placement.key);
     if (!cut) {
       const controller = new AbortController();
       cut = { controller, waiting: 0, done: null };
-      cut.done = this.#cutAndEvict(placement, controller.signal).finally(() => this.cuts.delete(placement.key));
-      this.cuts.set(placement.key, cut);
+      cut.done = this.#cutAndEvict(placement, controller.signal).finally(() => this.#cuts.delete(placement.key));
+      this.#cuts.set(placement.key, cut);
     }
     cut.waiting += 1;
     return new Promise((resolve, reject) => {
@@ -153,29 +165,29 @@ class MovieWindowCache {
   }
 
   async #cut({ moviePath, fingerprint, startUs, durationUs, key }, signal) {
-    const directory = path.join(this.folder, key);
+    const directory = path.join(this.#folder, key);
     try {
-      await this.fs.rm(directory, { recursive: true, force: true });
-      await this.fs.mkdir(directory, { recursive: true });
-      const temporary = path.join(directory, `.window-${this.randomId()}.mkv`);
-      const result = await this.runCommand(this.resolveFfmpeg(), [
+      await this.#fs.rm(directory, { recursive: true, force: true });
+      await this.#fs.mkdir(directory, { recursive: true });
+      const temporary = path.join(directory, `.window-${this.#randomId()}.mkv`);
+      const result = await this.#processRunner.run(this.#resolveFfmpeg(), [
         '-hide_banner', '-nostdin', '-y',
         '-ss', this.#seconds(startUs), '-t', this.#seconds(durationUs),
         '-i', moviePath,
         '-map', `0:${fingerprint.selectedStream}`, '-map', '0:a:0?',
         '-c', 'copy', '-f', 'matroska', temporary,
-      ], { signal, env: this.environment });
+      ], { signal, env: this.#environment });
       signal.throwIfAborted();
       if (!result.ok) throw new Error(`Cutting the movie window failed (${result.code}).`);
       const windowPath = this.#windowPath(key);
-      await this.fs.rename(temporary, windowPath);
-      const { size } = await this.fs.stat(windowPath);
+      await this.#fs.rename(temporary, windowPath);
+      const { size } = await this.#fs.stat(windowPath);
       await this.#writeManifest(key, {
-        schemaVersion: SCHEMA_VERSION, key, fingerprint, startUs, durationUs, bytes: size, lastUsedMs: this.now(),
+        schemaVersion: SCHEMA_VERSION, key, fingerprint, startUs, durationUs, bytes: size, lastUsedMs: this.#now(),
       });
       return windowPath;
     } catch (error) {
-      await this.fs.rm(directory, { recursive: true, force: true }).catch(cleanupError => {
+      await this.#fs.rm(directory, { recursive: true, force: true }).catch(cleanupError => {
         console.warn('[movie-window-cache] cut-cleanup-failed', { kind: this.#errorKind(cleanupError) });
       });
       throw error;
@@ -189,29 +201,29 @@ class MovieWindowCache {
   }
 
   #evictBeyondLimit(keptKey) {
-    this.eviction = this.eviction.then(() => this.#evict(keptKey)).catch(error => {
+    this.#eviction = this.#eviction.then(() => this.#evict(keptKey)).catch(error => {
       console.warn('[movie-window-cache] eviction-failed', { kind: this.#errorKind(error) });
     });
-    return this.eviction;
+    return this.#eviction;
   }
 
   async #evict(keptKey) {
     const windows = [];
-    for (const entry of await this.fs.readdir(this.folder, { withFileTypes: true })) {
-      if (!entry.isDirectory() || (this.cuts.has(entry.name) && entry.name !== keptKey)) continue;
+    for (const entry of await this.#fs.readdir(this.#folder, { withFileTypes: true })) {
+      if (!entry.isDirectory() || (this.#cuts.has(entry.name) && entry.name !== keptKey)) continue;
       const manifest = await this.#manifest(entry.name);
       if (manifest) windows.push(manifest);
-      else await this.fs.rm(path.join(this.folder, entry.name), { recursive: true, force: true });
+      else await this.#fs.rm(path.join(this.#folder, entry.name), { recursive: true, force: true });
     }
     windows.sort((first, second) => second.lastUsedMs - first.lastUsedMs);
-    for (const { key } of windows.slice(this.maxWindows)) {
-      if (key === keptKey || this.cuts.has(key)) continue;
+    for (const { key } of windows.slice(this.#maxWindows)) {
+      if (key === keptKey || this.#cuts.has(key)) continue;
       try {
-        await this.forgetPreparedReview(this.#windowPath(key));
+        await this.#forgetPreparedReview(this.#windowPath(key));
       } catch (error) {
         console.warn('[movie-window-cache] forget-prepared-review-failed', { kind: this.#errorKind(error) });
       }
-      await this.fs.rm(path.join(this.folder, key), { recursive: true, force: true });
+      await this.#fs.rm(path.join(this.#folder, key), { recursive: true, force: true });
     }
   }
 

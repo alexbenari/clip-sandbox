@@ -1,16 +1,16 @@
-const { runProcess } = require('./process-runner.cjs');
+const { ProcessRunner } = require('./process-runner.cjs');
 
 // FFprobe reads for the exact-range encoder: the cut's boundary times when no index can give them, and a check
 // of the encoded media.
 class ExactRangeProbe {
   #resolveFfprobe;
-  #runCommand;
+  #processRunner;
   #environment;
 
-  constructor({ resolveFfprobe, runCommand = runProcess, environment = process.env }) {
+  constructor({ resolveFfprobe, processRunner = new ProcessRunner(), environment = process.env }) {
     if (typeof resolveFfprobe !== 'function') throw new Error('Exact-range probe dependencies are invalid.');
     this.#resolveFfprobe = resolveFfprobe;
-    this.#runCommand = runCommand;
+    this.#processRunner = processRunner;
     this.#environment = environment;
   }
 
@@ -51,7 +51,7 @@ class ExactRangeProbe {
   }
 
   async #probed(args, signal, failureMessage) {
-    const result = await this.#runCommand(this.#resolveFfprobe(), args, { signal, env: this.#environment });
+    const result = await this.#processRunner.run(this.#resolveFfprobe(), args, { signal, env: this.#environment });
     if (!result.ok) throw Object.assign(new Error(failureMessage), { code: result.code });
     return JSON.parse(String(result.stdout || '').replace(/^\uFEFF/, ''));
   }

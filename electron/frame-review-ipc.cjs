@@ -15,58 +15,58 @@ const COMMANDS = new Set([
   'start-exact-preview', 'pause-exact-preview', 'resume-exact-preview', 'stop-exact-preview',
 ]);
 
-class FrameReviewIpcBoundary {
+const UNKNOWN_COMMAND = 'Unknown frame-review command.';
+
+class FrameReviewIpc {
+  #ipcMain;
+  #hostForEvent;
+  #chooseSourcePath;
+
   constructor({ ipcMain, hostForEvent, chooseSourcePath }) {
     if (!ipcMain?.handle || typeof hostForEvent !== 'function' || typeof chooseSourcePath !== 'function') {
       throw new Error('Frame-review IPC dependencies are invalid.');
     }
-    this.ipcMain = ipcMain;
-    this.hostForEvent = hostForEvent;
-    this.chooseSourcePath = chooseSourcePath;
+    this.#ipcMain = ipcMain;
+    this.#hostForEvent = hostForEvent;
+    this.#chooseSourcePath = chooseSourcePath;
   }
 
   register() {
-    this.ipcMain.handle(CHANNELS.chooseSource, (event, payload) => this.chooseSource(event, payload));
-    this.ipcMain.handle(CHANNELS.open, (event, payload) => this.open(event, payload));
-    this.ipcMain.handle(CHANNELS.command, (event, payload) => this.command(event, payload));
-    this.ipcMain.handle(CHANNELS.close, (event, payload) => this.close(event, payload));
-    return () => {
-      this.ipcMain.removeHandler(CHANNELS.chooseSource);
-      this.ipcMain.removeHandler(CHANNELS.open);
-      this.ipcMain.removeHandler(CHANNELS.command);
-      this.ipcMain.removeHandler(CHANNELS.close);
-    };
+    this.#ipcMain.handle(CHANNELS.chooseSource, (event, payload) => this.#chooseSource(event, payload));
+    this.#ipcMain.handle(CHANNELS.open, (event, payload) => this.#open(event, payload));
+    this.#ipcMain.handle(CHANNELS.command, (event, payload) => this.#command(event, payload));
+    this.#ipcMain.handle(CHANNELS.close, (event, payload) => this.#close(event, payload));
   }
 
-  async chooseSource(event, payload) {
+  async #chooseSource(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      const record = this.record(payload);
-      operationId = this.operationId(record.operationId);
-      const sourcePath = await this.chooseSourcePath(event);
-      if (!sourcePath) return this.success(operationId, { canceled: true });
-      if (!path.isAbsolute(sourcePath)) throw this.invalid('Selected movie path is invalid.');
-      const sourceHandle = this.requireHost(event).registerSource(sourcePath);
-      return this.success(operationId, {
+      const record = this.#record(payload);
+      operationId = this.#operationId(record.operationId);
+      const sourcePath = await this.#chooseSourcePath(event);
+      if (!sourcePath) return this.#success(operationId, { canceled: true });
+      if (!path.isAbsolute(sourcePath)) throw this.#invalid('Selected movie path is invalid.');
+      const sourceHandle = this.#requireHost(event).registerSource(sourcePath);
+      return this.#success(operationId, {
         canceled: false,
         name: path.basename(sourcePath),
         sourceHandle,
       });
     } catch (error) {
-      return this.failure(operationId, error);
+      return this.#failure(operationId, error);
     }
   }
 
-  async open(event, payload) {
+  async #open(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      const request = this.openRequest(payload);
+      const request = this.#openRequest(payload);
       operationId = request.operationId;
-      const host = this.requireHost(event);
+      const host = this.#requireHost(event);
       const buffered = [];
       let sessionId = null;
       const emit = (hostEvent) => {
-        const message = { sessionId, event: this.toWire(hostEvent) };
+        const message = { sessionId, event: this.#toWire(hostEvent) };
         if (sessionId) event.sender.send(CHANNELS.event, message);
         else buffered.push(message);
       };
@@ -80,192 +80,192 @@ class FrameReviewIpcBoundary {
       for (const message of buffered) {
         event.sender.send(CHANNELS.event, { ...message, sessionId });
       }
-      return this.success(operationId, { sessionId, state: this.toWire(session.state()) });
+      return this.#success(operationId, { sessionId, state: this.#toWire(session.state()) });
     } catch (error) {
-      return this.failure(operationId, error);
+      return this.#failure(operationId, error);
     }
   }
 
-  async command(event, payload) {
+  async #command(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      const request = this.commandRequest(payload);
+      const request = this.#commandRequest(payload);
       operationId = request.operationId;
-      const session = this.requireHost(event).session(request.sessionId);
-      const result = await this.execute(session, request.command, request.args);
-      return this.success(operationId, this.toWire(result ?? null));
+      const session = this.#requireHost(event).session(request.sessionId);
+      const result = await this.#execute(session, request.command, request.args);
+      return this.#success(operationId, this.#toWire(result ?? null));
     } catch (error) {
-      return this.failure(operationId, error);
+      return this.#failure(operationId, error);
     }
   }
 
-  async close(event, payload) {
+  async #close(event, payload) {
     let operationId = 'invalid-operation';
     try {
-      const request = this.baseRequest(payload);
+      const request = this.#baseRequest(payload);
       operationId = request.operationId;
-      await this.requireHost(event).closeSession(request.sessionId);
-      return this.success(operationId, null);
+      await this.#requireHost(event).closeSession(request.sessionId);
+      return this.#success(operationId, null);
     } catch (error) {
-      return this.failure(operationId, error);
+      return this.#failure(operationId, error);
     }
   }
 
-  execute(session, command, args) {
+  #execute(session, command, args) {
     switch (command) {
       case 'state': return session.state();
       case 'play': return session.play();
       case 'pause': return session.pause();
-      case 'seek-playback': return session.seekPlayback(this.decimalBigInt(args.timestampUs, 'timestampUs'));
+      case 'seek-playback': return session.seekPlayback(this.#decimalBigInt(args.timestampUs, 'timestampUs'));
       case 'jump-playback-by': {
-        const deltaUs = this.decimalBigInt(args.deltaUs, 'deltaUs');
-        if (deltaUs < 1n || deltaUs > 10_000_000n) throw this.invalid('Jump duration is out of range.');
+        const deltaUs = this.#decimalBigInt(args.deltaUs, 'deltaUs');
+        if (deltaUs < 1n || deltaUs > 10_000_000n) throw this.#invalid('Jump duration is out of range.');
         return session.jumpPlaybackBy(deltaUs);
       }
       case 'start-exact-preview': return session.startExactPreview({
-        startFrameIndex: this.nonnegativeInteger(args.startFrameIndex, 'startFrameIndex'),
-        endFrameIndex: this.nonnegativeInteger(args.endFrameIndex, 'endFrameIndex'),
+        startFrameIndex: this.#nonnegativeInteger(args.startFrameIndex, 'startFrameIndex'),
+        endFrameIndex: this.#nonnegativeInteger(args.endFrameIndex, 'endFrameIndex'),
       });
       case 'pause-exact-preview': return session.pauseExactPreview();
-      case 'resume-exact-preview': return session.resumeExactPreview(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      case 'resume-exact-preview': return session.resumeExactPreview(this.#nonnegativeInteger(args.frameIndex, 'frameIndex'));
       case 'stop-exact-preview': return session.stopExactPreview();
       case 'enter-scrub': return session.enterFrameScrub();
-      case 'drag-to-frame': return session.dragToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
-      case 'go-to-frame': return session.goToFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      case 'drag-to-frame': return session.dragToFrame(this.#nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      case 'go-to-frame': return session.goToFrame(this.#nonnegativeInteger(args.frameIndex, 'frameIndex'));
       case 'scrub-to-time': {
-        const timestampUs = this.decimalBigInt(args.timestampUs, 'timestampUs');
-        if (timestampUs > 9_223_372_036_854_775_807n) throw this.invalid('Scrub time is out of range.');
+        const timestampUs = this.#decimalBigInt(args.timestampUs, 'timestampUs');
+        if (timestampUs > 9_223_372_036_854_775_807n) throw this.#invalid('Scrub time is out of range.');
         return session.scrubToTime(timestampUs);
       }
-      case 'step-adjacent': return session.stepAdjacent(this.direction(args.direction));
-      case 'press-adjacent': return session.pressAdjacent(this.direction(args.direction));
+      case 'step-adjacent': return session.stepAdjacent(this.#direction(args.direction));
+      case 'press-adjacent': return session.pressAdjacent(this.#direction(args.direction));
       case 'release-adjacent': return session.releaseAdjacent(
-        args.direction === undefined ? undefined : this.direction(args.direction));
+        args.direction === undefined ? undefined : this.#direction(args.direction));
       case 'capture-current-point': return session.captureCurrentPoint();
-      case 'frame-identity': return session.frameIdentity(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
-      case 'thumbnail-frame': return session.thumbnailFrame(this.nonnegativeInteger(args.frameIndex, 'frameIndex'));
-      default: throw this.invalid('Unknown frame-review command.');
+      case 'frame-identity': return session.frameIdentity(this.#nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      case 'thumbnail-frame': return session.thumbnailFrame(this.#nonnegativeInteger(args.frameIndex, 'frameIndex'));
+      default: throw this.#invalid(UNKNOWN_COMMAND);
     }
   }
 
-  openRequest(payload) {
-    const record = this.record(payload);
-    const operationId = this.operationId(record.operationId);
-    const sourceHandle = this.opaqueId(record.sourceHandle, 'source');
-    const bounds = this.record(record.previewBounds);
-    const maxWidth = this.positiveInteger(bounds.maxWidth, 'maxWidth');
-    const maxHeight = this.positiveInteger(bounds.maxHeight, 'maxHeight');
+  #openRequest(payload) {
+    const record = this.#record(payload);
+    const operationId = this.#operationId(record.operationId);
+    const sourceHandle = this.#opaqueId(record.sourceHandle, 'source');
+    const bounds = this.#record(record.previewBounds);
+    const maxWidth = this.#positiveInteger(bounds.maxWidth, 'maxWidth');
+    const maxHeight = this.#positiveInteger(bounds.maxHeight, 'maxHeight');
     if (maxWidth > 16384 || maxHeight > 16384 || maxWidth * maxHeight * 4 > 256 * 1024 * 1024) {
-      throw this.invalid('Frame-review preview bounds exceed the bridge limit.');
+      throw this.#invalid('Frame-review preview bounds exceed the bridge limit.');
     }
-    return { operationId, sourceHandle, previewBounds: { maxWidth, maxHeight }, muted: this.muted(record.muted) };
+    return { operationId, sourceHandle, previewBounds: { maxWidth, maxHeight }, muted: this.#muted(record.muted) };
   }
 
-  muted(value) {
+  #muted(value) {
     if (value === undefined) return false;
-    if (typeof value !== 'boolean') throw this.invalid('Frame-review muted must be true or false.');
+    if (typeof value !== 'boolean') throw this.#invalid('Frame-review muted must be true or false.');
     return value;
   }
 
-  commandRequest(payload) {
-    const request = this.baseRequest(payload);
+  #commandRequest(payload) {
+    const request = this.#baseRequest(payload);
     if (typeof payload.command !== 'string' || !COMMANDS.has(payload.command)) {
-      throw this.invalid('Unknown frame-review command.');
+      throw this.#invalid(UNKNOWN_COMMAND);
     }
-    return { ...request, command: payload.command, args: payload.args === undefined ? {} : this.record(payload.args) };
+    return { ...request, command: payload.command, args: payload.args === undefined ? {} : this.#record(payload.args) };
   }
 
-  baseRequest(payload) {
-    const record = this.record(payload);
+  #baseRequest(payload) {
+    const record = this.#record(payload);
     return {
-      operationId: this.operationId(record.operationId),
-      sessionId: this.opaqueId(record.sessionId, 'session'),
+      operationId: this.#operationId(record.operationId),
+      sessionId: this.#opaqueId(record.sessionId, 'session'),
     };
   }
 
-  requireHost(event) {
-    const host = this.hostForEvent(event);
-    if (!host) throw this.invalid('No frame-review host exists for this window.');
+  #requireHost(event) {
+    const host = this.#hostForEvent(event);
+    if (!host) throw this.#invalid('No frame-review host exists for this window.');
     return host;
   }
 
-  record(value) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw this.invalid('IPC payload must be an object.');
+  #record(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw this.#invalid('IPC payload must be an object.');
     return value;
   }
 
-  operationId(value) {
-    if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(value)) throw this.invalid('Operation id is invalid.');
+  #operationId(value) {
+    if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(value)) throw this.#invalid('Operation id is invalid.');
     return value;
   }
 
-  opaqueId(value, kind) {
+  #opaqueId(value, kind) {
     if (typeof value !== 'string' || !new RegExp(`^${kind}_[a-zA-Z0-9_-]{8,120}$`).test(value)) {
-      throw this.invalid(`${kind} id is invalid.`);
+      throw this.#invalid(`${kind} id is invalid.`);
     }
     return value;
   }
 
-  positiveInteger(value, label) {
-    if (!Number.isSafeInteger(value) || value < 1) throw this.invalid(`${label} must be a positive integer.`);
+  #positiveInteger(value, label) {
+    if (!Number.isSafeInteger(value) || value < 1) throw this.#invalid(`${label} must be a positive integer.`);
     return value;
   }
 
-  nonnegativeInteger(value, label) {
-    if (!Number.isSafeInteger(value) || value < 0) throw this.invalid(`${label} must not be negative.`);
+  #nonnegativeInteger(value, label) {
+    if (!Number.isSafeInteger(value) || value < 0) throw this.#invalid(`${label} must not be negative.`);
     return value;
   }
 
-  decimalBigInt(value, label) {
-    if (typeof value !== 'string' || !/^\d+$/.test(value)) throw this.invalid(`${label} must be a decimal integer string.`);
+  #decimalBigInt(value, label) {
+    if (typeof value !== 'string' || !/^\d+$/.test(value)) throw this.#invalid(`${label} must be a decimal integer string.`);
     return BigInt(value);
   }
 
-  direction(value) {
-    if (value !== -1 && value !== 1) throw this.invalid('Adjacent direction must be -1 or 1.');
+  #direction(value) {
+    if (value !== -1 && value !== 1) throw this.#invalid('Adjacent direction must be -1 or 1.');
     return value;
   }
 
-  toWire(value) {
+  #toWire(value) {
     if (typeof value === 'bigint') return value.toString();
     if (value instanceof Uint8Array) return value;
-    if (Array.isArray(value)) return value.map((item) => this.toWire(item));
+    if (Array.isArray(value)) return value.map((item) => this.#toWire(item));
     if (value && typeof value === 'object') {
       if (value.type === 'error') {
         return {
           type: 'error',
           category: String(value.category || 'backend-failure'),
-          message: this.publicErrorMessage(value.category),
+          message: this.#publicErrorMessage(value.category),
           recoverable: value.recoverable === true,
         };
       }
-      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, this.toWire(item)]));
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, this.#toWire(item)]));
     }
     return value;
   }
 
-  success(operationId, result) { return { ok: true, operationId, result }; }
+  #success(operationId, result) { return { ok: true, operationId, result }; }
 
-  failure(operationId, error) {
+  #failure(operationId, error) {
     return {
       ok: false,
       operationId,
       error: {
         category: typeof error?.category === 'string' ? error.category : 'invalid-request',
-        message: this.publicErrorMessage(error?.category, error?.message),
+        message: this.#publicErrorMessage(error?.category, error?.message),
         recoverable: error?.recoverable === true,
       },
     };
   }
 
-  invalid(message) {
+  #invalid(message) {
     const error = new Error(message);
     error.category = 'invalid-request';
     error.recoverable = true;
     return error;
   }
 
-  publicErrorMessage(category, fallback) {
+  #publicErrorMessage(category, fallback) {
     switch (category) {
       case 'cache-unavailable': return 'Prepared-review caches under the application folder are not writable.';
       case 'process-crash': return 'The frame-review native service is unavailable. Build or reinstall the frame-review runtime.';
@@ -277,8 +277,4 @@ class FrameReviewIpcBoundary {
   }
 }
 
-function registerFrameReviewIpc(options) {
-  return new FrameReviewIpcBoundary(options).register();
-}
-
-module.exports = { CHANNELS, FrameReviewIpcBoundary, registerFrameReviewIpc };
+module.exports = { FrameReviewIpc };
