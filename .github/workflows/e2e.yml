@@ -8,6 +8,9 @@ on:
 jobs:
   e2e:
     runs-on: windows-latest
+    env:
+      CYGWIN_SETUP_VERSION: '2.941'
+      CYGWIN_SETUP_SHA512: '9bbbd4de497842446af58af875590ace5d8fa3c557cd7e27328569dfa68e58213da1cc1a6fb7102d4f0f01be38e0b92c6fa74f61b6eb7351a0481ca4bd9e8781'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,24 +21,40 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Restore pinned Cygwin packages
+        id: cygwin-packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\cygwin-packages
+          key: cygwin-packages-${{ env.CYGWIN_SETUP_VERSION }}-${{ hashFiles('.github/cygwin-packages.txt') }}
+
       - name: Install Cygwin toolchain
         shell: pwsh
+        env:
+          CYGWIN_PACKAGES_RESTORED: ${{ steps.cygwin-packages.outputs.cache-hit }}
         run: |
           # A versioned installer never changes; https://cygwin.com/setup-x86_64.exe changes with every release.
-          $setupPath = Join-Path $env:RUNNER_TEMP 'setup-2.941.x86_64.exe'
-          Invoke-WebRequest -Uri 'https://cygwin.com/setup/setup-2.941.x86_64.exe' -OutFile $setupPath
-          $expectedSha512 = '9bbbd4de497842446af58af875590ace5d8fa3c557cd7e27328569dfa68e58213da1cc1a6fb7102d4f0f01be38e0b92c6fa74f61b6eb7351a0481ca4bd9e8781'
+          $setupPath = Join-Path $env:RUNNER_TEMP "setup-$env:CYGWIN_SETUP_VERSION.x86_64.exe"
+          Invoke-WebRequest -Uri "https://cygwin.com/setup/setup-$env:CYGWIN_SETUP_VERSION.x86_64.exe" -OutFile $setupPath
           $actualSha512 = (Get-FileHash -LiteralPath $setupPath -Algorithm SHA512).Hash.ToLowerInvariant()
-          if ($actualSha512 -ne $expectedSha512) {
-            throw "Cygwin setup SHA-512 mismatch. Expected $expectedSha512; got $actualSha512."
+          if ($actualSha512 -ne $env:CYGWIN_SETUP_SHA512) {
+            throw "Cygwin setup SHA-512 mismatch. Expected $env:CYGWIN_SETUP_SHA512; got $actualSha512."
           }
-          $setupProcess = Start-Process -FilePath $setupPath -ArgumentList @(
+          $pins = Get-Content -LiteralPath '.github/cygwin-packages.txt' | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object {
+            $fields = -split $_
+            [pscustomobject]@{ Name = $fields[0]; Version = $fields[1] }
+          }
+          $packageDir = Join-Path $env:RUNNER_TEMP 'cygwin-packages'
+          # Cached archives install offline, so every package, dependencies included, matches the last passing run.
+          $source = if ($env:CYGWIN_PACKAGES_RESTORED -eq 'true') { @('-L') } else { @('-s', 'https://mirrors.kernel.org/sourceware/cygwin/') }
+          $setupProcess = Start-Process -FilePath $setupPath -ArgumentList (@(
             '-q'
             '-N'
             '-R', 'C:\cygwin64'
-            '-s', 'https://mirrors.kernel.org/sourceware/cygwin/'
+            '-l', $packageDir
+          ) + $source + @(
             '-P', 'gcc-g++,mingw64-x86_64-gcc-g++,cmake,make,python3,pkg-config'
-          ) -Wait -PassThru -NoNewWindow
+          )) -Wait -PassThru -NoNewWindow
           if ($setupProcess.ExitCode -ne 0) {
             throw "Cygwin setup failed with exit code $($setupProcess.ExitCode)."
           }
@@ -51,6 +70,19 @@ jobs:
               throw "Cygwin toolchain is missing $requiredTool."
             }
           }
+          $installed = @{}
+          Get-Content -LiteralPath 'C:\cygwin64\etc\setup\installed.db' | Select-Object -Skip 1 | ForEach-Object {
+            $fields = -split $_
+            $installed[$fields[0]] = $fields[1] -replace "^$([regex]::Escape($fields[0]))-", '' -replace '\.tar\.[a-z0-9]+$', ''
+          }
+          $drift = @($pins | Where-Object { $installed[$_.Name] -ne $_.Version } | ForEach-Object {
+            $found = if ($installed.ContainsKey($_.Name)) { $installed[$_.Name] } else { 'not installed' }
+            "$($_.Name): pinned $($_.Version), installed $found"
+          })
+          if ($drift.Count -gt 0) {
+            throw "Cygwin packages differ from .github/cygwin-packages.txt. The mirror moved on; update the pins on purpose:`n$($drift -join "`n")"
+          }
+          "Cygwin packages match .github/cygwin-packages.txt ($($pins.Count) pinned)."
 
       - name: Cache frame-review native toolchain
         uses: actions/cache@v4

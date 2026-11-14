@@ -1,0 +1,17 @@
+# Cygwin package versions E2E must install; it fails when the installed set differs.
+# Change these lines on purpose, in the commit whose CI run proves the new set.
+binutils 2.47-1
+cmake 4.4.5-1
+gcc-core 14.4.0-1
+gcc-g++ 14.4.0-1
+make 4.4.1-2
+mingw64-x86_64-binutils 2.47-1
+mingw64-x86_64-gcc-core 14.4.0-1
+mingw64-x86_64-gcc-g++ 14.4.0-1
+mingw64-x86_64-headers 14.0.0-1
+mingw64-x86_64-runtime 14.0.0-1
+mingw64-x86_64-winpthreads 14.0.0-1
+pkg-config 3.0.10-1
+pkgconf 3.0.10-1
+python3 3.12.12-1
+python312 3.12.12-1
