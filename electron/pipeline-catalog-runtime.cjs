@@ -3,9 +3,13 @@ const path = require('path');
 const { readFolderEntries, isVideoFilename } = require('./folder-entry.cjs');
 
 class PipelineCatalogRuntime {
-  constructor({ settingsStore, folderAccess, fs = fsPromises }) {
+  constructor({ settingsStore, folderAccess, fileNameValidity, fs = fsPromises }) {
+    if (typeof fileNameValidity?.isLegalWindowsFileName !== 'function') {
+      throw new Error('Pipeline catalog dependencies are invalid.');
+    }
     this.settingsStore = settingsStore;
     this.folderAccess = folderAccess;
+    this.fileNameValidity = fileNameValidity;
     this.fs = fs;
   }
 
@@ -21,7 +25,7 @@ class PipelineCatalogRuntime {
     for (const child of childDirectories) {
       if (!child.isDirectory()) continue;
       const folderPath = path.join(rootPath, child.name);
-      if (await this.hasTopLevelVideoFile(folderPath)) candidates.push({ folderPath, name: child.name });
+      if (await this.isListedPipelineFolder(folderPath)) candidates.push({ folderPath, name: child.name });
     }
 
     candidates.sort((left, right) => this.comparePipelineNames(left.name, right.name));
@@ -59,6 +63,24 @@ class PipelineCatalogRuntime {
     };
   }
 
+  async createPipeline(requestedName) {
+    const name = typeof requestedName === 'string' ? requestedName.trim() : '';
+    const rootPath = await this.configuredRootPath();
+    if (!rootPath) return { kind: 'refused', reason: 'no-top-folder' };
+    if (!this.fileNameValidity.isLegalWindowsFileName(name)) return { kind: 'refused', reason: 'invalid-name' };
+    const folderPath = path.resolve(rootPath, name);
+    // The window chose this name, so the folder boundary is checked here as well as by the name rule.
+    if (path.dirname(folderPath) !== rootPath) return { kind: 'refused', reason: 'invalid-name' };
+    try {
+      await this.fs.mkdir(folderPath);
+    } catch (error) {
+      if (error?.code === 'EEXIST') return { kind: 'refused', reason: 'name-taken' };
+      if (error?.code === 'ENOENT') return { kind: 'refused', reason: 'top-folder-missing' };
+      throw error;
+    }
+    return { kind: 'created', name };
+  }
+
   async configuredRootPath() {
     const settingsResult = await this.settingsStore.load();
     if (!settingsResult.ok) throw new Error(settingsResult.error || 'Could not load Pipelines settings.');
@@ -66,9 +88,9 @@ class PipelineCatalogRuntime {
     return typeof rootPath === 'string' && path.isAbsolute(rootPath) ? path.resolve(rootPath) : null;
   }
 
-  async hasTopLevelVideoFile(folderPath) {
+  async isListedPipelineFolder(folderPath) {
     const entries = await this.fs.readdir(folderPath, { withFileTypes: true });
-    return entries.some(entry => entry.isFile() && isVideoFilename(entry.name));
+    return entries.length === 0 || entries.some(entry => entry.isFile() && isVideoFilename(entry.name));
   }
 
   collectionClipNames(content) {

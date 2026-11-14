@@ -127,7 +127,7 @@ async function registerIpc({
     fileNameValidity,
   });
   const folderAccess = new FolderAccessRegistry();
-  const pipelineCatalogRuntime = new PipelineCatalogRuntime({ settingsStore, folderAccess });
+  const pipelineCatalogRuntime = new PipelineCatalogRuntime({ settingsStore, folderAccess, fileNameValidity });
   const clipSourceMovieRuntime = new ClipSourceMovieRuntime({ folderAccess });
   const frameRateProbe = new MovieFrameRateProbe({ resolveFfprobe: () => nativeProducts.ffprobe(), environment: nativeEnvironment });
   const zoomEditSources = new ZoomEditSources({
@@ -207,6 +207,8 @@ async function registerIpc({
     pipelineCatalogRuntime.describePipeline(event.sender, payload.pipelineId));
   ipcMain.handle('clip-sandbox:open-pipeline-catalog-entry', (event, payload = {}) =>
     pipelineCatalogRuntime.openPipeline(event.sender, payload.pipelineId));
+  ipcMain.handle('clip-sandbox:create-pipeline', (_event, payload = {}) =>
+    pipelineCatalogRuntime.createPipeline(payload.name));
 
   ipcMain.handle('clip-sandbox:refresh-folder', async (event, payload = {}) => {
     const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);

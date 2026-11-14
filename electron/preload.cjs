@@ -130,6 +130,7 @@ const desktopApi = {
   listPipelineCatalog() { return ipcRenderer.invoke('clip-sandbox:list-pipeline-catalog'); },
   describePipelineCatalogEntry(payload) { return ipcRenderer.invoke('clip-sandbox:describe-pipeline-catalog-entry', payload); },
   openPipelineCatalogEntry(payload) { return ipcRenderer.invoke('clip-sandbox:open-pipeline-catalog-entry', payload); },
+  createPipeline(payload) { return ipcRenderer.invoke('clip-sandbox:create-pipeline', payload); },
   pickFolder() {
     return ipcRenderer.invoke('clip-sandbox:pick-folder');
   },
