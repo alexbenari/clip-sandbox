@@ -1,8 +1,12 @@
 const fsPromises = require('fs/promises');
 const path = require('path');
-const { readFolderEntries, isVideoFilename } = require('./folder-entry.cjs');
+const { FolderEntries } = require('./folder-entries.cjs');
+const { VideoFilenames } = require('./video-filenames.cjs');
 
 class PipelineCatalogRuntime {
+  #folderEntries;
+  #videoFilenames = new VideoFilenames();
+
   constructor({ settingsStore, folderAccess, fileNameValidity, fs = fsPromises }) {
     if (typeof fileNameValidity?.isLegalWindowsFileName !== 'function') {
       throw new Error('Pipeline catalog dependencies are invalid.');
@@ -11,6 +15,7 @@ class PipelineCatalogRuntime {
     this.folderAccess = folderAccess;
     this.fileNameValidity = fileNameValidity;
     this.fs = fs;
+    this.#folderEntries = new FolderEntries({ fs });
   }
 
   async listPipelines(webContents) {
@@ -39,7 +44,7 @@ class PipelineCatalogRuntime {
     const folderPath = this.folderAccess.requireKnownCatalogPipeline(webContents, pipelineId);
     const entries = await this.fs.readdir(folderPath, { withFileTypes: true });
     const clipNames = entries
-      .filter(entry => entry.isFile() && isVideoFilename(entry.name))
+      .filter(entry => entry.isFile() && this.#videoFilenames.isVideo(entry.name))
       .map(entry => entry.name)
       .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }));
     const collectionFiles = entries
@@ -54,7 +59,7 @@ class PipelineCatalogRuntime {
 
   async openPipeline(webContents, pipelineId) {
     const folderPath = this.folderAccess.requireKnownCatalogPipeline(webContents, pipelineId);
-    const files = await readFolderEntries(folderPath);
+    const files = await this.#folderEntries.read(folderPath);
     this.folderAccess.remember(webContents, folderPath);
     return {
       folderPath,
@@ -90,7 +95,7 @@ class PipelineCatalogRuntime {
 
   async isListedPipelineFolder(folderPath) {
     const entries = await this.fs.readdir(folderPath, { withFileTypes: true });
-    return entries.length === 0 || entries.some(entry => entry.isFile() && isVideoFilename(entry.name));
+    return entries.length === 0 || entries.some(entry => entry.isFile() && this.#videoFilenames.isVideo(entry.name));
   }
 
   collectionClipNames(content) {

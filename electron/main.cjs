@@ -2,7 +2,7 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { readFolderEntries } = require('./folder-entry.cjs');
+const { FolderEntries } = require('./folder-entries.cjs');
 const { FolderAccessRegistry } = require('./folder-access-registry.cjs');
 const { PipelineCatalogRuntime } = require('./pipeline-catalog-runtime.cjs');
 const { AppSettingsStore } = require('./app-settings-store.cjs');
@@ -107,6 +107,7 @@ async function registerIpc({
 }) {
   const nativeEnvironment = nativeProducts.environment();
   const hostForEvent = event => frameReviewRuntime.hostForEvent(event);
+  const folderEntries = new FolderEntries();
   // End-to-end tests keep moved files in their own profile, so they never touch the real Recycle Bin.
   const testRecycleBin = process.env.CLIP_SANDBOX_E2E === '1'
     ? new TestRecycleBin(path.join(app.getPath('userData'), 'test-recycle-bin'))
@@ -199,7 +200,7 @@ async function registerIpc({
       canceled: false,
       folderPath: resolvedFolderPath,
       folderName: path.basename(resolvedFolderPath),
-      files: await readFolderEntries(resolvedFolderPath),
+      files: await folderEntries.read(resolvedFolderPath),
     };
   });
   ipcMain.handle('clip-sandbox:list-pipeline-catalog', event => pipelineCatalogRuntime.listPipelines(event.sender));
@@ -215,7 +216,7 @@ async function registerIpc({
     return {
       folderPath,
       folderName: path.basename(folderPath),
-      files: await readFolderEntries(folderPath),
+      files: await folderEntries.read(folderPath),
     };
   });
 

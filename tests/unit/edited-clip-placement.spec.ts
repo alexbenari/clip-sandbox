@@ -7,7 +7,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { createFolderEntry } = require('../../electron/folder-entry.cjs');
+const { FolderEntries } = require('../../electron/folder-entries.cjs');
 const { EditedClipPlacement } = require('../../electron/edited-clip-placement.cjs');
 
 let root: string;
@@ -135,7 +135,7 @@ describe('EditedClipPlacement', () => {
       releaseTrash();
       const saved = await replacing;
       // The saved clip is addressed as a folder listing addresses the same file.
-      const listed = await createFolderEntry(path.join(folder, 'Feature-002.mp4'));
+      const listed = await new FolderEntries().entry(path.join(folder, 'Feature-002.mp4'));
 
       expect(whileTrashing).toEqual({ files: ['Feature-002.a1b2c3.refining', 'Feature-002.mp4'], original: 'original', temporary: 'refined' });
       expect(saved).toEqual({
