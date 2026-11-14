@@ -84,6 +84,7 @@ import { EditedClipSaveWorkflow } from './edited-clip-save-workflow.js';
 import { CreatedClipInsertion } from './created-clip-insertion.js';
 import { ClipFileReplacement } from './clip-file-replacement.js';
 import { ClipRenameWorkflow } from './clip-rename-workflow.js';
+import { PipelineCreationWorkflow } from './pipeline-creation-workflow.js';
 import { ElectronClipRenameService } from '../adapters/electron/electron-clip-rename-service.js';
 import { ZoomEditModeKeyboard } from '../ui/zoom-edit-mode-keyboard.js';
 import { SaveEditsDialogControl } from '../ui/save-edits-dialog-control.js';
@@ -179,8 +180,8 @@ export class AppController {
         if (activityPanelAutoOpenPolicy.mayOpenAutomatically()) utilities?.open('activity');
       } : undefined,
     });
-    const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: fullscreenAdapter });
-    const pipelineCatalogControl = PipelineCatalogControl.fromDocument(document, { catalog: pipelineCatalog });
+    const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: fullscreenAdapter, appText });
+    const pipelineCatalogControl = PipelineCatalogControl.fromDocument(document, { catalog: pipelineCatalog, appText });
     const controlFailureReporting = new ControlFailureReporting({
       grid,
       pipelineCatalog: pipelineCatalogControl,
@@ -438,6 +439,15 @@ export class AppController {
         diagnostics,
       })
       : null;
+    const pipelineCreation = pipelineCatalogControl
+      ? new PipelineCreationWorkflow({
+        catalog: pipelineCatalogControl,
+        pipelines: pipelineCatalog,
+        appText,
+        reporter: activityReporter,
+        diagnostics,
+      })
+      : null;
     const gridContextMenu = new GridContextMenuWorkflow({
       pipelineWorkingCopy,
       grid,
@@ -521,6 +531,7 @@ export class AppController {
         await zoomEditMode?.dispose();
         editedClipSave?.dispose();
         clipRename?.dispose();
+        pipelineCreation?.dispose();
         await gifExtractionSession?.dispose();
       },
       disposeControls: () => {

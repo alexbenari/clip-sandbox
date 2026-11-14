@@ -124,6 +124,35 @@ describe('electron folder services', () => {
     expect(api.openPipelineCatalogEntry).toHaveBeenCalledWith({ pipelineId: 'pipeline_1' });
   });
 
+  it('sends only the typed pipeline name to the desktop and answers the created pipeline', async () => {
+    const api = { createPipeline: vi.fn(async () => ({ kind: 'created', name: 'Heist films' })) };
+    const service = new ElectronPipelineCatalogService(api, new ElectronFolderService(api));
+
+    await expect(service.createPipeline(' Heist films ')).resolves.toEqual({ kind: 'created', name: 'Heist films' });
+    expect(api.createPipeline).toHaveBeenCalledWith({ name: ' Heist films ' });
+  });
+
+  it.each(['invalid-name', 'name-taken', 'no-top-folder', 'top-folder-missing'])(
+    'answers a pipeline creation refused as %s',
+    async reason => {
+      const api = { createPipeline: vi.fn(async () => ({ kind: 'refused', reason })) };
+      const service = new ElectronPipelineCatalogService(api, new ElectronFolderService(api));
+
+      await expect(service.createPipeline('Noir')).resolves.toEqual({ kind: 'refused', reason });
+    },
+  );
+
+  it.each([
+    ['an unknown refusal', { kind: 'refused', reason: 'too-long' }],
+    ['a created answer without a name', { kind: 'created' }],
+    ['no answer', undefined],
+  ])('rejects a pipeline creation answer with %s', async (_case, answer) => {
+    const api = { createPipeline: vi.fn(async () => answer) };
+    const service = new ElectronPipelineCatalogService(api, new ElectronFolderService(api));
+
+    await expect(service.createPipeline('Noir')).rejects.toThrow('Invalid pipeline creation response.');
+  });
+
   it('maps Recycle Bin responses into renderer-facing errors', async () => {
     const api = {
       trashFiles: vi.fn(async () => ({

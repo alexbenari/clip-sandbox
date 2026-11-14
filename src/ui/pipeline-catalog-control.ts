@@ -3,14 +3,19 @@ import type {
   IPipelineCatalogDetails,
   IPipelineCatalogEntry,
   PipelineCatalogResult,
+  PipelineCreationProblem,
+  PipelineCreationRequest,
 } from '../app/pipeline-catalog.js';
+import type { AppText } from '../app/app-text.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 import { DocumentElements } from './document-elements.js';
+import { NewPipelineField } from './new-pipeline-field.js';
 
 export type PipelineCatalogFailureKind = 'catalog' | 'pipeline-contents';
 
 export interface IPipelineCatalogEvents {
   loadRequested: IPipelineCatalogEntry;
+  createRequested: PipelineCreationRequest;
   failed: Readonly<{ kind: PipelineCatalogFailureKind; message: string; error: unknown }>;
   loaded: void;
 }
@@ -20,30 +25,65 @@ type PipelineCatalogPort = {
   describePipelineCatalogEntry(entry: IPipelineCatalogEntry): Promise<IPipelineCatalogDetails>;
 };
 
+type PipelineCatalogText = Pick<AppText, 'windowsNameRefusalText' | 'pipelineCreationRecoveryText'>;
+
 type PipelineCatalogControlOptions = {
   host: HTMLElement;
+  newPipelineButton: HTMLButtonElement;
   catalog: PipelineCatalogPort;
-  document?: Document;
+  appText: PipelineCatalogText;
+  document: Document;
 };
+
+type CreateAvailability = 'available' | 'loading' | Readonly<{ unavailableBecause: string }>;
+
+const NEW_PIPELINE = 'New pipeline';
+const NO_TOP_FOLDER = 'Set a Pipelines top folder in Settings to create a pipeline.';
+const LOAD_FAILED = 'Pipelines could not be loaded.';
 
 export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEvents> {
   private readonly host: HTMLElement;
+  private readonly list: HTMLElement;
+  private readonly newPipelineButton: HTMLButtonElement;
   private readonly catalog: PipelineCatalogPort;
+  private readonly createProblemText: Readonly<Record<PipelineCreationProblem, string>>;
   private readonly events = new EventSource<IPipelineCatalogEvents>();
   private readonly document: Document;
+  private readonly listeners = new AbortController();
   private readonly detailsByPipelineId = new Map<string, IPipelineCatalogDetails>();
+  private readonly expandButtonsByName = new Map<string, HTMLButtonElement>();
+  private nameField: NewPipelineField | null = null;
   private requestGeneration = 0;
   private disposed = false;
 
-  static fromDocument(doc: Document, { catalog }: { catalog: PipelineCatalogPort }): PipelineCatalogControl | null {
-    const host = new DocumentElements(doc).optional('pipelinesPanelHost');
-    return host ? new PipelineCatalogControl({ host, catalog, document: doc }) : null;
+  static fromDocument(doc: Document, { catalog, appText }: {
+    catalog: PipelineCatalogPort;
+    appText: PipelineCatalogText;
+  }): PipelineCatalogControl | null {
+    const elements = new DocumentElements(doc);
+    const host = elements.optional('pipelinesPanelHost');
+    if (!host) return null;
+    const newPipelineButton = elements.required<HTMLButtonElement>('newPipeline');
+    return new PipelineCatalogControl({ host, newPipelineButton, catalog, appText, document: doc });
   }
 
   constructor(options: PipelineCatalogControlOptions) {
     this.host = options.host;
+    this.newPipelineButton = options.newPipelineButton;
     this.catalog = options.catalog;
-    this.document = options.document ?? document;
+    this.document = options.document;
+    this.createProblemText = Object.freeze({
+      'invalid-name': options.appText.windowsNameRefusalText(),
+      'name-taken': 'A folder with this name already exists in the Pipelines top folder.',
+      'no-top-folder': NO_TOP_FOLDER,
+      'top-folder-missing': 'The Pipelines top folder no longer exists. Choose it again in Settings.',
+      failed: `The pipeline could not be created. ${options.appText.pipelineCreationRecoveryText()}`,
+    });
+    this.list = this.document.createElement('div');
+    this.list.className = 'pipeline-catalog-list';
+    this.newPipelineButton.setAttribute('aria-label', NEW_PIPELINE);
+    this.newPipelineButton.addEventListener('click', () => this.beginCreate(), { signal: this.listeners.signal });
+    this.showCreateAvailability('loading');
   }
 
   on<TName extends keyof IPipelineCatalogEvents>(name: TName, handler: EventHandler<IPipelineCatalogEvents[TName]>): () => void {
@@ -53,7 +93,10 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
   async load(): Promise<void> {
     const requestGeneration = ++this.requestGeneration;
     this.detailsByPipelineId.clear();
-    this.host.replaceChildren(this.message('Loading pipelines…', 'pipeline-catalog-loading'));
+    this.expandButtonsByName.clear();
+    if (this.list.parentElement !== this.host) this.host.replaceChildren(this.list);
+    this.list.replaceChildren(this.message('Loading pipelines…', 'pipeline-catalog-loading'));
+    this.showCreateAvailability('loading');
     try {
       const result = await this.catalog.listPipelineCatalog();
       if (!this.isCurrent(requestGeneration)) return;
@@ -61,26 +104,73 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
       this.events.emit('loaded');
     } catch (error) {
       if (!this.isCurrent(requestGeneration)) return;
-      this.host.replaceChildren(this.message('Pipelines could not be loaded. Review the configured folder and try again.', 'pipeline-catalog-error'));
+      this.list.replaceChildren(this.message(`${LOAD_FAILED} Review the configured folder and try again.`, 'pipeline-catalog-error'));
+      this.showCreateAvailability({ unavailableBecause: LOAD_FAILED });
       this.events.emit('failed', { kind: 'catalog', message: 'Could not load Pipelines.', error });
     }
+  }
+
+  endCreate(): void {
+    const field = this.nameField;
+    if (!field) return;
+    this.nameField = null;
+    const hadFocus = field.hasFocus;
+    field.remove();
+    if (hadFocus) this.newPipelineButton.focus();
+  }
+
+  showCreateProblem(problem: PipelineCreationProblem): void {
+    this.nameField?.showProblem(this.createProblemText[problem]);
+  }
+
+  focusPipeline(name: string): boolean {
+    const expand = this.expandButtonsByName.get(name);
+    if (!expand?.isConnected) return false;
+    expand.focus();
+    return true;
   }
 
   dispose(): void {
     this.disposed = true;
     this.requestGeneration += 1;
+    this.listeners.abort();
+    this.nameField?.remove();
+    this.nameField = null;
+  }
+
+  private beginCreate(): void {
+    if (this.newPipelineButton.getAttribute('aria-disabled') === 'true') return;
+    if (!this.nameField) {
+      this.nameField = new NewPipelineField(this.document, {
+        submit: name => this.events.emit('createRequested', { name }),
+        cancel: () => this.endCreate(),
+      });
+      this.host.prepend(this.nameField.element);
+      this.host.scrollTop = 0;
+    }
+    this.nameField.focus();
+  }
+
+  private showCreateAvailability(availability: CreateAvailability): void {
+    const reason = typeof availability === 'object' ? availability.unavailableBecause : null;
+    this.newPipelineButton.setAttribute('aria-disabled', String(availability !== 'available'));
+    this.newPipelineButton.title = reason ?? NEW_PIPELINE;
+    if (reason) this.newPipelineButton.setAttribute('aria-description', reason);
+    else this.newPipelineButton.removeAttribute('aria-description');
   }
 
   private renderCatalog(result: PipelineCatalogResult): void {
     if (result.kind === 'unconfigured') {
-      this.host.replaceChildren(this.message('Configure a Pipelines top folder in Settings to see pipelines here.', 'pipeline-catalog-empty'));
+      this.list.replaceChildren(this.message('Configure a Pipelines top folder in Settings to see pipelines here.', 'pipeline-catalog-empty'));
+      this.showCreateAvailability({ unavailableBecause: NO_TOP_FOLDER });
       return;
     }
+    this.showCreateAvailability('available');
     if (result.entries.length === 0) {
-      this.host.replaceChildren(this.message('No pipelines with video clips were found in the configured folder.', 'pipeline-catalog-empty'));
+      this.list.replaceChildren(this.message('No pipelines with video clips were found in the configured folder.', 'pipeline-catalog-empty'));
       return;
     }
-    this.host.replaceChildren(...result.entries.map(entry => this.pipelineEntry(entry)));
+    this.list.replaceChildren(...result.entries.map(entry => this.pipelineEntry(entry)));
   }
 
   private pipelineEntry(entry: IPipelineCatalogEntry): HTMLElement {
@@ -97,6 +187,7 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
     name.className = 'pipeline-tree-name';
     name.textContent = entry.name;
     expand.append(this.disclosureIcon(), name);
+    this.expandButtonsByName.set(entry.name, expand);
     const load = this.document.createElement('button');
     load.type = 'button';
     load.className = 'pipeline-tree-load';

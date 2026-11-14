@@ -3,10 +3,11 @@ import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
 import { Clip } from '../../../src/domain/clip.js';
 import { ClipSequence } from '../../../src/domain/clip-sequence.js';
 import { SourceMovie } from '../../../src/domain/source-movie.js';
+import { AppText } from '../../../src/app/app-text.js';
 import { ClipCollectionGridControl } from '../../../src/ui/clip-collection-grid-control.js';
 import { testClip, clipSource } from '../../support/clip-source-fixtures.js';
 
-const createClipCollectionGridControl = options => new ClipCollectionGridControl(options);
+const createClipCollectionGridControl = options => new ClipCollectionGridControl({ appText: new AppText(), ...options });
 
 describe('clip collection grid control', () => {
   let originalPlay;
