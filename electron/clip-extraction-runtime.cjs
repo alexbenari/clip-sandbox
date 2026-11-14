@@ -6,27 +6,11 @@ const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
 const { SourceInfo } = require('./clip-provenance/source-info.cjs');
 const { OperationResult } = require('./operation-result.cjs');
 
-const COLLECTION_NAME = /^[^<>:"/\\|?*\u0000]{1,180}$/;
+const MAX_NAME_LENGTH = 180;
 const OPAQUE_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 
 function publicEntry(name, stat, type = '') {
   return Object.freeze({ name, type, size: stat.size, lastModifiedMs: stat.mtimeMs });
-}
-
-function validCollectionName(value) {
-  return typeof value === 'string'
-    && value === value.trim()
-    && COLLECTION_NAME.test(value)
-    && value !== '.'
-    && value !== '..'
-    && !/[. ]$/.test(value)
-    && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value);
-}
-
-function validTopLevelFilename(value, extension) {
-  return validCollectionName(value)
-    && path.basename(value) === value
-    && value.toLowerCase().endsWith(extension);
 }
 
 class ClipExtractionRuntime {
@@ -34,10 +18,12 @@ class ClipExtractionRuntime {
     fs = fsPromises,
     getSettings,
     encoder,
+    fileNameValidity,
     randomId = () => randomBytes(18).toString('base64url'),
     provenance = new Mp4Provenance(),
   } = {}) {
-    if (typeof getSettings !== 'function' || typeof encoder?.encode !== 'function') {
+    if (typeof getSettings !== 'function' || typeof encoder?.encode !== 'function'
+      || typeof fileNameValidity?.isLegalWindowsFileName !== 'function') {
       throw new Error('Clip-extraction runtime dependencies are invalid.');
     }
     this.fs = fs;
@@ -45,6 +31,7 @@ class ClipExtractionRuntime {
     this.randomId = randomId;
     this.provenance = provenance;
     this.encoder = encoder;
+    this.fileNameValidity = fileNameValidity;
     this.destinations = new Map();
     this.operations = new Map();
     this.collectionQueues = new Map();
@@ -85,7 +72,7 @@ class ClipExtractionRuntime {
     if (!target) return OperationResult.failure('invalid-destination', 'The extraction destination is unavailable.');
     if (!OPAQUE_ID.test(String(request.sourceHandle || '').replace(/^source_/, ''))
       || !Number.isSafeInteger(request.sourceGeneration) || request.sourceGeneration < 1
-      || !validCollectionName(request.collectionName)
+      || !this.#isLegalBoundedName(request.collectionName)
       || !Number.isSafeInteger(request.startFrameIndex) || request.startFrameIndex < 0
       || !Number.isSafeInteger(request.endFrameIndex) || request.endFrameIndex < request.startFrameIndex) {
       return OperationResult.failure('invalid-request', 'The exact extraction request is invalid.');
@@ -202,9 +189,9 @@ class ClipExtractionRuntime {
   async saveCollection(ownerId, request = {}) {
     const target = this.destination(ownerId, request.destinationHandle);
     if (!target) return OperationResult.failure('invalid-destination', 'The extraction destination is unavailable.');
-    if (!validTopLevelFilename(request.filename, '.txt') || typeof request.text !== 'string'
+    if (!this.#isLegalBoundedFilename(request.filename, '.txt') || typeof request.text !== 'string'
       || Buffer.byteLength(request.text, 'utf8') > 4 * 1024 * 1024
-      || request.text.split(/\r?\n/).filter(Boolean).some(name => !validTopLevelFilename(name, '.mp4'))) {
+      || request.text.split(/\r?\n/).filter(Boolean).some(name => !this.#isLegalBoundedFilename(name, '.mp4'))) {
       return OperationResult.failure('invalid-request', 'The collection publication request is invalid.');
     }
     const temporary = path.join(target.folderPath, `.${request.filename}.${this.randomId()}.tmp`);
@@ -235,6 +222,16 @@ class ClipExtractionRuntime {
     for (const operation of this.operations.values()) operation.controller.abort();
     await Promise.allSettled([...this.collectionQueues.values()]);
     this.destinations.clear();
+  }
+
+  #isLegalBoundedName(value) {
+    return typeof value === 'string'
+      && value.length <= MAX_NAME_LENGTH
+      && this.fileNameValidity.isLegalWindowsFileName(value);
+  }
+
+  #isLegalBoundedFilename(value, extension) {
+    return this.#isLegalBoundedName(value) && value.toLowerCase().endsWith(extension);
   }
 }
 

@@ -30,9 +30,6 @@ const { NativeProductLocator } = require('./native-product-locator.cjs');
 const { ThumbnailCacheRuntime } = require('./thumbnail-cache-runtime.cjs');
 const { TestRecycleBin } = require('./test-recycle-bin.cjs');
 
-const WINDOWS_INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000]/;
-const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
-
 async function pickFolderFromDialog(browserWindow) {
   if (global.__clipSandboxNextFolderPath) {
     const folderPath = global.__clipSandboxNextFolderPath;
@@ -95,29 +92,26 @@ function createMainWindow(frameReviewRuntime) {
   return win;
 }
 
-function validateTopLevelFilename(filename) {
+function validateTopLevelFilename(filename, fileNameValidity) {
   const normalizedFilename = String(filename || '').trim();
-  const basenamePrefix = normalizedFilename.split('.')[0] || '';
-  if (
-    !normalizedFilename
-    || normalizedFilename === '.'
-    || normalizedFilename === '..'
-    || WINDOWS_INVALID_FILENAME_CHARS.test(normalizedFilename)
-    || /[. ]$/.test(normalizedFilename)
-    || /[. ]$/.test(basenamePrefix)
-    || WINDOWS_RESERVED_BASENAME.test(basenamePrefix)
-  ) {
+  if (!fileNameValidity.isLegalWindowsFileName(normalizedFilename)) {
     throw new Error(`Invalid top-level filename: ${filename}`);
   }
   return normalizedFilename;
 }
 
-async function loadEditComposition(projectFolder) {
-  const moduleUrl = pathToFileURL(path.join(projectFolder, 'build', 'src', 'domain', 'zoom-edit-composition.js')).href;
-  return (await import(moduleUrl)).ZoomEditComposition;
+async function loadSharedDomain(projectFolder) {
+  const importDomainModule = name => import(pathToFileURL(path.join(projectFolder, 'build', 'src', 'domain', `${name}.js`)).href);
+  const [{ ZoomEditComposition }, { WindowsFileNameValidity }] = await Promise.all([
+    importDomainModule('zoom-edit-composition'),
+    importDomainModule('windows-file-name-validity'),
+  ]);
+  return { editComposition: ZoomEditComposition, fileNameValidity: new WindowsFileNameValidity() };
 }
 
-async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProducts, editComposition, zoomEditPreviewFolder }) {
+async function registerIpc({
+  frameReviewRuntime, thumbnailRuntime, nativeProducts, editComposition, fileNameValidity, zoomEditPreviewFolder,
+}) {
   const nativeEnvironment = nativeProducts.environment();
   // End-to-end tests keep moved files in their own profile, so they never touch the real Recycle Bin.
   const testRecycleBin = process.env.CLIP_SANDBOX_E2E === '1'
@@ -136,6 +130,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
   const clipExtractionRuntime = createClipExtractionRuntime({
     getSettings: () => settingsStore.load(),
     encoder: exactRangeEncoder,
+    fileNameValidity,
   });
   const folderAccess = new FolderAccessRegistry();
   const pipelineCatalogRuntime = new PipelineCatalogRuntime({ settingsStore, folderAccess });
@@ -182,7 +177,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
   await zoomEditPreviews.initialize();
   ipcMain.handle('clip-sandbox:clip-source-movies-read', (event, request) =>
     clipSourceMovieRuntime.read(event, request));
-  const clipFileRenamer = new ClipFileRenamer({ folderAccess });
+  const clipFileRenamer = new ClipFileRenamer({ folderAccess, fileNameValidity });
   ipcMain.handle('clip-sandbox:rename-clip', (event, request) => clipFileRenamer.rename(event.sender, request));
   frameReviewRuntime.onHostReleased(webContentsId => {
     zoomEditSources.forgetAppWindow(webContentsId);
@@ -230,14 +225,14 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
 
   ipcMain.handle('clip-sandbox:save-text-file', async (event, payload = {}) => {
     const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
-    const filename = validateTopLevelFilename(payload.filename);
+    const filename = validateTopLevelFilename(payload.filename, fileNameValidity);
     await fs.writeFile(path.join(folderPath, filename), String(payload.text || ''), 'utf8');
     return { mode: 'saved' };
   });
 
   ipcMain.handle('clip-sandbox:append-text-file', async (event, payload = {}) => {
     const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
-    const filename = validateTopLevelFilename(payload.filename);
+    const filename = validateTopLevelFilename(payload.filename, fileNameValidity);
     await fs.appendFile(path.join(folderPath, filename), String(payload.text || ''), 'utf8');
     return { mode: 'saved' };
   });
@@ -246,7 +241,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
     const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
     const rawFilenames = Array.from(payload.filenames || []).map((filename) => String(filename || '').trim()).filter(Boolean);
     try {
-      rawFilenames.forEach((filename) => validateTopLevelFilename(filename));
+      rawFilenames.forEach((filename) => validateTopLevelFilename(filename, fileNameValidity));
     } catch (error) {
       return {
         ok: false,
@@ -435,11 +430,13 @@ app.whenReady().then(async () => {
   const frameReviewRuntime = await createFrameReviewRuntime(nativeProducts);
   const thumbnailRuntime = new ThumbnailCacheRuntime(app.getPath('userData'));
   await thumbnailRuntime.initialize();
+  const { editComposition, fileNameValidity } = await loadSharedDomain(projectFolder);
   const clipExtractionRuntime = await registerIpc({
     frameReviewRuntime,
     thumbnailRuntime,
     nativeProducts,
-    editComposition: await loadEditComposition(projectFolder),
+    editComposition,
+    fileNameValidity,
     zoomEditPreviewFolder: path.join(app.getPath('userData'), 'zoom-edit-previews'),
   });
   let shutdownComplete = false;

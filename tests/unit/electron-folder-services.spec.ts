@@ -171,8 +171,23 @@ describe('electron folder services', () => {
       text: 'problem',
     })).rejects.toThrow('Invalid top-level filename');
 
+    await expect(service.saveTextFile({
+      folderAccess,
+      filename: 'tab\tname.txt',
+      text: 'alpha.mp4\n',
+    })).rejects.toThrow('Invalid top-level filename: tab\tname.txt');
+
     expect(api.saveTextFile).not.toHaveBeenCalled();
     expect(api.appendTextFile).not.toHaveBeenCalled();
+  });
+
+  it('passes a file name Windows allows with a space before an inner dot to the desktop api', async () => {
+    const api = { saveTextFile: vi.fn(async () => ({ mode: 'saved' })) };
+    const service = new ElectronFolderFileService(api);
+
+    await service.saveTextFile({ folderAccess: { folderPath: 'C:/clips' }, filename: 'name .final.txt', text: '' });
+
+    expect(api.saveTextFile).toHaveBeenCalledWith(expect.objectContaining({ filename: 'name .final.txt' }));
   });
 
   it('returns structured Recycle Bin failures for invalid filenames without calling the desktop api', async () => {

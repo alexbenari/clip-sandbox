@@ -8,9 +8,14 @@ class ClipFileRenamer {
   #grantedClips;
   #fs;
   #filenameRule = new ClipFilenameRule();
+  #fileNameValidity;
 
-  constructor({ folderAccess, fileSystem = fs }) {
+  constructor({ folderAccess, fileNameValidity, fileSystem = fs }) {
+    if (typeof fileNameValidity?.isLegalWindowsFileName !== 'function') {
+      throw new Error('Clip renamer dependencies are invalid.');
+    }
     this.#grantedClips = new GrantedClipResolver({ folderAccess, fileSystem });
+    this.#fileNameValidity = fileNameValidity;
     this.#fs = fileSystem;
   }
 
@@ -23,7 +28,9 @@ class ClipFileRenamer {
       if (error instanceof GrantedClipRefusal) return { kind: 'refused', reason: error.reason };
       throw error;
     }
-    if (!this.#filenameRule.isCreatableVideoFilename(newFilename) || !this.#keepsExtension(filename, newFilename)) {
+    if (!this.#filenameRule.isPlainVideoFilename(newFilename)
+      || !this.#fileNameValidity.isLegalWindowsFileName(newFilename)
+      || !this.#keepsExtension(filename, newFilename)) {
       return { kind: 'refused', reason: 'invalid-name' };
     }
     const target = path.join(clip.folder, newFilename);

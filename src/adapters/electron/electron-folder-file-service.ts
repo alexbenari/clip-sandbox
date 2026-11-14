@@ -1,4 +1,5 @@
 import type { FolderAccess } from '../../app/folder-access.js';
+import { WindowsFileNameValidity } from '../../domain/windows-file-name-validity.js';
 
 type DesktopTrashResult = {
   filename: string;
@@ -25,10 +26,9 @@ export type DesktopTrashFileResult =
   | { filename: string; ok: true; error: null }
   | { filename: string; ok: false; code: string; error: Error };
 
-const WINDOWS_INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000]/;
-const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
-
 export class ElectronFolderFileService {
+  private readonly fileNameValidity = new WindowsFileNameValidity();
+
   constructor(private readonly api: ElectronFolderFileApi | null | undefined) {}
 
   static fromWindow(win: Window): ElectronFolderFileService {
@@ -37,16 +37,7 @@ export class ElectronFolderFileService {
 
   private validateTopLevelFilename(filename: string): string {
     const normalizedFilename = String(filename || '').trim();
-    const basenamePrefix = normalizedFilename.split('.')[0] || '';
-    if (
-      !normalizedFilename
-      || normalizedFilename === '.'
-      || normalizedFilename === '..'
-      || WINDOWS_INVALID_FILENAME_CHARS.test(normalizedFilename)
-      || /[. ]$/.test(normalizedFilename)
-      || /[. ]$/.test(basenamePrefix)
-      || WINDOWS_RESERVED_BASENAME.test(basenamePrefix)
-    ) {
+    if (!this.fileNameValidity.isLegalWindowsFileName(normalizedFilename)) {
       throw new Error(`Invalid top-level filename: ${filename}`);
     }
     return normalizedFilename;

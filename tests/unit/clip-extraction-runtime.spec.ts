@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { WindowsFileNameValidity } from '../../src/domain/windows-file-name-validity.js';
 
 const require = createRequire(import.meta.url);
 
@@ -23,6 +24,7 @@ const { ExactRangeEncoder } = require('../../electron/exact-range-encoder.cjs');
 function runtimeWith({ fs, getSettings, randomId, provenance, ...encoding }: Record<string, any>) {
   return createClipExtractionRuntime({
     fs, getSettings, randomId, provenance, encoder: new ExactRangeEncoder({ fs, provenance, ...encoding }),
+    fileNameValidity: new WindowsFileNameValidity(),
   });
 }
 
@@ -394,5 +396,31 @@ describe('clip extraction runtime', () => {
     expect(result).toMatchObject({ ok: false, code: 'invalid-destination' });
     expect(prepareExtractionSource).not.toHaveBeenCalled();
     expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it('rejects a collection name Windows cannot create before preparing the source', async () => {
+    const prepareExtractionSource = vi.fn(async () => { throw new Error('The source was prepared.'); });
+    const runtime = runtimeWith({
+      fs: { mkdir: vi.fn(async () => undefined), readdir: vi.fn(async () => []) },
+      getSettings: vi.fn(async () => ({ ok: true, settings: { pipelinesRootPath: 'D:\\pipelines' } })),
+      resolveFfmpeg: vi.fn(),
+      resolveFfprobe: vi.fn(),
+      runCommand: vi.fn(),
+      randomId: vi.fn(() => 'opaque12345678'),
+    });
+    const destination = await runtime.openDestination(3);
+
+    const result = await runtime.extract(3, { prepareExtractionSource }, {
+      operationId: 'extract_12345678',
+      destinationHandle: destination.result.destinationHandle,
+      sourceHandle: 'source_12345678',
+      sourceGeneration: 1,
+      collectionName: 'tab\tname',
+      startFrameIndex: 0,
+      endFrameIndex: 1,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'invalid-request' });
+    expect(prepareExtractionSource).not.toHaveBeenCalled();
   });
 });
