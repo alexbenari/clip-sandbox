@@ -15,23 +15,6 @@ $mingwBin = 'C:\cygwin64\bin'
 if (-not (Test-Path -LiteralPath (Join-Path $mingwBin 'x86_64-w64-mingw32-g++.exe'))) {
     throw 'The x86_64 MinGW compiler is missing from C:\cygwin64\bin.'
 }
-$nativeCmakeCandidates = @()
-if ($env:ProgramFiles) {
-    $nativeCmakeCandidates += Join-Path $env:ProgramFiles 'CMake\bin\cmake.exe'
-}
-$nativeCmakeCandidates += @(
-    Get-Command cmake.exe -All -CommandType Application -ErrorAction SilentlyContinue |
-        Where-Object { $_.Source -notlike "$mingwBin\*" } |
-        Select-Object -ExpandProperty Source
-)
-$nativeCmake = $nativeCmakeCandidates |
-    Where-Object { $_ -and (Test-Path -LiteralPath $_) } |
-    Select-Object -First 1
-if (-not $nativeCmake) {
-    throw 'A native Windows CMake executable is required for vcpkg orchestration.'
-}
-$nativeCmakeDirectory = Split-Path -Parent $nativeCmake
-$env:PATH = "$nativeCmakeDirectory;$env:PATH"
 New-Item -ItemType Directory -Force -Path $depsRoot | Out-Null
 
 function Sync-PinnedGitSource([object]$pin, [string]$destination) {
@@ -56,6 +39,25 @@ function Write-Utf8NoBom([string]$path, [string]$content) {
     [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
 }
 
+# vcpkg takes the first new-enough cmake and the first python on PATH. Cygwin's cannot
+# be run with Windows paths, so resolve vcpkg's own while Cygwin is hidden from PATH.
+function Get-VcpkgTool([string]$vcpkgExe, [string]$name, [string]$downloadsRoot, [string]$cygwinBin) {
+    $originalPath = $env:PATH
+    $env:PATH = (($env:PATH -split ';') | Where-Object { $_ -and $_.TrimEnd('\') -ne $cygwinBin }) -join ';'
+    try {
+        $fetchOutput = & $vcpkgExe fetch $name "--downloads-root=$downloadsRoot" --disable-metrics
+        $fetchExitCode = $LASTEXITCODE
+    } finally {
+        $env:PATH = $originalPath
+    }
+    $tool = $fetchOutput | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+        Select-Object -Last 1
+    if ($fetchExitCode -ne 0 -or -not $tool) {
+        throw "Failed to resolve the vcpkg $name tool (exit $fetchExitCode). Fetch output: $($fetchOutput -join '; ')"
+    }
+    return $tool
+}
+
 Sync-PinnedGitSource $manifest.dependencies.vcpkg $vcpkgSource
 Sync-PinnedGitSource $manifest.dependencies.bestsource $bestSourceSource
 
@@ -64,6 +66,13 @@ if (-not (Test-Path -LiteralPath $vcpkgExe)) {
     & (Join-Path $vcpkgSource 'bootstrap-vcpkg.bat') -disableMetrics
     if ($LASTEXITCODE -ne 0) { throw 'Failed to bootstrap vcpkg.' }
 }
+$vcpkgDownloads = Join-Path $vcpkgSource 'downloads'
+
+$python = Get-VcpkgTool $vcpkgExe 'python3' $vcpkgDownloads $mingwBin
+$cmake = Get-VcpkgTool $vcpkgExe 'cmake' $vcpkgDownloads $mingwBin
+# vcpkg's own cmake and python must stay ahead of Cygwin's wherever Cygwin is on PATH.
+$vcpkgToolPath = "$(Split-Path -Parent $cmake);$(Split-Path -Parent $python)"
+$env:PATH = "$vcpkgToolPath;$env:PATH"
 
 # vcpkg's Windows NASM receives Cygwin paths under this MinGW installation.
 # Route it through an MSYS shell wrapper which translates only those path arguments.
@@ -141,7 +150,7 @@ $hostBin2cDirectory = Join-Path $installedRoot 'x64-windows\manual-tools\ffmpeg-
 if (-not (Test-Path -LiteralPath (Join-Path $hostBin2cDirectory 'bin2c.exe'))) {
     throw 'vcpkg did not provide the host bin2c tool required by the FFmpeg programs.'
 }
-$env:PATH = "$hostBin2cDirectory;$nativeCmakeDirectory;$mingwBin;$env:PATH"
+$env:PATH = "$hostBin2cDirectory;$vcpkgToolPath;$mingwBin;$env:PATH"
 & $vcpkgExe install `
     "ffmpeg[core,avcodec,avfilter,avformat,dav1d,ffmpeg,ffprobe,gpl,swresample,swscale,x264]:$triplet" `
     "xxhash:$triplet" `
@@ -185,23 +194,14 @@ if (-not (Test-Path -LiteralPath $libp2pMesonDestination) -or
     Write-Utf8NoBom $libp2pMesonDestination $libp2pMesonText
 }
 
-$vcpkgToolDownloads = Join-Path $vcpkgSource 'downloads\tools'
+$vcpkgToolDownloads = Join-Path $vcpkgDownloads 'tools'
 $meson = Get-ChildItem $vcpkgToolDownloads -Recurse -Filter meson.py -File |
     Select-Object -First 1 -ExpandProperty FullName
-$python = Get-ChildItem (Join-Path $vcpkgToolDownloads 'python') -Recurse -Filter python.exe -File |
-    Select-Object -First 1 -ExpandProperty FullName
-$ninjaFetchOutput = & $vcpkgExe fetch ninja "--downloads-root=$(Join-Path $vcpkgSource 'downloads')" --disable-metrics
-if ($LASTEXITCODE -ne 0) { throw 'Failed to resolve the vcpkg Ninja tool.' }
-$ninja = $ninjaFetchOutput | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
-    Select-Object -Last 1
-if (-not $ninja) {
-    $ninja = Get-ChildItem $vcpkgToolDownloads -Recurse -Filter ninja.exe -File |
-        Select-Object -First 1 -ExpandProperty FullName
-}
+$ninja = Get-VcpkgTool $vcpkgExe 'ninja' $vcpkgDownloads $mingwBin
 $pkgConfig = Get-ChildItem (Join-Path $vcpkgToolDownloads 'msys2') -Recurse -Filter pkg-config.exe -File |
     Where-Object FullName -Like '*mingw64*' | Select-Object -First 1 -ExpandProperty FullName
-if (-not $meson -or -not $python -or -not $ninja -or -not $pkgConfig) {
-    throw "vcpkg tool discovery failed: Meson=$([bool]$meson), Python=$([bool]$python), Ninja=$([bool]$ninja), MinGW pkg-config=$([bool]$pkgConfig). Ninja fetch output: $($ninjaFetchOutput -join '; ')"
+if (-not $meson -or -not $pkgConfig) {
+    throw "vcpkg tool discovery failed: Meson=$([bool]$meson), MinGW pkg-config=$([bool]$pkgConfig)."
 }
 
 function Posix([string]$path) { return $path.Replace('\', '/') }
@@ -229,7 +229,7 @@ pkg_config_path = ['$(Posix (Join-Path $dependencyRoot 'lib\pkgconfig'))']
 "@
 Write-Utf8NoBom $nativeFile $machine
 
-$env:PATH = "$(Split-Path -Parent $ninja);$nativeCmakeDirectory;$mingwBin;$env:PATH"
+$env:PATH = "$(Split-Path -Parent $ninja);$vcpkgToolPath;$mingwBin;$env:PATH"
 $setupArguments = @('setup', $bestSourceBuild, $bestSourceSource, '--native-file', $nativeFile, '-Denable_plugin=false')
 if (Test-Path -LiteralPath (Join-Path $bestSourceBuild 'meson-private')) {
     $setupArguments += '--reconfigure'
