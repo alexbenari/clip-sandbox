@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const { constants: { COPYFILE_EXCL } } = require('node:fs');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
-const { MediaAddresses } = require('./media-addresses.cjs');
+const { FolderEntries } = require('./folder-entries.cjs');
 
 const MAX_KEEP_BOTH_NAMES = 1000;
 const MAX_TEMPORARY_NAMES = 8;
@@ -19,7 +19,7 @@ class EditedClipPlacement {
   #trashItem;
   #fs;
   #randomId;
-  #mediaAddresses = new MediaAddresses();
+  #folderEntries;
   #replacing = Promise.resolve();
 
   constructor({ trashItem, fileSystem = fs, randomId = () => randomBytes(6).toString('hex') }) {
@@ -27,6 +27,7 @@ class EditedClipPlacement {
     this.#trashItem = trashItem;
     this.#fs = fileSystem;
     this.#randomId = randomId;
+    this.#folderEntries = new FolderEntries({ fs: fileSystem });
   }
 
   // The suffix names the staged edits, such as `-refined-looped`; Keep both adds it to the original's name.
@@ -156,9 +157,7 @@ class EditedClipPlacement {
   }
 
   async #saved(folder, filename, details) {
-    const filePath = path.join(folder, filename);
-    const stat = await this.#fs.stat(filePath);
-    const entry = { name: filename, path: filePath, mediaSource: this.#mediaAddresses.address(filePath, stat.mtimeMs), type: 'video/mp4', size: stat.size, lastModifiedMs: stat.mtimeMs };
+    const entry = await this.#folderEntries.entry(path.join(folder, filename));
     return { filename, entry, ...details };
   }
 }

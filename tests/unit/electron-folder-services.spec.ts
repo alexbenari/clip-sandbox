@@ -14,7 +14,6 @@ describe('electron folder services', () => {
         files: [
           {
             name: 'alpha.txt',
-            relativePath: 'alpha.txt',
             path: 'C:/clips/alpha.txt',
             text: 'hello',
             type: 'text/plain',
@@ -74,7 +73,6 @@ describe('electron folder services', () => {
         folderName: 'clips',
         files: [{
           name: 'bravo.mp4',
-          relativePath: 'bravo.mp4',
           path: 'C:/clips/bravo.mp4',
           mediaSource: 'file:///C:/clips/bravo.mp4',
           type: 'video/mp4',

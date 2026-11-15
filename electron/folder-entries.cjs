@@ -28,7 +28,6 @@ class FolderEntries {
     const entry = {
       name,
       path: absolutePath,
-      relativePath: name,
       mediaSource: this.#mediaAddresses.address(absolutePath, stat.mtimeMs),
       type: isText ? 'text/plain' : this.#videoFilenames.mimeType(name),
       lastModifiedMs: stat.mtimeMs,

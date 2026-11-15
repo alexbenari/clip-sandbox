@@ -31,7 +31,6 @@ export async function openActivityPanel() {
 export function desktopFile({
   name,
   path = `C:/clips/${name}`,
-  relativePath = name,
   mediaSource = `file:///C:/clips/${name}`,
   type = name.endsWith('.txt') ? 'text/plain' : 'video/mp4',
   text,
@@ -39,7 +38,6 @@ export function desktopFile({
   return {
     name,
     path,
-    relativePath,
     mediaSource: name.endsWith('.txt') ? undefined : mediaSource,
     type,
     text,
@@ -75,7 +73,6 @@ export class DesktopAppTestEnvironment {
         files: [{
           name: 'alpha.mp4',
           path: 'C:/clips/alpha.mp4',
-          relativePath: 'alpha.mp4',
           mediaSource: 'file:///C:/clips/alpha.mp4',
           type: 'video/mp4',
           lastModifiedMs: Date.now(),
