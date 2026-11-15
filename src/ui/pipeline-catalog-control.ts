@@ -167,7 +167,7 @@ export class PipelineCatalogControl implements IEventSource<IPipelineCatalogEven
     }
     this.showCreateAvailability('available');
     if (result.entries.length === 0) {
-      this.list.replaceChildren(this.message('No pipelines with video clips were found in the configured folder.', 'pipeline-catalog-empty'));
+      this.list.replaceChildren(this.message('No pipelines were found in the configured folder.', 'pipeline-catalog-empty'));
       return;
     }
     this.list.replaceChildren(...result.entries.map(entry => this.pipelineEntry(entry)));
