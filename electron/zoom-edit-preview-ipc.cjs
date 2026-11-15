@@ -6,7 +6,7 @@ const CHANNELS = Object.freeze({
   progress: 'clip-sandbox:zoom-edit-preview-progress',
 });
 
-class ZoomEditPreviewIpcBoundary {
+class ZoomEditPreviewIpc {
   #ipcMain;
   #previews;
   #replies = new CorrelatedIpcReplies({
@@ -22,7 +22,6 @@ class ZoomEditPreviewIpcBoundary {
   register() {
     this.#ipcMain.handle(CHANNELS.preview, (event, payload) => this.#preview(event, payload));
     this.#ipcMain.handle(CHANNELS.release, event => this.#release(event));
-    return () => [CHANNELS.preview, CHANNELS.release].forEach(channel => this.#ipcMain.removeHandler(channel));
   }
 
   async #preview(event, payload) {
@@ -49,8 +48,4 @@ class ZoomEditPreviewIpcBoundary {
   }
 }
 
-function registerZoomEditPreviewIpc(options) {
-  return new ZoomEditPreviewIpcBoundary(options).register();
-}
-
-module.exports = { CHANNELS, registerZoomEditPreviewIpc };
+module.exports = { ZoomEditPreviewIpc };

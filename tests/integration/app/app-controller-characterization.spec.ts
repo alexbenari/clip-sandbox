@@ -287,7 +287,7 @@ describe('AppController characterization', () => {
     async function startWithEmptyCatalog() {
       await startCollectionScreen();
       await waitFor(() => expect(document.getElementById('pipelinesPanelHost').textContent)
-        .toContain('No pipelines with video clips were found'));
+        .toContain('No pipelines were found in the configured folder.'));
     }
 
     test('GIF Extraction publishing its clips shows the new pipeline in the Pipelines panel', async () => {

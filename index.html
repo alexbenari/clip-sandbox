@@ -376,6 +376,11 @@
     .panel-empty{ color:var(--muted); font-size:14px; line-height:1.5; margin-top:24px; }
     #pipelinesPanelMount{ height:calc(100% - 48px); min-height:0; }
     #pipelinesPanelHost{ height:100%; min-height:0; overflow:auto; padding-right:2px; }
+    #newPipeline{ margin-left:auto; }
+    #newPipeline[aria-disabled="true"]{ opacity:.45; cursor:default; filter:none; transform:none; }
+    .new-pipeline-field{ margin:0 0 8px; }
+    .new-pipeline-field input{ width:100%; padding:4px 6px; border-radius:6px; border:1px solid var(--accent); background:rgba(2,6,23,.85); color:var(--fg); font:inherit; font-size:12px; }
+    .new-pipeline-field-problem{ margin:0 2px 6px; color:#fca5a5; font-size:12px; line-height:1.3; }
     .pipeline-catalog-loading,.pipeline-catalog-empty,.pipeline-catalog-error{ color:var(--muted); font-size:13px; line-height:1.55; margin:18px 2px; }
     .pipeline-catalog-error{ color:#fca5a5; }
     .pipeline-tree-entry{ padding:8px 0; border-bottom:1px solid rgba(148,163,184,.16); }
@@ -690,7 +695,7 @@
   <div id="workspaceRow">
     <aside id="pipelinesPanel" class="side-panel" aria-label="Pipelines" data-shell-panel="pipelines">
       <div id="pipelinesPanelContent" class="panel-content" data-shell-panel-content>
-        <header class="panel-heading"><h2>Pipelines</h2><button id="foldPipelines" data-shell-panel-fold type="button" aria-label="Fold Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button></header>
+        <header class="panel-heading"><h2>Pipelines</h2><button id="newPipeline" type="button"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><button id="foldPipelines" data-shell-panel-fold type="button" aria-label="Fold Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true"><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 6-6 6 6 6m5-12-6 6 6 6"/></svg></button></header>
         <div id="pipelinesPanelMount" data-shell-panel-contributions><div id="pipelinesPanelHost" data-shell-panel-fallback><p id="pipelinesPanelFallback" class="panel-empty">Pipeline browsing will appear here. Use Browse folder to open a pipeline.</p></div></div>
       </div>
       <button id="revealPipelines" class="panel-reveal" data-shell-panel-reveal type="button" aria-label="Show Pipelines" aria-controls="pipelinesPanelContent" aria-expanded="true" hidden><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5h7l2 3h9v12H3V7Z"/></svg><span class="rail-label">Pipelines</span><svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 6 6-6 6m5-12 6 6-6 6"/></svg></button>

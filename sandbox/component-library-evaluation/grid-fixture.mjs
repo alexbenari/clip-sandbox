@@ -1,8 +1,9 @@
+import { AppText } from '../../src/app/app-text.ts';
 import { Clip } from '../../src/domain/clip.ts';
+import { ClipSource } from '../../src/domain/clip-source.ts';
 import { ClipSequence } from '../../src/domain/clip-sequence.ts';
 import { ClipCollectionGridControl } from '../../src/ui/clip-collection-grid-control.ts';
-import { computeBestGrid } from '../../src/ui/display-layout-rules.ts';
-import { DomRendererAdapter } from '../../src/adapters/browser/dom-renderer-adapter.ts';
+import { DisplayLayoutRules } from '../../src/ui/display-layout-rules.ts';
 
 if (new URLSearchParams(location.search).get('grid') === '1') {
   const tiles = document.querySelector('#tiles');
@@ -12,17 +13,17 @@ if (new URLSearchParams(location.search).get('grid') === '1') {
   grid.id = 'grid';
   gridRoot.append(grid);
   tiles.replaceWith(gridRoot);
-  const renderer = new DomRendererAdapter();
   const controller = new ClipCollectionGridControl({
-    grid, gridRoot, toolbar: document.querySelector('.app-bar'), computeBestGrid,
-    applyGridLayout: (columns, height) => renderer.applyGridLayout(grid, columns, height),
+    grid, gridRoot, appText: new AppText(), layoutRules: new DisplayLayoutRules(), observeRootResize: true,
+    getAvailableHeight: () => {
+      const { paddingTop, paddingBottom } = getComputedStyle(gridRoot);
+      return gridRoot.clientHeight - parseFloat(paddingTop) - parseFloat(paddingBottom);
+    },
   });
   const mediaSource = new URL('../../tests/e2e/fixtures/video-edit/clips/source.mp4', location.href).href;
   const clips = Array.from({ length: 8 }, (_, index) => new Clip({
-    id: `pilot-${index}`, file: new File([], `Sample ${index + 1}.mp4`), mediaSource,
+    id: `pilot-${index}`, source: ClipSource.create({ name: `Sample ${index + 1}.mp4`, mediaSource }),
   }));
   controller.renderCollection(new ClipSequence({ name: 'Panel grid fixture', clips }));
-  const resize = new ResizeObserver(() => controller.recomputeLayout());
-  resize.observe(gridRoot);
-  window.addEventListener('pagehide', () => { resize.disconnect(); controller.dispose(); }, { once: true });
+  window.addEventListener('pagehide', () => controller.dispose(), { once: true });
 }

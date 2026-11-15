@@ -16,3 +16,17 @@ export interface IPipelineCatalogDetails {
 export type PipelineCatalogResult =
   | { readonly kind: 'unconfigured' }
   | { readonly kind: 'available'; readonly entries: readonly IPipelineCatalogEntry[] };
+
+export type PipelineCreationRequest = Readonly<{ name: string }>;
+
+export type PipelineCreationRefusal = 'invalid-name' | 'name-taken' | 'no-top-folder' | 'top-folder-missing';
+
+export type PipelineCreationProblem = PipelineCreationRefusal | 'failed';
+
+export type PipelineCreationOutcome =
+  | Readonly<{ kind: 'created'; name: string }>
+  | Readonly<{ kind: 'refused'; reason: PipelineCreationRefusal }>;
+
+export interface IPipelineCreationService {
+  createPipeline(name: string): Promise<PipelineCreationOutcome>;
+}

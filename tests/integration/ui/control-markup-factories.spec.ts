@@ -201,7 +201,7 @@ describe('controls built from the page markup', () => {
   });
 
   it('the clip grid takes over the page grid and owns its layout rules', () => {
-    const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: { isDocumentFullScreen: () => false } });
+    const grid = ClipCollectionGridControl.fromDocument(document, { fullScreen: { isDocumentFullScreen: () => false }, appText: new AppText() });
 
     expect(document.getElementById('gridWrap')!.classList.contains('clip-collection-grid-root')).toBe(true);
     expect(document.getElementById('grid')!.classList.contains('clip-collection-grid')).toBe(true);
@@ -279,7 +279,7 @@ describe('controls built from the page markup', () => {
 
   it('the Pipelines catalog and the captured ranges panel use the page hosts, and are absent without them', () => {
     const session = { subscribe: vi.fn(() => vi.fn()) };
-    const catalog = PipelineCatalogControl.fromDocument(document, { catalog: { listPipelineCatalog: vi.fn(), pipelineCatalogDetails: vi.fn() } as never });
+    const catalog = PipelineCatalogControl.fromDocument(document, { catalog: { listPipelineCatalog: vi.fn(), pipelineCatalogDetails: vi.fn() } as never, appText: new AppText() });
     const ranges = GifRangesPanelControl.fromDocument(document, session as never);
     const host = document.createElement('div');
     ranges!.mount(host);
@@ -290,7 +290,7 @@ describe('controls built from the page markup', () => {
     ranges!.dispose();
 
     document.body.innerHTML = '';
-    expect(PipelineCatalogControl.fromDocument(document, { catalog: {} as never })).toBeNull();
+    expect(PipelineCatalogControl.fromDocument(document, { catalog: {} as never, appText: new AppText() })).toBeNull();
     expect(GifRangesPanelControl.fromDocument(document, session as never)).toBeNull();
   });
 

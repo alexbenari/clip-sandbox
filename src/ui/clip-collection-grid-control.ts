@@ -8,6 +8,7 @@ import { GridPreviewPlaybackScheduler } from './grid-preview-playback-scheduler.
 import { GridNavigationRules } from './grid-navigation-rules.js';
 import { GridSelection } from './grid-selection.js';
 import { ClipNameEditor } from './clip-name-editor.js';
+import type { AppText } from '../app/app-text.js';
 import type { ClipRenameProblem } from '../app/clip-rename-service.js';
 import { EventSource, type EventHandler, type IEventSource } from '../app/event-source.js';
 
@@ -105,8 +106,11 @@ type GridViewCacheEntry = {
   signature: string;
 };
 
+type ClipGridText = Pick<AppText, 'windowsNameRefusalText'>;
+
 type ClipCollectionGridControlOptions = {
   grid?: HTMLElement | null;
+  appText: ClipGridText;
   gridRoot?: HTMLElement | null;
   getAvailableHeight?: () => number;
   coordinateWorkspaceLayout?: boolean;
@@ -338,6 +342,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private doc: Document;
   private currentCollection: ClipSequence | null;
   private readonly selection = new GridSelection();
+  private readonly appText: ClipGridText;
   private renaming: { clipId: string; editor: ClipNameEditor } | null = null;
   private tabStopClipId: string | null = null;
   private dragSourceCard: ClipCard | null;
@@ -353,9 +358,10 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
   private readonly navigationRules = new GridNavigationRules();
   private workspaceBounds: { width: number; height: number } | null = null;
 
-  constructor(options: ClipCollectionGridControlOptions = {}) {
+  constructor(options: ClipCollectionGridControlOptions) {
     if (!options.grid) throw new Error('A grid element is required.');
     this.grid = options.grid;
+    this.appText = options.appText;
     this.gridRoot = options.gridRoot ?? this.grid?.parentElement ?? null;
     this.getAvailableHeight = options.getAvailableHeight;
     this.coordinateWorkspaceLayout = options.coordinateWorkspaceLayout ?? false;
@@ -416,9 +422,13 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     }
   }
 
-  static fromDocument(doc: Document, { fullScreen }: { fullScreen: { isDocumentFullScreen(): boolean } }): ClipCollectionGridControl {
+  static fromDocument(doc: Document, { fullScreen, appText }: {
+    fullScreen: { isDocumentFullScreen(): boolean };
+    appText: ClipGridText;
+  }): ClipCollectionGridControl {
     const elements = new DocumentElements(doc);
     return new ClipCollectionGridControl({
+      appText,
       grid: elements.required('grid'),
       gridRoot: elements.required('gridWrap'),
       coordinateWorkspaceLayout: true,
@@ -1029,6 +1039,7 @@ export class ClipCollectionGridControl implements IEventSource<IClipGridEvents> 
     const editor = new ClipNameEditor(card, clip.name, {
       submit: (newFilename) => this.events.emit('renameRequested', { clipId, newFilename }),
       cancel: () => this.endRename(clipId),
+      appText: this.appText,
     });
     this.renaming = { clipId, editor };
   }

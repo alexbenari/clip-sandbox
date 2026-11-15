@@ -6,7 +6,7 @@ const CHANNELS = Object.freeze({
   progress: 'clip-sandbox:zoom-edit-save-progress',
 });
 
-class ZoomEditSaveIpcBoundary {
+class ZoomEditSaveIpc {
   #ipcMain;
   #saver;
   #replies = new CorrelatedIpcReplies({
@@ -22,7 +22,6 @@ class ZoomEditSaveIpcBoundary {
   register() {
     this.#ipcMain.handle(CHANNELS.save, (event, payload) => this.#save(event, payload));
     this.#ipcMain.handle(CHANNELS.cancel, (event, payload) => this.#cancel(event, payload));
-    return () => [CHANNELS.save, CHANNELS.cancel].forEach(channel => this.#ipcMain.removeHandler(channel));
   }
 
   async #save(event, payload) {
@@ -57,8 +56,4 @@ class ZoomEditSaveIpcBoundary {
   }
 }
 
-function registerZoomEditSaveIpc(options) {
-  return new ZoomEditSaveIpcBoundary(options).register();
-}
-
-module.exports = { CHANNELS, registerZoomEditSaveIpc };
+module.exports = { ZoomEditSaveIpc };

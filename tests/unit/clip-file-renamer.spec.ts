@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { WindowsFileNameValidity } from '../../src/domain/windows-file-name-validity.js';
 
 const require = createRequire(import.meta.url);
 const { ClipFileRenamer } = require('../../electron/clip-file-renamer.cjs');
@@ -18,7 +19,7 @@ function renamer() {
       return folder;
     },
   };
-  return new ClipFileRenamer({ folderAccess });
+  return new ClipFileRenamer({ folderAccess, fileNameValidity: new WindowsFileNameValidity() });
 }
 
 const rename = (filename: string, newFilename: unknown, folderPath = folder) =>
@@ -40,6 +41,12 @@ describe('ClipFileRenamer', () => {
     expect(answer).toMatchObject({ kind: 'renamed', entry: { name: 'sunset.mp4', path: path.join(folder, 'sunset.mp4') } });
     expect((await readdir(folder)).sort()).toEqual(['bravo.mp4', 'sunset.mp4']);
     expect(await readFile(path.join(folder, 'sunset.mp4'), 'utf8')).toBe('alpha');
+  });
+
+  it('renames a clip to a name Windows allows with a dot before the extension dot', async () => {
+    const answer = await rename('alpha.mp4', 'alpha..mp4');
+
+    expect(answer).toMatchObject({ kind: 'renamed', entry: { name: 'alpha..mp4' } });
   });
 
   it('renames a clip to the same name in another case', async () => {
@@ -71,7 +78,6 @@ describe('ClipFileRenamer', () => {
     ['no extension', 'alpha'],
     ['a folder in the name', 'sub\\alpha.mp4'],
     ['a character Windows forbids', 'al:pha.mp4'],
-    ['a name ending in a dot', 'alpha..mp4'],
     ['a name of spaces', '   .mp4'],
     ['a leading space', ' alpha2.mp4'],
     ['a reserved device name', 'con.mp4'],

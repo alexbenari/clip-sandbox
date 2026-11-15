@@ -1,8 +1,10 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
+import { FakeIpcMain } from '../support/fake-ipc-main.js';
+import { flushPendingWork } from '../support/flush-pending-work.js';
 
 const require = createRequire(import.meta.url);
-const { ClipCapturesIpcBoundary } = require('../../electron/clip-captures-ipc.cjs');
+const { ClipCapturesIpc } = require('../../electron/clip-captures-ipc.cjs');
 
 const original = {
   fingerprintVersion: 1, sourceSampleDigest: 'a'.repeat(64), sourceBytes: '123',
@@ -15,7 +17,7 @@ const saved = { nextRangeSequence: 2, ranges: [{ id: 'range-1',
   end: { kind: 'exact-frame', frameIndex: 2, frameInfoHash: '0000000000000002', reviewTimeUs: '20000' },
 }] };
 
-describe('ClipCapturesIpcBoundary', () => {
+describe('ClipCapturesIpc', () => {
   it('orders attach writes for one window so the last selected movie remains active', async () => {
     let finishFirst!: () => void;
     const firstWrite = new Promise<void>(resolve => { finishFirst = resolve; });
@@ -31,10 +33,14 @@ describe('ClipCapturesIpcBoundary', () => {
     const host = { captureContext: (sessionId: string) => ({
       sourcePath: 'D:\\movies\\Movie.mp4', fingerprint: sessionId.endsWith('A') ? original : changed,
     }) };
-    const boundary = new ClipCapturesIpcBoundary({ ipcMain: { handle: vi.fn() }, store, hostForEvent: () => host });
+    const ipcMain = new FakeIpcMain();
+    new ClipCapturesIpc({ ipcMain, store, hostForEvent: () => host }).register();
     const event = { sender: { id: 7 } };
-    const first = boundary.attach(event, { sessionId: 'session_1234567A' });
-    const second = boundary.attach(event, { sessionId: 'session_1234567B' });
+    const first = ipcMain.invoke('clip-sandbox:clip-captures-attach', event, { sessionId: 'session_1234567A' });
+    const second = ipcMain.invoke('clip-sandbox:clip-captures-attach', event, { sessionId: 'session_1234567B' });
+    await vi.waitFor(() => expect(store.save).toHaveBeenCalledOnce());
+    await flushPendingWork();
+    expect(store.save).toHaveBeenCalledOnce();
     finishFirst();
     await Promise.all([first, second]);
 
@@ -50,9 +56,10 @@ describe('ClipCapturesIpcBoundary', () => {
       load: vi.fn(async () => record), save: vi.fn(async () => undefined),
     };
     const host = { captureContext: vi.fn(() => ({ sourcePath: 'D:\\movies\\Movie.mp4', fingerprint: original })) };
-    const boundary = new ClipCapturesIpcBoundary({ ipcMain: { handle: vi.fn() }, store, hostForEvent: () => host });
+    const ipcMain = new FakeIpcMain();
+    new ClipCapturesIpc({ ipcMain, store, hostForEvent: () => host }).register();
     const event = { sender: { id: 7 } };
-    const result = await boundary.attach(event, { sessionId: 'session_12345678' });
+    const result = await ipcMain.invoke('clip-sandbox:clip-captures-attach', event, { sessionId: 'session_12345678' });
 
     expect(result).toMatchObject({ ok: true, result: {
       movieRef: expect.stringMatching(/^capture_/), data: { schemaVersion: 1, ...saved },
@@ -61,11 +68,11 @@ describe('ClipCapturesIpcBoundary', () => {
     const movieRef = result.result.movieRef;
     const changedData = { nextRangeSequence: 2, ranges: [] };
     store.save.mockClear();
-    expect(await boundary.save(event, { movieRef, data: changedData })).toEqual({ ok: true, result: null });
+    expect(await ipcMain.invoke('clip-sandbox:clip-captures-save', event, { movieRef, data: changedData })).toEqual({ ok: true, result: null });
     expect(store.save).toHaveBeenCalledWith({
       fingerprint: original, displayName: 'Movie.mp4', sourcePath: 'D:\\movies\\Movie.mp4', data: changedData,
     });
-    expect((await boundary.save({ sender: { id: 8 } }, { movieRef, data: changedData })).ok).toBe(false);
+    expect((await ipcMain.invoke('clip-sandbox:clip-captures-save', { sender: { id: 8 } }, { movieRef, data: changedData })).ok).toBe(false);
   });
 
 });

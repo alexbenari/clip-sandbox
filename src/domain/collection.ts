@@ -1,5 +1,6 @@
 import { ClipSequence } from './clip-sequence.js';
 import type { Clip } from './clip.js';
+import { WindowsFileNameValidity } from './windows-file-name-validity.js';
 
 export type CollectionNameValidationResult =
   | { ok: true; code: ''; name: string; filename: string }
@@ -45,8 +46,7 @@ type CollectionParams = {
 };
 
 export class Collection {
-  static ILLEGAL_COLLECTION_NAME_CHARS = /[<>:"/\\|?*]/;
-  static WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+  static readonly #fileNameValidity = new WindowsFileNameValidity();
   #collectionName: string;
   #filename: string | null;
   #orderedClipNames: string[];
@@ -90,10 +90,7 @@ export class Collection {
         filename: '',
       };
     }
-    if (
-      Collection.ILLEGAL_COLLECTION_NAME_CHARS.test(trimmed)
-      || Collection.#hasWindowsInvalidFilenameShape(trimmed)
-    ) {
+    if (!Collection.#fileNameValidity.isLegalWindowsFileName(trimmed)) {
       return {
         ok: false,
         code: 'illegal-chars',
@@ -275,13 +272,6 @@ export class Collection {
     return Array.from(names || [])
       .map((name) => Collection.#normalizedText(name))
       .filter(Boolean);
-  }
-
-  static #hasWindowsInvalidFilenameShape(name: string): boolean {
-    if (!name || name === '.' || name === '..') return true;
-    if (/[. ]$/.test(name)) return true;
-    const basenamePrefix = name.split('.')[0] || '';
-    return /[. ]$/.test(basenamePrefix) || Collection.WINDOWS_RESERVED_BASENAME.test(basenamePrefix);
   }
 }
 

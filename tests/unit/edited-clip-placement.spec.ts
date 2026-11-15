@@ -7,7 +7,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { createFolderEntry } = require('../../electron/folder-entry.cjs');
+const { FolderEntries } = require('../../electron/folder-entries.cjs');
 const { EditedClipPlacement } = require('../../electron/edited-clip-placement.cjs');
 
 let root: string;
@@ -51,6 +51,18 @@ const contentOf = (filename: string) => readFileSync(path.join(folder, filename)
 const failing = (code: string) => async () => { throw Object.assign(new Error(code), { code }); };
 
 describe('EditedClipPlacement', () => {
+  it.each([
+    ['Keep both', 'keepBoth'],
+    ['Replace', 'replace'],
+  ] as const)('describes a clip saved by %s as a folder listing describes the same file', async (_case, method) => {
+    const clip = clipNamed('Feature-002.mp4');
+
+    const saved = await placementWith()[method](clip, media, '-refined');
+
+    const listed = await new FolderEntries().read(folder);
+    expect(listed).toContainEqual(saved.entry);
+  });
+
   describe('Keep both', () => {
     it('saves the refined clip as <name>-refined.mp4 beside the original', async () => {
       const clip = clipNamed('Feature-002.mp4');
@@ -134,17 +146,9 @@ describe('EditedClipPlacement', () => {
       const whileTrashing = { files: folderFiles(), original: contentOf('Feature-002.mp4'), temporary: contentOf('Feature-002.a1b2c3.refining') };
       releaseTrash();
       const saved = await replacing;
-      // The saved clip is addressed as a folder listing addresses the same file.
-      const listed = await createFolderEntry(path.join(folder, 'Feature-002.mp4'));
 
       expect(whileTrashing).toEqual({ files: ['Feature-002.a1b2c3.refining', 'Feature-002.mp4'], original: 'original', temporary: 'refined' });
-      expect(saved).toEqual({
-        filename: 'Feature-002.mp4', outcome: 'replaced',
-        entry: {
-          name: 'Feature-002.mp4', path: path.join(folder, 'Feature-002.mp4'), mediaSource: listed.mediaSource,
-          type: 'video/mp4', size: 'refined'.length, lastModifiedMs: expect.any(Number),
-        },
-      });
+      expect(saved).toMatchObject({ filename: 'Feature-002.mp4', outcome: 'replaced' });
       expect([folderFiles(), contentOf('Feature-002.mp4'), readdirSync(recycleBin)]).toEqual([['Feature-002.mp4'], 'refined', ['Feature-002.mp4']]);
     });
 

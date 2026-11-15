@@ -6,57 +6,62 @@ const CHANNELS = Object.freeze({
   save: 'clip-sandbox:clip-captures-save',
 });
 
-class ClipCapturesIpcBoundary {
+class ClipCapturesIpc {
+  #ipcMain;
+  #store;
+  #hostForEvent;
+  #grants;
+  #attachQueues;
+
   constructor({ ipcMain, store, hostForEvent }) {
     if (!ipcMain?.handle || !store || typeof hostForEvent !== 'function') {
       throw new Error('Clip-captures IPC dependencies are invalid.');
     }
-    this.ipcMain = ipcMain;
-    this.store = store;
-    this.hostForEvent = hostForEvent;
-    this.contexts = new Map();
-    this.attachQueues = new Map();
+    this.#ipcMain = ipcMain;
+    this.#store = store;
+    this.#hostForEvent = hostForEvent;
+    this.#grants = new Map();
+    this.#attachQueues = new Map();
   }
 
   register() {
-    this.ipcMain.handle(CHANNELS.attach, (event, payload) => this.attach(event, payload));
-    this.ipcMain.handle(CHANNELS.save, (event, payload) => this.save(event, payload));
-    return () => Object.values(CHANNELS).forEach(channel => this.ipcMain.removeHandler(channel));
+    this.#ipcMain.handle(CHANNELS.attach, (event, payload) => this.#attach(event, payload));
+    this.#ipcMain.handle(CHANNELS.save, (event, payload) => this.#save(event, payload));
   }
 
-  async attach(event, payload) {
+  async #attach(event, payload) {
     const ownerId = event.sender.id;
-    const previous = this.attachQueues.get(ownerId) || Promise.resolve();
-    const operation = previous.then(() => this.attachOne(event, payload));
-    this.attachQueues.set(ownerId, operation);
+    const previous = this.#attachQueues.get(ownerId) || Promise.resolve();
+    const operation = previous.then(() => this.#attachOne(event, payload));
+    this.#attachQueues.set(ownerId, operation);
     try {
       return await operation;
     } finally {
-      if (this.attachQueues.get(ownerId) === operation) this.attachQueues.delete(ownerId);
+      if (this.#attachQueues.get(ownerId) === operation) this.#attachQueues.delete(ownerId);
     }
   }
 
-  async attachOne(event, payload) {
+  async #attachOne(event, payload) {
     try {
-      const context = this.context(event, payload);
-      let record = await this.store.load(context.fingerprint);
+      const context = this.#context(event, payload);
+      let record = await this.#store.load(context.fingerprint);
       if (!record) {
-        await this.store.save({
+        await this.#store.save({
           fingerprint: context.fingerprint,
           displayName: path.basename(context.sourcePath),
           sourcePath: context.sourcePath,
           data: { nextRangeSequence: 1, ranges: [] },
         });
-        record = await this.store.load(context.fingerprint);
+        record = await this.#store.load(context.fingerprint);
       } else {
-        await this.store.save({
+        await this.#store.save({
           fingerprint: context.fingerprint,
           displayName: path.basename(context.sourcePath),
           sourcePath: context.sourcePath,
           data: { nextRangeSequence: record.nextRangeSequence, draft: record.draft, ranges: record.ranges },
         });
       }
-      const movieRef = this.grant(event, {
+      const movieRef = this.#grant(event, {
         movieFingerprint: context.fingerprint,
         displayName: path.basename(context.sourcePath),
         lastKnownPath: context.sourcePath,
@@ -71,15 +76,15 @@ class ClipCapturesIpcBoundary {
         },
       };
     } catch (error) {
-      return this.failure(error);
+      return this.#failure(error);
     }
   }
 
-  async save(event, payload) {
+  async #save(event, payload) {
     try {
-      const grant = this.contexts.get(payload?.movieRef);
+      const grant = this.#grants.get(payload?.movieRef);
       if (!grant || grant.ownerId !== event.sender.id) throw new Error('Saved movie reference is unavailable.');
-      await this.store.save({
+      await this.#store.save({
         fingerprint: grant.fingerprint,
         displayName: grant.displayName,
         sourcePath: grant.sourcePath,
@@ -87,20 +92,20 @@ class ClipCapturesIpcBoundary {
       });
       return { ok: true, result: null };
     } catch (error) {
-      return this.failure(error);
+      return this.#failure(error);
     }
   }
 
-  context(event, payload) {
+  #context(event, payload) {
     if (typeof payload?.sessionId !== 'string' || !/^session_[a-zA-Z0-9_-]{8,120}$/.test(payload.sessionId)) {
       throw new Error('Capture session id is invalid.');
     }
-    return this.hostForEvent(event).captureContext(payload.sessionId);
+    return this.#hostForEvent(event).captureContext(payload.sessionId);
   }
 
-  grant(event, record) {
+  #grant(event, record) {
     const movieRef = `capture_${randomBytes(18).toString('base64url')}`;
-    this.contexts.set(movieRef, {
+    this.#grants.set(movieRef, {
       ownerId: event.sender.id,
       fingerprint: record.movieFingerprint,
       displayName: record.displayName,
@@ -109,7 +114,7 @@ class ClipCapturesIpcBoundary {
     return movieRef;
   }
 
-  failure(error) {
+  #failure(error) {
     return {
       ok: false,
       error: { message: error instanceof Error ? error.message.slice(0, 1024) : 'Saved captures are unavailable.' },
@@ -117,8 +122,4 @@ class ClipCapturesIpcBoundary {
   }
 }
 
-function registerClipCapturesIpc(options) {
-  return new ClipCapturesIpcBoundary(options).register();
-}
-
-module.exports = { CHANNELS, ClipCapturesIpcBoundary, registerClipCapturesIpc };
+module.exports = { ClipCapturesIpc };

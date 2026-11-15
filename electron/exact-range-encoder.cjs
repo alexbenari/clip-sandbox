@@ -1,7 +1,7 @@
 const fsPromises = require('node:fs/promises');
 const path = require('node:path');
 const { Mp4Provenance } = require('./clip-provenance/mp4-provenance.cjs');
-const { runProcess } = require('./process-runner.cjs');
+const { ProcessRunner } = require('./process-runner.cjs');
 const { FrameTime } = require('./frame-time.cjs');
 const { ForwardThenBackwardFilter } = require('./forward-then-backward-filter.cjs');
 const { ExactRangeProbe } = require('./exact-range-probe.cjs');
@@ -16,7 +16,7 @@ const ENCODED_OUTPUT = Object.freeze({
 class ExactRangeEncoder {
   #fs;
   #resolveFfmpeg;
-  #runCommand;
+  #processRunner;
   #probe;
   #environment;
   #provenance;
@@ -25,15 +25,15 @@ class ExactRangeEncoder {
     fs = fsPromises,
     resolveFfmpeg,
     resolveFfprobe,
-    runCommand = runProcess,
+    processRunner = new ProcessRunner(),
     environment = process.env,
-    probe = new ExactRangeProbe({ resolveFfprobe, runCommand, environment }),
+    probe = new ExactRangeProbe({ resolveFfprobe, processRunner, environment }),
     provenance = new Mp4Provenance(),
   } = {}) {
     if (typeof resolveFfmpeg !== 'function') throw new Error('Exact-range encoder dependencies are invalid.');
     this.#fs = fs;
     this.#resolveFfmpeg = resolveFfmpeg;
-    this.#runCommand = runCommand;
+    this.#processRunner = processRunner;
     this.#probe = probe;
     this.#environment = environment;
     this.#provenance = provenance;
@@ -130,7 +130,7 @@ class ExactRangeEncoder {
     const seek = Math.max(0, boundary.startSeconds - 5);
     const readDuration = boundary.endSeconds - seek + 2;
     const count = range.endFrameIndex - range.startFrameIndex + 1;
-    const result = await this.#runCommand(ffmpeg, [
+    const result = await this.#processRunner.run(ffmpeg, [
       '-hide_banner', '-nostdin', '-y', '-progress', 'pipe:1', '-stats_period', '0.5', '-noautorotate',
       '-ss', seek.toFixed(6), '-t', readDuration.toFixed(6), '-copyts', '-i', source.sourcePath,
       '-map', `0:${source.selectedStream}`,
@@ -165,7 +165,7 @@ class ExactRangeEncoder {
 
   async #encodeVideo({ ffmpeg, source, range, workspace, videoPath, signal, report }) {
     const count = range.endFrameIndex - range.startFrameIndex + 1;
-    const result = await this.#runCommand(ffmpeg, [
+    const result = await this.#processRunner.run(ffmpeg, [
       '-hide_banner', '-nostdin', '-y', '-progress', 'pipe:1', '-stats_period', '0.5', '-noautorotate', '-i', source.sourcePath,
       '-map', `0:${source.selectedStream}`,
       '-vf', `select='between(n,${range.startFrameIndex},${range.endFrameIndex})',setpts=PTS-STARTPTS`,
@@ -192,7 +192,7 @@ class ExactRangeEncoder {
     if (withSound) job.report({ stage: 'adding-audio' });
     const muxBase = withSound ? this.#muxWithAudio(job, videoPath, boundary)
       : ['-hide_banner', '-nostdin', '-y', '-i', videoPath, '-map', '0:v:0', '-c:v', 'copy'];
-    let muxResult = await this.#runCommand(ffmpeg, [
+    let muxResult = await this.#processRunner.run(ffmpeg, [
       ...muxBase,
       ...(writtenTag ? this.#provenance.muxArguments(writtenTag) : ['-movflags', '+faststart']),
       mediaPath,
@@ -200,7 +200,7 @@ class ExactRangeEncoder {
     if (!muxResult.ok && writtenTag && !signal.aborted) {
       warning = 'Clip saved without source metadata; the metadata writer failed.';
       writtenTag = null;
-      muxResult = await this.#runCommand(ffmpeg, [
+      muxResult = await this.#processRunner.run(ffmpeg, [
         ...muxBase, '-movflags', '+faststart', mediaPath,
       ], { cwd: workspace, signal, env: this.#environment });
     }
@@ -232,7 +232,7 @@ class ExactRangeEncoder {
   }
 
   async #encodeForwardThenBackward({ ffmpeg, workspace, videoPath, loopedVideoPath, signal }) {
-    return this.#runCommand(ffmpeg, [
+    return this.#processRunner.run(ffmpeg, [
       '-hide_banner', '-nostdin', '-y', '-i', videoPath,
       '-filter_complex', ForwardThenBackwardFilter.graph('0:v:0'), '-map', ForwardThenBackwardFilter.output,
       '-fps_mode', 'passthrough', '-an', '-c:v', 'libx264', '-crf', '16', '-maxrate', '48M', '-bufsize', '96M', '-preset', 'ultrafast',

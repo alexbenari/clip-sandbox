@@ -23,6 +23,10 @@ export async function writeAppSettings(profile: string, settings: Record<string,
   await fs.writeFile(path.join(profile, 'app-settings.json'), `${JSON.stringify(settings)}\n`, 'utf8');
 }
 
+export async function gridClipNames(page: Page): Promise<string[]> {
+  return page.locator('#grid .thumb').evaluateAll(cards => cards.map(card => (card as HTMLElement).dataset.name ?? ''));
+}
+
 export async function openActivity(page: Page): Promise<void> {
   const panel = page.locator('#activityIndicatorPanel');
   await expect(panel).toBeHidden();

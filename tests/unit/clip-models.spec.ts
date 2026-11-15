@@ -125,6 +125,19 @@ describe('domain models: clips, sequences, collections and pipelines', () => {
     expect(movie.orderedClipNames).toEqual(['intro.mp4', 'Movie-001.mp4', 'Movie-003.mp4']);
   });
 
+  test('accepts a collection name Windows allows with a space before an inner dot', () => {
+    expect(Collection.validateCollectionName('name .final')).toEqual({
+      ok: true,
+      code: '',
+      name: 'name .final',
+      filename: 'name .final.txt',
+    });
+  });
+
+  test('refuses a collection name holding a control character, as Windows does', () => {
+    expect(Collection.validateCollectionName('tab\tname')).toMatchObject({ ok: false, code: 'illegal-chars' });
+  });
+
   test('validates collection names and preserves append/remove semantics', () => {
     expect(Collection.validateCollectionName(' highlights ')).toEqual({
       ok: true,
@@ -145,10 +158,6 @@ describe('domain models: clips, sequences, collections and pipelines', () => {
       code: 'illegal-chars',
     });
     expect(Collection.validateCollectionName('trailing.')).toMatchObject({
-      ok: false,
-      code: 'illegal-chars',
-    });
-    expect(Collection.validateCollectionName('name .txt')).toMatchObject({
       ok: false,
       code: 'illegal-chars',
     });

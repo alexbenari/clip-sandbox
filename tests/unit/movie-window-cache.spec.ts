@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const { MovieWindowCache } = require('../../electron/movie-window-cache.cjs');
 
 type CommandResult = { ok: boolean; code: string; stderr: string };
-type RunCommand = (command: string, args: string[], options: { signal: AbortSignal; env: unknown }) => Promise<CommandResult>;
+type ProcessRun = (command: string, args: string[], options: { signal: AbortSignal; env: unknown }) => Promise<CommandResult>;
 
 const fingerprint = {
   fingerprintVersion: 1,
@@ -33,7 +33,7 @@ function cutContent(args: readonly string[]): string {
   return `${optionValues(args, '-map').join(' ')} from ${optionValues(args, '-ss')} for ${optionValues(args, '-t')}`;
 }
 
-const cutWindow: RunCommand = async (_command, args) => {
+const cutWindow: ProcessRun = async (_command, args) => {
   await fs.writeFile(args.at(-1)!, cutContent(args));
   return { ok: true, code: 'completed', stderr: '' };
 };
@@ -62,32 +62,32 @@ describe('MovieWindowCache', () => {
   });
 
   function cache({
-    runCommand = vi.fn(cutWindow),
+    run = vi.fn(cutWindow),
     forgetPreparedReview = vi.fn(async (_windowPath: string) => undefined),
-  }: { runCommand?: ReturnType<typeof vi.fn>; forgetPreparedReview?: (windowPath: string) => Promise<void> } = {}) {
+  }: { run?: ReturnType<typeof vi.fn>; forgetPreparedReview?: (windowPath: string) => Promise<void> } = {}) {
     const instance = new MovieWindowCache({
-      folder, resolveFfmpeg: () => 'ffmpeg.exe', environment, forgetPreparedReview, runCommand,
+      folder, resolveFfmpeg: () => 'ffmpeg.exe', environment, forgetPreparedReview, processRunner: { run },
       now: () => clock,
     });
-    return { cache: instance, runCommand };
+    return { cache: instance, run };
   }
 
   it('cuts a new window from the movie by stream copy of its selected video stream and first audio track', async () => {
-    const { cache: windows, runCommand } = cache();
+    const { cache: windows, run } = cache();
 
     await windows.window(placement(12_500_000, 150_000_000));
 
-    const args: string[] = runCommand.mock.calls[0][1];
+    const args: string[] = run.mock.calls[0][1];
     expect({ input: optionValues(args, '-i'), maps: optionValues(args, '-map'), codec: optionValues(args, '-c') })
       .toEqual({ input: [moviePath], maps: ['0:2', '0:a:0?'], codec: ['copy'] });
   });
 
   it('cuts a new window starting at its placement and lasting its duration', async () => {
-    const { cache: windows, runCommand } = cache();
+    const { cache: windows, run } = cache();
 
     await windows.window(placement(12_500_000, 150_000_000));
 
-    const args: string[] = runCommand.mock.calls[0][1];
+    const args: string[] = run.mock.calls[0][1];
     expect({ start: optionValues(args, '-ss'), duration: optionValues(args, '-t') })
       .toEqual({ start: ['12.500000'], duration: ['150.000000'] });
   });
@@ -119,13 +119,13 @@ describe('MovieWindowCache', () => {
   });
 
   it('reuses a window asked for again without running FFmpeg', async () => {
-    const { cache: windows, runCommand } = cache();
+    const { cache: windows, run } = cache();
     const first = await windows.window(placement(0));
 
     const second = await windows.window(placement(0));
 
     expect(second).toEqual({ windowPath: first.windowPath, cacheHit: true });
-    expect(runCommand).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 
   it('reuses a window cut before the application restarted', async () => {
@@ -149,11 +149,11 @@ describe('MovieWindowCache', () => {
   });
 
   it('leaves nothing behind when FFmpeg fails to cut the window', async () => {
-    const runCommand = vi.fn(async (_command: string, args: string[]) => {
+    const run = vi.fn(async (_command: string, args: string[]) => {
       await fs.writeFile(args.at(-1)!, 'partial');
       return { ok: false, code: 'process-failed', stderr: 'cut failed' };
     });
-    const { cache: windows } = cache({ runCommand });
+    const { cache: windows } = cache({ run });
 
     await expect(windows.window(placement(0))).rejects.toThrow('Cutting the movie window failed (process-failed).');
     expect(await fs.readdir(folder)).toEqual([]);
@@ -161,13 +161,13 @@ describe('MovieWindowCache', () => {
 
   it('rejects as aborted and leaves nothing behind when the cut is cancelled', async () => {
     const started = deferred();
-    const runCommand = vi.fn(async (_command: string, args: string[], { signal }: { signal: AbortSignal }) => {
+    const run = vi.fn(async (_command: string, args: string[], { signal }: { signal: AbortSignal }) => {
       await fs.writeFile(args.at(-1)!, 'partial');
       started.resolve();
       await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
       return { ok: false, code: 'cancelled', stderr: '' };
     });
-    const { cache: windows } = cache({ runCommand });
+    const { cache: windows } = cache({ run });
     const controller = new AbortController();
     const request = windows.window(placement(0), controller.signal);
     await started.promise;
@@ -182,14 +182,14 @@ describe('MovieWindowCache', () => {
     function heldCut() {
       const started = deferred();
       const release = deferred();
-      const runCommand = vi.fn(async (...call: Parameters<RunCommand>) => {
+      const run = vi.fn(async (...call: Parameters<ProcessRun>) => {
         const [, args, { signal }] = call;
         await fs.writeFile(args.at(-1)!, 'partial');
         started.resolve();
         await Promise.race([release.promise, new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }))]);
         return signal.aborted ? { ok: false, code: 'cancelled', stderr: '' } : cutWindow(...call);
       });
-      return { runCommand, started, release };
+      return { run, started, release };
     }
 
     function twoCallers(windows: { window(request: unknown, signal: AbortSignal): Promise<{ windowPath: string }> }) {
@@ -203,8 +203,8 @@ describe('MovieWindowCache', () => {
     }
 
     it('keeps cutting for the other caller when one of them gives up', async () => {
-      const { runCommand, started, release } = heldCut();
-      const { cache: windows } = cache({ runCommand });
+      const { run, started, release } = heldCut();
+      const { cache: windows } = cache({ run });
       const { controllers, requests } = twoCallers(windows);
       await started.promise;
       controllers[0].abort();
@@ -217,8 +217,8 @@ describe('MovieWindowCache', () => {
     });
 
     it('cancels the cut and leaves nothing behind once both callers give up', async () => {
-      const { runCommand, started } = heldCut();
-      const { cache: windows } = cache({ runCommand });
+      const { run, started } = heldCut();
+      const { cache: windows } = cache({ run });
       const { controllers, requests } = twoCallers(windows);
       await started.promise;
 
@@ -233,18 +233,18 @@ describe('MovieWindowCache', () => {
 
   it('runs one cut for two requests for the same window at the same time', async () => {
     const release = deferred();
-    const runCommand = vi.fn(async (...call: Parameters<RunCommand>) => {
+    const run = vi.fn(async (...call: Parameters<ProcessRun>) => {
       await release.promise;
       return cutWindow(...call);
     });
-    const { cache: windows } = cache({ runCommand });
+    const { cache: windows } = cache({ run });
     const requests = [windows.window(placement(0)), windows.window(placement(0))];
-    await vi.waitFor(() => expect(runCommand).toHaveBeenCalled());
+    await vi.waitFor(() => expect(run).toHaveBeenCalled());
 
     release.resolve();
     await Promise.all(requests);
 
-    expect(runCommand).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -253,10 +253,10 @@ describe('MovieWindowCache', () => {
     ['a fractional start', placement(0.5)],
     ['a relative movie path', { ...placement(0), moviePath: 'movies/Sample Feature.mkv' }],
   ])('refuses a window with %s before cutting anything', async (_scenario, request) => {
-    const { cache: windows, runCommand } = cache();
+    const { cache: windows, run } = cache();
 
     await expect(windows.window(request)).rejects.toThrow('The movie window request is invalid.');
-    expect(runCommand).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
   });
 
   describe('beyond ten windows', () => {

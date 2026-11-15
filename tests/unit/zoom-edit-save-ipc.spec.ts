@@ -1,9 +1,10 @@
 // @vitest-environment node
 import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
+import { FakeIpcMain } from '../support/fake-ipc-main.js';
 
 const require = createRequire(import.meta.url);
-const { registerZoomEditSaveIpc } = require('../../electron/zoom-edit-save-ipc.cjs');
+const { ZoomEditSaveIpc } = require('../../electron/zoom-edit-save-ipc.cjs');
 
 const saveRequest = {
   operationId: 'refine_12345678', folderPath: 'D:\\clips', filename: 'Feature-002.mp4',
@@ -12,14 +13,13 @@ const saveRequest = {
 };
 
 function registered(saver: Record<string, unknown>) {
-  const handlers = new Map<string, Function>();
-  const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
-  registerZoomEditSaveIpc({ ipcMain, saver });
+  const ipcMain = new FakeIpcMain();
+  new ZoomEditSaveIpc({ ipcMain, saver }).register();
   const sender = { id: 7, isDestroyed: vi.fn(() => false), send: vi.fn() };
   return {
     sender,
-    save: (payload: unknown) => handlers.get('clip-sandbox:zoom-edit-save')!({ sender }, payload),
-    cancel: (payload: unknown) => handlers.get('clip-sandbox:zoom-edit-cancel-save')!({ sender }, payload),
+    save: (payload: unknown) => ipcMain.invoke('clip-sandbox:zoom-edit-save', { sender }, payload),
+    cancel: (payload: unknown) => ipcMain.invoke('clip-sandbox:zoom-edit-cancel-save', { sender }, payload),
   };
 }
 

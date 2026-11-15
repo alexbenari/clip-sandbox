@@ -1,18 +1,23 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
+import { FakeIpcMain } from '../../support/fake-ipc-main.js';
 
 const require = createRequire(import.meta.url);
+const { FrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
+
+function registered(host: unknown, chooseSourcePath = vi.fn(async (): Promise<string | null> => null)) {
+  const ipcMain = new FakeIpcMain();
+  new FrameReviewIpc({ ipcMain, hostForEvent: () => host, chooseSourcePath }).register();
+  return ipcMain;
+}
 
 describe('frame review IPC', () => {
   it('rejects malformed commands before they reach a host session', async () => {
-    const handlers = new Map<string, Function>();
-    const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
     const session = { play: vi.fn() };
     const host = { session: vi.fn(() => session) };
-    const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
-    registerFrameReviewIpc({ ipcMain, hostForEvent: () => host, chooseSourcePath: vi.fn(async () => null) });
+    const ipcMain = registered(host);
 
-    const response = await handlers.get('clip-sandbox:frame-review-command')?.(
+    const response = await ipcMain.invoke('clip-sandbox:frame-review-command',
       { sender: { send: vi.fn() } },
       { operationId: 'operation_123456', sessionId: 'session_12345678', command: 'delete-everything', args: {} },
     );
@@ -22,29 +27,21 @@ describe('frame review IPC', () => {
   });
 
   it('closes the session through its host and reports success to the renderer', async () => {
-    const handlers = new Map<string, Function>();
-    const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
     const closeSession = vi.fn(async () => undefined);
-    const host = { closeSession };
-    const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
-    registerFrameReviewIpc({ ipcMain, hostForEvent: () => host, chooseSourcePath: vi.fn(async () => null) });
+    const ipcMain = registered({ closeSession });
 
-    const closed = await handlers.get('clip-sandbox:frame-review-close')?.(
+    const closed = await ipcMain.invoke('clip-sandbox:frame-review-close',
       { sender: {} }, { operationId: 'operation_123456', sessionId: 'session_12345678' });
     expect(closed).toEqual({ ok: true, operationId: 'operation_123456', result: null });
     expect(closeSession).toHaveBeenCalledWith('session_12345678');
   });
 
   it('registers a selected absolute path and returns only its name and opaque handle', async () => {
-    const handlers = new Map<string, Function>();
-    const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
     const registerSource = vi.fn(() => 'source_123456789');
-    const host = { registerSource };
-    const chooseSourcePath = vi.fn(async () => 'D:\\Movies\\feature.mkv');
-    const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
-    registerFrameReviewIpc({ ipcMain, hostForEvent: () => host, chooseSourcePath });
+    const chooseSourcePath = vi.fn(async (): Promise<string | null> => 'D:\\Movies\\feature.mkv');
+    const ipcMain = registered({ registerSource }, chooseSourcePath);
 
-    const response = await handlers.get('clip-sandbox:frame-review-choose-source')?.(
+    const response = await ipcMain.invoke('clip-sandbox:frame-review-choose-source',
       { sender: {} }, { operationId: 'operation_123456' });
 
     expect(registerSource).toHaveBeenCalledWith('D:\\Movies\\feature.mkv');
@@ -57,12 +54,9 @@ describe('frame review IPC', () => {
   });
 
   function openThroughIpc(extra: object) {
-    const handlers = new Map<string, Function>();
-    const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
     const open = vi.fn(async (_request: { muted: boolean }) => ({ id: 'session_12345678', state: () => ({ phase: 'opening' }) }));
-    const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
-    registerFrameReviewIpc({ ipcMain, hostForEvent: () => ({ open }), chooseSourcePath: vi.fn(async () => null) });
-    const response = handlers.get('clip-sandbox:frame-review-open')!({ sender: { send: vi.fn() } }, {
+    const ipcMain = registered({ open });
+    const response = ipcMain.invoke('clip-sandbox:frame-review-open', { sender: { send: vi.fn() } }, {
       operationId: 'operation_123456', sourceHandle: 'source_123456789', previewBounds: { maxWidth: 960, maxHeight: 540 }, ...extra,
     });
     return { open, response };
@@ -90,13 +84,9 @@ describe('frame review IPC', () => {
   });
 
   it('validates jump duration and exact target time before calling the session', async () => {
-    const handlers = new Map<string, Function>();
-    const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
     const session = { jumpPlaybackBy: vi.fn(async () => 3_000_000n), scrubToTime: vi.fn(async () => null) };
-    const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
-    registerFrameReviewIpc({ ipcMain, hostForEvent: () => ({ session: () => session }), chooseSourcePath: vi.fn(async () => null) });
-    const command = handlers.get('clip-sandbox:frame-review-command')!;
-    const request = (name: string, args: object) => command({ sender: { send: vi.fn() } },
+    const ipcMain = registered({ session: () => session });
+    const request = (name: string, args: object) => ipcMain.invoke('clip-sandbox:frame-review-command', { sender: { send: vi.fn() } },
       { operationId: 'operation_123456', sessionId: 'session_12345678', command: name, args });
 
     expect(await request('jump-playback-by', { deltaUs: '2000000' })).toMatchObject({ ok: true, result: '3000000' });
@@ -109,13 +99,9 @@ describe('frame review IPC', () => {
   });
 
   it('goes to a whole non-negative frame and refuses any other before calling the session', async () => {
-    const handlers = new Map<string, Function>();
-    const ipcMain = { handle: (channel: string, handler: Function) => handlers.set(channel, handler), removeHandler: vi.fn() };
     const session = { goToFrame: vi.fn(async () => null) };
-    const { registerFrameReviewIpc } = require('../../../electron/frame-review-ipc.cjs');
-    registerFrameReviewIpc({ ipcMain, hostForEvent: () => ({ session: () => session }), chooseSourcePath: vi.fn(async () => null) });
-    const command = handlers.get('clip-sandbox:frame-review-command')!;
-    const request = (args: object) => command({ sender: { send: vi.fn() } },
+    const ipcMain = registered({ session: () => session });
+    const request = (args: object) => ipcMain.invoke('clip-sandbox:frame-review-command', { sender: { send: vi.fn() } },
       { operationId: 'operation_123456', sessionId: 'session_12345678', command: 'go-to-frame', args });
 
     expect(await request({ frameIndex: -1 })).toMatchObject({ ok: false, error: { category: 'invalid-request' } });

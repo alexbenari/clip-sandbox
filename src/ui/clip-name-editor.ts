@@ -1,17 +1,11 @@
+import type { AppText } from '../app/app-text.js';
 import type { ClipRenameProblem } from '../app/clip-rename-service.js';
 
-export interface IClipNameEditorHandlers {
+export interface IClipNameEditorOptions {
   submit(newFilename: string): void;
   cancel(): void;
+  appText: Pick<AppText, 'windowsNameRefusalText'>;
 }
-
-const PROBLEM_TEXT: Readonly<Record<ClipRenameProblem, string>> = Object.freeze({
-  'invalid-name': 'Windows cannot use this name. Avoid \\ / : * ? " < > | and a dot or space at the end.',
-  'name-taken': 'Another file in this folder already has this name.',
-  'not-a-file': 'The clip is no longer in this folder. Press Escape, then open the folder again.',
-  'folder-not-open': 'The folder is no longer open. Press Escape, then open it again.',
-  failed: 'The clip could not be renamed. Check that no other program is using it, then try again.',
-});
 
 const RENAMING_CLASS = 'renaming';
 
@@ -19,13 +13,21 @@ export class ClipNameEditor {
   private readonly root: HTMLElement;
   private readonly field: HTMLInputElement;
   private readonly problem: HTMLElement;
+  private readonly problemText: Readonly<Record<ClipRenameProblem, string>>;
   private readonly extension: string;
   private readonly originalStem: string;
   private readonly wasDraggable: boolean;
   private submittedStem: string | null = null;
   private ended = false;
 
-  constructor(private readonly card: HTMLElement, filename: string, private readonly handlers: IClipNameEditorHandlers) {
+  constructor(private readonly card: HTMLElement, filename: string, private readonly options: IClipNameEditorOptions) {
+    this.problemText = Object.freeze({
+      'invalid-name': options.appText.windowsNameRefusalText(),
+      'name-taken': 'Another file in this folder already has this name.',
+      'not-a-file': 'The clip is no longer in this folder. Press Escape, then open the folder again.',
+      'folder-not-open': 'The folder is no longer open. Press Escape, then open it again.',
+      failed: 'The clip could not be renamed. Check that no other program is using it, then try again.',
+    });
     const doc = card.ownerDocument;
     const dot = filename.lastIndexOf('.');
     this.extension = dot > 0 ? filename.slice(dot) : '';
@@ -53,7 +55,7 @@ export class ClipNameEditor {
 
   showProblem(problem: ClipRenameProblem): void {
     if (this.ended) return;
-    this.problem.textContent = PROBLEM_TEXT[problem];
+    this.problem.textContent = this.problemText[problem];
     this.problem.hidden = false;
     this.field.readOnly = false;
     this.field.focus();
@@ -89,22 +91,22 @@ export class ClipNameEditor {
     if (this.ended || this.field.readOnly) return;
     const stem = this.field.value.trim();
     if (stem === this.originalStem) {
-      this.handlers.cancel();
+      this.options.cancel();
       return;
     }
     this.submittedStem = stem;
     this.field.readOnly = true;
-    this.handlers.submit(stem + this.extension);
+    this.options.submit(stem + this.extension);
   }
 
   private cancel(): void {
-    if (!this.ended) this.handlers.cancel();
+    if (!this.ended) this.options.cancel();
   }
 
   // Leaving a name that was just refused gives it up, so the field does not take the focus back again.
   private leave(): void {
     if (this.ended || this.field.readOnly) return;
-    if (this.field.value.trim() === this.submittedStem) this.handlers.cancel();
+    if (this.field.value.trim() === this.submittedStem) this.options.cancel();
     else this.submit();
   }
 }

@@ -10,8 +10,8 @@ const signal = new AbortController().signal;
 
 function probeAnswering(document: object, { byteOrderMark = false } = {}) {
   const stdout = `${byteOrderMark ? String.fromCharCode(0xfeff) : ''}${JSON.stringify(document)}`;
-  const runCommand = vi.fn(async () => ({ ok: true, code: 'completed', stdout }));
-  return new ExactRangeProbe({ resolveFfprobe: () => 'ffprobe', runCommand });
+  const run = vi.fn(async () => ({ ok: true, code: 'completed', stdout }));
+  return new ExactRangeProbe({ resolveFfprobe: () => 'ffprobe', processRunner: { run } });
 }
 
 // Four frames 40 ms apart, starting at 10 s.

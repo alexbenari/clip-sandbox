@@ -1,9 +1,11 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { isVideoFilename } = require('./folder-entry.cjs');
+const { VideoFilenames } = require('./video-filenames.cjs');
 
 // Movie paths stay in the main process; the renderer never receives one.
 class SourceMovieLocator {
+  #videoFilenames = new VideoFilenames();
+
   constructor({ folderAccess, capturesStore, locatedMovies, hostForEvent, chooseSourcePath, fileSystem = fs }) {
     this.folderAccess = folderAccess;
     this.capturesStore = capturesStore;
@@ -67,7 +69,7 @@ class SourceMovieLocator {
       try { entries = await this.fs.readdir(folder, { withFileTypes: true }); }
       catch { continue; }
       for (const entry of entries) {
-        if (!entry.isFile() || !isVideoFilename(entry.name)) continue;
+        if (!entry.isFile() || !this.#videoFilenames.isVideo(entry.name)) continue;
         (entry.name === sourceMovie.displayName ? matchingNames : otherNames).push(path.join(folder, entry.name));
       }
     }

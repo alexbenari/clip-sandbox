@@ -1,16 +1,18 @@
+// The main-process entry point is plain functions because it is the composition root: it builds the classes and wires them to Electron.
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
-const fs = require('fs/promises');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { readFolderEntries } = require('./folder-entry.cjs');
+const { FolderEntries } = require('./folder-entries.cjs');
 const { FolderAccessRegistry } = require('./folder-access-registry.cjs');
 const { PipelineCatalogRuntime } = require('./pipeline-catalog-runtime.cjs');
 const { AppSettingsStore } = require('./app-settings-store.cjs');
-const { registerFrameReviewIpc } = require('./frame-review-ipc.cjs');
-const { registerClipExtractionIpc } = require('./clip-extraction-ipc.cjs');
+const { FrameReviewIpc } = require('./frame-review-ipc.cjs');
+const { FrameReviewRuntime } = require('./frame-review-runtime.cjs');
+const { FolderFileOperations } = require('./folder-file-operations.cjs');
+const { ClipExtractionIpc } = require('./clip-extraction-ipc.cjs');
 const { ClipCapturesStore } = require('./clip-captures-store.cjs');
-const { registerClipCapturesIpc } = require('./clip-captures-ipc.cjs');
-const { createClipExtractionRuntime } = require('./clip-extraction-runtime.cjs');
+const { ClipCapturesIpc } = require('./clip-captures-ipc.cjs');
+const { ClipExtractionRuntime } = require('./clip-extraction-runtime.cjs');
 const { ClipSourceMovieRuntime } = require('./clip-source-movie-runtime.cjs');
 const { SourceMovieLocator } = require('./source-movie-locator.cjs');
 const { LocatedMovieStore } = require('./located-movie-store.cjs');
@@ -20,18 +22,15 @@ const { ZoomEditSources } = require('./zoom-edit-sources.cjs');
 const { EditedClipSaver } = require('./edited-clip-saver.cjs');
 const { EditedClipPlacement } = require('./edited-clip-placement.cjs');
 const { ExactRangeEncoder } = require('./exact-range-encoder.cjs');
-const { registerZoomEditSaveIpc } = require('./zoom-edit-save-ipc.cjs');
+const { ZoomEditSaveIpc } = require('./zoom-edit-save-ipc.cjs');
 const { StagedEditResolver } = require('./staged-edit-resolver.cjs');
 const { ZoomEditPreviews } = require('./zoom-edit-previews.cjs');
 const { ClipFileRenamer } = require('./clip-file-renamer.cjs');
-const { registerZoomEditPreviewIpc } = require('./zoom-edit-preview-ipc.cjs');
+const { ZoomEditPreviewIpc } = require('./zoom-edit-preview-ipc.cjs');
 const { MovieWindowPlacement } = require('./movie-window-placement.cjs');
 const { NativeProductLocator } = require('./native-product-locator.cjs');
 const { ThumbnailCacheRuntime } = require('./thumbnail-cache-runtime.cjs');
 const { TestRecycleBin } = require('./test-recycle-bin.cjs');
-
-const WINDOWS_INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000]/;
-const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
 async function pickFolderFromDialog(browserWindow) {
   if (global.__clipSandboxNextFolderPath) {
@@ -84,9 +83,8 @@ function createMainWindow(frameReviewRuntime) {
   win.maximize();
   win.show();
 
-  const frameReviewHost = frameReviewRuntime.createHost();
   const webContentsId = win.webContents.id;
-  frameReviewRuntime.hosts.set(webContentsId, frameReviewHost);
+  const frameReviewHost = frameReviewRuntime.openHost(webContentsId);
   win.once('closed', () => {
     frameReviewRuntime.releaseHost(webContentsId, frameReviewHost);
   });
@@ -95,30 +93,21 @@ function createMainWindow(frameReviewRuntime) {
   return win;
 }
 
-function validateTopLevelFilename(filename) {
-  const normalizedFilename = String(filename || '').trim();
-  const basenamePrefix = normalizedFilename.split('.')[0] || '';
-  if (
-    !normalizedFilename
-    || normalizedFilename === '.'
-    || normalizedFilename === '..'
-    || WINDOWS_INVALID_FILENAME_CHARS.test(normalizedFilename)
-    || /[. ]$/.test(normalizedFilename)
-    || /[. ]$/.test(basenamePrefix)
-    || WINDOWS_RESERVED_BASENAME.test(basenamePrefix)
-  ) {
-    throw new Error(`Invalid top-level filename: ${filename}`);
-  }
-  return normalizedFilename;
+async function loadSharedDomain(projectFolder) {
+  const importDomainModule = name => import(pathToFileURL(path.join(projectFolder, 'build', 'src', 'domain', `${name}.js`)).href);
+  const [{ ZoomEditComposition }, { WindowsFileNameValidity }] = await Promise.all([
+    importDomainModule('zoom-edit-composition'),
+    importDomainModule('windows-file-name-validity'),
+  ]);
+  return { editComposition: ZoomEditComposition, fileNameValidity: new WindowsFileNameValidity() };
 }
 
-async function loadEditComposition(projectFolder) {
-  const moduleUrl = pathToFileURL(path.join(projectFolder, 'build', 'src', 'domain', 'zoom-edit-composition.js')).href;
-  return (await import(moduleUrl)).ZoomEditComposition;
-}
-
-async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProducts, editComposition, zoomEditPreviewFolder }) {
+async function registerIpc({
+  frameReviewRuntime, thumbnailRuntime, nativeProducts, editComposition, fileNameValidity, zoomEditPreviewFolder,
+}) {
   const nativeEnvironment = nativeProducts.environment();
+  const hostForEvent = event => frameReviewRuntime.hostForEvent(event);
+  const folderEntries = new FolderEntries();
   // End-to-end tests keep moved files in their own profile, so they never touch the real Recycle Bin.
   const testRecycleBin = process.env.CLIP_SANDBOX_E2E === '1'
     ? new TestRecycleBin(path.join(app.getPath('userData'), 'test-recycle-bin'))
@@ -133,22 +122,23 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
     resolveFfprobe: () => nativeProducts.ffprobe(),
     environment: nativeEnvironment,
   });
-  const clipExtractionRuntime = createClipExtractionRuntime({
+  const clipExtractionRuntime = new ClipExtractionRuntime({
     getSettings: () => settingsStore.load(),
     encoder: exactRangeEncoder,
+    fileNameValidity,
   });
   const folderAccess = new FolderAccessRegistry();
-  const pipelineCatalogRuntime = new PipelineCatalogRuntime({ settingsStore, folderAccess });
+  const pipelineCatalogRuntime = new PipelineCatalogRuntime({ settingsStore, folderAccess, fileNameValidity });
   const clipSourceMovieRuntime = new ClipSourceMovieRuntime({ folderAccess });
   const frameRateProbe = new MovieFrameRateProbe({ resolveFfprobe: () => nativeProducts.ffprobe(), environment: nativeEnvironment });
   const zoomEditSources = new ZoomEditSources({
     folderAccess,
-    hostForEvent: frameReviewRuntime.hostForEvent,
+    hostForEvent,
     locator: new SourceMovieLocator({
       folderAccess,
       capturesStore: clipCapturesStore,
       locatedMovies: new LocatedMovieStore(app.getPath('userData')),
-      hostForEvent: frameReviewRuntime.hostForEvent,
+      hostForEvent,
       chooseSourcePath: event => pickMovieFromDialog(BrowserWindow.fromWebContents(event.sender)),
     }),
     windowCache: new MovieWindowCache({
@@ -163,7 +153,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
   });
   const stagedEdits = new StagedEditResolver({
     folderAccess,
-    hostForEvent: frameReviewRuntime.hostForEvent,
+    hostForEvent,
     sources: zoomEditSources,
     editComposition,
   });
@@ -182,7 +172,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
   await zoomEditPreviews.initialize();
   ipcMain.handle('clip-sandbox:clip-source-movies-read', (event, request) =>
     clipSourceMovieRuntime.read(event, request));
-  const clipFileRenamer = new ClipFileRenamer({ folderAccess });
+  const clipFileRenamer = new ClipFileRenamer({ folderAccess, fileNameValidity });
   ipcMain.handle('clip-sandbox:rename-clip', (event, request) => clipFileRenamer.rename(event.sender, request));
   frameReviewRuntime.onHostReleased(webContentsId => {
     zoomEditSources.forgetAppWindow(webContentsId);
@@ -210,7 +200,7 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
       canceled: false,
       folderPath: resolvedFolderPath,
       folderName: path.basename(resolvedFolderPath),
-      files: await readFolderEntries(resolvedFolderPath),
+      files: await folderEntries.read(resolvedFolderPath),
     };
   });
   ipcMain.handle('clip-sandbox:list-pipeline-catalog', event => pipelineCatalogRuntime.listPipelines(event.sender));
@@ -218,74 +208,22 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
     pipelineCatalogRuntime.describePipeline(event.sender, payload.pipelineId));
   ipcMain.handle('clip-sandbox:open-pipeline-catalog-entry', (event, payload = {}) =>
     pipelineCatalogRuntime.openPipeline(event.sender, payload.pipelineId));
+  ipcMain.handle('clip-sandbox:create-pipeline', (_event, payload = {}) =>
+    pipelineCatalogRuntime.createPipeline(payload.name));
 
   ipcMain.handle('clip-sandbox:refresh-folder', async (event, payload = {}) => {
     const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
     return {
       folderPath,
       folderName: path.basename(folderPath),
-      files: await readFolderEntries(folderPath),
+      files: await folderEntries.read(folderPath),
     };
   });
 
-  ipcMain.handle('clip-sandbox:save-text-file', async (event, payload = {}) => {
-    const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
-    const filename = validateTopLevelFilename(payload.filename);
-    await fs.writeFile(path.join(folderPath, filename), String(payload.text || ''), 'utf8');
-    return { mode: 'saved' };
-  });
-
-  ipcMain.handle('clip-sandbox:append-text-file', async (event, payload = {}) => {
-    const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
-    const filename = validateTopLevelFilename(payload.filename);
-    await fs.appendFile(path.join(folderPath, filename), String(payload.text || ''), 'utf8');
-    return { mode: 'saved' };
-  });
-
-  ipcMain.handle('clip-sandbox:trash-files', async (event, payload = {}) => {
-    const folderPath = folderAccess.requireKnownPath(event.sender, payload.folderPath);
-    const rawFilenames = Array.from(payload.filenames || []).map((filename) => String(filename || '').trim()).filter(Boolean);
-    try {
-      rawFilenames.forEach((filename) => validateTopLevelFilename(filename));
-    } catch (error) {
-      return {
-        ok: false,
-        code: 'partial',
-        results: rawFilenames.map((filename) => ({
-          filename,
-          ok: false,
-          code: 'trash-failed',
-          error: {
-            message: error?.message || String(error),
-          },
-        })),
-      };
-    }
-    const filenames = rawFilenames;
-    const results = [];
-
-    for (const filename of filenames) {
-      try {
-        await trashItem(path.join(folderPath, filename));
-        results.push({ filename, ok: true });
-      } catch (error) {
-        results.push({
-          filename,
-          ok: false,
-          code: 'trash-failed',
-          error: {
-            message: error?.message || String(error),
-          },
-        });
-      }
-    }
-
-    return {
-      ok: results.every((result) => result.ok),
-      code: results.every((result) => result.ok) ? 'trashed' : 'partial',
-      results,
-    };
-  });
+  const folderFiles = new FolderFileOperations({ folderAccess, fileNameValidity, trashItem });
+  ipcMain.handle('clip-sandbox:save-text-file', (event, payload) => folderFiles.saveText(event.sender, payload));
+  ipcMain.handle('clip-sandbox:append-text-file', (event, payload) => folderFiles.appendText(event.sender, payload));
+  ipcMain.handle('clip-sandbox:trash-files', (event, payload) => folderFiles.trash(event.sender, payload));
 
   ipcMain.handle('clip-sandbox:test-set-next-folder-path', async (_event, folderPath) => {
     global.__clipSandboxNextFolderPath = folderPath || null;
@@ -322,23 +260,23 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
     }
   });
 
-  registerFrameReviewIpc({
+  new FrameReviewIpc({
     ipcMain,
-    hostForEvent: frameReviewRuntime.hostForEvent,
+    hostForEvent,
     chooseSourcePath: event => pickMovieFromDialog(BrowserWindow.fromWebContents(event.sender)),
-  });
-  registerClipExtractionIpc({
+  }).register();
+  new ClipExtractionIpc({
     ipcMain,
     runtime: clipExtractionRuntime,
-    hostForEvent: frameReviewRuntime.hostForEvent,
-  });
-  registerZoomEditSaveIpc({ ipcMain, saver: editedClipSaver });
-  registerZoomEditPreviewIpc({ ipcMain, previews: zoomEditPreviews });
-  registerClipCapturesIpc({
+    hostForEvent,
+  }).register();
+  new ZoomEditSaveIpc({ ipcMain, saver: editedClipSaver }).register();
+  new ZoomEditPreviewIpc({ ipcMain, previews: zoomEditPreviews }).register();
+  new ClipCapturesIpc({
     ipcMain,
     store: clipCapturesStore,
-    hostForEvent: frameReviewRuntime.hostForEvent,
-  });
+    hostForEvent,
+  }).register();
   return { dispose: async () => {
     await Promise.allSettled([
       clipExtractionRuntime.dispose(), editedClipSaver.dispose(), zoomEditPreviews.dispose(), clipCapturesStore.flush(),
@@ -346,16 +284,18 @@ async function registerIpc({ frameReviewRuntime, thumbnailRuntime, nativeProduct
   } };
 }
 
-async function createFrameReviewRuntime(nativeProducts) {
-  const projectFolder = path.resolve(__dirname, '..');
+async function loadFrameReviewHostClass(projectFolder) {
   const hostModuleUrl = pathToFileURL(path.join(projectFolder, 'build', 'src', 'frame-review', 'host', 'frame-review-host.js')).href;
   const { FrameReviewHost } = await import(hostModuleUrl);
-  let configuration;
+  return FrameReviewHost;
+}
+
+function frameReviewConfiguration(projectFolder, nativeProducts) {
   if (app.isPackaged) {
     const frameReviewFolder = path.join(process.resourcesPath, 'frame-review');
     const packagedManifest = nativeProducts.dependencyManifest();
     const packagedVersion = app.getVersion();
-    configuration = {
+    return {
       applicationFolder: path.dirname(app.getPath('exe')),
       nativeBinaryFolder: path.join(frameReviewFolder, 'bin'),
       ffmpegExecutable: nativeProducts.ffmpeg(),
@@ -368,60 +308,27 @@ async function createFrameReviewRuntime(nativeProducts) {
         || `packaged-ffmpeg-${packagedVersion}`,
       runtimePathEntries: [path.join(frameReviewFolder, 'bin')],
     };
-  } else {
-    const dependencyManifest = nativeProducts.dependencyManifest();
-    const dependencyRoot = path.join(projectFolder, 'tools', 'frame-review', '.deps');
-    const ffmpegRoot = path.join(dependencyRoot, 'vcpkg-installed', 'x64-mingw-release');
-    const libVlcRoot = path.join(dependencyRoot, 'libvlc');
-    configuration = {
-      // End-to-end tests keep prepared-review caches in their own profile, so each test starts cold and
-      // removes its caches with the profile instead of sharing the project folder's caches.
-      applicationFolder: process.env.CLIP_SANDBOX_E2E === '1' ? app.getPath('userData') : projectFolder,
-      nativeBinaryFolder: path.join(projectFolder, 'native-build', 'frame-review', 'bin'),
-      ffmpegExecutable: nativeProducts.ffmpeg(),
-      ffprobeExecutable: nativeProducts.ffprobe(),
-      libVlcDll: dependencyManifest?.libvlc?.dll || path.join(libVlcRoot, 'libvlc.dll'),
-      libVlcPluginFolder: dependencyManifest?.libvlc?.plugins || path.join(libVlcRoot, 'plugins'),
-      bestSourceVersion: dependencyManifest?.sources?.bestsource?.commit || 'bestsource-dependencies-unresolved',
-      ffmpegVersion: dependencyManifest?.manifestSha256 || 'ffmpeg-dependencies-unresolved',
-      runtimePathEntries: [
-        dependencyManifest?.ffmpeg?.runtimeDllRoot || path.join(ffmpegRoot, 'bin'),
-        dependencyManifest?.compiler?.runtimeDllRoot || '',
-        path.join(dependencyManifest?.bestsource?.root || path.join(dependencyRoot, 'bestsource-install'), 'bin'),
-      ],
-    };
   }
-  const hosts = new Map();
-  const pendingDisposals = new Set();
-  const releaseListeners = [];
-  // Cache upkeep needs no window, so it runs on one host that no window owns.
-  let maintenanceHost = null;
+  const dependencyManifest = nativeProducts.dependencyManifest();
+  const dependencyRoot = path.join(projectFolder, 'tools', 'frame-review', '.deps');
+  const ffmpegRoot = path.join(dependencyRoot, 'vcpkg-installed', 'x64-mingw-release');
+  const libVlcRoot = path.join(dependencyRoot, 'libvlc');
   return {
-    hosts,
-    applicationFolder: configuration.applicationFolder,
-    createHost: () => new FrameReviewHost(configuration),
-    forgetPreparedReview: (sourcePath) => {
-      maintenanceHost ??= new FrameReviewHost(configuration);
-      return maintenanceHost.forgetPreparedReview(sourcePath);
-    },
-    onHostReleased: (listener) => { releaseListeners.push(listener); },
-    hostForEvent: (event) => {
-      const host = hosts.get(event?.sender?.id);
-      if (!host) throw new Error('No frame-review host exists for this window.');
-      return host;
-    },
-    releaseHost: (webContentsId, host) => {
-      if (hosts.get(webContentsId) === host) hosts.delete(webContentsId);
-      for (const listener of releaseListeners) listener(webContentsId);
-      const disposal = host.dispose().finally(() => pendingDisposals.delete(disposal));
-      pendingDisposals.add(disposal);
-    },
-    dispose: async () => {
-      const activeHosts = [...hosts.values(), ...(maintenanceHost ? [maintenanceHost] : [])];
-      hosts.clear();
-      maintenanceHost = null;
-      await Promise.allSettled([...activeHosts.map(host => host.dispose()), ...pendingDisposals]);
-    },
+    // End-to-end tests keep prepared-review caches in their own profile, so each test starts cold and
+    // removes its caches with the profile instead of sharing the project folder's caches.
+    applicationFolder: process.env.CLIP_SANDBOX_E2E === '1' ? app.getPath('userData') : projectFolder,
+    nativeBinaryFolder: path.join(projectFolder, 'native-build', 'frame-review', 'bin'),
+    ffmpegExecutable: nativeProducts.ffmpeg(),
+    ffprobeExecutable: nativeProducts.ffprobe(),
+    libVlcDll: dependencyManifest?.libvlc?.dll || path.join(libVlcRoot, 'libvlc.dll'),
+    libVlcPluginFolder: dependencyManifest?.libvlc?.plugins || path.join(libVlcRoot, 'plugins'),
+    bestSourceVersion: dependencyManifest?.sources?.bestsource?.commit || 'bestsource-dependencies-unresolved',
+    ffmpegVersion: dependencyManifest?.manifestSha256 || 'ffmpeg-dependencies-unresolved',
+    runtimePathEntries: [
+      dependencyManifest?.ffmpeg?.runtimeDllRoot || path.join(ffmpegRoot, 'bin'),
+      dependencyManifest?.compiler?.runtimeDllRoot || '',
+      path.join(dependencyManifest?.bestsource?.root || path.join(dependencyRoot, 'bestsource-install'), 'bin'),
+    ],
   };
 }
 
@@ -432,14 +339,19 @@ app.whenReady().then(async () => {
     resourcesPath: process.resourcesPath,
     packaged: app.isPackaged,
   });
-  const frameReviewRuntime = await createFrameReviewRuntime(nativeProducts);
+  const frameReviewRuntime = new FrameReviewRuntime({
+    hostClass: await loadFrameReviewHostClass(projectFolder),
+    configuration: frameReviewConfiguration(projectFolder, nativeProducts),
+  });
   const thumbnailRuntime = new ThumbnailCacheRuntime(app.getPath('userData'));
   await thumbnailRuntime.initialize();
+  const { editComposition, fileNameValidity } = await loadSharedDomain(projectFolder);
   const clipExtractionRuntime = await registerIpc({
     frameReviewRuntime,
     thumbnailRuntime,
     nativeProducts,
-    editComposition: await loadEditComposition(projectFolder),
+    editComposition,
+    fileNameValidity,
     zoomEditPreviewFolder: path.join(app.getPath('userData'), 'zoom-edit-previews'),
   });
   let shutdownComplete = false;

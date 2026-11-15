@@ -20,6 +20,18 @@ export class AppText {
     return count === 1 ? '1 clip' : `${this.niceNum(count)} clips`;
   }
 
+  pipelineCreatedText(name: string): string {
+    return `Created pipeline ${name}`;
+  }
+
+  pipelineCreationRecoveryText(): string {
+    return 'Check that the Pipelines top folder can be written to, then try again.';
+  }
+
+  windowsNameRefusalText(): string {
+    return 'Windows cannot use this name. Avoid \\ / : * ? " < > | and a dot or space at the end.';
+  }
+
   loadedVideosText(count: number): string {
     return `Loaded pipeline with ${count} clip${count === 1 ? '' : 's'}.`;
   }

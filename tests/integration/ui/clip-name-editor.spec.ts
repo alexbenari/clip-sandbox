@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AppText } from '../../../src/app/app-text.js';
 import { ClipNameEditor } from '../../../src/ui/clip-name-editor.js';
 
 function editing(filename = 'alpha.mp4') {
@@ -9,7 +10,7 @@ function editing(filename = 'alpha.mp4') {
   card.addEventListener('dblclick', cardClicks);
   document.body.append(card, document.createElement('button'));
   const handlers = { submit: vi.fn(), cancel: vi.fn() };
-  const editor = new ClipNameEditor(card, filename, handlers);
+  const editor = new ClipNameEditor(card, filename, { ...handlers, appText: new AppText() });
   const field = card.querySelector('input')!;
   const type = (value: string) => {
     field.value = value;

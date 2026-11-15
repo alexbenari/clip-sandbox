@@ -9,48 +9,8 @@ const DEFAULT_SETTINGS = Object.freeze({
 });
 const SETTINGS_FIELDS = new Set(Object.keys(DEFAULT_SETTINGS));
 
-let temporaryFileCounter = 0;
-
-function cloneSettings(settings) {
-  return {
-    pipelinesRootPath: settings.pipelinesRootPath,
-    singleClipAudioDefault: settings.singleClipAudioDefault,
-    startupScreenId: settings.startupScreenId,
-  };
-}
-
-function deriveKnownSettings(value) {
-  return {
-    pipelinesRootPath: value.pipelinesRootPath,
-    singleClipAudioDefault: value.singleClipAudioDefault,
-    startupScreenId: value.startupScreenId ?? DEFAULT_SETTINGS.startupScreenId,
-  };
-}
-
-function validateSettings(value) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return 'Settings must be an object';
-  }
-
-  const { pipelinesRootPath, singleClipAudioDefault, startupScreenId } = value;
-  if (pipelinesRootPath !== null &&
-      (typeof pipelinesRootPath !== 'string' ||
-       pipelinesRootPath.trim().length === 0 ||
-       pipelinesRootPath.includes('\0') ||
-       !path.isAbsolute(pipelinesRootPath))) {
-    return 'pipelinesRootPath must be null or a nonempty absolute folder path';
-  }
-  if (typeof singleClipAudioDefault !== 'boolean') {
-    return 'singleClipAudioDefault must be a boolean';
-  }
-  if (typeof startupScreenId !== 'string' || startupScreenId.trim().length === 0) {
-    return 'startupScreenId must be nonempty text';
-  }
-
-  return null;
-}
-
 class AppSettingsStore {
+  static #temporaryFileCounter = 0;
   #directoryPath;
   #settingsFilePath;
   #fs;
@@ -71,7 +31,7 @@ class AppSettingsStore {
       text = await this.#fs.readFile(this.#settingsFilePath, 'utf8');
     } catch (error) {
       if (error && error.code === 'ENOENT') {
-        return { ok: true, settings: cloneSettings(DEFAULT_SETTINGS) };
+        return { ok: true, settings: this.#cloneSettings(DEFAULT_SETTINGS) };
       }
       return this.#loadWarning(`Could not read settings: ${this.#errorMessage(error)}`);
     }
@@ -84,8 +44,8 @@ class AppSettingsStore {
       if (document === null || typeof document !== 'object' || Array.isArray(document)) {
         throw new Error('settings must be an object');
       }
-      const settings = deriveKnownSettings(document);
-      const validationError = validateSettings(settings);
+      const settings = this.#deriveKnownSettings(document);
+      const validationError = this.#validateSettings(settings);
       if (validationError !== null) {
         throw new Error(validationError);
       }
@@ -99,12 +59,12 @@ class AppSettingsStore {
   }
 
   save(value) {
-    const validationError = validateSettings(value);
+    const validationError = this.#validateSettings(value);
     if (validationError !== null) {
       return Promise.resolve({ ok: false, error: validationError });
     }
 
-    const settings = cloneSettings(value);
+    const settings = this.#cloneSettings(value);
     const operation = this.#saveQueue.then(() => this.#writeSettings(settings));
     this.#saveQueue = operation.catch(() => undefined);
     return operation;
@@ -119,7 +79,7 @@ class AppSettingsStore {
       await this.#fs.writeFile(temporaryPath, serialized, { encoding: 'utf8', flag: 'wx' });
       await this.#fs.rename(temporaryPath, this.#settingsFilePath);
       temporaryPath = undefined;
-      return { ok: true, settings: cloneSettings(settings) };
+      return { ok: true, settings: this.#cloneSettings(settings) };
     } catch (error) {
       if (temporaryPath !== undefined) {
         try {
@@ -133,19 +93,58 @@ class AppSettingsStore {
   }
 
   #temporaryPath() {
-    temporaryFileCounter += 1;
+    AppSettingsStore.#temporaryFileCounter += 1;
     return path.join(
       this.#directoryPath,
-      `.${SETTINGS_FILENAME}.${process.pid}.${Date.now()}-${temporaryFileCounter}.tmp`,
+      `.${SETTINGS_FILENAME}.${process.pid}.${Date.now()}-${AppSettingsStore.#temporaryFileCounter}.tmp`,
     );
   }
 
   #loadWarning(message) {
-    return { ok: true, settings: cloneSettings(DEFAULT_SETTINGS), warning: message, warningKind: 'recovered-defaults' };
+    return { ok: true, settings: this.#cloneSettings(DEFAULT_SETTINGS), warning: message, warningKind: 'recovered-defaults' };
   }
 
   #errorMessage(error) {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  #cloneSettings(settings) {
+    return {
+      pipelinesRootPath: settings.pipelinesRootPath,
+      singleClipAudioDefault: settings.singleClipAudioDefault,
+      startupScreenId: settings.startupScreenId,
+    };
+  }
+
+  #deriveKnownSettings(value) {
+    return {
+      pipelinesRootPath: value.pipelinesRootPath,
+      singleClipAudioDefault: value.singleClipAudioDefault,
+      startupScreenId: value.startupScreenId ?? DEFAULT_SETTINGS.startupScreenId,
+    };
+  }
+
+  #validateSettings(value) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return 'Settings must be an object';
+    }
+
+    const { pipelinesRootPath, singleClipAudioDefault, startupScreenId } = value;
+    if (pipelinesRootPath !== null &&
+        (typeof pipelinesRootPath !== 'string' ||
+         pipelinesRootPath.trim().length === 0 ||
+         pipelinesRootPath.includes('\0') ||
+         !path.isAbsolute(pipelinesRootPath))) {
+      return 'pipelinesRootPath must be null or a nonempty absolute folder path';
+    }
+    if (typeof singleClipAudioDefault !== 'boolean') {
+      return 'singleClipAudioDefault must be a boolean';
+    }
+    if (typeof startupScreenId !== 'string' || startupScreenId.trim().length === 0) {
+      return 'startupScreenId must be nonempty text';
+    }
+
+    return null;
   }
 }
 

@@ -1,10 +1,10 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
-const { mediaSourceOf } = require('./folder-entry.cjs');
+const { MediaAddresses } = require('./media-addresses.cjs');
 const { FrameTime } = require('./frame-time.cjs');
 const { ForwardThenBackwardFilter } = require('./forward-then-backward-filter.cjs');
-const { runProcess } = require('./process-runner.cjs');
+const { ProcessRunner } = require('./process-runner.cjs');
 const { StagedEditRefusal } = require('./staged-edit-resolver.cjs');
 const { OperationResult } = require('./operation-result.cjs');
 
@@ -19,13 +19,14 @@ class ZoomEditPreviews {
   #folder;
   #stagedEdits;
   #resolveFfmpeg;
-  #runCommand;
+  #processRunner;
   #environment;
   #fs;
   #randomId;
+  #mediaAddresses = new MediaAddresses();
   #previews = new Map();
 
-  constructor({ folder, stagedEdits, resolveFfmpeg, runCommand = runProcess, environment = process.env,
+  constructor({ folder, stagedEdits, resolveFfmpeg, processRunner = new ProcessRunner(), environment = process.env,
     fileSystem = fs, randomId = () => randomBytes(12).toString('base64url') }) {
     if (!path.isAbsolute(String(folder || '')) || !stagedEdits || typeof resolveFfmpeg !== 'function') {
       throw new Error('Zoom edit preview dependencies are invalid.');
@@ -33,7 +34,7 @@ class ZoomEditPreviews {
     this.#folder = folder;
     this.#stagedEdits = stagedEdits;
     this.#resolveFfmpeg = resolveFfmpeg;
-    this.#runCommand = runCommand;
+    this.#processRunner = processRunner;
     this.#environment = environment;
     this.#fs = fileSystem;
     this.#randomId = randomId;
@@ -85,14 +86,14 @@ class ZoomEditPreviews {
       if (startUs === undefined || endUs === undefined) throw new Error('The staged frames have no usable times.');
       preview.filePath = path.join(this.#folder, `preview-${this.#randomId()}.mp4`);
       const totalFrames = 2 * (cut.endFrame - cut.startFrame + 1);
-      const result = await this.#runCommand(this.#resolveFfmpeg(), this.#arguments({ source, startUs, endUs, outputPath: preview.filePath }), {
+      const result = await this.#processRunner.run(this.#resolveFfmpeg(), this.#arguments({ source, startUs, endUs, outputPath: preview.filePath }), {
         cwd: this.#folder, signal, env: this.#environment,
         onProgress: frame => report({ renderedFrames: Math.min(frame, totalFrames), totalFrames }),
       });
       if (signal.aborted) return OperationResult.failure('cancelled', 'The preview was replaced.');
       if (!result.ok) throw Object.assign(new Error('The preview could not be encoded.'), { code: result.code });
       const stat = await this.#fs.stat(preview.filePath);
-      return { ok: true, result: { mediaSource: mediaSourceOf(preview.filePath, stat.mtimeMs) } };
+      return { ok: true, result: { mediaSource: this.#mediaAddresses.address(preview.filePath, stat.mtimeMs) } };
     } catch (error) {
       await this.#removed(preview);
       if (error instanceof StagedEditRefusal) return OperationResult.failure(error.code, error.message);
