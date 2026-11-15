@@ -30,6 +30,10 @@ describe('AppText', () => {
     expect(appText.loadedVideosText(0)).toBe('Loaded pipeline with no clips.');
   });
 
+  test('reports a loaded collection without clips as having no clips rather than 0', () => {
+    expect(appText.collectionLoadedText(0)).toBe('Loaded collection with no clips.');
+  });
+
   test('asks to save before moving clips to the Recycle Bin', () => {
     expect(appText.trashClipsPreflightText()).toBe(
       'The current view has unsaved changes. Save before moving clips to the Recycle Bin?'

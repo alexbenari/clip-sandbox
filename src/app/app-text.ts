@@ -42,6 +42,7 @@ export class AppText {
   }
 
   collectionLoadedText(count: number): string {
+    if (count === 0) return 'Loaded collection with no clips.';
     return `Loaded collection with ${count} clip${count === 1 ? '' : 's'}.`;
   }
 
