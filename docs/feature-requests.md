@@ -21,7 +21,6 @@
 ### Pipelines
 #### Pipeline management sidebar
 - Copy clip/s to pipeline -> drag to that pipeline in the sidebar (supports multi-select)
-- Create a new pipeline -> creates a physical folder names the same as the pipeline
 #### New pipeline from movie
 - Select a movie file => A new pipeline is created under the main pipelines folder. Its default name is a cleanup version of the movie name (remove all codex info and such).
 - The movie is opened in the player control in clip creation mode
