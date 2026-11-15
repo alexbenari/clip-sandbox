@@ -1,10 +1,11 @@
 const fsPromises = require('fs/promises');
 const path = require('path');
-const { pathToFileURL } = require('url');
+const { MediaAddresses } = require('./media-addresses.cjs');
 const { VideoFilenames } = require('./video-filenames.cjs');
 
 class FolderEntries {
   #fs;
+  #mediaAddresses = new MediaAddresses();
   #videoFilenames = new VideoFilenames();
 
   constructor({ fs = fsPromises } = {}) {
@@ -28,19 +29,13 @@ class FolderEntries {
       name,
       path: absolutePath,
       relativePath: name,
-      mediaSource: this.mediaSource(absolutePath, stat.mtimeMs),
+      mediaSource: this.#mediaAddresses.address(absolutePath, stat.mtimeMs),
       type: isText ? 'text/plain' : this.#videoFilenames.mimeType(name),
       lastModifiedMs: stat.mtimeMs,
       size: stat.size,
     };
     if (isText) entry.text = await this.#fs.readFile(absolutePath, 'utf8');
     return entry;
-  }
-
-  // The address names the file's version, so a file replaced under the same name is not shown from the
-  // renderer's media cache of the previous one.
-  mediaSource(absolutePath, lastModifiedMs) {
-    return `${pathToFileURL(absolutePath).href}?modified=${Math.round(lastModifiedMs)}`;
   }
 }
 

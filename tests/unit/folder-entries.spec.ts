@@ -3,10 +3,11 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-const { FolderEntries } = createRequire(import.meta.url)('../../electron/folder-entries.cjs');
+const require = createRequire(import.meta.url);
+const { FolderEntries } = require('../../electron/folder-entries.cjs');
+const { MediaAddresses } = require('../../electron/media-addresses.cjs');
 
 describe('FolderEntries', () => {
   let folder: string;
@@ -14,18 +15,14 @@ describe('FolderEntries', () => {
   beforeEach(() => { folder = mkdtempSync(path.join(os.tmpdir(), 'clip-folder-entry-')); });
   afterEach(() => { rmSync(folder, { recursive: true, force: true }); });
 
-  it('gives a file replaced under the same name a new media address that still plays that file', async () => {
+  it('addresses an entry by its file version', async () => {
     const clip = path.join(folder, 'Sample Clip #1.mp4');
-    writeFileSync(clip, 'original');
+    writeFileSync(clip, 'clip');
     utimesSync(clip, new Date(1_700_000_000_000), new Date(1_700_000_000_000));
-    const before = await new FolderEntries().entry(clip);
-    writeFileSync(clip, 'refined');
-    utimesSync(clip, new Date(1_700_000_060_000), new Date(1_700_000_060_000));
 
-    const after = await new FolderEntries().entry(clip);
+    const entry = await new FolderEntries().entry(clip);
 
-    expect(after.mediaSource).not.toBe(before.mediaSource);
-    expect([before.mediaSource, after.mediaSource].map(address => fileURLToPath(address))).toEqual([clip, clip]);
+    expect(entry.mediaSource).toBe(new MediaAddresses().address(clip, 1_700_000_000_000));
   });
 
   it('lists only the files directly in the folder', async () => {

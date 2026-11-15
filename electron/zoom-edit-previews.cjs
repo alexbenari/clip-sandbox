@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
-const { FolderEntries } = require('./folder-entries.cjs');
+const { MediaAddresses } = require('./media-addresses.cjs');
 const { FrameTime } = require('./frame-time.cjs');
 const { ForwardThenBackwardFilter } = require('./forward-then-backward-filter.cjs');
 const { ProcessRunner } = require('./process-runner.cjs');
@@ -23,7 +23,7 @@ class ZoomEditPreviews {
   #environment;
   #fs;
   #randomId;
-  #folderEntries;
+  #mediaAddresses = new MediaAddresses();
   #previews = new Map();
 
   constructor({ folder, stagedEdits, resolveFfmpeg, processRunner = new ProcessRunner(), environment = process.env,
@@ -38,7 +38,6 @@ class ZoomEditPreviews {
     this.#environment = environment;
     this.#fs = fileSystem;
     this.#randomId = randomId;
-    this.#folderEntries = new FolderEntries({ fs: fileSystem });
   }
 
   async initialize() {
@@ -94,7 +93,7 @@ class ZoomEditPreviews {
       if (signal.aborted) return OperationResult.failure('cancelled', 'The preview was replaced.');
       if (!result.ok) throw Object.assign(new Error('The preview could not be encoded.'), { code: result.code });
       const stat = await this.#fs.stat(preview.filePath);
-      return { ok: true, result: { mediaSource: this.#folderEntries.mediaSource(preview.filePath, stat.mtimeMs) } };
+      return { ok: true, result: { mediaSource: this.#mediaAddresses.address(preview.filePath, stat.mtimeMs) } };
     } catch (error) {
       await this.#removed(preview);
       if (error instanceof StagedEditRefusal) return OperationResult.failure(error.code, error.message);
