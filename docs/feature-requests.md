@@ -1,13 +1,11 @@
 # Feature Requests
 
 ## Next up
+- Move clip between pipelines (copy semantics and move semantics) - either to pipeline or collection inside it
+- When a clip is in xoom mode F should move it to full screen, esc back to zoom
 - Remember last position of movie scroll
-- Move clip between pipelines (copy semantics and move semantics)
-- Z does not work in Refine?
-- After extraction, clips are cleared from side panel (should be)
+- After extraction, clips should be cleared from side panel
 - When selecting to Refine a clip whose movie is already loaded, use the movie
-- clear history of messages -? closes the panel
-- Review the codebase for mixup of clip/gif terminology and unify if needed
 
 ## Small bugs
 - when clicking open folder in Collection screen the file explorer selection should open on the folder defined in settings
@@ -15,7 +13,6 @@
 - Status history: clear history should remove all but the latest one
 
 ## Movie Edit mode
-- Movie edit mode can be initiated from within a pipeline
 - Allow capturing frames and enhancing them
 
 ### Pipelines
@@ -27,6 +24,7 @@
 
 ### Design and code quality
 - add `better-result` for error 
+- Review the codebase for mixup of clip/gif terminology and unify to clip
 -  make error log usable: 
    -  one line message, timestamp, module, error message
    -  save in available folder
@@ -39,17 +37,14 @@
 - bugs under /code-reviews folder
 
 ### App
-- Add a keyboard map icon in the top bar. When clicked, open a small panel showing all key mappings and their descriptions.
 - Add a `?` icon that opens a panel with a brief textual explanation of the main app features, one per row.
 - Share collection: allow sending a link to a gallery of clips.
 - Add general settings panel: 
-  - default audio = on/off
   - movie cache folder location + cleanup
-  - default pipelines location: the default location where a new pipeline is opened. 
 
 ### Quick Actions
 Some quick manipulations on videos that generate new videos in the same collection named: [orig-name]-[action]-[serial]
-- quick refine: trim from start/end to current frame
+- Perfect: locate the start and end points which are visually closest to each other so that the loop is perfect
 - slow by X%
 - remove background / extract just a specific object/character from the video
 - add metadata to generated clip
@@ -57,8 +52,6 @@ Some quick manipulations on videos that generate new videos in the same collecti
   - Progress when generating video
   - After generation show in compare mode
   
-
-
 ### Gif composition mode
 A workspace for creating compositions of gifs
 - select gifs (across pipelines, optionally by metadata search like all close ups of a woman etc)
@@ -76,7 +69,6 @@ A workspace for creating compositions of gifs
     - Add a count showing total items and current screen position (`x/y`).
 
 #### Zoom mode
-- Respct `display titles` setting
 - Allow making it full screen and back
 - Compare mode:
   - Compare two clips by opening them in side-by-side zoom and synchronizing their start.
@@ -86,7 +78,6 @@ A workspace for creating compositions of gifs
   - frame by frame (fwd/bwd arrows)
 
 ### Collections
-- ctrl+s saves the collection
 - Delete collection -> removes the collection file and any references to it
 - Open in file explorer -> opens the current pipeline folder in file explorer
 - Rename collection
@@ -133,7 +124,6 @@ A video can have various types of metadata
 
 ### General
 
-- Toggle metadata display. Default should be off.
 - Select number of slots, both through a keyboard shortcut and explicit UI.
 
 ### Modes
