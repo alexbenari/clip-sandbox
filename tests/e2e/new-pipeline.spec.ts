@@ -9,7 +9,7 @@ import { gridClipNames, launchApp, openActivity, writeAppSettings } from './supp
 const openPipelineName = (page: Page) => page.locator('#activeCollectionName option:checked');
 const listedPipelines = (page: Page) => page.getByRole('button', { name: /^Expand (?!collection )/ });
 
-test('a pipeline created from the Pipelines panel is listed in order and focused, reported in Activity, leaves the open pipeline in place, and loads empty', async () => {
+test('a pipeline created from the Pipelines panel is listed in order and focused, reported in Activity, leaves the open pipeline in place, and loads as a pipeline with no clips', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clip-new-pipeline-'));
   const profile = path.join(directory, 'profile');
   const pipelines = path.join(directory, 'pipelines');
@@ -40,6 +40,8 @@ test('a pipeline created from the Pipelines panel is listed in order and focused
     await page.getByRole('button', { name: 'Load Heist films' }).click();
     await expect(openPipelineName(page)).toHaveText('Heist films');
     await expect.poll(() => gridClipNames(page)).toEqual([]);
+    await openActivity(page);
+    await expect(page.locator('#activityIndicatorList')).toContainText('Loaded pipeline with no clips.');
   } finally {
     await app.close().catch(() => undefined);
     await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);

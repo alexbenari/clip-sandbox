@@ -33,6 +33,7 @@ export class AppText {
   }
 
   loadedVideosText(count: number): string {
+    if (count === 0) return 'Loaded pipeline with no clips.';
     return `Loaded pipeline with ${count} clip${count === 1 ? '' : 's'}.`;
   }
 

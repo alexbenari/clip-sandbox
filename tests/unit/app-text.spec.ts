@@ -26,6 +26,10 @@ describe('AppText', () => {
     expect(appText.removedClipsText(3)).toBe('Removed 3 clips from view.');
   });
 
+  test('reports a loaded pipeline without clips as having no clips rather than 0', () => {
+    expect(appText.loadedVideosText(0)).toBe('Loaded pipeline with no clips.');
+  });
+
   test('asks to save before moving clips to the Recycle Bin', () => {
     expect(appText.trashClipsPreflightText()).toBe(
       'The current view has unsaved changes. Save before moving clips to the Recycle Bin?'

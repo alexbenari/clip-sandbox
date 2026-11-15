@@ -319,7 +319,7 @@ export class FolderSelectionWorkflow {
       }
       collectionView.applySelection(result.sequence, { collection: null, folderAccess });
       if (reportInitialLoad) {
-        this.folder.reporter.success(this.loadStatusText.folderLoaded(pipeline, result.sequence.orderedClips().length));
+        this.folder.reporter.success(this.folder.appText.loadedVideosText(result.sequence.orderedClips().length));
       }
       return true;
     } catch (err) {

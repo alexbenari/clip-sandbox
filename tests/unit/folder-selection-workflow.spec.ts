@@ -106,6 +106,16 @@ describe('FolderSelectionWorkflow', () => {
       kind: 'success', message: 'Loaded pipeline with 2 clips.' }));
   });
 
+  it('reports opening a folder without videos as a loaded pipeline with no clips', async () => {
+    const context = folderWorkflow();
+    context.folders.pickFolder.mockResolvedValueOnce({ folderAccess: context.folderAccess, files: [], folderName: 'clips' });
+
+    await openFolder(context);
+
+    expect(context.activityLog.log).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'success', message: 'Loaded pipeline with no clips.' }));
+  });
+
   it('reads the source movies of the clips in a newly opened folder', async () => {
     const context = folderWorkflow();
 
