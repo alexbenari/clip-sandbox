@@ -172,6 +172,7 @@ test('Refine and Loopify with Keep both: the looped clip plays the staged frames
     await expect(page.locator('[data-range-id="range-1"]')).toContainText('Extracted as Feature-001.mp4', { timeout: 90_000 });
     await openFolderInCollection(page, clips, 'Feature-001.mp4');
     await page.locator('#activeCollectionName').selectOption('Feature.txt');
+    await expect(page).toHaveTitle('Feature');
     await page.evaluate(next => (window as unknown as { clipSandboxDesktop: { __testSetNextMoviePath(path: string): Promise<void> } })
       .clipSandboxDesktop.__testSetNextMoviePath(next), movie);
 
